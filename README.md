@@ -74,8 +74,8 @@ Tailored high-contrast visual themes designed for all lighting conditions, scree
 Clone the repository and run the installer:
 
 ```bash
-git clone https://github.com/cachyos/cachymusic.git
-cd cachymusic
+git clone https://github.com/Vi-En/CachyMusic.git
+cd CachyMusic
 ./install.sh
 ```
 
