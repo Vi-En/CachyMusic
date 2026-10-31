@@ -19,9 +19,9 @@
 
 ---
 
-## ✨ Features
+##  Features
 
-### 🎧 Focal Centerpiece & Workstation Ergonomics
+###  Focal Centerpiece & Workstation Ergonomics
 - **Intuitive 3-Column Workstation Layout**:
   - **Left**: Collapsible Track Metadata Inspector & embedded artwork card.
   - **Center**: The primary vinyl turntable platter, tactile playback transport, timeline scrubber, and 10-band DSP console.
@@ -29,40 +29,23 @@
 - **Sliding Metadata Inspector**: One-click or hotkey (`KeyI`) sliding drawer that expands the center turntable deck across the workstation with smooth cubic-bezier transitions.
 - **Tactile Turntable Platter**: Physics-driven vinyl platter with audio-reactive tonearm tracking, speed selection (33 RPM, 45 RPM, 78 RPM), and ambient album art glow backdrops.
 
-### 🎛️ Studio DSP & Audiophile Metrics
+###  Studio DSP & Audiophile Metrics
 - **10-Band Graphic Equalizer**: Studio-grade parametric audio shaping (32Hz, 64Hz, 125Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz, 16kHz) with one-click flat reset and custom frequency profiles.
 - **Real-Time Embedded Audio Data**: Automatic ID3 tag and audio stream inspection displaying bitrate, sample rate, bit depth, channel configuration, codec format, dynamic range, and peak headroom.
 - **Audiophile Format Support**: Native playback and streaming for FLAC, ALAC, WAV, AIFF, MP3, AAC, OGG, Opus, and WebM audio containers.
 
-### 🎨 12 Procedural Design Themes (100% WCAG AA/AAA Compliant)
-Tailored high-contrast visual themes designed for all lighting conditions, screen technologies, and OLED displays:
-- **Default Studio**: Professional matte dark chassis with high-contrast neutral accents.
-- **No Man's Sky / Atlas**: Deep space cockpit HUD with neon cyan and crimson telemetry.
-- **Solar Eclipse**: Cyberpunk high-contrast twilight with hot pink and electric blue accents.
-- **Euclid Horizon**: Deep teal and emerald celestial observatory aesthetics.
-- **Alien Paradise**: Bioluminescent flora palette with vibrant lime and violet tones.
-- **Abyssal Void**: Ultra-deep indigo oceanic abyss with sapphire illumination.
-- **Dissonance**: Avant-garde brutalist monochrome with stark industrial typography.
-- **Sentinel**: Polished titanium and tungsten militarized aesthetic.
-- **Minimalist Light**: Clean architectural gallery theme optimized for daylight environments.
-- **Minimalist Dark**: Refined charcoal and slate palette for fatigue-free night sessions.
-- **Minimalist Warm**: Rich espresso, walnut, and warm linen organic palette.
-- **Minimalist Obsidian**: True pure black (`#000000`) OLED power-saving interface.
-
-### 📱 Progressive Web App & Multi-Device Freedom
+###  Progressive Web App & Multi-Device Freedom
 - **Cross-Platform PWA**: Installable on Linux, Windows, macOS, Android, and iOS as a standalone desktop or mobile app.
 - **Window Controls Overlay (WCO)**: Native desktop titlebar integration for modern Chromium and Edge browsers.
 - **Hardware Back-Button Navigation**: Full HTML5 History API integration handling device back gestures and ESC hotkeys seamlessly across all modal dialogs.
 - **LAN Audio Streaming**: Native multi-device streaming across your local Wi-Fi network.
 
-### 🛡️ Privacy & Security First
+###  Privacy & Security First
 - **Clean Slate Architecture**: Zero telemetry, zero tracking, and zero unwanted network access.
 - **Soulseek P2P Integration**: Built-in Nicotine+ headless integration that is **disconnected by default on startup**. Network connection and file sharing only initiate when explicitly requested by the user.
 - **Sandboxed Directory Confinement**: Strict route whitelisting preventing directory traversal outside authorized library folders.
 
----
-
-## 🚀 Installation & Quick Start
+##  Installation & Quick Start
 
 ### Prerequisites
 - **PHP 8.2+** with `php-curl`, `php-mbstring`
@@ -114,25 +97,7 @@ To completely remove the desktop application and launcher:
 
 ---
 
-## ⌨️ Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Space` | Play / Pause |
-| `←` / `→` | Seek -5s / +5s (or Previous / Next Track with Shift) |
-| `↑` / `↓` | Volume Up / Down (5%) |
-| `M` | Mute / Unmute Audio |
-| `S` | Toggle Shuffle Play |
-| `R` | Cycle Repeat Mode (Off / All / One) |
-| `I` | Toggle Track Metadata Inspector Drawer |
-| `L` | Toggle Synchronized Lyrics View |
-| `T` | Open Theme Customization Dialog |
-| `E` | Open 10-Band Equalizer & Studio DSP |
-| `Esc` | Close Active Modal / Dismiss View |
-
----
-
-## 📁 Repository Structure
+##  Repository Structure
 
 ```
 .
@@ -158,7 +123,7 @@ To completely remove the desktop application and launcher:
 
 ---
 
-## 📄 License
+##  License
 
 This project is licensed under the **GNU General Public License v3.0 or later** ([GPL-3.0-or-later](LICENSE)).
 
