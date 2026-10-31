@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0-beta] - 2026-10-31
+
+### Highlights
+- **Android Physical Device Black Screen Fix & Wi-Fi Connection Manager**:
+  - **Self-Contained Connection & Setup UI**: Replaced the unresponsive black screen caused by unreachable emulator loopback defaults (`10.0.2.2:8000`) with a native, audiophile-styled setup screen (`#0a0b0e` / `#00e5ff`) rendered via `loadDataWithBaseURL`.
+  - **Wi-Fi Subnet Auto-Discovery Engine**: Multi-threaded subnet scanner (`ExecutorService` probing port 8000 across `192.168.x.1-254`) that automatically discovers active CachyMusic workstation servers on the local Wi-Fi and presents 1-tap `📡 CONNECT` quick-action cards.
+  - **Persistent Host Configuration**: User-configured host addresses are securely remembered in Android `SharedPreferences` (`cachymusic_prefs`), booting directly into the lossless workstation on subsequent launches.
+  - **Interactive Server Switcher**: Pressing the Android hardware/gesture **Back** button at the root screen displays a native dialog offering to switch servers or exit, preventing users from ever being trapped on unreachable endpoints.
+  - **Graceful Error Recovery**: Comprehensive `onReceivedError` handling for both legacy and API 23+ `WebResourceRequest` main frame failures, displaying actionable diagnostic messages with instant **Retry** and **Scan Local Wi-Fi** triggers.
+- **Cross-Platform Release Executables & Bundles (GitHub Release `v1.0.0-beta`)**:
+  - **Linux Standalone Portable Package (`CachyMusic-v1.0.0-beta-linux.tar.gz`)**: Includes the pre-compiled 64-bit ELF `cachymusic` launcher binary, system menu assets, and automated `./install.sh` / `./uninstall.sh` scripts.
+  - **Windows Standalone Executable Suite (`CachyMusic-v1.0.0-beta-windows.zip`)**: Includes the windowless `CachyMusic.vbs` runner, `cachymusic.bat` launcher, and native Edge/Chrome app-mode window integration.
+  - **Android Native Signed APK (`CachyMusic-v1.0.0-beta.apk`)**: Compiled and signed release APK with Android 14 (`targetSdk 34`) support, hardware acceleration, cleartext local HTTP traffic, background audio playback, and wake lock.
+  - **Android Studio Project Archive (`CachyMusic-v1.0.0-beta-android-project.zip`)**: Clean source archive ready for Android Studio import and customization.
+- **Version Harmonization**:
+  - Synchronized public beta version across `package.json`, `index.html`, `build.gradle`, and GitHub release tags as `1.0.0-beta`.
+
+---
+
 ## [10.52.0] - 2026-10-31
 
 ### Highlights
