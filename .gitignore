@@ -19,7 +19,10 @@ server/soulseek-transfers.json
 # Android & Packager Build Artifacts
 tools/packager/android/build/
 tools/packager/android/.gradle/
+tools/packager/android/app/build/
+tools/packager/android/local.properties
 dist/
+bin/*-bin
 *.apk
 *.aab
 *.tar.gz
