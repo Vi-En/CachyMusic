@@ -16,7 +16,7 @@
 
 ## Overview
 
-**CachyMusic** is an open-source, high-fidelity music player engineered for music listeners. The name is inspired from my current OS called CachyOS.
+**CachyMusic** is an open-source music player. The name is inspired from my current OS called CachyOS.
 
 It is a lightweight, self-contained music player and audio workstation that runs directly in your browser or installs as a standalone desktop app.
 
