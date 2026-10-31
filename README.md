@@ -37,18 +37,16 @@ Pre-built binaries and standalone executable packages are available on the [GitH
 
 | Platform | Package | Description |
 |:---|:---|:---|
-| **Android** | [`CachyMusic-v1.0.0-beta.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta.apk) | Native signed APK with local Wi-Fi auto-discovery, background audio playback, and wake lock. |
+| **Android** | [`CachyMusic-v1.0.0-beta.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta.apk) | Native self-contained standalone APK. Plays local audio files directly from phone storage with 10-band PEQ, DSP engine, and turntable visualizers. 100% offline with zero server required. |
 | **Linux (64-bit)** | [`CachyMusic-v1.0.0-beta-linux.tar.gz`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-linux.tar.gz) | Standalone package with native compiled `cachymusic` ELF executable, XDG desktop integration, and vector icons. |
 | **Windows** | [`CachyMusic-v1.0.0-beta-windows.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-windows.zip) | Standalone zip package with silent `CachyMusic.vbs` runner, `cachymusic.bat` launcher, and Edge/Chrome app mode. |
 | **Android Studio** | [`CachyMusic-v1.0.0-beta-android-project.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-android-project.zip) | Complete source project archive ready for Android Studio import. |
 
-### Running on Android & Mobile Wi-Fi Streaming
-1. Run CachyMusic on your PC/Mac/Linux workstation (`./cachymusic` or `php -S 0.0.0.0:8000 index.php`).
-2. Ensure your smartphone or tablet is connected to the same Wi-Fi network.
-3. Open **CachyMusic** on Android:
-   - The app will automatically scan your local subnet and discover your computer with a 1-tap **`📡 CONNECT`** prompt.
-   - Alternatively, enter your computer's IP address (displayed under the **DOWNLOAD HUB $\to$ MOBILE & WI-FI** tab in CachyMusic).
-4. Tap Android's **Back** button at any time to switch servers or disconnect.
+### Android Standalone App & Playback
+1. Download and install [`CachyMusic-v1.0.0-beta.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta.apk) on your Android device.
+2. Launch **CachyMusic**. The workstation opens immediately on your phone—no PC, server, or Wi-Fi network needed.
+3. Tap **`+ LOCAL`** in the track library to select music files (FLAC, MP3, WAV, M4A, AAC, OGG) from your internal storage or SD card.
+4. CachyMusic parses embedded audio metadata and album art directly on the device and plays them through the 32-bit floating point Web Audio engine, 10-band PEQ, and vinyl turntable deck.
 
 ---
 

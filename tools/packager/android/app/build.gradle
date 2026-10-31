@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
 }
+
 android {
     namespace 'org.cachymusic.app'
     compileSdk 34
@@ -19,3 +20,19 @@ android {
         }
     }
 }
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.10.0'
+}
+
+tasks.register('syncWorkstationAssets', Sync) {
+    from("${project.rootDir}/../../..") {
+        include 'index.html', 'manifest.json'
+        include 'stylesheets/**'
+        include 'scripts/**'
+        include 'resources/**'
+    }
+    into "${projectDir}/src/main/assets"
+}
+
+preBuild.dependsOn syncWorkstationAssets

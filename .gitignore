@@ -20,6 +20,7 @@ server/soulseek-transfers.json
 tools/packager/android/build/
 tools/packager/android/.gradle/
 tools/packager/android/app/build/
+tools/packager/android/app/src/main/assets/
 tools/packager/android/local.properties
 dist/
 bin/*-bin
