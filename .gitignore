@@ -19,8 +19,11 @@ server/soulseek-transfers.json
 # Android & Packager Build Artifacts
 tools/packager/android/build/
 tools/packager/android/.gradle/
+dist/
 *.apk
 *.aab
+*.tar.gz
+*.zip
 
 # Python Cache
 __pycache__/
