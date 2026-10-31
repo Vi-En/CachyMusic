@@ -33,76 +33,13 @@ It is a lightweight, self-contained music player and audio workstation that runs
 
 ## Downloads & Releases (v1.0.0-beta)
 
-Pre-built binaries and standalone executable packages are available on the [GitHub Releases](https://github.com/Vi-En/CachyMusic/releases/tag/v1.0.0) page:
-
 | Platform | Package | Description |
 |:---|:---|:---|
-| **Android** | [`CachyMusic-v1.0.0-beta.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta.apk) | Native self-contained standalone APK. Plays local audio files directly from phone storage with 10-band PEQ, DSP engine, and turntable visualizers. 100% offline with zero server required. |
-| **Linux (64-bit)** | [`CachyMusic-v1.0.0-beta-linux.tar.gz`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-linux.tar.gz) | Standalone package with native compiled `cachymusic` ELF executable, XDG desktop integration, and vector icons. |
+| **Android** | [`CachyMusic-v1.0.0-beta.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta.apk) | Native self-contained standalone APK. |
+| **Linux (64-bit)** | [`CachyMusic-v1.0.0-beta-linux.tar.gz`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-linux.tar.gz) | Standalone package with native compiled `cachymusic` ELF executable. |
 | **Windows** | [`CachyMusic-v1.0.0-beta-windows.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-windows.zip) | Standalone zip package with silent `CachyMusic.vbs` runner, `cachymusic.bat` launcher, and Edge/Chrome app mode. |
 | **Android Studio** | [`CachyMusic-v1.0.0-beta-android-project.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-android-project.zip) | Complete source project archive ready for Android Studio import. |
 
-### Android Standalone App & Playback
-1. Download and install [`CachyMusic-v1.0.0-beta.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta.apk) on your Android device.
-2. Launch **CachyMusic**. The workstation opens immediately on your phone—no PC, server, or Wi-Fi network needed.
-3. Tap **`+ LOCAL`** in the track library to select music files (FLAC, MP3, WAV, M4A, AAC, OGG) from your internal storage or SD card.
-4. CachyMusic parses embedded audio metadata and album art directly on the device and plays them through the 32-bit floating point Web Audio engine, 10-band PEQ, and vinyl turntable deck.
-
----
-
-## Installation & Quick Start
-
-### Prerequisites
-- **PHP 8.2+** with `php-curl` and `php-mbstring`
-- Any modern web browser (Brave, Chrome, Firefox, Edge, Safari)
-- *Optional*: **Nicotine+** (for Soulseek P2P sharing)
-
-### One-Click Desktop Installation (Linux)
-Clone the repository and run the installer:
-
-```bash
-git clone https://github.com/Vi-En/CachyMusic.git
-cd CachyMusic
-./install.sh
-```
-
-This sets up:
-1. System dependency checks.
-2. The executable launcher at `~/.local/bin/cachymusic`.
-3. Desktop menu entries and high-resolution icons at `~/.local/share/applications`.
-
-Launch CachyMusic anytime from your application menu or terminal:
-```bash
-cachymusic
-```
-
-### Windows Quick Start
-1. Download [`CachyMusic-v1.0.0-beta-windows.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-windows.zip) from GitHub Releases.
-2. Extract the zip archive to any folder.
-3. Double-click `CachyMusic.vbs` (runs silently in the background) or `cachymusic.bat`.
-4. CachyMusic launches immediately as a dedicated windowed app.
-
-### Manual / Developer Launch
-You can also launch directly without installing:
-
-```bash
-php -S 127.0.0.1:8000 index.php
-```
-
-Then visit `http://127.0.0.1:8000/` in your browser.
-
-### Arch Linux / CachyOS (AUR)
-```bash
-cd packaging/aur
-makepkg -si
-```
-
-### Clean Uninstallation
-To remove the application shortcuts and launcher:
-```bash
-./uninstall.sh
-```
-*(Your music files, local library, and playlists remain untouched.)*
 
 ---
 
