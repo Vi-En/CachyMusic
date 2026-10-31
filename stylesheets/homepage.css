@@ -5165,9 +5165,9 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .topBar
     {
-        height: calc(3.1rem + env(safe-area-inset-top, 0px)) !important;
-        min-height: calc(3.1rem + env(safe-area-inset-top, 0px)) !important;
-        padding: max(0.35rem, env(safe-area-inset-top, 0px)) max(0.8rem, env(safe-area-inset-right, 0px)) 0.35rem max(0.8rem, env(safe-area-inset-left, 0px)) !important;
+        height: calc(3.1rem + max(0.65rem, env(safe-area-inset-top, 0px))) !important;
+        min-height: calc(3.1rem + max(0.65rem, env(safe-area-inset-top, 0px))) !important;
+        padding: max(0.65rem, env(safe-area-inset-top, 0px)) max(0.8rem, env(safe-area-inset-right, 0px)) 0.35rem max(0.8rem, env(safe-area-inset-left, 0px)) !important;
         display: flex !important;
         align-items: center !important;
         justify-content: space-between !important;
@@ -5177,6 +5177,10 @@ body.is-playing .playPauseBtn .playPauseGlowRing
         z-index: 100 !important;
         box-sizing: border-box !important;
         overflow: hidden !important;
+    }
+
+    body.view-settings #topSettingsBtn {
+        display: none !important;
     }
 
     .brand
@@ -5754,7 +5758,7 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     .persistentMiniPlayer
     {
         position: fixed !important;
-        bottom: calc(3.4rem + env(safe-area-inset-bottom, 0px)) !important;
+        bottom: calc(3.5rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
         left: 0 !important;
         right: 0 !important;
         width: 100% !important;
@@ -5787,8 +5791,9 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .miniPlayerLeft
     {
-        flex: 1 !important;
+        flex: 1 1 0% !important;
         max-width: none !important;
+        min-width: 0 !important;
         gap: 0.65rem !important;
         cursor: pointer !important;
     }
@@ -5797,18 +5802,25 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     {
         width: 2.5rem !important;
         height: 2.5rem !important;
+        flex-shrink: 0 !important;
     }
 
     .miniTitle
     {
         font-size: 0.86rem !important;
-        max-width: 46vw !important;
+        max-width: none !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
 
     .miniArtist
     {
         font-size: 0.72rem !important;
-        max-width: 46vw !important;
+        max-width: none !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
 
     .miniPlayerCenter
@@ -5861,9 +5873,7 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .miniDeckReturnBtn
     {
-        padding: 0.32rem 0.6rem !important;
-        font-size: 0.72rem !important;
-        border-radius: 0.25rem !important;
+        display: none !important;
     }
 
     /* ========================================================================= */
@@ -5877,9 +5887,9 @@ body.is-playing .playPauseBtn .playPauseGlowRing
         left: 0 !important;
         right: 0 !important;
         width: 100% !important;
-        height: calc(3.4rem + env(safe-area-inset-bottom, 0px)) !important;
-        min-height: calc(3.4rem + env(safe-area-inset-bottom, 0px)) !important;
-        padding: 0.22rem 0.35rem calc(0.22rem + env(safe-area-inset-bottom, 0px)) !important;
+        height: calc(3.5rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
+        min-height: calc(3.5rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
+        padding: 0.22rem 0.35rem calc(0.22rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
         margin: 0 !important;
         z-index: 9999 !important;
         box-sizing: border-box !important;
@@ -9299,36 +9309,116 @@ body.view-settings #headerSearchContainer
         font-size: 0.8rem;
     }
 
+    .slskPlaceholder
+    {
+        padding: 1.25rem 0.85rem !important;
+        gap: 0.5rem !important;
+        margin: 0 auto !important;
+    }
+
+    .slskRadarGraphic
+    {
+        width: 4.5rem !important;
+        height: 4.5rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+
+    .slskPlaceholder h3
+    {
+        font-size: 1.05rem !important;
+        letter-spacing: 0.05rem !important;
+        margin: 0 !important;
+    }
+
+    .slskPlaceholder p
+    {
+        font-size: 0.82rem !important;
+        line-height: 1.35 !important;
+        margin: 0 !important;
+    }
+
+    .slskSampleTags
+    {
+        gap: 0.4rem !important;
+        margin-top: 0.35rem !important;
+    }
+
+    .sampleTagBtn
+    {
+        font-size: 0.72rem !important;
+        padding: 0.25rem 0.55rem !important;
+    }
+
     .slskTransfersDrawer
     {
-        left: 0.5rem;
-        right: 0.5rem;
-        bottom: 0;
-        max-height: 75vh;
-        z-index: 60;
-        transform: translateY(105%);
-        box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.85);
+        left: 0.5rem !important;
+        right: 0.5rem !important;
+        bottom: calc(3.5rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
+        max-height: calc(100dvh - 8.5rem) !important;
+        z-index: 10000 !important;
+        transform: translateY(105%) !important;
+        box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.85) !important;
     }
 
     .slskTransfersDrawer.open
     {
-        transform: translateY(0);
+        transform: translateY(0) !important;
     }
 
     .slskTransfersHeader
     {
-        padding: 0.55rem 0.75rem;
+        padding: 0.45rem 0.65rem !important;
+        min-height: 2.7rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 0.4rem !important;
     }
 
     .slskTransfersTitle
     {
-        font-size: 0.82rem;
+        font-size: 0.76rem !important;
+        gap: 0.35rem !important;
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+        overflow: hidden !important;
+        display: flex !important;
+        align-items: center !important;
     }
 
-    .slskTransfersHeaderActions .actionBtn
+    .slskTransfersTitle strong
     {
-        padding: 0.3rem 0.5rem;
-        font-size: 0.72rem;
+        font-size: 0.76rem !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        letter-spacing: 0.04em !important;
+    }
+
+    #slskTransfersSummary
+    {
+        font-size: 0.66rem !important;
+        padding: 0.12rem 0.35rem !important;
+        border-radius: 4px !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+
+    .slskTransfersHeaderActions
+    {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.35rem !important;
+        flex-shrink: 0 !important;
+    }
+
+    .slskTransfersHeaderActions .actionBtn,
+    .slskTransfersHeaderActions #slskScanDownloadsBtn
+    {
+        padding: 0.28rem 0.55rem !important;
+        font-size: 0.7rem !important;
+        white-space: nowrap !important;
+        letter-spacing: 0.02em !important;
     }
 
     .persistentMiniPlayer
@@ -28273,38 +28363,38 @@ body.view-settings #headerSearchContainer
     color: #ffffff !important;
 }
 
-/* Default Theme: Soulseek Workspace */
+/* Default Theme: Soulseek Workspace (Studio Dark Unified) */
 :root[data-theme="default"] .soulseekWorkspace,
 :root:not([data-theme]) .soulseekWorkspace,
 [data-theme="default"] .soulseekWorkspace {
-    background: #f9fafb !important;
-    color: #111111 !important;
+    background: #0d0d12 !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .slskControlsPanel,
 :root:not([data-theme]) .slskControlsPanel,
 [data-theme="default"] .slskControlsPanel {
-    background: #ffffff !important;
-    border-bottom: 1.5px solid #d1d5db !important;
+    background: #14141c !important;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 :root[data-theme="default"] .slskToolbar,
 :root:not([data-theme]) .slskToolbar,
 [data-theme="default"] .slskToolbar {
-    background: #ffffff !important;
-    border: 1.5px solid #d1d5db !important;
+    background: #14141c !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 :root[data-theme="default"] .slskLogo,
 :root:not([data-theme]) .slskLogo,
 [data-theme="default"] .slskLogo {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .slskBadge,
 :root:not([data-theme]) .slskBadge,
 [data-theme="default"] .slskBadge {
-    background: #000000 !important;
+    background: #e60000 !important;
     color: #ffffff !important;
 }
 
@@ -28317,9 +28407,9 @@ body.view-settings #headerSearchContainer
 [data-theme="default"] .slskStatusPill,
 [data-theme="default"] .slskStatusPill *,
 [data-theme="default"] .slskStatusText {
-    background: #f3f4f6 !important;
-    border: none !important;
-    color: #111111 !important;
+    background: #1a1a24 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .slskStatItem,
@@ -28334,23 +28424,23 @@ body.view-settings #headerSearchContainer
 [data-theme="default"] .slskStatItem *,
 [data-theme="default"] .slskStatItem strong,
 [data-theme="default"] #slskUsername {
-    color: #111111 !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .slskDirPill,
 :root:not([data-theme]) .slskDirPill,
 [data-theme="default"] .slskDirPill {
-    background-color: #f3f4f6 !important;
-    border: 1px solid #9ca3af !important;
-    color: #111111 !important;
+    background-color: #1a1a24 !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .slskDirPill:hover,
 :root:not([data-theme]) .slskDirPill:hover,
 [data-theme="default"] .slskDirPill:hover {
-    background-color: #e5e7eb !important;
-    border-color: #111111 !important;
-    color: #000000 !important;
+    background-color: #242432 !important;
+    border-color: #ffffff !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .slskDirPill span,
@@ -28370,9 +28460,9 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .slskSyncDirBtn,
 :root:not([data-theme]) .slskSyncDirBtn,
 [data-theme="default"] .slskSyncDirBtn {
-    background-color: #ffffff !important;
-    border: 1.5px solid #111111 !important;
-    color: #111111 !important;
+    background-color: #1a1a24 !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
     text-shadow: none !important;
     font-weight: 800 !important;
 }
@@ -28800,21 +28890,21 @@ body.view-settings #headerSearchContainer
     color: #ffffff !important;
 }
 
-/* Default Theme Results Area */
+/* Default Theme Results Area (Studio Dark Audiophile Unified) */
 :root[data-theme="default"] .slskResultsCon,
 :root:not([data-theme]) .slskResultsCon,
 [data-theme="default"] .slskResultsCon {
-    background-color: #ffffff !important;
-    border: 1.5px solid #d1d5db !important;
+    background-color: #14141c !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.12) !important;
     border-radius: 0.5rem !important;
 }
 
 :root[data-theme="default"] .slskResultsHeader,
 :root:not([data-theme]) .slskResultsHeader,
 [data-theme="default"] .slskResultsHeader {
-    background: #f3f4f6 !important;
-    border-bottom: 1.5px solid #d1d5db !important;
-    color: #111111 !important;
+    background: #1a1a24 !important;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .slskResultsHeader .col,
@@ -28826,14 +28916,14 @@ body.view-settings #headerSearchContainer
 [data-theme="default"] .slskResultsHeader .col,
 [data-theme="default"] .slskResultsHeader .col *,
 [data-theme="default"] .slskResultsHeader .col span {
-    color: #111111 !important;
+    color: #cbd5e1 !important;
     font-weight: 800 !important;
 }
 
 :root[data-theme="default"] .slskResultsHeader .col.sortable .sortIndicator,
 :root:not([data-theme]) .slskResultsHeader .col.sortable .sortIndicator,
 [data-theme="default"] .slskResultsHeader .col.sortable .sortIndicator {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
     opacity: 0.9 !important;
 }
 
@@ -28843,35 +28933,35 @@ body.view-settings #headerSearchContainer
 :root:not([data-theme]) .slskResultsHeader .col.sortable.active *,
 [data-theme="default"] .slskResultsHeader .col.sortable.active,
 [data-theme="default"] .slskResultsHeader .col.sortable.active * {
-    color: #000000 !important;
+    color: #38bdf8 !important;
     font-weight: 900 !important;
 }
 
 :root[data-theme="default"] .slskResultsList,
 :root:not([data-theme]) .slskResultsList,
 [data-theme="default"] .slskResultsList {
-    background-color: #ffffff !important;
-    color: #111111 !important;
+    background-color: #14141c !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .slskPlaceholder,
 :root:not([data-theme]) .slskPlaceholder,
 [data-theme="default"] .slskPlaceholder {
     background: transparent !important;
-    color: #111111 !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .slskPlaceholder h3,
 :root:not([data-theme]) .slskPlaceholder h3,
 [data-theme="default"] .slskPlaceholder h3 {
-    color: #111111 !important;
+    color: #ffffff !important;
     font-weight: 900 !important;
 }
 
 :root[data-theme="default"] .slskPlaceholder p,
 :root:not([data-theme]) .slskPlaceholder p,
 [data-theme="default"] .slskPlaceholder p {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
     font-weight: 500 !important;
 }
 
@@ -28879,165 +28969,165 @@ body.view-settings #headerSearchContainer
 :root:not([data-theme]) .slskRadarGraphic,
 [data-theme="default"] .slskRadarGraphic {
     border: none !important;
-    background: radial-gradient(circle, rgba(0, 0, 0, 0.04) 0%, transparent 70%) !important;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.1) 0%, transparent 70%) !important;
 }
 
 :root[data-theme="default"] .radarRing,
 :root:not([data-theme]) .radarRing,
 [data-theme="default"] .radarRing {
-    border: 1px dashed rgba(0, 0, 0, 0.25) !important;
+    border: 1px dashed rgba(56, 189, 248, 0.3) !important;
 }
 
 :root[data-theme="default"] .radarSweep,
 :root:not([data-theme]) .radarSweep,
 [data-theme="default"] .radarSweep {
-    border-top: 2px solid #111111 !important;
-    opacity: 0.4 !important;
+    border-top: 2px solid #38bdf8 !important;
+    opacity: 0.6 !important;
 }
 
 :root[data-theme="default"] .radarIcon,
 :root:not([data-theme]) .radarIcon,
 [data-theme="default"] .radarIcon {
-    color: #111111 !important;
+    color: #38bdf8 !important;
 }
 
 :root[data-theme="default"] .slskSampleTags span,
 :root:not([data-theme]) .slskSampleTags span,
 [data-theme="default"] .slskSampleTags span {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
     font-weight: 600 !important;
 }
 
 :root[data-theme="default"] .sampleTagBtn,
 :root:not([data-theme]) .sampleTagBtn,
 [data-theme="default"] .sampleTagBtn {
-    background: #f3f4f6 !important;
-    border: 1px solid #d1d5db !important;
-    color: #111111 !important;
+    background: #1e293b !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    color: #f0f6fc !important;
     font-weight: 600 !important;
 }
 
 :root[data-theme="default"] .sampleTagBtn:hover,
 :root:not([data-theme]) .sampleTagBtn:hover,
 [data-theme="default"] .sampleTagBtn:hover {
-    background: #111111 !important;
-    border-color: #111111 !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #040712 !important;
 }
 
 :root[data-theme="default"] #slskSearchingTitle,
 :root:not([data-theme]) #slskSearchingTitle,
 [data-theme="default"] #slskSearchingTitle {
-    color: #111111 !important;
+    color: #ffffff !important;
     font-weight: 800 !important;
 }
 
 :root[data-theme="default"] .slskSearchingState p,
 :root:not([data-theme]) .slskSearchingState p,
 [data-theme="default"] .slskSearchingState p {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] .slskSpinner,
 :root:not([data-theme]) .slskSpinner,
 [data-theme="default"] .slskSpinner {
-    border: 3px solid #e5e7eb !important;
-    border-top-color: #111111 !important;
+    border: 3px solid rgba(255, 255, 255, 0.16) !important;
+    border-top-color: #38bdf8 !important;
 }
 
 :root[data-theme="default"] .slskResultRow,
 :root:not([data-theme]) .slskResultRow,
 [data-theme="default"] .slskResultRow {
-    background: #ffffff !important;
-    color: #111111 !important;
-    border-bottom: 1px solid #e5e7eb !important;
+    background: #14141c !important;
+    color: #f0f6fc !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 :root[data-theme="default"] .slskResultRow:hover,
 :root:not([data-theme]) .slskResultRow:hover,
 [data-theme="default"] .slskResultRow:hover {
-    background: #f9fafb !important;
-    color: #000000 !important;
+    background: #1e293b !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .slskResultTitle,
 :root:not([data-theme]) .slskResultTitle,
 [data-theme="default"] .slskResultTitle {
-    color: #111111 !important;
+    color: #ffffff !important;
     font-weight: 700 !important;
 }
 
 :root[data-theme="default"] .slskResultPath,
 :root:not([data-theme]) .slskResultPath,
 [data-theme="default"] .slskResultPath {
-    color: #6b7280 !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] .slskBitrateVal,
 :root:not([data-theme]) .slskBitrateVal,
 [data-theme="default"] .slskBitrateVal {
-    color: #111111 !important;
+    color: #cbd5e1 !important;
     font-weight: 600 !important;
 }
 
 :root[data-theme="default"] .slskBitrateVal.hiRes,
 :root:not([data-theme]) .slskBitrateVal.hiRes,
 [data-theme="default"] .slskBitrateVal.hiRes {
-    color: #059669 !important;
+    color: #34d399 !important;
     font-weight: 800 !important;
 }
 
 :root[data-theme="default"] .slskSampleRateVal,
 :root:not([data-theme]) .slskSampleRateVal,
 [data-theme="default"] .slskSampleRateVal {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] .slskSizeVal,
 :root:not([data-theme]) .slskSizeVal,
 [data-theme="default"] .slskSizeVal {
-    color: #374151 !important;
+    color: #cbd5e1 !important;
 }
 
 :root[data-theme="default"] .slskPeerUser,
 :root:not([data-theme]) .slskPeerUser,
 [data-theme="default"] .slskPeerUser {
-    color: #111111 !important;
+    color: #ffffff !important;
     font-weight: 600 !important;
 }
 
 :root[data-theme="default"] .slskPeerSpeed,
 :root:not([data-theme]) .slskPeerSpeed,
 [data-theme="default"] .slskPeerSpeed {
-    color: #059669 !important;
+    color: #34d399 !important;
     font-weight: 700 !important;
 }
 
 :root[data-theme="default"] .slskQueueVal,
 :root:not([data-theme]) .slskQueueVal,
 [data-theme="default"] .slskQueueVal {
-    color: #374151 !important;
+    color: #cbd5e1 !important;
 }
 
 :root[data-theme="default"] .slskQueueVal.free,
 :root:not([data-theme]) .slskQueueVal.free,
 [data-theme="default"] .slskQueueVal.free {
-    color: #059669 !important;
+    color: #34d399 !important;
     font-weight: 800 !important;
 }
 
 :root[data-theme="default"] .slskQueueVal.queued,
 :root:not([data-theme]) .slskQueueVal.queued,
 [data-theme="default"] .slskQueueVal.queued {
-    color: #b45309 !important;
+    color: #fbbf24 !important;
     font-weight: 700 !important;
 }
 
 :root[data-theme="default"] .slskFormatBadge.badgeFlac,
 :root:not([data-theme]) .slskFormatBadge.badgeFlac,
 [data-theme="default"] .slskFormatBadge.badgeFlac {
-    color: #0369a1 !important;
-    background-color: #e0f2fe !important;
+    color: #38bdf8 !important;
+    background-color: rgba(56, 189, 248, 0.15) !important;
     border: none !important;
     font-weight: 800 !important;
 }
@@ -29045,8 +29135,8 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .slskFormatBadge.badgeMp3,
 :root:not([data-theme]) .slskFormatBadge.badgeMp3,
 [data-theme="default"] .slskFormatBadge.badgeMp3 {
-    color: #92400e !important;
-    background-color: #fef3c7 !important;
+    color: #fbbf24 !important;
+    background-color: rgba(251, 191, 36, 0.15) !important;
     border: none !important;
     font-weight: 800 !important;
 }
@@ -29054,8 +29144,8 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .slskFormatBadge.badgeOther,
 :root:not([data-theme]) .slskFormatBadge.badgeOther,
 [data-theme="default"] .slskFormatBadge.badgeOther {
-    color: #6d28d9 !important;
-    background-color: #ede9fe !important;
+    color: #c084fc !important;
+    background-color: rgba(192, 132, 252, 0.15) !important;
     border: none !important;
     font-weight: 800 !important;
 }
@@ -29063,51 +29153,51 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .slskBtn,
 :root:not([data-theme]) .slskBtn,
 [data-theme="default"] .slskBtn {
-    background-color: #f3f4f6 !important;
-    border: 1px solid #d1d5db !important;
-    color: #111111 !important;
+    background-color: #1e293b !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    color: #f0f6fc !important;
     font-weight: 700 !important;
 }
 
 :root[data-theme="default"] .slskBtn:hover,
 :root:not([data-theme]) .slskBtn:hover,
 [data-theme="default"] .slskBtn:hover {
-    background-color: #111111 !important;
-    border-color: #111111 !important;
-    color: #ffffff !important;
+    background-color: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #040712 !important;
 }
 
 :root[data-theme="default"] .slskBtnPrimary,
 :root:not([data-theme]) .slskBtnPrimary,
 [data-theme="default"] .slskBtnPrimary {
-    background-color: #111111 !important;
-    border: 1px solid #111111 !important;
-    color: #ffffff !important;
+    background-color: #38bdf8 !important;
+    border: 1px solid #38bdf8 !important;
+    color: #040712 !important;
     font-weight: 800 !important;
 }
 
 :root[data-theme="default"] .slskBtnPrimary:hover,
 :root:not([data-theme]) .slskBtnPrimary:hover,
 [data-theme="default"] .slskBtnPrimary:hover {
-    background-color: #374151 !important;
-    border-color: #374151 !important;
-    color: #ffffff !important;
+    background-color: #7dd3fc !important;
+    border-color: #7dd3fc !important;
+    color: #040712 !important;
 }
 
 :root[data-theme="default"] .slskBtn.enqueued,
 :root:not([data-theme]) .slskBtn.enqueued,
 [data-theme="default"] .slskBtn.enqueued {
-    background-color: #ecfdf5 !important;
+    background-color: rgba(16, 185, 129, 0.2) !important;
     border-color: #10b981 !important;
-    color: #065f46 !important;
+    color: #34d399 !important;
 }
 
 :root[data-theme="default"] .slskResultsFooter,
 :root:not([data-theme]) .slskResultsFooter,
 [data-theme="default"] .slskResultsFooter {
-    background-color: #f9fafb !important;
-    border-top: 1px solid #e5e7eb !important;
-    color: #374151 !important;
+    background-color: #1a1a24 !important;
+    border-top: 1.5px solid rgba(255, 255, 255, 0.1) !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] #slskResultCount,
@@ -29116,26 +29206,24 @@ body.view-settings #headerSearchContainer
 :root:not([data-theme]) #slskActiveSearchMeta,
 [data-theme="default"] #slskResultCount,
 [data-theme="default"] #slskActiveSearchMeta {
-    color: #374151 !important;
+    color: #94a3b8 !important;
     font-weight: 700 !important;
 }
 
-/* Default Theme Transfers Drawer & Mini Deck Return */
 :root[data-theme="default"] .slskTransfersDrawer,
 :root:not([data-theme]) .slskTransfersDrawer,
 [data-theme="default"] .slskTransfersDrawer {
-    background-color: #ffffff !important;
-    border: 1.5px solid #d1d5db !important;
-    border-top: 2px solid #111111 !important;
-    color: #111111 !important;
+    background-color: #14141c !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .slskTransfersHeader,
 :root:not([data-theme]) .slskTransfersHeader,
 [data-theme="default"] .slskTransfersHeader {
-    background-color: #f3f4f6 !important;
-    border-bottom: 1.5px solid #d1d5db !important;
-    color: #111111 !important;
+    background-color: #1a1a24 !important;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .slskTransfersTitle,
@@ -29150,77 +29238,80 @@ body.view-settings #headerSearchContainer
 [data-theme="default"] .slskTransfersTitle strong,
 [data-theme="default"] .slskTransfersTitle .drawerArrow,
 [data-theme="default"] .slskTransfersTitle span {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] #slskTransfersSummary,
 :root:not([data-theme]) #slskTransfersSummary,
 [data-theme="default"] #slskTransfersSummary {
-    background: #111111 !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    color: #040712 !important;
     border: none !important;
+    font-weight: 800 !important;
 }
 
 :root[data-theme="default"] #slskScanDownloadsBtn,
 :root:not([data-theme]) #slskScanDownloadsBtn,
 [data-theme="default"] #slskScanDownloadsBtn {
-    background-color: #111111 !important;
-    border: 1px solid #111111 !important;
-    color: #ffffff !important;
+    background-color: #242434 !important;
+    border: 1px solid rgba(56, 189, 248, 0.4) !important;
+    color: #38bdf8 !important;
 }
 
 :root[data-theme="default"] #slskScanDownloadsBtn *,
 :root:not([data-theme]) #slskScanDownloadsBtn *,
 [data-theme="default"] #slskScanDownloadsBtn * {
-    color: #ffffff !important;
+    color: #38bdf8 !important;
 }
 
 :root[data-theme="default"] #slskScanDownloadsBtn:hover,
 :root:not([data-theme]) #slskScanDownloadsBtn:hover,
 [data-theme="default"] #slskScanDownloadsBtn:hover {
-    background-color: #374151 !important;
+    background-color: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #040712 !important;
 }
 
 :root[data-theme="default"] #slskResumeAllBtn,
 :root:not([data-theme]) #slskResumeAllBtn,
 [data-theme="default"] #slskResumeAllBtn {
-    background-color: #ffffff !important;
-    border: 1px solid #d1d5db !important;
-    color: #111111 !important;
+    background-color: #1e293b !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] #slskCloseDrawerBtn,
 :root:not([data-theme]) #slskCloseDrawerBtn,
 [data-theme="default"] #slskCloseDrawerBtn {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .slskTransfersBody,
 :root:not([data-theme]) .slskTransfersBody,
 [data-theme="default"] .slskTransfersBody {
-    background-color: #ffffff !important;
-    color: #111111 !important;
+    background-color: #14141c !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .slskEmptyTransfers,
 :root:not([data-theme]) .slskEmptyTransfers,
 [data-theme="default"] .slskEmptyTransfers {
-    color: #6b7280 !important;
+    color: #94a3b8 !important;
     font-weight: 600 !important;
 }
 
 :root[data-theme="default"] .slskTransferRow,
 :root:not([data-theme]) .slskTransferRow,
 [data-theme="default"] .slskTransferRow {
-    background-color: #f9fafb !important;
-    border: 1px solid #e5e7eb !important;
+    background-color: #1a1a24 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 0.35rem !important;
 }
 
 :root[data-theme="default"] .slskTransferName,
 :root:not([data-theme]) .slskTransferName,
 [data-theme="default"] .slskTransferName {
-    color: #111111 !important;
+    color: #ffffff !important;
     font-weight: 700 !important;
 }
 
@@ -29230,26 +29321,26 @@ body.view-settings #headerSearchContainer
 :root:not([data-theme]) .slskTransferMeta span,
 [data-theme="default"] .slskTransferMeta,
 [data-theme="default"] .slskTransferMeta span {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] .slskTransferMeta .speed,
 :root:not([data-theme]) .slskTransferMeta .speed,
 [data-theme="default"] .slskTransferMeta .speed {
-    color: #059669 !important;
+    color: #34d399 !important;
     font-weight: 700 !important;
 }
 
 :root[data-theme="default"] .slskTransferBarCon,
 :root:not([data-theme]) .slskTransferBarCon,
 [data-theme="default"] .slskTransferBarCon {
-    background-color: #e5e7eb !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 :root[data-theme="default"] .slskTransferBarFill,
 :root:not([data-theme]) .slskTransferBarFill,
 [data-theme="default"] .slskTransferBarFill {
-    background-color: #111111 !important;
+    background-color: #38bdf8 !important;
 }
 
 :root[data-theme="default"] .slskTransferBarFill.finished,
@@ -29261,9 +29352,9 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .slskPlayNowBtn,
 :root:not([data-theme]) .slskPlayNowBtn,
 [data-theme="default"] .slskPlayNowBtn {
-    background-color: #111111 !important;
+    background-color: #1e293b !important;
     color: #ffffff !important;
-    border: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
     font-weight: 800 !important;
     box-shadow: none !important;
 }
@@ -29432,13 +29523,13 @@ body.view-settings #headerSearchContainer
     border-color: #e5e7eb !important;
 }
 
-/* Default Theme: Mobile Controls Toggle Bar */
+/* Default Theme: Mobile Controls Toggle Bar (Studio Dark) */
 :root[data-theme="default"] .slskPanelToggleBar,
 :root:not([data-theme]) .slskPanelToggleBar,
 [data-theme="default"] .slskPanelToggleBar {
-    background: #ffffff !important;
-    border: 1.5px solid #d1d5db !important;
-    color: #111111 !important;
+    background: #14141c !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .slskToggleTitle,
@@ -29450,7 +29541,7 @@ body.view-settings #headerSearchContainer
 [data-theme="default"] .slskToggleTitle,
 [data-theme="default"] .slskToggleIcon,
 [data-theme="default"] .slskToggleChevron {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .slskToggleActiveFilter,
@@ -29488,40 +29579,40 @@ body.view-settings #headerSearchContainer
     color: #ffffff !important;
 }
 
-/* Default Theme: Settings Workspace & Cards */
+/* Default Theme: Settings Workspace & Cards (Studio Dark) */
 :root[data-theme="default"] .settingsWorkspace,
 :root:not([data-theme]) .settingsWorkspace,
 [data-theme="default"] .settingsWorkspace {
-    background: #f9fafb !important;
-    background-color: #f9fafb !important;
-    color: #111111 !important;
+    background: #0d0d12 !important;
+    background-color: #0d0d12 !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .settingsHubHeader,
 :root:not([data-theme]) .settingsHubHeader,
 [data-theme="default"] .settingsHubHeader {
-    border-bottom: 1.5px solid #d1d5db !important;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 :root[data-theme="default"] .settingsBadge,
 :root:not([data-theme]) .settingsBadge,
 [data-theme="default"] .settingsBadge {
-    background: #e5e7eb !important;
-    border: none !important;
-    color: #111111 !important;
+    background: rgba(56, 189, 248, 0.15) !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
+    color: #38bdf8 !important;
     text-shadow: none !important;
 }
 
 :root[data-theme="default"] .settingsHubHeaderLeft h2,
 :root:not([data-theme]) .settingsHubHeaderLeft h2,
 [data-theme="default"] .settingsHubHeaderLeft h2 {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .settingsSubtitle,
 :root:not([data-theme]) .settingsSubtitle,
 [data-theme="default"] .settingsSubtitle {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] .settingsReturnBtn,
@@ -29530,10 +29621,10 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .settingsWorkspace .settingsReturnBtn,
 :root:not([data-theme]) .settingsWorkspace .settingsReturnBtn,
 [data-theme="default"] .settingsWorkspace .settingsReturnBtn {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
-    border: 1px solid #000000 !important;
-    color: #111111 !important;
+    background: #181f2e !important;
+    background-color: #181f2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    color: #ffffff !important;
     box-shadow: none !important;
 }
 
@@ -29543,37 +29634,38 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .settingsWorkspace .settingsReturnBtn:hover,
 :root:not([data-theme]) .settingsWorkspace .settingsReturnBtn:hover,
 [data-theme="default"] .settingsWorkspace .settingsReturnBtn:hover {
-    background: #000000 !important;
-    background-color: #000000 !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    background-color: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #040712 !important;
 }
 
 :root[data-theme="default"] .settingsCard,
 :root:not([data-theme]) .settingsCard,
 [data-theme="default"] .settingsCard {
-    background: #ffffff !important;
-    border: 1px solid #e5e7eb !important;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05) !important;
+    background: #131722 !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
 }
 
 :root[data-theme="default"] .settingsCardMeta h3,
 :root:not([data-theme]) .settingsCardMeta h3,
 [data-theme="default"] .settingsCardMeta h3 {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .settingsCardMeta p,
 :root:not([data-theme]) .settingsCardMeta p,
 [data-theme="default"] .settingsCardMeta p {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] .settingsInput,
 :root:not([data-theme]) .settingsInput,
 [data-theme="default"] .settingsInput {
-    background: #ffffff !important;
-    border-color: #d1d5db !important;
-    color: #111111 !important;
+    background: #181f2e !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .settingsScanStatusBox,
@@ -29594,21 +29686,21 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .settingsSleepStatusRow,
 :root:not([data-theme]) .settingsSleepStatusRow,
 [data-theme="default"] .settingsSleepStatusRow {
-    background: #f9fafb !important;
-    border-color: #e5e7eb !important;
+    background: #181f2e !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 :root[data-theme="default"] .settingsDspVal,
 :root:not([data-theme]) .settingsDspVal,
 [data-theme="default"] .settingsDspVal {
-    color: #111111 !important;
+    color: #38bdf8 !important;
 }
 
 :root[data-theme="default"] .settingsThemeBadge,
 :root:not([data-theme]) .settingsThemeBadge,
 [data-theme="default"] .settingsThemeBadge {
-    background: #111111 !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    color: #040712 !important;
     box-shadow: none !important;
 }
 
@@ -29616,36 +29708,36 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .downloadWorkspace,
 :root:not([data-theme]) .downloadWorkspace,
 [data-theme="default"] .downloadWorkspace {
-    background: #f9fafb !important;
-    background-color: #f9fafb !important;
-    color: #111111 !important;
+    background: #0d0d12 !important;
+    background-color: #0d0d12 !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .downloadHubHeader,
 :root:not([data-theme]) .downloadHubHeader,
 [data-theme="default"] .downloadHubHeader {
-    border-bottom: 1.5px solid #d1d5db !important;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 :root[data-theme="default"] .downloadBadge,
 :root:not([data-theme]) .downloadBadge,
 [data-theme="default"] .downloadBadge {
-    background: #e5e7eb !important;
-    border: none !important;
-    color: #111111 !important;
+    background: rgba(56, 189, 248, 0.15) !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
+    color: #38bdf8 !important;
     text-shadow: none !important;
 }
 
 :root[data-theme="default"] .downloadHubHeaderLeft h2,
 :root:not([data-theme]) .downloadHubHeaderLeft h2,
 [data-theme="default"] .downloadHubHeaderLeft h2 {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .downloadSubtitle,
 :root:not([data-theme]) .downloadSubtitle,
 [data-theme="default"] .downloadSubtitle {
-    color: #4b5563 !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] .downloadReturnBtn,
@@ -29654,10 +29746,10 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .downloadWorkspace .downloadReturnBtn,
 :root:not([data-theme]) .downloadWorkspace .downloadReturnBtn,
 [data-theme="default"] .downloadWorkspace .downloadReturnBtn {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
-    border: 1px solid #000000 !important;
-    color: #111111 !important;
+    background: #181f2e !important;
+    background-color: #181f2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    color: #ffffff !important;
     box-shadow: none !important;
 }
 
@@ -29667,9 +29759,10 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .downloadWorkspace .downloadReturnBtn:hover,
 :root:not([data-theme]) .downloadWorkspace .downloadReturnBtn:hover,
 [data-theme="default"] .downloadWorkspace .downloadReturnBtn:hover {
-    background: #000000 !important;
-    background-color: #000000 !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    background-color: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #040712 !important;
 }
 
 :root[data-theme="default"] .downloadDirectPwaBtn,
@@ -29678,10 +29771,11 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] #downloadPwaPromptBtn,
 :root:not([data-theme]) #downloadPwaPromptBtn,
 [data-theme="default"] #downloadPwaPromptBtn {
-    background: #000000 !important;
-    background-color: #000000 !important;
-    border: 1px solid #000000 !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    background-color: #38bdf8 !important;
+    border: 1px solid #38bdf8 !important;
+    color: #040712 !important;
+    font-weight: 800 !important;
 }
 
 :root[data-theme="default"] #installAppBtn,
@@ -29711,82 +29805,82 @@ body.view-settings #headerSearchContainer
 :root[data-theme="default"] .downloadTabsBar,
 :root:not([data-theme]) .downloadTabsBar,
 [data-theme="default"] .downloadTabsBar {
-    border-bottom: 1.5px solid #d1d5db !important;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 :root[data-theme="default"] .downloadTabBtn,
 :root:not([data-theme]) .downloadTabBtn,
 [data-theme="default"] .downloadTabBtn {
-    background: #ffffff !important;
-    border: 1.5px solid #d1d5db !important;
-    color: #374151 !important;
+    background: #181f2e !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.14) !important;
+    color: #cbd5e1 !important;
     box-shadow: none !important;
 }
 
 :root[data-theme="default"] .downloadTabBtn .platformName,
 :root:not([data-theme]) .downloadTabBtn .platformName,
 [data-theme="default"] .downloadTabBtn .platformName {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .downloadTabBtn .platformSub,
 :root:not([data-theme]) .downloadTabBtn .platformSub,
 [data-theme="default"] .downloadTabBtn .platformSub {
-    color: #6b7280 !important;
+    color: #94a3b8 !important;
 }
 
 :root[data-theme="default"] .downloadTabBtn .osDetectedBadge,
 :root:not([data-theme]) .downloadTabBtn .osDetectedBadge,
 [data-theme="default"] .downloadTabBtn .osDetectedBadge {
-    background: #111111 !important;
+    background: #38bdf8 !important;
     border: none !important;
-    color: #ffffff !important;
+    color: #040712 !important;
 }
 
 :root[data-theme="default"] .downloadTabBtn:hover,
 :root:not([data-theme]) .downloadTabBtn:hover,
 [data-theme="default"] .downloadTabBtn:hover {
-    background: #f3f4f6 !important;
-    border-color: #111111 !important;
-    color: #111111 !important;
+    background: #242c3e !important;
+    border-color: #38bdf8 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .downloadTabBtn.active,
 :root:not([data-theme]) .downloadTabBtn.active,
 [data-theme="default"] .downloadTabBtn.active {
-    background: #ffffff !important;
-    border: 2px solid #000000 !important;
-    color: #111111 !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+    background: #38bdf8 !important;
+    border: 2px solid #38bdf8 !important;
+    color: #040712 !important;
+    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25) !important;
 }
 
 :root[data-theme="default"] .downloadTabBtn.active .platformName,
 :root:not([data-theme]) .downloadTabBtn.active .platformName,
 [data-theme="default"] .downloadTabBtn.active .platformName {
-    color: #000000 !important;
+    color: #040712 !important;
     text-shadow: none !important;
 }
 
 :root[data-theme="default"] .downloadTabBtn.active .platformSub,
 :root:not([data-theme]) .downloadTabBtn.active .platformSub,
 [data-theme="default"] .downloadTabBtn.active .platformSub {
-    color: #374151 !important;
+    color: #082f49 !important;
 }
 
 /* Default Cards */
 :root[data-theme="default"] .downloadCardMain,
 :root:not([data-theme]) .downloadCardMain,
 [data-theme="default"] .downloadCardMain {
-    background: #ffffff !important;
-    border: 1.5px solid #000000 !important;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
-    color: #111111 !important;
+    background: #131722 !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
+    color: #f0f6fc !important;
 }
 
 :root[data-theme="default"] .cardHeaderLeft h3,
 :root:not([data-theme]) .cardHeaderLeft h3,
 [data-theme="default"] .cardHeaderLeft h3 {
-    color: #111111 !important;
+    color: #ffffff !important;
 }
 
 :root[data-theme="default"] .clientTag,
@@ -36945,13 +37039,13 @@ html.is-firefox .visualizerDock {
         display: flex !important;
         flex-direction: column !important;
         width: 100% !important;
-        height: calc(100dvh - 3.1rem - env(safe-area-inset-top, 0px)) !important;
+        height: calc(100dvh - 3.1rem - max(0.65rem, env(safe-area-inset-top, 0px))) !important;
         min-height: 0 !important;
-        max-height: calc(100dvh - 3.1rem - env(safe-area-inset-top, 0px)) !important;
+        max-height: calc(100dvh - 3.1rem - max(0.65rem, env(safe-area-inset-top, 0px))) !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
         -webkit-overflow-scrolling: touch !important;
-        padding: 0.65rem 0.65rem calc(5.2rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding: 0.85rem 0.85rem calc(9.2rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
         margin: 0 !important;
         box-sizing: border-box !important;
     }
@@ -37000,7 +37094,7 @@ html.is-firefox .visualizerDock {
     :root[data-theme] body .gridContainer .settingsPanel.mobileActive,
     body .trackListPanel.mobileActive,
     body .settingsPanel.mobileActive {
-        padding-bottom: calc(7.6rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(9.2rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch !important;
     }
@@ -37008,7 +37102,7 @@ html.is-firefox .visualizerDock {
     :root body .gridContainer .playerDeck.mobileActive,
     :root[data-theme] body .gridContainer .playerDeck.mobileActive,
     body .playerDeck.mobileActive {
-        padding-bottom: calc(4.0rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(4.6rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch !important;
     }
@@ -40660,21 +40754,21 @@ body .dspDeck {
 
     /* Info Panel on mobile */
     .settingsPanel.mobileActive {
-        padding: 0.75rem 0.85rem calc(7.6rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding: 0.75rem 0.85rem calc(9.2rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch !important;
     }
 
     /* Library / Tracks Panel on mobile */
     .trackListPanel.mobileActive {
-        padding: 0.75rem 0.85rem calc(7.6rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding: 0.75rem 0.85rem calc(9.2rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch !important;
     }
 
     /* Settings Workspace on mobile */
     .settingsWorkspace {
-        padding: 0.85rem 0.85rem calc(7.6rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding: 0.85rem 0.85rem calc(9.2rem + max(0.55rem, env(safe-area-inset-bottom, 0px))) !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch !important;
     }
@@ -44519,98 +44613,98 @@ body .dspDeck {
     margin: 0 !important;
 }
 
-/* Default Studio Hi-Fi Theme (#settingsWorkspace Parent -> Section Card -> Child Row -> Grandchild Control) */
+/* Default Studio Hi-Fi Theme (Studio Dark Audiophile Unified) */
 :root:not([data-theme]) #settingsWorkspace,
 :root:not([data-theme]) .settingsWorkspace,
 [data-theme="default"] #settingsWorkspace,
 [data-theme="default"] .settingsWorkspace {
-    background: #f1f5f9 !important;
-    color: #0f172a !important;
+    background: #0d0d12 !important;
+    color: #f0f6fc !important;
 }
 
 :root:not([data-theme]) .settingsHubHeader,
 [data-theme="default"] .settingsHubHeader {
-    border-bottom: 1.5px solid #cbd5e1 !important;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 :root:not([data-theme]) .settingsHubHeaderLeft h2,
 [data-theme="default"] .settingsHubHeaderLeft h2 {
-    color: #0f172a !important;
+    color: #ffffff !important;
     font-weight: 900 !important;
     text-shadow: none !important;
 }
 
 :root:not([data-theme]) .settingsSubtitle,
 [data-theme="default"] .settingsSubtitle {
-    color: #334155 !important;
+    color: #94a3b8 !important;
 }
 
 :root:not([data-theme]) .settingsBadge,
 [data-theme="default"] .settingsBadge {
-    background: #0f172a !important;
-    color: #ffffff !important;
-    border: 1px solid #0f172a !important;
+    background: rgba(56, 189, 248, 0.15) !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
     font-weight: 800 !important;
 }
 
 :root:not([data-theme]) .settingsReturnBtn,
 [data-theme="default"] .settingsReturnBtn {
-    background: #ffffff !important;
-    border: 1.5px solid #64748b !important;
-    color: #0f172a !important;
+    background: #181f2e !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+    color: #ffffff !important;
     font-weight: 800 !important;
 }
 
 :root:not([data-theme]) .settingsReturnBtn:hover,
 [data-theme="default"] .settingsReturnBtn:hover {
-    background: #0f172a !important;
-    border-color: #0f172a !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #040712 !important;
 }
 
 :root:not([data-theme]) .settingsSectionPanel,
 [data-theme="default"] .settingsSectionPanel {
-    background: #ffffff !important;
-    border: 1.5px solid #cbd5e1 !important;
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06) !important;
-    color: #0f172a !important;
+    background: #131722 !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
+    color: #f0f6fc !important;
 }
 
 :root:not([data-theme]) .settingsSectionHeader,
 [data-theme="default"] .settingsSectionHeader {
-    border-bottom: 1.5px solid #e2e8f0 !important;
+    border-bottom: 1.5px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 :root:not([data-theme]) .settingsSectionBadge,
 [data-theme="default"] .settingsSectionBadge {
-    background: #0f172a !important;
-    color: #ffffff !important;
-    border: 1px solid #0f172a !important;
+    background: rgba(56, 189, 248, 0.18) !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
     font-weight: 800 !important;
 }
 
 :root:not([data-theme]) .settingsSectionTitle,
 [data-theme="default"] .settingsSectionTitle {
-    color: #0f172a !important;
+    color: #ffffff !important;
     font-weight: 900 !important;
     text-shadow: none !important;
 }
 
 :root:not([data-theme]) .settingsSectionDesc,
 [data-theme="default"] .settingsSectionDesc {
-    color: #334155 !important;
+    color: #94a3b8 !important;
 }
 
 :root:not([data-theme]) .settingsRowItem,
 [data-theme="default"] .settingsRowItem {
-    background: #f8fafc !important;
-    border: 1.5px solid #cbd5e1 !important;
-    color: #0f172a !important;
+    background: #181f2e !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.1) !important;
+    color: #f0f6fc !important;
 }
 
 :root:not([data-theme]) .settingsRowTitle,
 [data-theme="default"] .settingsRowTitle {
-    color: #0f172a !important;
+    color: #ffffff !important;
     font-weight: 800 !important;
     text-shadow: none !important;
 }
@@ -44621,61 +44715,61 @@ body .dspDeck {
 [data-theme="default"] .settingsRowDesc,
 [data-theme="default"] .settingsCardNote,
 [data-theme="default"] .settingsPresetLabel {
-    color: #334155 !important;
+    color: #94a3b8 !important;
 }
 
 :root:not([data-theme]) .settingsEnginePill,
 :root:not([data-theme]) .settingsSleepBadge,
 [data-theme="default"] .settingsEnginePill,
 [data-theme="default"] .settingsSleepBadge {
-    background: #e2e8f0 !important;
-    border: 1px solid #64748b !important;
-    color: #0f172a !important;
+    background: #1e293b !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    color: #f0f6fc !important;
     font-weight: 800 !important;
 }
 
 :root:not([data-theme]) .settingsDspMetricItem,
 [data-theme="default"] .settingsDspMetricItem {
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
+    background: #181f2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
 :root:not([data-theme]) .settingsDspKey,
 [data-theme="default"] .settingsDspKey {
-    color: #475569 !important;
+    color: #94a3b8 !important;
     font-weight: 800 !important;
 }
 
 :root:not([data-theme]) .settingsDspVal,
 [data-theme="default"] .settingsDspVal {
-    color: #0f172a !important;
+    color: #38bdf8 !important;
     font-weight: 800 !important;
 }
 
 :root:not([data-theme]) .settingsThemePickerBtn,
 [data-theme="default"] .settingsThemePickerBtn {
-    background: #ffffff !important;
-    border: 1.5px solid #64748b !important;
-    color: #0f172a !important;
+    background: #181f2e !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
 }
 
 :root:not([data-theme]) .settingsThemePickerSub,
 [data-theme="default"] .settingsThemePickerSub {
-    color: #475569 !important;
+    color: #94a3b8 !important;
     font-weight: 800 !important;
 }
 
 :root:not([data-theme]) .settingsThemePickerCurrent,
 [data-theme="default"] .settingsThemePickerCurrent {
-    color: #0f172a !important;
+    color: #38bdf8 !important;
     font-weight: 900 !important;
     text-shadow: none !important;
 }
 
 :root:not([data-theme]) .settingsThemePickerAction,
 [data-theme="default"] .settingsThemePickerAction {
-    background: #0f172a !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    color: #040712 !important;
     font-weight: 800 !important;
 }
 
@@ -44689,9 +44783,9 @@ body .dspDeck {
 [data-theme="default"] .settingsWorkspace .presetPathBtn,
 [data-theme="default"] .settingsWorkspace .settingsSelect,
 [data-theme="default"] .settingsWorkspace .settingsInput {
-    background: #ffffff !important;
-    border: 1.5px solid #64748b !important;
-    color: #0f172a !important;
+    background: #181f2e !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+    color: #ffffff !important;
     font-weight: 700 !important;
 }
 
@@ -44707,26 +44801,26 @@ body .dspDeck {
 [data-theme="default"] .settingsWorkspace .actionBtn.primaryBtn *,
 [data-theme="default"] .settingsWorkspace .visModeBtn.active,
 [data-theme="default"] .settingsWorkspace .presetPathBtn:hover {
-    background: #0f172a !important;
-    border-color: #0f172a !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #040712 !important;
 }
 
 :root:not([data-theme]) .settingsWorkspace .actionBtn.dangerBtn,
 [data-theme="default"] .settingsWorkspace .actionBtn.dangerBtn {
-    background: #fef2f2 !important;
-    border-color: #dc2626 !important;
-    color: #991b1b !important;
+    background: rgba(239, 68, 68, 0.15) !important;
+    border-color: #ef4444 !important;
+    color: #fca5a5 !important;
 }
 
 :root:not([data-theme]) .settingsScanStatusBox,
 :root:not([data-theme]) #settingsTabScanStatus,
 [data-theme="default"] .settingsScanStatusBox,
 [data-theme="default"] #settingsTabScanStatus {
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    border-left: 3px solid #0f172a !important;
-    color: #0f172a !important;
+    background: #181f2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-left: 3px solid #38bdf8 !important;
+    color: #f0f6fc !important;
 }
 
 /* 5. Settings Category Sub-Navigation Bar (#settingsCategoryNav) Across All 12 Themes */
@@ -44771,23 +44865,23 @@ body .dspDeck {
 /* Light themes Settings Category Navigation */
 :root:not([data-theme]) .settingsCategoryNav,
 [data-theme="default"] .settingsCategoryNav {
-    background: #ffffff !important;
-    border: 1.5px solid #cbd5e1 !important;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+    background: #131722 !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
 }
 
 :root:not([data-theme]) .settingsCatBtn,
 [data-theme="default"] .settingsCatBtn {
-    background: #f8fafc !important;
-    border: 1.5px solid #94a3b8 !important;
-    color: #0f172a !important;
+    background: #181f2e !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.14) !important;
+    color: #cbd5e1 !important;
 }
 
 :root:not([data-theme]) .settingsCatBtn.active,
 [data-theme="default"] .settingsCatBtn.active {
-    background: #0f172a !important;
-    border-color: #0f172a !important;
-    color: #ffffff !important;
+    background: #38bdf8 !important;
+    border-color: #38bdf8 !important;
+    color: #040712 !important;
 }
 
 [data-theme="minimalist-light"] .settingsCategoryNav {
@@ -45911,6 +46005,13 @@ html[data-theme="minimalist-warm"] body #themeModal .themeSelectCard .themeCardT
         flex-wrap: nowrap !important;
         padding: 0.5rem 0.6rem !important;
         -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+    }
+    .settingsCategoryNav::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
     }
     .settingsCatBtn {
         white-space: nowrap !important;

@@ -58,3 +58,4 @@ for t in themes:
     print(f"Captured Theme: {t}")
 
 print("=== Visual Captures Finished ===")
+

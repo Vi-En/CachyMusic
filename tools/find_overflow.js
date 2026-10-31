@@ -39,3 +39,4 @@ async function test() {
     proc.kill();
 }
 test().catch(console.error);
+
