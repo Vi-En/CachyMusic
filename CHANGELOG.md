@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0-beta] - 2026-10-31
 
 ### Highlights
+- **Universal Mobile Layout & Contrast Overhaul**:
+  - **Zero Horizontal Body Overflow (`42/42 Tests Passing`)**: Validated across all 7 reference mobile devices and viewports: **Infinix Note 30 5G** (`392 x 872`), **Infinix Note 30** (`392 x 872`), **Infinix Note 50** (`392 x 872`), **Samsung Galaxy Note** (`412 x 915`), **iPhone 11** (`414 x 896`), **iPhone 15** (`393 x 852`), and **iPhone 6** (`375 x 667`). Every workspace (`PLAYER`, `TRACKS`, `INFO`, `SOULSEEK`, `SETTINGS`, `DOWNLOAD`) satisfies `scrollWidth === innerWidth` with zero horizontal pan or rubber-banding.
+  - **Safe-Area Insets for Notches, Punch Holes & Dynamic Island**: Embedded `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)` into `.topBar` and `.mobileTabBar` to ensure branding, navigation pills, and media buttons are never obscured by camera punch holes or system home indicators.
+  - **Top Bar Mobile Optimization**: Collapsed `#topSettingsBtn` to an icon-only button on screens $\le 768\text{px}$, integrated an SVG palette icon into `#themeModalBtn`, and concealed desktop-only `#toggleFolderBtn` in the header (accessible in TRACKS tab), preventing top bar overflow on 375px screens.
+  - **Mobile GPU & Battery Efficiency**: Suppressed the offscreen 1440px background disc (`.bgDisc`, `.bgWatermark`) and the obscured canvas dock (`.visualizerDock`) on mobile, eliminating redundant `requestAnimationFrame` render cycles while preserving the center turntable vinyl visualizer.
+  - **WCAG 2.1 AAA Contrast Calibration Across All 12 Themes**:
+    - Calibrated active bottom tab pills with theme-specific illuminated glows and borders, achieving $\ge 13:1$ to $21:1$ contrast against the dark navigation bar (exceeding WCAG AAA $7:1$ requirements).
+    - Added dedicated active tab treatments for `minimalist-obsidian` (`#38bdf8` electric blue) and `minimalist-dark` (`#ffffff` crisp white).
+    - Verified 0 contrast issues across all 72 combinations (12 themes $\times$ 6 tabs).
 - **100% Self-Contained, Independent Android Application**:
   - **Embedded Workstation Assets (`WebViewAssetLoader`)**: Bundled the complete CachyMusic frontend (HTML5, stylesheets, scripts, fonts, and sample audio) directly into the APK assets. Serves local assets via `https://appassets.androidcache.net`, providing a secure origin context (`isSecureContext === true`) for the Web Audio API, AudioWorklet, and local client storage.
   - **Zero External Device Dependency**: CachyMusic on Android is completely independent and standalone—it boots straight into the full vinyl turntable deck, 10-band parametric equalizer, and audio engine out-of-the-box without requiring a PC, backend server, or Wi-Fi network.

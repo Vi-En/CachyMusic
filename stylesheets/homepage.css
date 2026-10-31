@@ -5165,17 +5165,18 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .topBar
     {
-        height: 3.1rem !important;
-        min-height: 3.1rem !important;
-        padding: 0 0.8rem !important;
+        height: calc(3.1rem + env(safe-area-inset-top, 0px)) !important;
+        min-height: calc(3.1rem + env(safe-area-inset-top, 0px)) !important;
+        padding: max(0.35rem, env(safe-area-inset-top, 0px)) max(0.8rem, env(safe-area-inset-right, 0px)) 0.35rem max(0.8rem, env(safe-area-inset-left, 0px)) !important;
         display: flex !important;
         align-items: center !important;
         justify-content: space-between !important;
         flex-wrap: nowrap !important;
-        gap: 0.5rem !important;
+        gap: 0.4rem !important;
         border-bottom: 0.1rem solid rgba(255, 255, 255, 0.1) !important;
         z-index: 100 !important;
         box-sizing: border-box !important;
+        overflow: hidden !important;
     }
 
     .brand
@@ -5207,9 +5208,9 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     body.mobile-tab-tracks .topBar
     {
         height: auto !important;
-        min-height: 5.3rem !important;
+        min-height: calc(5.3rem + env(safe-area-inset-top, 0px)) !important;
         flex-wrap: wrap !important;
-        padding: 0.35rem 0.8rem 0.45rem !important;
+        padding: max(0.35rem, env(safe-area-inset-top, 0px)) max(0.8rem, env(safe-area-inset-right, 0px)) 0.45rem max(0.8rem, env(safe-area-inset-left, 0px)) !important;
     }
 
     body.mobile-tab-tracks .topBar .searchContainer
@@ -5225,7 +5226,7 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     body.mobile-tab-tracks .gridContainer
     {
-        height: calc(100dvh - 5.3rem) !important;
+        height: calc(100dvh - 5.3rem - env(safe-area-inset-top, 0px)) !important;
     }
 
     .searchContainer input
@@ -5244,7 +5245,8 @@ body.is-playing .playPauseBtn .playPauseGlowRing
         flex-shrink: 0 !important;
     }
 
-    #toggleFolderBtn span,
+    #toggleFolderBtn,
+    #topSettingsBtn span,
     #themeModalBtn #topThemeLabel
     {
         display: none !important;
@@ -36878,12 +36880,38 @@ html.is-firefox .visualizerDock {
    Applies across viewports <= 768px (iPhone SE, A55, 16 Pro Max, Folds)
    ========================================================================= */
 @media (max-width: 768px) {
-    /* 1. Global Viewport Fit: Full Bleed, Zero Gutters */
+    /* 1. Global Viewport Fit: Full Bleed, Zero Gutters, Zero Horizontal Overflow */
     html, body {
         height: 100% !important;
         min-height: 100% !important;
         overflow: hidden !important;
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
         overscroll-behavior: none !important;
+    }
+
+    /* Decorative background containment on mobile: suppress offscreen rotation overflows */
+    .bgDisc,
+    .bgWatermark {
+        display: none !important;
+    }
+
+    .ambientAtmosphere,
+    #ambientAtmosphere {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        overflow: hidden !important;
+        contain: strict !important;
+        pointer-events: none !important;
+    }
+
+    /* Suppress obscured visualizer dock under mobile bottom navigation bar */
+    .visualizerDock {
+        display: none !important;
     }
 
     :root body .gridContainer,
@@ -36892,7 +36920,8 @@ html.is-firefox .visualizerDock {
         flex-direction: column !important;
         width: 100% !important;
         max-width: 100% !important;
-        height: calc(100dvh - 3.1rem) !important;
+        height: calc(100dvh - 3.1rem - env(safe-area-inset-top, 0px)) !important;
+        max-height: calc(100dvh - 3.1rem - env(safe-area-inset-top, 0px)) !important;
         min-height: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
@@ -36900,6 +36929,7 @@ html.is-firefox .visualizerDock {
         border: none !important;
         box-shadow: none !important;
         box-sizing: border-box !important;
+        overflow-x: hidden !important;
     }
 
     /* 2. Workspace View Swapping: Hide gridContainer on Soulseek, Download & Settings */
@@ -36915,12 +36945,13 @@ html.is-firefox .visualizerDock {
         display: flex !important;
         flex-direction: column !important;
         width: 100% !important;
-        height: calc(100dvh - 3.1rem) !important;
+        height: calc(100dvh - 3.1rem - env(safe-area-inset-top, 0px)) !important;
         min-height: 0 !important;
-        max-height: calc(100dvh - 3.1rem) !important;
+        max-height: calc(100dvh - 3.1rem - env(safe-area-inset-top, 0px)) !important;
         overflow-y: auto !important;
+        overflow-x: hidden !important;
         -webkit-overflow-scrolling: touch !important;
-        padding: 0.65rem 0.65rem calc(7.4rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding: 0.65rem 0.65rem calc(5.2rem + env(safe-area-inset-bottom, 0px)) !important;
         margin: 0 !important;
         box-sizing: border-box !important;
     }
@@ -37293,12 +37324,14 @@ html.is-firefox .visualizerDock {
 
     :root body .mobileTabBar .mobileTabBtn.active .mobileTabIcon,
     body .mobileTabBar .mobileTabBtn.active .mobileTabIcon {
-        filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6)) !important;
+        color: inherit !important;
+        fill: currentColor !important;
+        filter: drop-shadow(0 0 6px currentColor) !important;
     }
 
     :root body .mobileTabBar .mobileTabBtn.active .mobileTabLabel,
     body .mobileTabBar .mobileTabBtn.active .mobileTabLabel {
-        color: #ffffff !important;
+        color: inherit !important;
         font-weight: 900 !important;
     }
 
@@ -37351,6 +37384,20 @@ html.is-firefox .visualizerDock {
         border-color: rgba(0, 229, 255, 0.45) !important;
         color: #00e5ff !important;
         box-shadow: 0 0 16px rgba(0, 229, 255, 0.35) !important;
+    }
+
+    :root[data-theme="minimalist-obsidian"] body .mobileTabBar .mobileTabBtn.active {
+        background: rgba(56, 189, 248, 0.16) !important;
+        border-color: rgba(56, 189, 248, 0.45) !important;
+        color: #38bdf8 !important;
+        box-shadow: 0 0 16px rgba(56, 189, 248, 0.35) !important;
+    }
+
+    :root[data-theme="minimalist-dark"] body .mobileTabBar .mobileTabBtn.active {
+        background: rgba(255, 255, 255, 0.14) !important;
+        border-color: rgba(255, 255, 255, 0.4) !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.2) !important;
     }
 }
 
