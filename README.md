@@ -13,7 +13,7 @@
 
 ---
 
-## 🎵 Overview
+##  Overview
 
 **CachyMusic** is an open-source, high-fidelity audio workstation and music player engineered for audiophiles, musicians, and casual listeners alike. Designed around tactile ergonomics and physical studio gear, CachyMusic combines an interactive vinyl turntable deck, professional 10-band equalization, real-time audio metric analysis, seamless playlist curation, and decentralized Soulseek P2P integration into a zero-latency, cross-platform Progressive Web Application.
 
