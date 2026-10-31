@@ -1,0 +1,45 @@
+# Maintainer: CachyOS / CachyMusic Team
+pkgname=cachymusic
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="High-fidelity audio workstation and music player with studio DSP and turntable deck"
+arch=('any')
+url="https://github.com/cachyos/cachymusic"
+license=('GPL-3.0-or-later')
+depends=(
+    'php'
+    'python'
+    'python-gobject'
+    'libappindicator-gtk3'
+)
+optdepends=(
+    'nicotine-plus: Headless Soulseek P2P network integration'
+    'nodejs: Standalone Soulseek microservice alternative'
+    'ffmpeg: Studio metadata and codec probing'
+    'pipewire: Low-latency integer clock rate switching'
+)
+source=(
+    "${pkgname}-${pkgver}.tar.gz"
+    "cachymusic.desktop"
+)
+sha256sums=(
+    'SKIP'
+    'SKIP'
+)
+
+package() {
+    cd "${srcdir}"
+
+    install -dm755 "${pkgdir}/usr/share/cachymusic"
+    cp -r index.html index.php manifest.json sw.js schema.sql resources scripts stylesheets php tools bin "${pkgdir}/usr/share/cachymusic/"
+
+    # Launcher symlink
+    install -dm755 "${pkgdir}/usr/bin"
+    ln -sf "/usr/share/cachymusic/bin/cachymusic" "${pkgdir}/usr/bin/cachymusic"
+
+    # Desktop entry & Icon
+    install -Dm644 "${srcdir}/cachymusic.desktop" "${pkgdir}/usr/share/applications/cachymusic.desktop"
+    if [ -f "resources/images/icon-512.png" ]; then
+        install -Dm644 "resources/images/icon-512.png" "${pkgdir}/usr/share/icons/hicolor/512x512/apps/cachymusic.png"
+    fi
+}

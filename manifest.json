@@ -1,0 +1,96 @@
+{
+  "id": "com.cachymusic.audioworkstation",
+  "name": "CachyMusic Audio Workstation",
+  "short_name": "CachyMusic",
+  "description": "High-fidelity audiophile music workstation with 64-bit studio DSP and lossless library management",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
+  "background_color": "#09090d",
+  "theme_color": "#09090d",
+  "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "categories": [
+    "music",
+    "audio",
+    "entertainment",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "resources/images/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "resources/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "resources/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "resources/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "resources/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Library",
+      "short_name": "Library",
+      "description": "View all tracks and playlists",
+      "url": "./index.html#library",
+      "icons": [
+        {
+          "src": "resources/images/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Parametric Equalizer",
+      "short_name": "EQ & DSP",
+      "description": "Open 10-Band Parametric Equalizer and Studio DSP",
+      "url": "./index.html#peq",
+      "icons": [
+        {
+          "src": "resources/images/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Soulseek Studio",
+      "short_name": "Soulseek",
+      "description": "P2P lossless music discovery and transfer studio",
+      "url": "./index.html#soulseek",
+      "icons": [
+        {
+          "src": "resources/images/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/">
+    <title>CachyMusic: Audio Workstation</title>
+    <script>
+        (function() {
+            try {
+                var isFx = /firefox|fxios/i.test(navigator.userAgent);
+                if (isFx) document.documentElement.classList.add('is-firefox');
+                var urlT = null;
+                try { urlT = (new URLSearchParams(window.location.search)).get('theme'); } catch (_) {}
+                var savedT = null;
+                try { if (window.localStorage) savedT = localStorage.getItem('cachymusic_active_theme'); } catch (_) {}
+                if (!savedT) {
+                    try { if (window.sessionStorage) savedT = sessionStorage.getItem('cachymusic_active_theme'); } catch (_) {}
+                }
+                if (!savedT) {
+                    try {
+                        var m = document.cookie.match(/(?:^|;\s*)cachymusic_active_theme=([^;]+)/);
+                        if (m) savedT = decodeURIComponent(m[1]);
+                    } catch (_) {}
+                }
+                var t = urlT || savedT || 'default';
+                if (t === 'brutalist-minimalism-light' || t === 'brutalist-light') t = 'minimalist-light';
+                if (t === 'brutalist-minimalism-dark' || t === 'brutalist-dark') t = 'minimalist-dark';
+                var valid = [
+                    'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
+                    'abyssal-void', 'dissonance', 'sentinel',
+                    'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian',
+                    'brutalist-light', 'brutalist-dark'
+                ];
+                if (!valid.includes(t)) {
+                    t = (t === 'spotify' || t === 'apple' || t === 'atlas') ? 'nms' : 'default';
+                }
+                try { if (window.localStorage) localStorage.setItem('cachymusic_active_theme', t); } catch(_) {}
+                try { if (window.sessionStorage) sessionStorage.setItem('cachymusic_active_theme', t); } catch(_) {}
+                try { document.cookie = 'cachymusic_active_theme=' + encodeURIComponent(t) + '; path=/; max-age=31536000; SameSite=Lax'; } catch(_) {}
+                document.documentElement.setAttribute('data-theme', t);
+            } catch (_) {}
+        })();
+    </script>
+    <meta name="theme-color" content="#09090d">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CachyMusic">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="resources/images/icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="resources/images/music-hanzi.svg">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=10.47">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                if (window.caches) {
+                    caches.keys().then(function(keys) {
+                        keys.forEach(function(k) {
+                            if (k !== 'cachymusic-v10.47' && !k.startsWith('cachymusic-artwork-')) {
+                                caches.delete(k);
+                            }
+                        });
+                    }).catch(function() {});
+                }
+                navigator.serviceWorker.register('./sw.js?v=10.47').then(function(reg) {
+                    reg.update();
+                }).catch(function(err) {
+                    console.warn('[PWA] ServiceWorker registration failed:', err);
+                });
+            });
+        }
+    </script>
+</head>
+<body class="view-player mobile-tab-player">
+
+    <!-- Dynamic Acoustic Ambiance & Ambient Artwork Bleed -->
+    <div class="ambientAtmosphere" id="ambientAtmosphere" aria-hidden="true">
+        <div class="ambientAuraGlow" id="ambientAuraGlow"></div>
+    </div>
+
+    <!-- Turntable disc background decoration -->
+    <div class="disc bgDisc">
+        <div class="outer"></div>
+        <div class="middle"></div>
+        <div class="inner"></div>
+    </div>
+
+    <!-- Background calligraphy watermark -->
+    <img src="resources/images/music-hanzi.svg" alt="" class="bgWatermark">
+
+    <!-- Top Navigation Bar -->
+    <header class="topBar">
+        <div class="brand">
+            <span class="brandLogo">CACHYMUSIC</span>
+            <div class="brandLiveMeter" id="brandLiveMeter" aria-hidden="true" title="Audio Engine Signal">
+                <span class="meterBar b1"></span>
+                <span class="meterBar b2"></span>
+                <span class="meterBar b3"></span>
+                <span class="meterBar b4"></span>
+            </div>
+        </div>
+
+        <div class="workspaceSwitcher" id="workspaceSwitcher">
+            <button type="button" class="wsTabBtn active" id="wsPlayerBtn" data-view="player" title="Workstation Player &amp; Turntable (Alt+P)">
+                <span class="wsLabel">PLAYER</span>
+            </button>
+            <button type="button" class="wsTabBtn" id="wsSoulseekBtn" data-view="soulseek" title="Soulseek / Nicotine+ Network (Alt+S)">
+                <span class="wsLabel">SEEK</span>
+                <span class="wsBadge" id="wsSoulseekBadge">●</span>
+            </button>
+        </div>
+
+        <div class="searchContainer" id="headerSearchContainer">
+            <svg class="searchIcon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="trackSearch" placeholder="Search title, artist, album, genre..." autocomplete="off" aria-label="Search track library">
+            <kbd class="searchKbdShortcut" id="searchKbdShortcut" title="Press / to search library">/</kbd>
+        </div>
+
+        <div class="topActions">
+            <button type="button" id="themeModalBtn" class="topBtn themeModalBtn" title="Theme Overhaul (Default / The Atlas)">
+                <span id="topThemeLabel">THEMES</span>
+            </button>
+            <button type="button" id="toggleFolderBtn" class="topBtn" title="Load Audio From Folder Path">
+                FOLDER SCAN
+            </button>
+            <button type="button" id="topSettingsBtn" class="topBtn settingsQuickBtn" title="Studio Settings, Themes &amp; Audio Sources">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <span>SETTINGS</span>
+            </button>
+            <span class="userStatus" id="userStatus" title="Local audio engine status">● READY</span>
+        </div>
+    </header>
+
+    <!-- Folder Scan Dropdown Tray -->
+    <div class="folderTray" id="folderTray">
+        <div class="folderTrayHeader">
+            <label for="folderPathInput" class="folderTrayLabel">AUDIO DIRECTORY PATH</label>
+            <span class="folderTrayHelp">Choose a folder from your computer or select a quick path below</span>
+        </div>
+        <div class="folderTrayControls">
+            <div class="folderInputWrapper">
+                <input type="text" id="folderPathInput" placeholder="/path/to/audio/directory" aria-label="Audio directory path">
+                <button type="button" id="browseFolderBtn" class="folderBrowseBtn" title="Choose folder from your computer">
+                    📁 BROWSE...
+                </button>
+                <input type="file" id="folderPickerInput" webkitdirectory directory multiple style="display: none;" aria-label="Choose folder">
+            </div>
+            <button type="button" id="scanFolderBtn" class="scanFolderActionBtn" title="Scan directory and load tracks">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>SCAN &amp; LOAD</span>
+            </button>
+            <button type="button" id="closeFolderTrayBtn" class="folderTrayCloseBtn" title="Close Tray" aria-label="Close Tray">✕</button>
+        </div>
+        <div class="folderQuickPresets">
+            <span class="quickPresetsLabel">QUICK PATHS:</span>
+            <button type="button" class="presetPathBtn" data-path="~/Music">~/Music</button>
+            <button type="button" class="presetPathBtn" data-path="~/Music/Main">~/Music/Main</button>
+            <button type="button" class="presetPathBtn" data-path="~/Downloads">~/Downloads</button>
+        </div>
+        <div id="scanStatus" class="scanStatus"></div>
+    </div>
+
+    <!-- Mobile View Switcher Tab Bar (Visible on mobile screens <= 768px) -->
+    <nav class="mobileTabBar" id="mobileTabBar" aria-label="Mobile View Navigation">
+        <button type="button" class="mobileTabBtn" data-target="playerDeck" id="mobilePlayerTabBtn">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>
+            <span class="mobileTabLabel">PLAYER</span>
+        </button>
+        <button type="button" class="mobileTabBtn" data-target="trackListPanel">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+            <span class="mobileTabLabel">TRACKS</span>
+        </button>
+        <button type="button" class="mobileTabBtn" data-target="settingsPanel" id="mobileInfoTabBtn">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span class="mobileTabLabel">INFO</span>
+        </button>
+        <button type="button" class="mobileTabBtn" data-target="soulseekWorkspace" id="mobileSoulseekTabBtn">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span class="mobileTabLabel">SEEK</span>
+        </button>
+        <button type="button" class="mobileTabBtn" data-target="settingsWorkspace" id="mobileSettingsTabBtn">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <span class="mobileTabLabel">SETTINGS</span>
+        </button>
+    </nav>
+
+    <!-- Main Player Grid Container -->
+    <main class="gridContainer">
+
+        <!-- Left Panel: Track Metadata & Embedded Artwork Inspector -->
+        <section class="panel settingsPanel" id="infoPanel">
+            <div class="panelHeader">
+                <h2>TRACK METADATA</h2>
+                <span class="panelSub">ID3 &amp; AUDIO METRICS</span>
+            </div>
+
+            <!-- Metadata Inspector (ID3 Tags) -->
+            <div class="settingsSubPane active" id="metaPane">
+                <!-- Embedded Cover Art Card -->
+                <div class="coverCardCon">
+                    <img src="resources/images/bad-apple.png" alt="Album Art" id="coverArtPreview" class="coverArtPreview">
+                    <div class="coverBadge" id="coverBadge">COVER ART</div>
+                </div>
+
+                <!-- Turntable Platter RPM & Speed (Transferred back to Metadata Inspector) -->
+                <div class="settingsGroup" id="metaTurntableSpeedGroup">
+                    <div class="settingsGroupHeader">
+                        <h3>TURNTABLE RPM &amp; SPEED</h3>
+                    </div>
+                    <div class="speedSelector">
+                        <button type="button" class="speedBtn active" data-speed="1">1.0x (33 RPM)</button>
+                        <button type="button" class="speedBtn" data-speed="1.25">1.25x</button>
+                        <button type="button" class="speedBtn" data-speed="1.5">1.5x (45 RPM)</button>
+                        <button type="button" class="speedBtn" data-speed="2">2.0x (78 RPM)</button>
+                    </div>
+                </div>
+
+                <!-- Detailed Embedded Track Metadata -->
+                <div class="settingsGroup">
+                    <h3>EMBEDDED AUDIO DATA</h3>
+                    <div class="metaGrid">
+                        <div class="metaItem">
+                            <span class="metaKey">TITLE</span>
+                            <span class="metaVal" id="statTitle">Unknown</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">ARTIST</span>
+                            <span class="metaVal" id="statArtist">Unknown</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">ALBUM</span>
+                            <span class="metaVal" id="statAlbum">Unknown</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">GENRE</span>
+                            <span class="metaVal" id="statGenre">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">YEAR</span>
+                            <span class="metaVal" id="statYear">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">TRACK #</span>
+                            <span class="metaVal" id="statTrack">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">BITRATE</span>
+                            <span class="metaVal" id="statBitrate">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">SAMPLE RATE</span>
+                            <span class="metaVal" id="statSampleRate">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">BIT DEPTH</span>
+                            <span class="metaVal" id="statBitDepth">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">CHANNELS</span>
+                            <span class="metaVal" id="statChannels">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">FORMAT</span>
+                            <span class="metaVal" id="statFormat">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">SIZE</span>
+                            <span class="metaVal" id="statSize">N/A</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">DYNAMIC RANGE</span>
+                            <span class="metaVal" id="statDynamicRange">-- dB (Analyzing)</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">PEAK HEADROOM</span>
+                            <span class="metaVal" id="statPeakLevel">-0.0 dBFS</span>
+                        </div>
+                        <div class="metaItem">
+                            <span class="metaKey">FILE</span>
+                            <span class="metaVal" id="statPath" title="N/A">N/A</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Center Panel: The Turntable Deck & Now Playing -->
+        <section class="panel playerDeck mobileActive">
+
+            <!-- Player Deck Quick Controls (Metadata Inspector & Lyrics Toggles) -->
+            <div class="deckTopControls" id="deckTopControls">
+                <button type="button" id="metadataToggleBtn" class="deckActionBtn metadataToggleBtn active" title="Toggle Track Metadata Inspector (I)" aria-label="Toggle Metadata Inspector" aria-pressed="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    <span class="deckBtnLabel">METADATA</span>
+                </button>
+                <button type="button" id="lyricsToggleBtn" class="deckActionBtn lyricsToggleBtn" title="Toggle Lyrics View (L)" aria-label="Toggle Lyrics View">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                        <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 16h8v1H8v-1zm0-3h8v1H8v-1zm0-3h5v1H8v-1z"/>
+                    </svg>
+                    <span class="deckBtnLabel">LYRICS</span>
+                </button>
+            </div>
+
+            <!-- Turntable Stage: Embedded Artwork Backdrop Behind Vinyl Deck -->
+            <div class="turntableStage" id="turntableStage">
+                <!-- Embedded Artwork Layer (Positioned Behind Turntable) -->
+                <div class="deckArtworkWrapper" id="deckArtworkWrapper">
+                    <img src="resources/images/bad-apple.png" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true">
+                    <div class="deckArtworkCard" id="deckArtworkCard">
+                        <img src="resources/images/bad-apple.png" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop">
+                    </div>
+                    <div class="deckArtworkScrim"></div>
+                </div>
+
+                <!-- Lyrics View (overlays turntable) -->
+                <div class="lyricsCon" id="lyricsCon" style="display:none;">
+                    <div class="lyricsHeader">
+                        <span class="lyricsTrackName" id="lyricsTrackName">—</span>
+                        <span class="lyricsArtistName" id="lyricsArtistName">—</span>
+                    </div>
+                    <div class="lyricsScrollArea" id="lyricsScrollArea">
+                        <div class="lyricsContent" id="lyricsContent">
+                            <div class="lyricsPlaceholder" id="lyricsPlaceholder">
+                                <div class="lyricsPlaceholderIcon">♪</div>
+                                <p>No lyrics available for this track.</p>
+                                <span>Lyrics can be embedded via the<br>USLT/LYRICS tag in your audio files.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vinyl Turntable Unit -->
+                <div class="turntableCon" id="turntableCon">
+                    <div class="vinylTurntable" id="vinylTurntable">
+                        <div class="vinylGrooves"></div>
+                        <div class="vinylLabel" id="vinylLabel">
+                            <img src="resources/images/bad-apple.png" alt="Cover Art" id="vinylArt">
+                            <div class="spindleHole"></div>
+                        </div>
+                    </div>
+
+                    <!-- Turntable Center Visualizer Hub (Always visible with dynamic fidelity) -->
+                    <div class="turntableCenterVis" id="turntableCenterVis">
+                        <canvas id="turntableCenterCanvas" class="turntableCenterCanvas"></canvas>
+                    </div>
+
+                    <div class="toneArm" id="toneArm">
+                        <div class="armPivot"></div>
+                        <div class="armShaft"></div>
+                        <div class="armCartridge"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Track Metadata Header -->
+            <div class="trackMeta">
+                <div class="metaBadgeRow">
+                    <span class="formatBadge" id="trackBadge">AUDIO</span>
+                    <button type="button" id="signalPathBadgeBtn" class="signalPathBadge" title="Open Roon-Grade Audiophile Signal Path Audit">
+                        <span class="signalDot" id="deckSignalDot">●</span>
+                        <span id="signalPathLabel">32-BIT DIRECT</span>
+                    </button>
+                </div>
+                <h1 id="trackName">Select A Track</h1>
+                <h2 id="artistName">CachyMusic Player</h2>
+                <p id="albumName" class="albumName">-</p>
+            </div>
+
+            <!-- Scrubber Timeline -->
+            <div class="timelineCon">
+                <span id="currentTime" class="timeLabel">0:00</span>
+                <div class="progressBarCon" id="progressCon">
+                    <div class="progressBar" id="progressBar">
+                        <span class="progressPlayhead" id="progressPlayhead"></span>
+                    </div>
+                    <div class="progressHover" id="progressHover"></div>
+                    <div class="progressHoverTooltip" id="progressHoverTooltip">0:00</div>
+                </div>
+                <span id="totalDuration" class="timeLabel">0:00</span>
+            </div>
+
+            <!-- Primary Media Controls -->
+            <div class="mediaCon">
+                <button type="button" class="mediaBtn subBtn" id="shuffleBtn" title="Toggle Shuffle" aria-label="Toggle Shuffle">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                        <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+                    </svg>
+                </button>
+
+                <button type="button" class="mediaBtn skipBtn" id="prevBtn" title="Previous Track (←)" aria-label="Previous Track">
+                    <img src="resources/images/skipprevious.svg" alt="Previous">
+                </button>
+
+                <button type="button" class="mediaBtn playPauseBtn" id="playPauseBtn" title="Play / Pause (Space)" aria-label="Play or Pause">
+                    <div class="playPauseGlowRing"></div>
+                    <svg id="playPauseImg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                        <path class="icon-play" d="M8 5v14l11-7z"/>
+                        <path class="icon-pause" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                </button>
+
+                <button type="button" class="mediaBtn skipBtn" id="nextBtn" title="Next Track (→)" aria-label="Next Track">
+                    <img src="resources/images/skipnext.svg" alt="Next">
+                </button>
+
+                <button type="button" class="mediaBtn subBtn" id="repeatBtn" title="Toggle Repeat" aria-label="Toggle Repeat">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                        <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Volume and Level -->
+            <div class="volumeDeck">
+                <button type="button" id="muteBtn" class="muteBtn" title="Mute/Unmute (M)" aria-label="Mute or Unmute">
+                    <svg id="volumeIcon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                    </svg>
+                </button>
+                <input type="range" id="volumeSlider" min="0" max="1.5" step="0.01" value="0.8" class="volumeSlider" title="Volume &amp; Clean Amplification (0% - 150%) — Scroll or drag to adjust" aria-label="Master Volume">
+                <span id="volumeLevel" class="volumeLevel">80%</span>
+            </div>
+
+            <!-- Audio Equalizer & Studio DSP Workstation Launcher Strip -->
+            <div class="audioProcessingBar" id="audioProcessingBar">
+                <div class="eqDeckModule" id="eqDeckModule">
+                    <button type="button" class="eqDeckBtn" id="playerPeqBtn" data-target="peq" title="Open Interactive 10-Band Parametric Equalizer &amp; Studio DSP Workstation">
+                        <div class="eqDeckInfo">
+                            <span class="eqDeckTitle">STUDIO EQUALIZER &amp; DSP</span>
+                            <span class="eqDeckSub">10-BAND ISO • DYNAMIC ENHANCERS • HEADPHONE STAGING</span>
+                        </div>
+                        <div class="eqDeckBadges">
+                            <span class="eqDeckBadge" id="playerPeqBadge">10-BAND</span>
+                            <span class="eqDeckDspBadge" id="playerDspCountBadge" style="display: none;">0 DSP</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audio Element -->
+            <audio id="audioPlayer" preload="auto"></audio>
+        </section>
+
+        <!-- Right Panel: Track Library & Playlists -->
+        <section class="panel trackListPanel">
+            <!-- Library / Playlist / Up Next Navigation Tabs -->
+            <div class="libraryTabs">
+                <button type="button" class="libTab active" id="tabLibrary">LIBRARY</button>
+                <button type="button" class="libTab" id="tabPlaylists">PLAYLISTS</button>
+                <button type="button" class="libTab" id="tabQueue">UP NEXT <span class="queueCountBadge" id="queueCountBadge" style="display: none;">0</span></button>
+            </div>
+
+            <!-- Library View Controls -->
+            <div class="libraryControls" id="libraryControls">
+                <div class="sortContainer">
+                    <label for="sortSelect">SORT BY:</label>
+                    <select id="sortSelect" class="sortSelect">
+                        <option value="default">Default / ID</option>
+                        <option value="title-asc">Title (A → Z)</option>
+                        <option value="title-desc">Title (Z → A)</option>
+                        <option value="artist-asc">Artist (A → Z)</option>
+                        <option value="artist-desc">Artist (Z → A)</option>
+                        <option value="album-asc">Album (A → Z)</option>
+                        <option value="album-desc">Album (Z → A)</option>
+                        <option value="duration-asc">Duration (Shortest)</option>
+                        <option value="duration-desc">Duration (Longest)</option>
+                        <option value="year-desc">Year (Newest)</option>
+                        <option value="year-asc">Year (Oldest)</option>
+                    </select>
+                </div>
+                <div class="panelActions">
+                    <button type="button" id="restoreTracksBtn" class="actionBtn restoreBtn" title="Restore removed tracks" style="display: none;">
+                        RESTORE (0)
+                    </button>
+                    <button type="button" id="quickNewPlaylistBtn" class="actionBtn" title="Create a New Playlist">
+                        + PLAYLIST
+                    </button>
+                    <button type="button" id="refreshTracksBtn" class="actionBtn" title="Rescan and Refresh Track Library">
+                        REFRESH
+                    </button>
+                    <button type="button" id="shufflePlayBtn" class="actionBtn" title="Shuffle Play Current List">
+                        SHUFFLE
+                    </button>
+                    <label for="localFileInput" class="actionBtn uploadBtn" title="Load Audio Files From Device">
+                        + LOCAL
+                    </label>
+                    <input type="file" id="localFileInput" accept="audio/*" multiple style="display: none;" aria-label="Load Local Audio Files">
+                </div>
+            </div>
+
+            <!-- Instant Quality Format Filter Bar -->
+            <div class="quickFormatFilterBar" id="quickFormatFilterBar">
+                <button type="button" class="formatFilterPill active" data-filter="all">ALL</button>
+                <button type="button" class="formatFilterPill" data-filter="hires" title="Filter for Hi-Res 24-bit/32-bit &amp; 96kHz+ tracks">HI-RES</button>
+                <button type="button" class="formatFilterPill" data-filter="lossless" title="Filter for Lossless FLAC &amp; ALAC audio">LOSSLESS</button>
+                <button type="button" class="formatFilterPill" data-filter="lossy" title="Filter for standard MP3 / AAC / OGG tracks">MP3 / AAC</button>
+            </div>
+
+            <!-- Active Playlist Header (MusicBee / Musicolet Style) -->
+            <div class="playlistBanner" id="playlistBanner" style="display: none;">
+                <div class="playlistBannerHeaderTop">
+                    <button type="button" id="backToLibraryBtn" class="backBtn" title="Back to All Playlists">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                        <span>PLAYLISTS</span>
+                    </button>
+                    <div class="playlistBannerMetaCol">
+                        <span id="currentPlaylistTitle" class="playlistBannerTitle">Playlist</span>
+                        <span id="currentPlaylistMeta" class="playlistBannerMeta">0 TRACKS • 0 MINS</span>
+                    </div>
+                </div>
+                <div class="playlistBannerActions">
+                    <button type="button" id="bannerPlayAllBtn" class="actionBtn primaryBtn bannerPlayBtn" title="Play playlist from beginning">▶ PLAY ALL</button>
+                    <button type="button" id="bannerShuffleBtn" class="actionBtn bannerShuffleBtn" title="Shuffle playlist">🔀 SHUFFLE</button>
+                    <button type="button" id="bannerAddTracksBtn" class="actionBtn bannerAddBtn" title="Quickly Add Songs From Library">+ ADD SONGS</button>
+                    <button type="button" id="deleteCurrentPlaylistBtn" class="deleteBtn" title="Delete Playlist">DELETE</button>
+                </div>
+            </div>
+
+            <!-- Playlists Management View (MusicBee / Musicolet Style) -->
+            <div class="playlistsView" id="playlistsView" style="display: none;">
+                <div class="playlistsViewHeader">
+                    <div class="playlistsStatsRow">
+                        <span class="playlistsSectionTitle">MY PLAYLISTS</span>
+                        <span class="playlistsCounterBadge" id="playlistsSummaryBadge">0 Playlists</span>
+                    </div>
+                    <div class="createPlaylistBar">
+                        <input type="text" id="newPlaylistInput" placeholder="Create new playlist... (Press Enter to save)" maxlength="50" aria-label="New playlist name">
+                        <button type="button" id="createPlaylistBtn" class="actionBtn primaryBtn">+ CREATE</button>
+                    </div>
+                    <div class="playlistQuickChips">
+                        <span class="quickChipsLabel">Quick:</span>
+                        <button type="button" class="playlistChipBtn" data-name="Favorites">⭐ Favorites</button>
+                        <button type="button" class="playlistChipBtn" data-name="Late Night">🌙 Late Night</button>
+                        <button type="button" class="playlistChipBtn" data-name="Workout Boost">⚡ Workout Boost</button>
+                        <button type="button" class="playlistChipBtn" data-name="Focus &amp; Work">☕ Focus &amp; Work</button>
+                    </div>
+                </div>
+                <div class="playlistList" id="playlistList">
+                    <!-- Populated dynamically with rich MusicBee/Musicolet style cards -->
+                </div>
+            </div>
+
+            <!-- Up Next / Dynamic Play Queue View -->
+            <div class="queueView" id="queueView" style="display: none;">
+                <div class="queueControlsBar">
+                    <div class="queueSummary">
+                        <span class="queueBadge">PLAY QUEUE</span>
+                        <span class="queueCountText" id="queueCountSummary">0 songs queued</span>
+                    </div>
+                    <button type="button" id="clearQueueBtn" class="actionBtn clearQueueBtn" title="Clear all queued songs">CLEAR ALL</button>
+                </div>
+                <div class="queueSectionLabel">UP NEXT (CUSTOM QUEUE)</div>
+                <div class="queueList" id="queueList">
+                    <div class="queueEmpty">Your queue is empty. Click "+ Queue" or "Play Next" on any track.</div>
+                </div>
+                <div class="queueSectionLabel">CONTINUING FROM LIBRARY</div>
+                <div class="upcomingLibraryList" id="upcomingLibraryList">
+                    <!-- Upcoming tracks preview populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Track List View -->
+            <div class="trackList" id="trackList">
+                <!-- Populated dynamically with tracks -->
+            </div>
+
+            <!-- Library Footer / Count -->
+            <div class="libraryFooter">
+                <span id="trackCount" class="counter">0 TRACKS</span>
+                <span id="activeListLabel" class="activeListLabel">ALL TRACKS</span>
+            </div>
+        </section>
+    </main>
+
+    <!-- Soulseek Studio Workspace (In-Page Native View) -->
+    <section class="soulseekWorkspace" id="soulseekWorkspace" style="display: none;">
+        <!-- Soulseek Account & Settings Modal -->
+        <div class="slskModalOverlay" id="slskAccountModal" style="display: none;">
+            <div class="slskModalCard">
+                <div class="slskModalHeader">
+                    <h3>SOULSEEK SETTINGS</h3>
+                    <button type="button" class="closeBtn" id="slskCloseAccountModalBtn" aria-label="Close Settings">✕</button>
+                </div>
+                <form id="slskAccountForm" class="slskModalBody" onsubmit="return false;">
+                    <p class="slskModalDesc">
+                        Credentials are encrypted and securely stored in your local database. Soulseek is disconnected by default so your shared files are never exposed until you explicitly connect.
+                    </p>
+                    <div class="slskFormGroup">
+                        <label for="slskModalUsername">USERNAME</label>
+                        <input type="text" id="slskModalUsername" placeholder="e.g. musiclover123" autocomplete="username">
+                    </div>
+                    <div class="slskFormGroup">
+                        <label for="slskModalPassword">PASSWORD</label>
+                        <input type="password" id="slskModalPassword" placeholder="Enter password" autocomplete="current-password">
+                    </div>
+
+                    <hr class="slskModalDivider">
+
+                    <div class="slskFormGroup">
+                        <label for="slskModalDownloadDir">DOWNLOAD DIRECTORY</label>
+                        <div class="slskDirInputRow">
+                            <input type="text" id="slskModalDownloadDir" placeholder="/path/to/music/folder" class="slskDirInput">
+                            <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalSyncPlayerDirBtn" title="Use Current Music Library Folder">
+                                USE PLAYER DIR
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="slskFormGroup">
+                        <label for="slskModalSharedDir">SHAREABLE FOLDER (OTHERS CAN DOWNLOAD FROM YOU)</label>
+                        <div class="slskDirInputRow">
+                            <input type="text" id="slskModalSharedDir" placeholder="/path/to/share/folder" class="slskDirInput">
+                            <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalSyncSharePlayerDirBtn" title="Share Current Music Library Folder">
+                                USE PLAYER DIR
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="slskModalAlert" id="slskAccountAlert" style="display: none;"></div>
+                    <div class="slskModalActions">
+                        <button type="button" class="actionBtn slskModalPowerBtn" id="slskModalPowerBtn">CONNECT</button>
+                        <button type="button" class="actionBtn" id="slskLogoutBtn">LOGOUT / CLEAR</button>
+                        <button type="submit" class="actionBtn primaryBtn" id="slskSaveAccountBtn">SAVE &amp; CONNECT</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Soulseek Controls & Search Panel (Desktop: normal flow, Mobile: swapped below results and collapsible) -->
+        <div class="slskControlsPanel is-collapsed" id="slskControlsPanel">
+            <!-- Mobile Sticky Collapsible Toggle Header (Mobile only) -->
+            <div class="slskPanelToggleBar" id="slskPanelToggleBar" title="Click to Expand or Collapse Search &amp; Filters">
+                <div class="slskToggleBarLeft">
+                    <span class="slskToggleIcon">🔍</span>
+                    <span class="slskToggleTitle">SEARCH &amp; FILTERS</span>
+                    <span class="slskToggleActiveFilter" id="slskMobileActiveFilter">ALL</span>
+                </div>
+                <div class="slskToggleBarRight">
+                    <div class="slskMiniStatus" id="slskMobileStatusDot" title="Soulseek Status">
+                        <span class="slskStatusDot"></span>
+                    </div>
+                    <button type="button" class="slskMiniTransfersBtn" id="slskMobileTransfersBtn" title="View Transfers">
+                        TRANSFERS (<span id="slskMobileTransferCount">0</span>)
+                    </button>
+                    <span class="slskToggleChevron" id="slskPanelToggleChevron">▲</span>
+                </div>
+            </div>
+
+            <div class="slskPanelCollapsible" id="slskPanelCollapsible">
+                <!-- Soulseek Top Toolbar -->
+                <div class="slskToolbar">
+                    <div class="slskBrand">
+                        <span class="slskLogo">SOULSEEK</span>
+                        <span class="slskBadge" id="slskBadge">NICOTINE+</span>
+                        <div class="slskStatusPill" id="slskStatusPill" title="Soulseek Network Status">
+                            <span class="slskStatusDot" id="slskStatusDot"></span>
+                            <span class="slskStatusText" id="slskStatusText">Connecting...</span>
+                        </div>
+                    </div>
+
+                    <div class="slskQuickStats" id="slskQuickStats">
+                        <span class="slskStatItem" id="slskUserItem"><strong id="slskUsername">Not logged in</strong></span>
+                        <button type="button" class="slskDirPill" id="slskChangeDirBtn" title="Click to Change Soulseek Download Folder">
+                            <span id="slskDownloadsPathText">./downloads</span>
+                        </button>
+                        <button type="button" class="slskDirPill" id="slskChangeSharedDirBtn" title="Click to Change Shareable Folder (Available for peers to download)">
+                            SHARE: <span id="slskSharedPathText">./shared</span>
+                        </button>
+                        <button type="button" class="actionBtn slskSyncDirBtn" id="slskSyncCurrentDirBtn" title="Set Soulseek Downloads to Match Your Current Music Player Folder">
+                            SYNC WITH PLAYER DIR
+                        </button>
+                    </div>
+
+                    <div class="slskToolbarActions">
+                        <button type="button" id="slskPowerBtn" class="actionBtn slskPowerBtn" title="Connect / Disconnect Soulseek Network (Disconnects and stops sharing files)">
+                            <span class="powerIcon">⏻</span> <span id="slskPowerBtnText">CONNECT</span>
+                        </button>
+                        <button type="button" id="slskAccountBtn" class="actionBtn" title="Soulseek Account &amp; Directory Settings">
+                            SETTINGS
+                        </button>
+                        <button type="button" id="slskRefreshStatusBtn" class="actionBtn" title="Refresh Connection Status">
+                            REFRESH
+                        </button>
+                        <button type="button" id="slskToggleTransfersBtn" class="actionBtn primaryBtn" title="View Active &amp; Completed Transfers">
+                            TRANSFERS (<span id="slskTransferCount">0</span>)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Soulseek Search & Filter Header -->
+                <div class="slskSearchArea">
+                    <div class="slskSearchRow">
+                        <div class="slskSearchBox">
+                            <input type="text" id="slskSearchInput" placeholder="Search track, artist, album, genre on Soulseek network..." autocomplete="off" aria-label="Search Soulseek P2P Network">
+                            <button type="button" id="slskSearchClearBtn" class="slskClearBtn" title="Clear Search" aria-label="Clear Search" style="display: none;">✕</button>
+                        </div>
+                        <select id="slskSearchModeSelect" class="slskModeSelect" title="Nicotine+ Search Scope" aria-label="Search Scope">
+                            <option value="global" selected>GLOBAL</option>
+                            <option value="rooms">ROOMS</option>
+                            <option value="buddies">BUDDIES</option>
+                        </select>
+                        <button type="button" id="slskSearchSubmitBtn" class="actionBtn primaryBtn slskSubmitBtn">SEARCH</button>
+                    </div>
+
+                    <div class="slskFilterRow">
+                        <div class="slskFilterGroup" id="slskFilterChips">
+                            <button type="button" class="slskChip active" data-filter="all">ALL FORMATS</button>
+                            <button type="button" class="slskChip" data-filter="flac">FLAC ONLY (LOSSLESS)</button>
+                            <button type="button" class="slskChip" data-filter="320">320 KBPS MP3</button>
+                            <button type="button" class="slskChip" data-filter="slots">FREE SLOTS ONLY</button>
+                        </div>
+                        <div class="slskTextFiltersCon">
+                            <div class="slskTextFilterItem">
+                                <label for="slskIncludeFilterInput" class="slskFilterLabel">Include Text:</label>
+                                <div class="slskFilterInputWrap">
+                                    <input type="text" id="slskIncludeFilterInput" placeholder="Filter terms to include..." autocomplete="off">
+                                    <button type="button" id="slskIncludeFilterClearBtn" class="slskInFilterClearBtn" style="display: none;" title="Clear include filter" aria-label="Clear include filter">✕</button>
+                                </div>
+                            </div>
+                            <div class="slskTextFilterItem">
+                                <label for="slskExcludeFilterInput" class="slskFilterLabel">Exclude Text:</label>
+                                <div class="slskFilterInputWrap">
+                                    <input type="text" id="slskExcludeFilterInput" placeholder="Filter terms to exclude..." autocomplete="off">
+                                    <button type="button" id="slskExcludeFilterClearBtn" class="slskInFilterClearBtn" style="display: none;" title="Clear exclude filter" aria-label="Clear exclude filter">✕</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Suggested Filters (Albums, Tracks, Folders from results) -->
+                    <div class="slskSuggestedRow" id="slskSuggestedRow" style="display: none;">
+                        <div class="slskSuggestedHeader">
+                            <span class="slskSuggestedLabel">SUGGESTIONS:</span>
+                            <div class="slskSuggestedChips" id="slskSuggestedChips"></div>
+                            <button type="button" class="slskClearSubBtn" id="slskClearSubFilterBtn" style="display: none;" title="Clear Sub-filter">✕ RESET</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Soulseek Main Results Container -->
+        <div class="slskResultsCon">
+            <!-- Results Header / Clickable Sortable Columns -->
+            <div class="slskResultsHeader" id="slskResultsHeader">
+                <div class="col colTrack sortable" data-sort="filename" title="Sort by Filename (A-Z)">
+                    <span>FILE &amp; PATH</span>
+                    <span class="sortIndicator">↕</span>
+                </div>
+                <div class="col colFormat sortable" data-sort="format" title="Sort by Format">
+                    <span>FORMAT</span>
+                    <span class="sortIndicator">↕</span>
+                </div>
+                <div class="col colBitrate sortable" data-sort="bitrate" title="Sort by Bitrate">
+                    <span>BITRATE</span>
+                    <span class="sortIndicator">↕</span>
+                </div>
+                <div class="col colSize sortable" data-sort="size" title="Sort by File Size">
+                    <span>SIZE</span>
+                    <span class="sortIndicator">↕</span>
+                </div>
+                <div class="col colPeer sortable active desc" data-sort="speed" title="Sort by Peer Upload Speed">
+                    <span>PEER / SPEED</span>
+                    <span class="sortIndicator">▼</span>
+                </div>
+                <div class="col colQueue sortable" data-sort="slots" title="Sort by Queue / Free Slots">
+                    <span>QUEUE</span>
+                    <span class="sortIndicator">↕</span>
+                </div>
+                <div class="col colAction">
+                    <span>ACTION</span>
+                </div>
+            </div>
+
+            <!-- Scrollable Results Body -->
+            <div class="slskResultsList" id="slskResultsList">
+                <!-- Initial Welcome / Idle State -->
+                <div class="slskPlaceholder" id="slskPlaceholder">
+                    <div class="slskRadarGraphic">
+                        <div class="radarRing r1"></div>
+                        <div class="radarRing r2"></div>
+                        <div class="radarSweep"></div>
+                    </div>
+                    <h3>SOULSEEK P2P NETWORK</h3>
+                    <p>Search millions of high-fidelity tracks directly from peer collections without leaving CachyMusic.</p>
+                    <div class="slskSampleTags">
+                        <span>Try searching:</span>
+                        <button type="button" class="sampleTagBtn" data-query="OneRepublic FLAC">OneRepublic FLAC</button>
+                        <button type="button" class="sampleTagBtn" data-query="Daft Punk Discovery">Daft Punk Discovery</button>
+                        <button type="button" class="sampleTagBtn" data-query="Interstellar Soundtrack">Interstellar Soundtrack</button>
+                        <button type="button" class="sampleTagBtn" data-query="Bad Apple FLAC">Bad Apple FLAC</button>
+                    </div>
+                </div>
+
+                <!-- Searching Spinner (Hidden by default) -->
+                <div class="slskSearchingState" id="slskSearchingState" style="display: none;">
+                    <div class="slskSpinner"></div>
+                    <h3 id="slskSearchingTitle">Querying Soulseek Network...</h3>
+                    <p>Collecting peer search responses. Results stream in live.</p>
+                </div>
+            </div>
+
+            <!-- Results Summary Footer -->
+            <div class="slskResultsFooter">
+                <span id="slskResultCount">0 RESULTS FOUND</span>
+                <span id="slskActiveSearchMeta" class="slskActiveSearchMeta">IDLE</span>
+            </div>
+        </div>
+
+        <!-- Sliding Transfers Drawer (Collapsible) -->
+        <div class="slskTransfersDrawer" id="slskTransfersDrawer">
+            <div class="slskTransfersHeader" id="slskTransfersHeader">
+                <div class="slskTransfersTitle">
+                    <span class="drawerArrow" id="slskDrawerArrow">▲</span>
+                    <strong>SOULSEEK TRANSFERS</strong>
+                    <span class="counter" id="slskTransfersSummary">0 Active</span>
+                </div>
+                <div class="slskTransfersHeaderActions">
+                    <button type="button" id="slskResumeAllBtn" class="actionBtn" title="Resume All Paused Downloads" style="display: none;">
+                        RESUME ALL
+                    </button>
+                    <button type="button" id="slskScanDownloadsBtn" class="actionBtn" title="Scan and Load All Downloaded Songs into CachyMusic Library">
+                        SYNC ALL TO LIBRARY
+                    </button>
+                    <button type="button" id="slskCloseDrawerBtn" class="closeBtn" title="Collapse Transfers" aria-label="Collapse Transfers">✕</button>
+                </div>
+            </div>
+            <div class="slskTransfersBody" id="slskTransfersBody">
+                <div class="slskTransfersList" id="slskTransfersList">
+                    <div class="slskEmptyTransfers">No active or recent transfers.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Cross-Platform Downloads & Native Apps Workspace -->
+    <section class="downloadWorkspace" id="downloadWorkspace" style="display: none;">
+        <div class="downloadHubHeader">
+            <div class="downloadHubHeaderLeft">
+                <span class="downloadBadge">CROSS-PLATFORM DEPLOYMENT</span>
+                <h2>DOWNLOADS &amp; CLIENT SETUP</h2>
+                <p class="downloadSubtitle">CachyMusic is zero-dependency and runs everywhere — native Linux desktop, standalone PWA on Windows &amp; macOS, and local Wi-Fi lossless streaming to iOS and Android.</p>
+            </div>
+            <div class="downloadHubHeaderRight">
+                <button type="button" class="actionBtn primaryBtn downloadDirectPwaBtn" id="downloadPwaPromptBtn" title="Install CachyMusic directly in this browser">
+                    1-CLICK PWA INSTALL
+                </button>
+                <button type="button" class="actionBtn downloadReturnBtn" id="downloadReturnBtn" title="Return to Player (Alt+P)">
+                    RETURN TO PLAYER
+                </button>
+            </div>
+        </div>
+
+        <!-- Platform Switcher Tabs (High-Visibility Segmented Selector) -->
+        <div class="downloadTabsBar" id="downloadTabsBar" role="tablist">
+            <button type="button" class="downloadTabBtn active" data-platform="linux" role="tab" aria-selected="true" id="tabBtn-linux">
+                <div class="tabTopRow">
+                    <span class="platformName">LINUX</span>
+                    <span class="osDetectedBadge" id="osBadge-linux" style="display: none;">YOUR OS</span>
+                </div>
+                <span class="platformSub">Desktop &amp; CLI Runner</span>
+            </button>
+            <button type="button" class="downloadTabBtn" data-platform="windows" role="tab" aria-selected="false" id="tabBtn-windows">
+                <div class="tabTopRow">
+                    <span class="platformName">WINDOWS</span>
+                    <span class="osDetectedBadge" id="osBadge-windows" style="display: none;">YOUR OS</span>
+                </div>
+                <span class="platformSub">Win 10/11 Standalone</span>
+            </button>
+            <button type="button" class="downloadTabBtn" data-platform="macos" role="tab" aria-selected="false" id="tabBtn-macos">
+                <div class="tabTopRow">
+                    <span class="platformName">MACOS</span>
+                    <span class="osDetectedBadge" id="osBadge-macos" style="display: none;">YOUR OS</span>
+                </div>
+                <span class="platformSub">Apple Silicon &amp; Intel Dock</span>
+            </button>
+            <button type="button" class="downloadTabBtn" data-platform="mobile" role="tab" aria-selected="false" id="tabBtn-mobile">
+                <div class="tabTopRow">
+                    <span class="platformName">MOBILE &amp; WI-FI</span>
+                    <span class="osDetectedBadge" id="osBadge-mobile" style="display: none;">YOUR OS</span>
+                </div>
+                <span class="platformSub">iOS &amp; Android Apps</span>
+            </button>
+            <button type="button" class="downloadTabBtn" data-platform="pwa" role="tab" aria-selected="false" id="tabBtn-pwa">
+                <div class="tabTopRow">
+                    <span class="platformName">WEB / PWA</span>
+                    <span class="osDetectedBadge" id="osBadge-pwa" style="display: none;">YOUR OS</span>
+                </div>
+                <span class="platformSub">Direct Browser Runtime</span>
+            </button>
+        </div>
+
+        <!-- Platform Detail Cards Container -->
+        <div class="downloadContentArea">
+            <!-- 1. LINUX -->
+            <div class="downloadPanel active" id="platform-linux" role="tabpanel">
+                <div class="downloadCardMain">
+                    <div class="cardHeaderRow">
+                        <div class="cardHeaderLeft">
+                            <span class="clientTag linuxTag">RECOMMENDED FOR LINUX / CACHYOS</span>
+                            <h3>Linux Desktop &amp; System Integration</h3>
+                        </div>
+                        <span class="versionPill">v1.0.0 Native XDG</span>
+                    </div>
+
+                    <!-- Quick Start Callout Banner -->
+                    <div class="quickStartCallout">
+                        <div class="calloutHeader">
+                            <span class="calloutTag">QUICK START</span>
+                            <span class="calloutTitle">Run 1 command in terminal to integrate:</span>
+                        </div>
+                        <div class="quickCommandRow">
+                            <code>./install.sh</code>
+                            <button type="button" class="copyCodeBtn" data-copy="./install.sh" title="Copy command to clipboard">COPY</button>
+                        </div>
+                    </div>
+
+                    <p class="cardDesc">
+                        Full native system integration conforming to FreeDesktop XDG specifications. Auto-generates application launcher entries, high-resolution 512x512 vector icons, MIME type associations for audio files, and command-line daemon management.
+                    </p>
+                    
+                    <div class="codeSnippetBox">
+                        <div class="codeSnippetHeader">
+                            <span>TERMINAL INSTALLATION (ONE-LINE RUNNER)</span>
+                            <button type="button" class="copyCodeBtn" data-copy="./install.sh" title="Copy command to clipboard">
+                                COPY
+                            </button>
+                        </div>
+                        <pre><code>./install.sh</code></pre>
+                    </div>
+
+                    <div class="featureGrid">
+                        <div class="featureItem">
+                            <span class="featureDot"></span>
+                            <div>
+                                <strong>System Menu Entry</strong>
+                                <p>Search "CachyMusic" in Rofi, Dmenu, GNOME, KDE, or Hyprland.</p>
+                            </div>
+                        </div>
+                        <div class="featureItem">
+                            <span class="featureDot"></span>
+                            <div>
+                                <strong>Global CLI Launcher</strong>
+                                <p>Run <code>cachymusic</code> from any terminal to launch standalone window mode.</p>
+                            </div>
+                        </div>
+                        <div class="featureItem">
+                            <span class="featureDot"></span>
+                            <div>
+                                <strong>Audio Associations</strong>
+                                <p>Registers FLAC, MP3, WAV, OGG, and AAC file associations.</p>
+                            </div>
+                        </div>
+                        <div class="featureItem">
+                            <span class="featureDot"></span>
+                            <div>
+                                <strong>Clean Removal</strong>
+                                <p>Run <code>./uninstall.sh</code> to cleanly remove shortcuts without touching your music.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cardActionsRow">
+                        <a href="install.sh" download="install.sh" class="actionBtn primaryBtn">
+                            DOWNLOAD INSTALL.SH
+                        </a>
+                        <a href="uninstall.sh" download="uninstall.sh" class="actionBtn">
+                            DOWNLOAD UNINSTALL.SH
+                        </a>
+                        <button type="button" class="actionBtn copyCodeBtn" data-copy="cachymusic --background">
+                            COPY BACKGROUND DAEMON CMD
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. WINDOWS -->
+            <div class="downloadPanel" id="platform-windows" role="tabpanel" style="display: none;">
+                <div class="downloadCardMain">
+                    <div class="cardHeaderRow">
+                        <div class="cardHeaderLeft">
+                            <span class="clientTag windowsTag">WINDOWS 10 / 11 NATIVE RUNNER</span>
+                            <h3>Windows Standalone App &amp; Launcher</h3>
+                        </div>
+                        <span class="versionPill">Batch / Edge App</span>
+                    </div>
+
+                    <!-- Quick Start Callout Banner -->
+                    <div class="quickStartCallout">
+                        <div class="calloutHeader">
+                            <span class="calloutTag">QUICK START</span>
+                            <span class="calloutTitle">Download launcher and double-click to start:</span>
+                        </div>
+                        <div class="quickCommandRow">
+                            <a href="bin/cachymusic.bat" download="cachymusic.bat" class="actionBtn primaryBtn">DOWNLOAD CACHYMUSIC.BAT</a>
+                        </div>
+                    </div>
+
+                    <p class="cardDesc">
+                        Run CachyMusic natively on Windows without installing complex software. Double-click the launcher batch file to spawn background PHP and Soulseek services and launch a dedicated windowed app via Microsoft Edge or Google Chrome.
+                    </p>
+
+                    <div class="downloadOptionsRow">
+                        <div class="optionBox">
+                            <div class="optionBadge">OPTION A (RECOMMENDED)</div>
+                            <h4>Standalone Batch Launcher</h4>
+                            <p>Download <code>cachymusic.bat</code> into your project folder and double-click to launch.</p>
+                            <a href="bin/cachymusic.bat" download="cachymusic.bat" class="actionBtn primaryBtn">
+                                DOWNLOAD CACHYMUSIC.BAT
+                            </a>
+                        </div>
+                        <div class="optionBox">
+                            <div class="optionBadge">OPTION B</div>
+                            <h4>Browser PWA Mode</h4>
+                            <p>Open <code>http://localhost:8000</code> in Edge or Chrome, then click the <strong>Install</strong> icon in the address bar.</p>
+                            <button type="button" class="actionBtn downloadDirectPwaBtn">
+                                TRIGGER PWA INSTALL
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="codeSnippetBox">
+                        <div class="codeSnippetHeader">
+                            <span>POWERSHELL / CMD MANUAL RUNNER</span>
+                            <button type="button" class="copyCodeBtn" data-copy="start /b php -S 0.0.0.0:8000 index.php &amp;&amp; msedge --app=http://localhost:8000" title="Copy to clipboard">
+                                COPY
+                            </button>
+                        </div>
+                        <pre><code>start /b php -S 0.0.0.0:8000 index.php &amp;&amp; msedge --app=http://localhost:8000</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. MACOS -->
+            <div class="downloadPanel" id="platform-macos" role="tabpanel" style="display: none;">
+                <div class="downloadCardMain">
+                    <div class="cardHeaderRow">
+                        <div class="cardHeaderLeft">
+                            <span class="clientTag macTag">APPLE SILICON &amp; INTEL MACOS</span>
+                            <h3>macOS Standalone &amp; Dock Integration</h3>
+                        </div>
+                        <span class="versionPill">PWA / Command</span>
+                    </div>
+
+                    <!-- Quick Start Callout Banner -->
+                    <div class="quickStartCallout">
+                        <div class="calloutHeader">
+                            <span class="calloutTag">QUICK START</span>
+                            <span class="calloutTitle">Native standalone macOS setup:</span>
+                        </div>
+                        <p class="quickCalloutText">In Safari click <strong>File ➔ Add to Dock</strong>, or download the one-click launch script below.</p>
+                    </div>
+
+                    <p class="cardDesc">
+                        Seamless standalone window experience on macOS. Supports Retina display rendering, native MediaSession audio keys, and dedicated dock icon placement.
+                    </p>
+
+                    <div class="downloadOptionsRow">
+                        <div class="optionBox">
+                            <div class="optionBadge">SAFARI (SONOMA+)</div>
+                            <h4>Add to Dock</h4>
+                            <p>In Safari, click <strong>File</strong> ➔ <strong>Add to Dock</strong> to convert CachyMusic into a native Mac application.</p>
+                        </div>
+                        <div class="optionBox">
+                            <div class="optionBadge">CHROME / BRAVE</div>
+                            <h4>Install Standalone</h4>
+                            <p>Click the <strong>Install CachyMusic</strong> icon located on the right side of the URL address bar.</p>
+                        </div>
+                        <div class="optionBox">
+                            <div class="optionBadge">TERMINAL LAUNCHER</div>
+                            <h4>Command Script</h4>
+                            <p>Double-click the <code>.command</code> script to automatically run services and launch.</p>
+                            <a href="bin/cachymusic-mac.command" download="cachymusic-mac.command" class="actionBtn primaryBtn">
+                                DOWNLOAD .COMMAND
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. MOBILE & WI-FI STREAMING -->
+            <div class="downloadPanel" id="platform-mobile" role="tabpanel" style="display: none;">
+                <div class="downloadCardMain">
+                    <div class="cardHeaderRow">
+                        <div class="cardHeaderLeft">
+                            <span class="clientTag mobileTag">LOCAL WI-FI STREAMING &amp; MOBILE APP</span>
+                            <h3>Mobile App &amp; Local Network Stream</h3>
+                        </div>
+                        <span class="versionPill">iOS &amp; Android PWA</span>
+                    </div>
+
+                    <!-- Quick Start Callout Banner -->
+                    <div class="quickStartCallout">
+                        <div class="calloutHeader">
+                            <span class="calloutTag">QUICK START</span>
+                            <span class="calloutTitle">Lossless streaming over local Wi-Fi:</span>
+                        </div>
+                        <p class="quickCalloutText">Connect phone to same Wi-Fi network, open address below, and tap <strong>Add to Home Screen</strong>.</p>
+                    </div>
+
+                    <p class="cardDesc">
+                        Stream your entire lossless library from this computer to any smartphone or tablet on your local Wi-Fi network. Includes lock screen album art and playback controls.
+                    </p>
+
+                    <div class="lanAddressCard">
+                        <div class="lanAddressLabel">YOUR LOCAL NETWORK STREAMING ADDRESS:</div>
+                        <div class="lanAddressRow">
+                            <input type="text" id="downloadLanUrlInput" readonly value="http://localhost:8000" class="lanUrlInput">
+                            <button type="button" class="actionBtn primaryBtn copyCodeBtn" id="copyLanUrlBtn" data-copy="http://localhost:8000">
+                                COPY ADDRESS
+                            </button>
+                        </div>
+                        <p class="lanAddressHelp">Make sure your phone is connected to the same Wi-Fi network as this computer, then open this address in your mobile browser.</p>
+                    </div>
+
+                    <div class="downloadOptionsRow" style="margin-top: 1.25rem; margin-bottom: 1.25rem;">
+                        <div class="optionBox">
+                            <div class="optionBadge">IOS &amp; IPADOS</div>
+                            <h4>1-Tap iOS Profile (.mobileconfig)</h4>
+                            <p>Direct installation on iPhone and iPad Safari. Adds home screen app icon with full-screen lossless playback without App Store or sideloading tools.</p>
+                            <div class="cardActionsRow" style="margin-top: 0.8rem; gap: 0.5rem;">
+                                <a href="php/api/ios_profile.php" class="actionBtn primaryBtn" download="CachyMusic.mobileconfig">
+                                    INSTALL PROFILE
+                                </a>
+                                <a href="downloads/CachyMusic.mobileconfig" class="actionBtn" download="CachyMusic.mobileconfig" title="Download pre-generated profile">
+                                    DOWNLOAD FILE
+                                </a>
+                            </div>
+                        </div>
+                        <div class="optionBox">
+                            <div class="optionBadge">ANDROID (WEBAPK &amp; NATIVE)</div>
+                            <h4>Android WebAPK &amp; Native Packager</h4>
+                            <p>1-tap install on Android via Chrome/Brave (auto WebAPK), or generate native Android Studio project with foreground audio service permissions.</p>
+                            <div class="cardActionsRow" style="margin-top: 0.8rem; gap: 0.5rem;">
+                                <button type="button" class="actionBtn primaryBtn downloadDirectPwaBtn">
+                                    1-TAP INSTALL
+                                </button>
+                                <a href="tools/packager/package-mobile.sh" class="actionBtn" download="package-mobile.sh" title="Download packaging script">
+                                    PACKAGER SCRIPT
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mobileStepsGrid">
+                        <div class="mobileStepCard">
+                            <h4>Android (Chrome / Brave / Firefox)</h4>
+                            <ol>
+                                <li>Connect phone to same Wi-Fi network.</li>
+                                <li>Open the address above in Chrome or Brave.</li>
+                                <li>Tap the three dots menu (<strong>⋮</strong>) in the top-right corner.</li>
+                                <li>Select <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
+                                <li>CachyMusic installs as a full-screen mobile app with app drawer icon!</li>
+                            </ol>
+                        </div>
+                        <div class="mobileStepCard">
+                            <h4>iOS &amp; iPadOS (Safari WebClip)</h4>
+                            <ol>
+                                <li>Connect iPhone/iPad to same Wi-Fi network.</li>
+                                <li>Tap <strong>"INSTALL PROFILE"</strong> above (or visit <code>/php/api/ios_profile.php</code>).</li>
+                                <li>Tap <strong>Allow</strong> when iOS prompts <em>"Profile Downloaded"</em>.</li>
+                                <li>Open iOS <strong>Settings</strong> &rarr; <strong>Profile Downloaded</strong> &rarr; Tap <strong>Install</strong>.</li>
+                                <li>CachyMusic immediately appears on your home screen with custom icon!</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <div class="codeSnippetBox" style="margin-top: 1.2rem;">
+                        <div class="codeSnippetHeader">
+                            <span>CROSS-PLATFORM MOBILE PACKAGER CLI (ANDROID &amp; IOS)</span>
+                            <button type="button" class="copyCodeBtn" data-copy="./tools/packager/package-mobile.sh all" title="Copy to clipboard">
+                                COPY
+                            </button>
+                        </div>
+                        <pre><code>./tools/packager/package-mobile.sh all</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. DIRECT PWA INSTALL -->
+            <div class="downloadPanel" id="platform-pwa" role="tabpanel" style="display: none;">
+                <div class="downloadCardMain">
+                    <div class="cardHeaderRow">
+                        <div class="cardHeaderLeft">
+                            <span class="clientTag pwaTag">STANDALONE WEB APP RUNTIME</span>
+                            <h3>Direct Web App (PWA) Engine</h3>
+                        </div>
+                        <span class="versionPill" id="downloadPwaStatusPill">Browser Mode</span>
+                    </div>
+
+                    <!-- Quick Start Callout Banner -->
+                    <div class="quickStartCallout">
+                        <div class="calloutHeader">
+                            <span class="calloutTag">QUICK START</span>
+                            <span class="calloutTitle">Instant standalone window mode:</span>
+                        </div>
+                        <p class="quickCalloutText">Zero installation required — runs in an isolated desktop frame without address bar or browser tabs.</p>
+                    </div>
+
+                    <p class="cardDesc">
+                        CachyMusic includes an offline-capable Service Worker and Web App Manifest that allows any modern browser to install it into an isolated native window without browser address bars or navigation tabs.
+                    </p>
+
+                    <div class="pwaHeroAction">
+                        <button type="button" class="actionBtn primaryBtn pwaBigInstallBtn" id="downloadPwaTriggerBtn">
+                            INSTALL CACHYMUSIC DIRECTLY TO SYSTEM
+                        </button>
+                        <p class="pwaInstallHint" id="pwaInstallHint">Click above to trigger your browser's native installation prompt.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dedicated Settings Workspace (Native Full Tab View) -->
+    <section class="settingsWorkspace" id="settingsWorkspace" style="display: none;">
+        <div class="settingsHubHeader">
+            <div class="settingsHubHeaderLeft">
+                <span class="settingsBadge">SYSTEM &amp; AUDIO CONFIGURATION</span>
+                <h2>STUDIO SETTINGS &amp; PREFERENCES</h2>
+                <p class="settingsSubtitle">Select a category below to configure the 64-bit DSP engine, visual themes, local music directories, or timers.</p>
+            </div>
+            <div class="settingsHubHeaderRight">
+                <button type="button" class="actionBtn settingsReturnBtn" id="settingsReturnBtn" title="Return to Player (Alt+P)">
+                    RETURN TO PLAYER
+                </button>
+            </div>
+        </div>
+
+        <!-- Settings Category Sub-Navigation Bar (Focused 2-Column Sub-Groupings) -->
+        <nav class="settingsCategoryNav" id="settingsCategoryNav" aria-label="Settings Categories">
+            <button type="button" class="settingsCatBtn active" data-cat="audio">AUDIO &amp; DSP ENGINE</button>
+            <button type="button" class="settingsCatBtn" data-cat="visual">THEMES &amp; VISUALIZER</button>
+            <button type="button" class="settingsCatBtn" data-cat="library">LIBRARY &amp; FOLDERS</button>
+            <button type="button" class="settingsCatBtn" data-cat="system">TIMERS &amp; CLIENTS</button>
+            <button type="button" class="settingsCatBtn" data-cat="all">ALL OVERVIEW</button>
+        </nav>
+
+        <div class="settingsLayoutGrid" id="settingsLayoutGrid" data-active-cat="audio">
+            <!-- COLUMN 1: PRIMARY SUB-GROUP CARDS -->
+            <div class="settingsCol" id="settingsColAudio" data-settings-col="audio">
+                <!-- AUDIO SUB-CARD A: CORE DSP & PRECISION -->
+                <div class="settingsSectionPanel" id="settingsPanelAudioDsp" data-settings-cat="audio">
+                    <div class="settingsSectionHeader">
+                        <div class="settingsSectionTitleRow">
+                            <span class="settingsSectionBadge">CORE DSP</span>
+                            <h3 class="settingsSectionTitle">PRECISION &amp; SIGNAL CHAIN</h3>
+                        </div>
+                        <p class="settingsSectionDesc">Floating-point bit depth, psychoacoustic dithering, and hardware buffer calibration.</p>
+                    </div>
+
+                    <div class="settingsPanelContent">
+                        <!-- 1. Signal Path Metrics -->
+                        <div class="settingsRowItem" id="settingsCardDsp">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">SIGNAL CHAIN TELEMETRY</h4>
+                                    <p class="settingsRowDesc">Real-time Web Audio pipeline status &amp; true-peak headroom.</p>
+                                </div>
+                            </div>
+                            <div class="settingsDspMetricsGrid">
+                                <div class="settingsDspMetricItem">
+                                    <span class="settingsDspKey">AUDIO ENGINE</span>
+                                    <span class="settingsDspVal">64-Bit / 32-Bit IEEE</span>
+                                </div>
+                                <div class="settingsDspMetricItem">
+                                    <span class="settingsDspKey">HEADROOM</span>
+                                    <span class="settingsDspVal" id="settingsDspHeadroomVal">Dynamic True-Peak</span>
+                                </div>
+                                <div class="settingsDspMetricItem">
+                                    <span class="settingsDspKey">BUFFER LATENCY</span>
+                                    <span class="settingsDspVal">Direct Hardware</span>
+                                </div>
+                                <div class="settingsDspMetricItem">
+                                    <span class="settingsDspKey">CROSSFEED &amp; EQ</span>
+                                    <span class="settingsDspVal">Audiophile Linear</span>
+                                </div>
+                            </div>
+                            <button type="button" id="settingsTabOpenSignalAuditBtn" class="actionBtn primaryBtn settingsFullWidthBtn signalPathAuditBtn">
+                                AUDIT COMPLETE SIGNAL PATH
+                            </button>
+                        </div>
+
+                        <!-- 2. Math Precision Architecture -->
+                        <div class="settingsRowItem" id="settingsRowPrecision">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">MATH PRECISION</h4>
+                                    <p class="settingsRowDesc">64-bit double-float AudioWorklet prevents biquad rounding noise.</p>
+                                </div>
+                                <span class="settingsEnginePill" id="settingsEnginePrecisionPill">64-BIT DOUBLE FLOAT</span>
+                            </div>
+                            <div class="settingsOptionToggles">
+                                <button type="button" class="actionBtn enginePrecisionBtn active" data-precision="64">64-BIT STUDIO FLOAT</button>
+                                <button type="button" class="actionBtn enginePrecisionBtn" data-precision="32">32-BIT FAST FLOAT</button>
+                            </div>
+                        </div>
+
+                        <!-- 3. Dithering & Noise Shaping -->
+                        <div class="settingsRowItem" id="settingsRowDither">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">DITHERING &amp; NOISE SHAPING</h4>
+                                    <p class="settingsRowDesc">Shapes quantization noise above 18 kHz during DAC output conversion.</p>
+                                </div>
+                                <span class="settingsEnginePill" id="settingsDitherPill">SHAPED (&gt;18 kHz)</span>
+                            </div>
+                            <div class="settingsOptionToggles">
+                                <button type="button" class="actionBtn ditherModeBtn" data-dither="off">OFF (TRUNCATE)</button>
+                                <button type="button" class="actionBtn ditherModeBtn" data-dither="tpdf">TPDF FLAT</button>
+                                <button type="button" class="actionBtn ditherModeBtn active" data-dither="shaped">PSYCHOACOUSTIC SHAPED</button>
+                            </div>
+                        </div>
+
+                        <!-- 4. Audio Buffer & Latency Tuning -->
+                        <div class="settingsRowItem" id="settingsRowBuffer">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">BUFFER &amp; LATENCY</h4>
+                                    <p class="settingsRowDesc">Balance responsive controls (~15ms) against dropout-free buffering (~100ms).</p>
+                                </div>
+                                <span class="settingsEnginePill" id="settingsBufferPill">PLAYBACK (AUDIOPHILE)</span>
+                            </div>
+                            <div class="settingsOptionToggles">
+                                <button type="button" class="actionBtn bufferLatencyBtn" data-latency="interactive">LOW-LATENCY (~15ms)</button>
+                                <button type="button" class="actionBtn bufferLatencyBtn active" data-latency="playback">AUDIOPHILE (~100ms)</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VISUAL SUB-CARD A: THEME PROFILE -->
+                <div class="settingsSectionPanel" id="settingsPanelThemesVis" data-settings-cat="visual" style="display: none;">
+                    <div class="settingsSectionHeader">
+                        <div class="settingsSectionTitleRow">
+                            <span class="settingsSectionBadge">COLOR SYSTEM</span>
+                            <h3 class="settingsSectionTitle">ACTIVE THEME &amp; PALETTE</h3>
+                        </div>
+                        <p class="settingsSectionDesc">Switch between 12 calibrated studio, sci-fi, and minimalist high-contrast themes.</p>
+                    </div>
+
+                    <div class="settingsPanelContent">
+                        <div class="settingsRowItem" id="settingsCardThemes">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">CURRENT WORKSTATION SKIN</h4>
+                                    <p class="settingsRowDesc">Adapts surfaces, typography, turntable lighting, and visualizer colors.</p>
+                                </div>
+                            </div>
+                            <button type="button" id="settingsTabOpenThemeModalBtn" class="settingsThemePickerBtn" title="Open Theme Overhaul Selector">
+                                <div class="settingsThemePickerInfo">
+                                    <span class="settingsThemePickerSub">ACTIVE THEME</span>
+                                    <span class="settingsThemePickerCurrent" id="settingsTabCurrentThemeBadge">DEFAULT STUDIO HI-FI</span>
+                                </div>
+                                <span class="settingsThemePickerAction">CHANGE THEME</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LIBRARY SUB-CARD A: LOCAL FOLDER SCANNER -->
+                <div class="settingsSectionPanel" id="settingsPanelLibrarySystem" data-settings-cat="library" style="display: none;">
+                    <div class="settingsSectionHeader">
+                        <div class="settingsSectionTitleRow">
+                            <span class="settingsSectionBadge">INDEXER</span>
+                            <h3 class="settingsSectionTitle">LOCAL DIRECTORY SCANNER</h3>
+                        </div>
+                        <p class="settingsSectionDesc">Index local directories for lossless FLAC, WAV, ALAC, and high-bitrate audio.</p>
+                    </div>
+
+                    <div class="settingsPanelContent">
+                        <div class="settingsRowItem" id="settingsCardFolders" data-settings-item-cat="library">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">SOURCE DIRECTORY PATH</h4>
+                                    <p class="settingsRowDesc">Enter a local folder path or browse your filesystem to index tracks.</p>
+                                </div>
+                            </div>
+                            <div class="settingsFolderInputRow">
+                                <input type="text" id="settingsTabFolderPathInput" class="settingsInput" placeholder="/path/to/music/folder" aria-label="Audio directory path">
+                                <button type="button" id="settingsTabBrowseBtn" class="actionBtn" title="Choose folder from your computer">BROWSE...</button>
+                                <button type="button" id="settingsTabScanBtn" class="actionBtn primaryBtn" title="Scan directory and load tracks">SCAN &amp; LOAD</button>
+                            </div>
+                            <div class="settingsScanStatusBox" id="settingsTabScanStatus">
+                                Ready to scan local music library.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SYSTEM SUB-CARD A: SLEEP TIMER -->
+                <div class="settingsSectionPanel" id="settingsPanelSleepGroup" data-settings-cat="system" style="display: none;">
+                    <div class="settingsSectionHeader">
+                        <div class="settingsSectionTitleRow">
+                            <span class="settingsSectionBadge">AUTOMATION</span>
+                            <h3 class="settingsSectionTitle">AUDIOPHILE SLEEP TIMER</h3>
+                        </div>
+                        <p class="settingsSectionDesc">Logarithmic volume fade-out gently lowers output before pausing playback.</p>
+                    </div>
+
+                    <div class="settingsPanelContent">
+                        <div class="settingsRowItem" id="settingsCardSleep" data-settings-item-cat="system">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">QUICK COUNTDOWN PRESETS</h4>
+                                    <p class="settingsRowDesc">Select a countdown duration or pause automatically at the end of the track.</p>
+                                </div>
+                                <span class="settingsSleepBadge" id="settingsTabSleepStatusBadge">INACTIVE</span>
+                            </div>
+                            <div class="settingsSleepQuickRow">
+                                <button type="button" class="actionBtn settingsSleepPresetBtn" data-mins="15">15 MIN</button>
+                                <button type="button" class="actionBtn settingsSleepPresetBtn" data-mins="30">30 MIN</button>
+                                <button type="button" class="actionBtn settingsSleepPresetBtn" data-mins="45">45 MIN</button>
+                                <button type="button" class="actionBtn settingsSleepPresetBtn" data-mins="60">60 MIN</button>
+                                <button type="button" class="actionBtn settingsSleepPresetBtn" data-mins="end">END OF TRACK</button>
+                                <button type="button" id="settingsTabCancelSleepBtn" class="actionBtn dangerBtn">CANCEL TIMER</button>
+                            </div>
+                            <button type="button" id="settingsTabOpenSleepModalBtn" class="actionBtn settingsFullWidthBtn">
+                                CONFIGURE CUSTOM SLEEP TIMER
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COLUMN 2: SECONDARY SUB-GROUP CARDS -->
+            <div class="settingsCol" id="settingsColSystem" data-settings-col="system">
+                <!-- AUDIO SUB-CARD B: HARDWARE DAC & ACOUSTIC CONDITIONING -->
+                <div class="settingsSectionPanel" id="settingsPanelAudioHardware" data-settings-cat="audio">
+                    <div class="settingsSectionHeader">
+                        <div class="settingsSectionTitleRow">
+                            <span class="settingsSectionBadge">DAC &amp; ACOUSTICS</span>
+                            <h3 class="settingsSectionTitle">HARDWARE &amp; STAGE FILTERS</h3>
+                        </div>
+                        <p class="settingsSectionDesc">Direct PipeWire/ALSA DAC volume bridge, ultrasonic filtering, and speaker stage DSP.</p>
+                    </div>
+
+                    <div class="settingsPanelContent">
+                        <!-- 1. Hardware Analog Gain -->
+                        <div class="settingsRowItem" id="settingsRowHwGain">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">HARDWARE ANALOG GAIN (DAC BRIDGE)</h4>
+                                    <p class="settingsRowDesc">Locks digital stream at 0 dBFS and controls physical DAC volume directly.</p>
+                                </div>
+                                <span class="settingsEnginePill" id="settingsHardwareGainPill">READY (PIPEWIRE)</span>
+                            </div>
+                            <div class="settingsOptionToggles">
+                                <button type="button" id="settingsHwGainToggleBtn" class="actionBtn toggleActiveBtn">
+                                    <span class="toggleDot" id="settingsHwGainDot" style="display:none;"></span>
+                                    <span id="settingsHwGainText">HARDWARE GAIN: OFF</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 2. Ultrasonic IMD Filter -->
+                        <div class="settingsRowItem" id="settingsRowUltrasonic">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">ULTRASONIC IMD FILTER</h4>
+                                    <p class="settingsRowDesc">Attenuates out-of-band ultrasonic noise to prevent amplifier intermodulation.</p>
+                                </div>
+                                <span class="settingsEnginePill" id="settingsUltrasonicPill">ACTIVE (32 kHz)</span>
+                            </div>
+                            <div class="settingsOptionToggles settingsInlineControls">
+                                <button type="button" id="settingsUltrasonicToggleBtn" class="actionBtn toggleActiveBtn active">
+                                    <span class="toggleDot active" id="settingsUltrasonicDot" style="display:none;"></span>
+                                    <span id="settingsUltrasonicText">ULTRASONIC FILTER: ON</span>
+                                </button>
+                                <select id="settingsUltrasonicCutoffSelect" class="settingsSelect" aria-label="Ultrasonic Filter Cutoff">
+                                    <option value="24000">24 kHz (Redbook / CD)</option>
+                                    <option value="32000" selected>32 kHz (Balanced)</option>
+                                    <option value="40000">40 kHz (Hi-Res Audio)</option>
+                                    <option value="48000">48 kHz (Ultra-Wide)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 3. Speaker Ambiophonics R.A.C.E. -->
+                        <div class="settingsRowItem" id="settingsRowAmbi">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">SPEAKER AMBIOPHONICS (R.A.C.E.)</h4>
+                                    <p class="settingsRowDesc">Recursive crosstalk cancellation for physical stereo desk/room speakers.</p>
+                                </div>
+                                <span class="settingsEnginePill" id="settingsAmbiPill">BYPASS</span>
+                            </div>
+                            <div class="settingsOptionToggles">
+                                <button type="button" id="settingsAmbiToggleBtn" class="actionBtn toggleActiveBtn">
+                                    <span class="toggleDot" id="settingsAmbiDot" style="display:none;"></span>
+                                    <span id="settingsAmbiText">AMBIOPHONICS: OFF (SPEAKERS ONLY)</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VISUAL SUB-CARD B: SPECTRUM VISUALIZER -->
+                <div class="settingsSectionPanel" id="settingsPanelVisualizer" data-settings-cat="visual" style="display: none;">
+                    <div class="settingsSectionHeader">
+                        <div class="settingsSectionTitleRow">
+                            <span class="settingsSectionBadge">SPECTRUM</span>
+                            <h3 class="settingsSectionTitle">REAL-TIME VISUALIZER</h3>
+                        </div>
+                        <p class="settingsSectionDesc">High-DPI 60fps frequency analyzer modes synchronized with audio playback.</p>
+                    </div>
+
+                    <div class="settingsPanelContent">
+                        <div class="settingsRowItem" id="settingsCardVis">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">RENDERING TOPOLOGY</h4>
+                                    <p class="settingsRowDesc">Choose between smooth spline waves, LED bars, or theme-reactive rendering.</p>
+                                </div>
+                            </div>
+                            <div class="visSelectorGrid">
+                                <button type="button" class="visModeBtn active" data-mode="wave">LIQUID WAVE</button>
+                                <button type="button" class="visModeBtn" data-mode="dash">SEGMENTED DASH</button>
+                                <button type="button" class="visModeBtn" data-mode="thematic">THEMATIC CORE</button>
+                            </div>
+                            <p class="settingsCardNote">
+                                Thematic Core automatically pauses when playback stops to eliminate idle GPU/CPU drain.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LIBRARY SUB-CARD B: QUICK FOLDER PRESETS -->
+                <div class="settingsSectionPanel" id="settingsPanelLibraryPresets" data-settings-cat="library" style="display: none;">
+                    <div class="settingsSectionHeader">
+                        <div class="settingsSectionTitleRow">
+                            <span class="settingsSectionBadge">SHORTCUTS</span>
+                            <h3 class="settingsSectionTitle">QUICK DIRECTORY PRESETS</h3>
+                        </div>
+                        <p class="settingsSectionDesc">One-click shortcuts to standard local music and download directories.</p>
+                    </div>
+
+                    <div class="settingsPanelContent">
+                        <div class="settingsRowItem">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">COMMON MUSIC LOCATIONS</h4>
+                                    <p class="settingsRowDesc">Click a preset below to populate and scan the directory immediately.</p>
+                                </div>
+                            </div>
+                            <div class="settingsPresetsRow">
+                                <span class="settingsPresetLabel">QUICK PRESETS:</span>
+                                <button type="button" class="presetPathBtn" data-path="~/Music">~/Music</button>
+                                <button type="button" class="presetPathBtn" data-path="~/Music/Main">~/Music/Main</button>
+                                <button type="button" class="presetPathBtn" data-path="~/Downloads">~/Downloads</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SYSTEM SUB-CARD B: CROSS-PLATFORM CLIENTS & PWA -->
+                <div class="settingsSectionPanel" id="settingsPanelClientApps" data-settings-cat="system" style="display: none;">
+                    <div class="settingsSectionHeader">
+                        <div class="settingsSectionTitleRow">
+                            <span class="settingsSectionBadge">DEPLOYMENT</span>
+                            <h3 class="settingsSectionTitle">APPS &amp; MOBILE STREAMING</h3>
+                        </div>
+                        <p class="settingsSectionDesc">Install as a standalone desktop/mobile app or pair over local Wi-Fi.</p>
+                    </div>
+
+                    <div class="settingsPanelContent">
+                        <div class="settingsRowItem" id="settingsCardDownload" data-settings-item-cat="system">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">NATIVE RUNNERS &amp; PWA</h4>
+                                    <p class="settingsRowDesc">Launch the cross-platform setup hub for Linux, Windows, macOS, Android, and iOS.</p>
+                                </div>
+                            </div>
+                            <div class="settingsDownloadQuickRow">
+                                <button type="button" id="settingsTabOpenDownloadHubBtn" class="actionBtn primaryBtn">
+                                    OPEN DOWNLOAD &amp; SETUP HUB
+                                </button>
+                                <button type="button" id="settingsTabPwaInstallBtn" class="actionBtn">
+                                    1-CLICK PWA INSTALL
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Persistent Mini-Player Bar (Active in Soulseek Workspace) -->
+    <aside class="persistentMiniPlayer" id="persistentMiniPlayer" style="display: none;" aria-label="Quick Audio Controls">
+        <div class="miniPlayerLeft">
+            <div class="miniTurntableThumb" id="miniTurntableThumb">
+                <img src="resources/images/bad-apple.png" alt="Mini Art" id="miniArtPreview">
+                <div class="miniSpindle"></div>
+            </div>
+            <div class="miniTrackInfo">
+                <div class="miniTitle" id="miniTitle">Select A Track</div>
+                <div class="miniArtist" id="miniArtist">CachyMusic Player</div>
+            </div>
+        </div>
+
+        <div class="miniPlayerCenter">
+            <div class="miniControls">
+                <button type="button" class="miniBtn" id="miniPrevBtn" title="Previous Track" aria-label="Previous Track">
+                    <img src="resources/images/skipprevious.svg" alt="Previous">
+                </button>
+                <button type="button" class="miniBtn miniPlayBtn" id="miniPlayBtn" title="Play / Pause" aria-label="Play or Pause">
+                    <svg id="miniPlayImg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                        <path class="icon-play" d="M8 5v14l11-7z"/>
+                        <path class="icon-pause" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                </button>
+                <button type="button" class="miniBtn" id="miniNextBtn" title="Next Track" aria-label="Next Track">
+                    <img src="resources/images/skipnext.svg" alt="Next">
+                </button>
+            </div>
+            <div class="miniScrubberRow">
+                <span class="miniTime" id="miniCurrentTime">0:00</span>
+                <div class="miniProgressBarCon" id="miniProgressCon">
+                    <div class="miniProgressBar" id="miniProgressBar"></div>
+                </div>
+                <span class="miniTime" id="miniTotalDuration">0:00</span>
+            </div>
+        </div>
+
+        <div class="miniPlayerRight">
+            <div class="miniVolumeCon">
+                <button type="button" class="miniMuteBtn" id="miniMuteBtn" title="Mute" aria-label="Mute or Unmute">
+                    <svg id="miniVolumeIcon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                    </svg>
+                </button>
+                <input type="range" id="miniVolumeSlider" min="0" max="1" step="0.01" value="0.8" class="volumeSlider" title="Volume" aria-label="Mini Player Volume">
+            </div>
+            <button type="button" class="miniDeckReturnBtn" id="miniDeckReturnBtn" title="Return to Player (Alt+P)">
+                OPEN PLAYER
+            </button>
+        </div>
+    </aside>
+
+    <!-- Add Track To Playlist Modal -->
+    <div class="modalBackdrop" id="playlistModal" style="display: none;">
+        <div class="modalCard">
+            <div class="modalHeader">
+                <h3>ADD TO PLAYLIST</h3>
+                <button type="button" id="closeModalBtn" class="closeModalBtn" aria-label="Close modal">✕</button>
+            </div>
+            <p id="modalTrackTitle" class="modalTrackTitle">Track Title</p>
+            <div class="modalPlaylistList" id="modalPlaylistList">
+                <!-- List of playlists with an Add button -->
+            </div>
+            <div class="modalCreateNew">
+                <input type="text" id="modalNewPlaylistName" placeholder="Or create new playlist... (Press Enter to create &amp; add)" aria-label="Playlist Name">
+                <button type="button" id="modalCreateAndAddBtn" class="actionBtn primaryBtn">CREATE &amp; ADD</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MusicBee / Musicolet Batch Add Songs To Playlist Modal -->
+    <div class="modalBackdrop" id="batchAddSongsModal" style="display: none;">
+        <div class="modalCard batchAddSongsCard">
+            <div class="modalHeader">
+                <div class="batchAddHeaderTitle">
+                    <span class="batchAddHeaderIcon">🎵</span>
+                    <h3 id="batchAddModalTitle">ADD SONGS TO PLAYLIST</h3>
+                </div>
+                <button type="button" id="closeBatchAddModalBtn" class="closeModalBtn" title="Close song picker" aria-label="Close modal">✕</button>
+            </div>
+            <p class="batchAddSubtitle">Search your track library and tap "+" to instantly add songs to this playlist:</p>
+            <div class="batchAddSearchBar">
+                <input type="text" id="batchAddSearchInput" placeholder="Filter library by title, artist, or album..." aria-label="Search library tracks">
+            </div>
+            <div class="batchAddTracksList" id="batchAddTracksList">
+                <!-- Populated dynamically with track items -->
+            </div>
+            <div class="batchAddFooter">
+                <span id="batchAddSummaryText">0 songs in playlist</span>
+                <button type="button" id="doneBatchAddBtn" class="actionBtn primaryBtn">DONE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Studio Parametric Equalizer (PEQ) Workstation Modal -->
+    <div class="modalBackdrop" id="peqModal" style="display: none;">
+        <div class="modalCard peqModalCard">
+            <div class="modalHeader">
+                <div class="peqHeaderTitle">
+                    <div>
+                        <h3>STUDIO EQUALIZER &amp; DSP WORKSTATION</h3>
+                        <span class="peqHeaderSub">10-BAND ISO BIQUAD ENGINE • DYNAMIC ENHANCERS • HEADPHONE STAGING</span>
+                    </div>
+                </div>
+                <div class="peqHeaderActions">
+                    <button type="button" id="peqBypassToggleBtn" class="actionBtn peqBypassBtn" title="Toggle Equalizer Bypass">
+                        <span class="peqBypassText" id="peqBypassStatusText">ACTIVE</span>
+                    </button>
+                    <button type="button" id="peqResetBtn" class="actionBtn peqResetBtn" title="Reset all bands to 0.0 dB">RESET FLAT</button>
+                    <button type="button" id="closePeqModalBtn" class="closeModalBtn" title="Close Equalizer" aria-label="Close Equalizer">✕</button>
+                </div>
+            </div>
+
+            <!-- Real-Time Frequency Response Curve Display -->
+            <div class="peqCanvasContainer">
+                <canvas id="peqCurveCanvas" class="peqCurveCanvas" width="900" height="190"></canvas>
+                <div class="peqCanvasOverlay">
+                    <span class="peqDbLabel top">+15 dB</span>
+                    <span class="peqDbLabel mid">0 dB</span>
+                    <span class="peqDbLabel bot">-15 dB</span>
+                </div>
+            </div>
+
+            <!-- Studio DSP & Dynamic Enhancers Rack -->
+            <div class="peqDspStrip" id="peqDspStrip">
+                <div class="peqDspHeader">
+                    <div class="peqDspTitleGroup">
+                        <span class="peqSectionBadge">STUDIO DSP</span>
+                        <h4 class="peqDspTitle">ACOUSTIC ENHANCERS &amp; HEADPHONE STAGING</h4>
+                    </div>
+                    <span class="peqDspSummaryPill" id="peqDspActiveSummary">ALL BYPASSED</span>
+                </div>
+                <div class="peqDspGrid">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerAmpBoostBtn" data-target="amp" title="Toggle Clean Amplification (+3.6 dB Broadcast Loudness &amp; Headroom)">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">AMP</span>
+                        <span class="peqDspSpec">+3.6 dB</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn" id="playerBassBoostBtn" data-target="bass" title="Toggle Analog Sub-Bass Boost (+3.8 dB Harman Sub-Bass &amp; 808s at 95 Hz)">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">BASS</span>
+                        <span class="peqDspSpec">+3.8 dB</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn" id="playerVocalBoostBtn" data-target="vocal" title="Toggle Vocal Boost (+2.8 dB Pinna Ear-Gain &amp; Speech Clarity at 3.0 kHz)">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">VOCAL</span>
+                        <span class="peqDspSpec">+2.8 dB</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn" id="playerTrebleBoostBtn" data-target="treble" title="Toggle Air Band &amp; Treble Sparkle (+3.0 dB High Shimmer at 10.0 kHz)">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">TREBLE</span>
+                        <span class="peqDspSpec">+3.0 dB</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn" id="playerLimiterBtn" data-target="limiter" title="Toggle Dedicated Brickwall Peak Limiter (-0.6 dBFS True-Peak Ceiling &amp; Anti-Clipping)">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">LIMITER</span>
+                        <span class="peqDspSpec">-0.6 dBFS</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn" id="playerXfeedBtn" data-target="xfeed" title="Toggle Bauer Headphone Crossfeed (Acoustic Spatial Staging &amp; Ear Fatigue Reduction)">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">CROSSFEED</span>
+                        <span class="peqDspSpec" id="peqXfeedStatus">OFF</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn active" id="playerAgpBtn" data-target="agp" title="Toggle Neutron Automatic Gain Protection (Prevents EQ/DSP Clipping via 64-Bit Envelope Attenuator)">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">AUTO GAIN (AGP)</span>
+                        <span class="peqDspSpec" id="peqAgpStatus">GUARD ON</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn" id="playerSurroundBtn" data-target="surround" title="Toggle Mid/Side Holographic Soundstage Widener (135% Spatial Expansion)">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">SURROUND M/S</span>
+                        <span class="peqDspSpec" id="peqSurroundStatus">100%</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn" id="playerPhaseBtn" data-target="phase" title="Toggle 180° Absolute Acoustic Phase Polarity Inversion">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">PHASE 180°</span>
+                        <span class="peqDspSpec" id="peqPhaseStatus">0° NORM</span>
+                    </button>
+                    <button type="button" class="dspBtn peqDspBtn" id="playerMonoBtn" data-target="mono" title="Toggle Phase-Coherent L+R Mono Summing">
+                        <span class="dspDot"></span>
+                        <span class="peqDspName">MONO SUM</span>
+                        <span class="peqDspSpec" id="peqMonoStatus">STEREO</span>
+                    </button>
+                </div>
+                <div class="peqSpatialCalibrationRow" id="peqSpatialCalibrationRow">
+                    <div class="peqSpatialControlGroup">
+                        <label for="peqStereoBalanceSlider" class="peqSpatialLabel">STEREO BALANCE:</label>
+                        <input type="range" id="peqStereoBalanceSlider" class="peqBalanceSlider" min="-100" max="100" step="1" value="0" aria-label="Stereo Channel Balance">
+                        <span class="peqSpatialValue" id="peqStereoBalanceValue">CENTER</span>
+                        <button type="button" id="peqBalanceResetBtn" class="peqMiniResetBtn" title="Center Stereo Balance">0</button>
+                    </div>
+                    <div class="peqSpatialControlGroup">
+                        <span class="peqSpatialLabel">TURNTABLE PITCH / TEMPO MODE:</span>
+                        <button type="button" id="peqPitchLockBtn" class="peqMiniModeBtn" title="Switch between Analog Vinyl Pitch+Tempo coupling and Independent Time-Stretch Tempo">
+                            ANALOG VINYL PITCH
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Toolbar Row: Presets & AutoEq Import -->
+            <div class="peqToolbarRow">
+                <div class="peqPresetGroup">
+                    <span class="peqToolbarLabel">ACOUSTIC PRESET:</span>
+                    <select id="peqPresetSelect" class="peqSelect" aria-label="Equalizer Presets">
+                        <option value="flat">Flat (Studio Monitor)</option>
+                        <option value="harman_in_ear">Harman Target (In-Ear / IEM)</option>
+                        <option value="harman_over_ear">Harman Target (Over-Ear)</option>
+                        <option value="vocal">Vocal Presence &amp; Clarity</option>
+                        <option value="bass_slam">Bass Slam &amp; Sub-Bass 808</option>
+                        <option value="acoustic">Acoustic &amp; Classical Air</option>
+                        <option value="treble_shimmer">Treble Shimmer &amp; Cymbals</option>
+                        <option value="vinyl_warmth">Analog Vinyl Warmth</option>
+                        <option value="electronic">Electronic &amp; Club Energy</option>
+                        <option value="oratory_hd600">Sennheiser HD600 (Oratory1990)</option>
+                    </select>
+                </div>
+                <div class="peqAutoEqGroup">
+                    <button type="button" id="peqAutoEqOpenBtn" class="actionBtn peqAutoEqBtn" title="Import custom parametric EQ or AutoEq profile">
+                        IMPORT AUTOEQ PROFILE
+                    </button>
+                </div>
+            </div>
+
+            <!-- AutoEq Drawer (Collapsible) -->
+            <div class="peqAutoEqDrawer" id="peqAutoEqDrawer" style="display: none;">
+                <textarea id="peqAutoEqInput" class="peqAutoEqTextarea" placeholder="Paste AutoEq or Oratory1990 filter text (e.g. 'Filter 1: ON PK Fc 105 Hz Gain 3.5 dB Q 1.41')..."></textarea>
+                <div class="peqAutoEqDrawerActions">
+                    <button type="button" id="peqAutoEqApplyBtn" class="actionBtn primaryBtn">APPLY COMPENSATION</button>
+                    <button type="button" id="peqAutoEqCancelBtn" class="actionBtn">CANCEL</button>
+                    <span class="peqAutoEqHint">Calculates least-squares parametric mapping across all 10 biquads.</span>
+                </div>
+            </div>
+
+            <!-- 10-Band Vertical Faders Strip -->
+            <div class="peqFadersGrid" id="peqFadersGrid">
+                <!-- Dynamically populated or rendered with 10 tactile faders -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Roon-Grade Audiophile Signal Path & Quality Audit Modal -->
+    <div class="modalBackdrop" id="signalPathModal" style="display: none;">
+        <div class="modalCard signalPathCard">
+            <div class="modalHeader">
+                <div class="signalPathHeaderTitle">
+                    <span class="signalDot" id="auditQualityDot">●</span>
+                    <h3>SIGNAL PATH &amp; AUDIOPHILE AUDIT</h3>
+                </div>
+                <button type="button" id="closeSignalPathModalBtn" class="closeModalBtn" title="Close Signal Path Inspector" aria-label="Close Signal Path Inspector">✕</button>
+            </div>
+            <div class="signalPathSummary">
+                <div class="signalQualityBadge" id="auditQualityBadge">LOSSLESS BIT-PERFECT</div>
+                <p id="auditQualityDesc">Audio is transmitted directly from source to DAC with zero phase alteration, pristine bit-depth preservation, and true-peak overload guard.</p>
+            </div>
+            
+            <div class="signalMetricsGrid">
+                <div class="metricCard">
+                    <div class="metricCardHeader">
+                        <span class="metricLabel">DYNAMIC HEADROOM</span>
+                        <span class="metricVal" id="auditMetricHeadroom">+14.2 dB (Pristine)</span>
+                    </div>
+                    <p class="metricExplanation">Acoustic safety margin below digital clipping ceiling (0 dBFS) to prevent inter-sample peak distortion during loud dynamic transients.</p>
+                </div>
+                <div class="metricCard">
+                    <div class="metricCardHeader">
+                        <span class="metricLabel">ESTIMATED LATENCY</span>
+                        <span class="metricVal" id="auditMetricLatency">~5.3 ms (Ultra-Low)</span>
+                    </div>
+                    <p class="metricExplanation">Hardware audio buffer roundtrip response time from internal DSP pipeline to physical DAC/speaker output.</p>
+                </div>
+                <div class="metricCard">
+                    <div class="metricCardHeader">
+                        <span class="metricLabel">BUFFER PRECISION</span>
+                        <span class="metricVal">32-Bit Float</span>
+                    </div>
+                    <p class="metricExplanation">IEEE 754 floating-point internal math ensuring infinite processing headroom, zero quantization distortion, and bit-level micro-dynamics.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audiophile Sleep Timer Modal -->
+    <div class="modalBackdrop" id="sleepTimerModal" style="display: none;">
+        <div class="modalCard sleepTimerCard">
+            <div class="modalHeader">
+                <div class="sleepTimerHeaderTitle">
+                    <span class="sleepTimerMoon">🌙</span>
+                    <h3>AUDIOPHILE SLEEP TIMER</h3>
+                </div>
+                <button type="button" id="closeSleepTimerModalBtn" class="closeModalBtn" title="Close Sleep Timer" aria-label="Close Sleep Timer">✕</button>
+            </div>
+            <p class="sleepTimerDesc">
+                Automatically pauses playback with a gentle 12-second exponential volume fade-out so you drift into sleep without being startled by abrupt silence.
+            </p>
+            <div class="sleepStatusCard" id="sleepStatusCard" style="display: none;">
+                <span class="sleepStatusLabel">ACTIVE TIMER:</span>
+                <span class="sleepStatusTime" id="sleepStatusRemaining">28:45 remaining</span>
+                <button type="button" id="cancelSleepTimerBtn" class="actionBtn cancelTimerBtn">STOP TIMER</button>
+            </div>
+            <div class="sleepTimerOptions">
+                <button type="button" class="sleepOptBtn" data-minutes="end">END OF TRACK</button>
+                <button type="button" class="sleepOptBtn" data-minutes="15">15 MINUTES</button>
+                <button type="button" class="sleepOptBtn" data-minutes="30">30 MINUTES</button>
+                <button type="button" class="sleepOptBtn" data-minutes="45">45 MINUTES</button>
+                <button type="button" class="sleepOptBtn" data-minutes="60">60 MINUTES</button>
+            </div>
+            <div class="customSleepRow">
+                <input type="number" id="customSleepInput" min="1" max="360" placeholder="Custom minutes..." aria-label="Custom sleep minutes">
+                <button type="button" id="setCustomSleepBtn" class="actionBtn primaryBtn">SET TIMER</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overhaul Theme Settings Modal -->
+    <!-- Overhaul Theme Settings Modal -->
+    <div class="modalBackdrop" id="themeModal" style="display: none;">
+        <div class="modalCard themeModalCard">
+            <div class="modalHeader">
+                <div class="themeModalHeaderTitle">
+                    <h3>THEME OVERHAUL</h3>
+                </div>
+                <button type="button" id="closeThemeModalBtn" class="closeModalBtn" title="Close Theme Settings" aria-label="Close Theme Settings">✕</button>
+            </div>
+            <p class="themeModalSubtitle">Select a visual theme overhaul categorized by universe, aesthetic, and architectural style:</p>
+            
+            <div class="themeModalScrollArea" id="themeModalScrollArea">
+                <div class="themeColumnsContainer" id="themeColumnsContainer">
+                    <!-- Category 1: Sci-Fi & Universe (No Man's Sky) -->
+                    <div class="themeCategoryGroup" data-category="scifi">
+                    <div class="themeCategoryHeader">
+                        <div class="themeCategoryHeading">
+                            <h4>NO MAN'S SKY &amp; PROCEDURAL WORLDS</h4>
+                        </div>
+                        <span class="themeCategoryCount">7 THEMES</span>
+                    </div>
+                    <p class="themeCategoryLead">Procedural galaxies, deep space anomalies, planetary warp fields, and sentinel interfaces.</p>
+                    <div class="themeModalGrid">
+                        <button type="button" class="themeSelectCard" data-theme="nms">
+                            <span class="themeCardPreview themePreviewNms">
+                                <span class="previewDot" style="background: #ff1744; box-shadow: 0 0 8px #ff1744;"></span>
+                                <span class="previewDot" style="background: #06080f; border: 1px solid #ff1744;"></span>
+                                <span class="previewDot" style="background: #00e5ff; box-shadow: 0 0 6px #00e5ff;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">The Atlas</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">The Crimson Atlas Core, Analysis Visor HUD, Warp Seeker &amp; Space Anomaly Terminal</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="solar-eclipse">
+                            <span class="themeCardPreview themePreviewEclipse">
+                                <span class="previewDot" style="background: #00f0ff; box-shadow: 0 0 8px #00f0ff;"></span>
+                                <span class="previewDot" style="background: #ff007f; box-shadow: 0 0 8px #ff007f;"></span>
+                                <span class="previewDot" style="background: #090d1e; border: 1px solid #00f0ff;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Planetary Warp</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Curved Lightspeed Warp Orbit, Ringed World, Solar Corona &amp; Cyan Platter Rings</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="euclid-horizon">
+                            <span class="themeCardPreview themePreviewEuclid">
+                                <span class="previewDot" style="background: #fbbf24; box-shadow: 0 0 8px #fbbf24;"></span>
+                                <span class="previewDot" style="background: #14b8a6; box-shadow: 0 0 8px #14b8a6;"></span>
+                                <span class="previewDot" style="background: #e11d48; box-shadow: 0 0 6px #e11d48;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Space Station</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Orbital Space Station Dock, Stargate Dial Halo, Teal Haze &amp; Floating Monolith</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="alien-paradise">
+                            <span class="themeCardPreview themePreviewParadise">
+                                <span class="previewDot" style="background: #ff2a70; box-shadow: 0 0 8px #ff2a70;"></span>
+                                <span class="previewDot" style="background: #00ced1; box-shadow: 0 0 8px #00ced1;"></span>
+                                <span class="previewDot" style="background: #facc15; box-shadow: 0 0 6px #facc15;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Alien Paradise</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">70s Retro Sci-Fi, Hot Fuchsia Flora, Turquoise Skies, Atlas Spire &amp; Golden Canopies</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="abyssal-void">
+                            <span class="themeCardPreview themePreviewAbyssal">
+                                <span class="previewDot" style="background: #00ffaa; box-shadow: 0 0 8px #00ffaa;"></span>
+                                <span class="previewDot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+                                <span class="previewDot" style="background: #020707; border: 1px solid #00ffaa;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Emeril Drive</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Emeril Hyperdrive Engine, Radiant Emerald Crescent, Gas Giant &amp; Starlight Beams</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="dissonance">
+                            <span class="themeCardPreview themePreviewDissonance">
+                                <span class="previewDot" style="background: #a855f7; box-shadow: 0 0 8px #a855f7;"></span>
+                                <span class="previewDot" style="background: #d946ef; box-shadow: 0 0 8px #d946ef;"></span>
+                                <span class="previewDot" style="background: #0a0515; border: 1px solid #a855f7;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Dissonance</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Corrupted Sentinel Worlds, Purple Haze, Luminous Atlantideum &amp; Sentinel Interceptor</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="sentinel">
+                            <span class="themeCardPreview themePreviewSentinel">
+                                <span class="previewDot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></span>
+                                <span class="previewDot" style="background: #00e5ff; box-shadow: 0 0 8px #00e5ff;"></span>
+                                <span class="previewDot" style="background: #ff3d00; box-shadow: 0 0 8px #ff3d00;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Sentinel</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Planetary Defense Policing Bots, Combat Drones, 5-Star Wanted HUD &amp; Sentinel Pillars</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Category 2: Studio Hi-Fi & Precision Acoustics -->
+                <div class="themeCategoryGroup" data-category="studio">
+                    <div class="themeCategoryHeader">
+                        <div class="themeCategoryHeading">
+                            <h4>STUDIO HI-FI &amp; PRECISION ACOUSTICS</h4>
+                        </div>
+                        <span class="themeCategoryCount">1 THEME</span>
+                    </div>
+                    <p class="themeCategoryLead">Mastering console layout, precision industrial matte deck, calibrated for maximum contrast and legibility.</p>
+                    <div class="themeModalGrid">
+                        <button type="button" class="themeSelectCard active" data-theme="default">
+                            <span class="themeCardPreview themePreviewDefault">
+                                <span class="previewDot" style="background: #ffffff;"></span>
+                                <span class="previewDot" style="background: #000000; border: 1px solid #ffffff;"></span>
+                                <span class="previewDot" style="background: #00e5ff;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Default Studio Hi-Fi</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Audiophile Noir, Brutalist High-Contrast &amp; Precision Industrial Turntable Deck</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Category 3: Minimalist Modernist Architecture -->
+                <div class="themeCategoryGroup" data-category="minimalist">
+                    <div class="themeCategoryHeader">
+                        <div class="themeCategoryHeading">
+                            <h4>MINIMALIST EDITIONS</h4>
+                        </div>
+                        <span class="themeCategoryCount">4 THEMES</span>
+                    </div>
+                    <p class="themeCategoryLead">Zero clutter, stark architectural lines, high-contrast monospace typographic clarity, and mobile-optimized layouts.</p>
+                    <div class="themeModalGrid">
+                        <button type="button" class="themeSelectCard" data-theme="minimalist-light">
+                            <span class="themeCardPreview themePreviewBrutalistLight">
+                                <span class="previewDot" style="background: #ffffff; border: 1.5px solid #000000;"></span>
+                                <span class="previewDot" style="background: #000000;"></span>
+                                <span class="previewDot" style="background: #71717a; border: 1px solid #000000;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Minimalist (Light)</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Architectural High-Contrast Paper, Monolithic Layout, Zero Clutter &amp; Stark Lines</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="minimalist-dark">
+                            <span class="themeCardPreview themePreviewBrutalistDark">
+                                <span class="previewDot" style="background: #09090b; border: 1.5px solid #ffffff;"></span>
+                                <span class="previewDot" style="background: #ffffff;"></span>
+                                <span class="previewDot" style="background: #27272a; border: 1.5px solid #ffffff;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Minimalist (Dark)</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Monolithic Matte Obsidian, Wireframe Geometry, Zero Clutter &amp; Stark White Lines</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="minimalist-warm">
+                            <span class="themeCardPreview themePreviewMinimalistWarm">
+                                <span class="previewDot" style="background: #faf8f5; border: 1.5px solid #d97706;"></span>
+                                <span class="previewDot" style="background: #1c1917;"></span>
+                                <span class="previewDot" style="background: #d97706;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Minimalist (Warm Paper)</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Nordic Warm Alabaster Ivory, Deep Umber Typography &amp; Terracotta Amber Accents</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="minimalist-obsidian">
+                            <span class="themeCardPreview themePreviewMinimalistObsidian">
+                                <span class="previewDot" style="background: #000000; border: 1.5px solid #38bdf8;"></span>
+                                <span class="previewDot" style="background: #ffffff;"></span>
+                                <span class="previewDot" style="background: #38bdf8;"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Minimalist (Obsidian OLED)</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Pitch-Black OLED 0-Watt Background, Pure Platinum White &amp; Electric Ice Cyan</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modern Floating Toast Container -->
+    <div id="cachyToastContainer" class="toastContainer" aria-live="polite"></div>
+
+    <!-- Bottom Selectable Visualizer Dock -->
+    <div class="visualizerDock" id="visualizerDock">
+        <!-- High-DPI Visualizer Canvas -->
+        <canvas id="visualizerCanvas" class="visualizerCanvas"></canvas>
+    </div>
+
+    <script src="scripts/homepage.js?v=10.47"></script>
+</body>
+</html>

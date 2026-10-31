@@ -1,0 +1,39 @@
+# Dependencies & Runtimes
+node_modules/
+package-lock.json
+
+# User Data, Databases & Local Cache
+data/
+downloads/
+*.sqlite
+*.sqlite3
+*.db
+*.log
+*.pid
+*.port
+
+# Server Runtime Caches
+server/soulseek-config.json
+server/soulseek-transfers.json
+
+# Android & Packager Build Artifacts
+tools/packager/android/build/
+tools/packager/android/.gradle/
+*.apk
+*.aab
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE & Editor Artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating System Files
+.DS_Store
+Thumbs.db

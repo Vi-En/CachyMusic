@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="260" viewBox="0 0 500 260">
+  <defs>
+    <style>
+      .hanzi {
+        font-family: "Songti SC", "STSong", "SimSun", "Noto Serif SC", "PingFang SC", serif;
+        font-size: 200px;
+        fill: #000000;
+        text-anchor: middle;
+        dominant-baseline: middle;
+      }
+    </style>
+  </defs>
+  <text x="250" y="150" class="hanzi">音乐</text>
+</svg>

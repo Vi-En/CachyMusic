@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CachyMusic
+GenericName=Audio Workstation & Player
+Comment=High-fidelity audio workstation and music player with studio DSP and turntable deck
+Exec=cachymusic %U
+Icon=cachymusic
+Terminal=false
+StartupNotify=true
+StartupWMClass=cachymusic
+Categories=AudioVideo;Audio;Player;Music;
+Keywords=audio;music;player;workstation;flac;hifi;audiophile;cachyos;
+MimeType=audio/mpeg;audio/flac;audio/ogg;audio/wav;audio/x-wav;audio/mp4;audio/aac;audio/opus;

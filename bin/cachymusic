@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# CachyMusic Desktop Launcher & Daemon Manager
+# ==============================================================================
+set -euo pipefail
+
+# Resolve symlinks to find actual app directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+APP_DIR="$(cd -P "$(dirname "$SOURCE")/.." >/dev/null 2>&1 && pwd)"
+
+find_available_port() {
+    local base="${1:-8000}"
+    for ((i=0; i<50; i++)); do
+        local p=$((base + i))
+        # 1. If CachyMusic is already responding on this port, reuse it
+        if curl -s -m 0.3 "http://127.0.0.1:$p/" 2>/dev/null | grep -qi "cachymusic"; then
+            echo "$p"
+            return 0
+        fi
+        # 2. Check if port is completely free to bind
+        if python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', $p)); s.close()" 2>/dev/null; then
+            echo "$p"
+            return 0
+        fi
+    done
+    echo "$base"
+}
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/cachymusic"
+mkdir -p "$STATE_DIR"
+PORT_FILE="$STATE_DIR/port"
+
+is_port_listening() {
+    local p="$1"
+    curl -s -o /dev/null -m 0.5 "http://127.0.0.1:$p/" 2>/dev/null
+}
+
+if [ -f "$PORT_FILE" ]; then
+    SAVED_PORT=$(cat "$PORT_FILE" 2>/dev/null || true)
+    if [ -n "$SAVED_PORT" ] && is_port_listening "$SAVED_PORT"; then
+        PORT="$SAVED_PORT"
+    fi
+fi
+if [ -z "${PORT:-}" ]; then
+    DEFAULT_PORT="${CACHY_PORT:-8000}"
+    PORT=$(find_available_port "$DEFAULT_PORT")
+fi
+
+SOULSEEK_PORT="${SOULSEEK_PORT:-12339}"
+PHP_PID_FILE="$STATE_DIR/php.pid"
+SOULSEEK_PID_FILE="$STATE_DIR/soulseek.pid"
+PHP_LOG="$STATE_DIR/php-server.log"
+SOULSEEK_LOG="$STATE_DIR/soulseek.log"
+
+start_daemons() {
+    # Bind host defaults to 0.0.0.0 so both localhost (127.0.0.1) and LAN mobile/tablet streaming work seamlessly
+    local bind_host="${CACHY_BIND_HOST:-0.0.0.0}"
+    if ! is_port_listening "$PORT"; then
+        echo "Starting CachyMusic backend on port $PORT ($bind_host)..."
+        cd "$APP_DIR"
+        PHP_CLI_SERVER_WORKERS=12 setsid php -S "${bind_host}:$PORT" index.php </dev/null > "$PHP_LOG" 2>&1 &
+        local php_pid=$!
+        echo "$php_pid" > "$PHP_PID_FILE"
+        echo "$PORT" > "$PORT_FILE"
+        disown "$php_pid" 2>/dev/null || true
+        
+        # Wait up to 3 seconds for server to be responsive
+        for _ in {1..30}; do
+            if is_port_listening "$PORT"; then
+                break
+            fi
+            sleep 0.1
+        done
+    else
+        echo "$PORT" > "$PORT_FILE"
+    fi
+
+    # Check Soulseek service - standardize on Nicotine+ headless daemon with fallback to Node
+    if ! is_port_listening "$SOULSEEK_PORT"; then
+        if command -v nicotine >/dev/null 2>&1; then
+            # Ensure Nicotine client is disconnected by default on startup
+            local nico_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/nicotine/config"
+            if [ -f "$nico_cfg" ]; then
+                sed -i 's/^auto_connect_startup\s*=\s*True/auto_connect_startup = False/' "$nico_cfg" 2>/dev/null || true
+            fi
+            echo "Starting Nicotine+ headless daemon on port $SOULSEEK_PORT..."
+            setsid nicotine -n </dev/null > "$SOULSEEK_LOG" 2>&1 &
+            local nico_pid=$!
+            echo "$nico_pid" > "$SOULSEEK_PID_FILE"
+            disown "$nico_pid" 2>/dev/null || true
+        elif command -v node >/dev/null 2>&1 && [ -f "$APP_DIR/server/soulseek-service.js" ]; then
+            echo "Starting CachyMusic Soulseek service on port $SOULSEEK_PORT..."
+            cd "$APP_DIR"
+            setsid node server/soulseek-service.js </dev/null > "$SOULSEEK_LOG" 2>&1 &
+            local node_pid=$!
+            echo "$node_pid" > "$SOULSEEK_PID_FILE"
+            disown "$node_pid" 2>/dev/null || true
+        fi
+
+        # Wait up to 3 seconds for microservice to be responsive
+        for _ in {1..30}; do
+            if is_port_listening "$SOULSEEK_PORT"; then
+                break
+            fi
+            sleep 0.1
+        done
+    fi
+
+    # Start Linux MPRIS2 D-Bus bridge if available
+    if [ -f "$APP_DIR/bin/cachymusic-mpris.py" ] && command -v python3 >/dev/null 2>&1; then
+        if ! pgrep -f "cachymusic-mpris.py" >/dev/null 2>&1; then
+            setsid python3 "$APP_DIR/bin/cachymusic-mpris.py" --port "$PORT" </dev/null > "$STATE_DIR/mpris.log" 2>&1 &
+            local mpris_pid=$!
+            echo "$mpris_pid" > "$STATE_DIR/mpris.pid"
+            disown "$mpris_pid" 2>/dev/null || true
+        fi
+    fi
+}
+
+stop_daemons() {
+    echo "Stopping CachyMusic services..."
+    if [ -f "$STATE_DIR/mpris.pid" ]; then
+        local mpid
+        mpid=$(cat "$STATE_DIR/mpris.pid" 2>/dev/null || true)
+        if [ -n "$mpid" ] && kill -0 "$mpid" 2>/dev/null; then
+            kill "$mpid" 2>/dev/null || true
+        fi
+        rm -f "$STATE_DIR/mpris.pid"
+    fi
+    pkill -f "cachymusic-mpris.py" 2>/dev/null || true
+
+    if [ -f "$PHP_PID_FILE" ]; then
+        local pid
+        pid=$(cat "$PHP_PID_FILE" 2>/dev/null || true)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            echo "Stopped PHP server (PID: $pid)"
+        fi
+        rm -f "$PHP_PID_FILE"
+    fi
+
+    if [ -f "$SOULSEEK_PID_FILE" ]; then
+        local spid
+        spid=$(cat "$SOULSEEK_PID_FILE" 2>/dev/null || true)
+        if [ -n "$spid" ] && kill -0 "$spid" 2>/dev/null; then
+            kill "$spid" 2>/dev/null || true
+            echo "Stopped Soulseek service (PID: $spid)"
+        fi
+        rm -f "$SOULSEEK_PID_FILE"
+    fi
+
+    fuser -k "${PORT}/tcp" 2>/dev/null || true
+    pkill -f "php.*-S.*127\.0\.0\.1:${PORT}" 2>/dev/null || true
+    pkill -f "nicotine.*-n" 2>/dev/null || true
+    pkill -f "node.*soulseek-service" 2>/dev/null || true
+    rm -f "$PORT_FILE"
+    echo "All services stopped."
+}
+
+status_daemons() {
+    echo "=== CachyMusic Service Status ==="
+    if is_port_listening "$PORT"; then
+        echo "PHP Backend: RUNNING (http://127.0.0.1:$PORT)"
+    else
+        echo "PHP Backend: STOPPED"
+    fi
+
+    if is_port_listening "$SOULSEEK_PORT"; then
+        echo "Soulseek Service: RUNNING (http://127.0.0.1:$SOULSEEK_PORT)"
+    else
+        echo "Soulseek Service: STOPPED"
+    fi
+
+    if pgrep -f "cachymusic-mpris.py" >/dev/null 2>&1; then
+        echo "MPRIS2 Bridge: RUNNING (org.mpris.MediaPlayer2.cachymusic)"
+    else
+        echo "MPRIS2 Bridge: STOPPED"
+    fi
+}
+
+launch_ui() {
+    local url="http://127.0.0.1:$PORT"
+    local browser=""
+    local browser_pid=""
+    local start_ts
+    start_ts=$(date +%s)
+
+    # Tie window lifecycle to background child processes only if browser kept a standalone process
+    cleanup_session() {
+        local end_ts
+        end_ts=$(date +%s)
+        local elapsed=$((end_ts - start_ts))
+        if [ "$elapsed" -lt 3 ]; then
+            echo ""
+            echo "Browser handed off window to an existing session. Keeping CachyMusic backend running at $url"
+            return 0
+        fi
+        echo ""
+        echo "CachyMusic window closed. Terminating session daemons..."
+        stop_daemons
+    }
+    trap cleanup_session EXIT INT TERM HUP
+
+    for candidate in brave brave-browser google-chrome google-chrome-stable chromium chromium-browser microsoft-edge; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            browser="$candidate"
+            break
+        fi
+    done
+
+    if [ -n "$browser" ]; then
+        # Standalone native window mode with segregated user profile and WM class
+        echo "Launching CachyMusic desktop window ($browser)..."
+        "$browser" --app="$url" --user-data-dir="$HOME/.config/cachymusic" --class="cachymusic" "$@" >/dev/null 2>&1 &
+        browser_pid=$!
+        wait "$browser_pid" 2>/dev/null || true
+    elif command -v xdg-open >/dev/null 2>&1; then
+        echo "Opening CachyMusic at $url..."
+        xdg-open "$url" >/dev/null 2>&1 &
+        browser_pid=$!
+        wait "$browser_pid" 2>/dev/null || true
+    elif command -v firefox >/dev/null 2>&1; then
+        echo "Launching CachyMusic in Firefox..."
+        firefox --new-window "$url" >/dev/null 2>&1 &
+        browser_pid=$!
+        wait "$browser_pid" 2>/dev/null || true
+    else
+        echo "CachyMusic is running at $url"
+        echo "Press Ctrl+C to stop services and exit."
+        while true; do sleep 1; done
+    fi
+}
+
+case "${1:-}" in
+    --stop|stop)
+        stop_daemons
+        exit 0
+        ;;
+    --status|status)
+        status_daemons
+        exit 0
+        ;;
+    --background|-b|daemon)
+        start_daemons
+        echo "CachyMusic running in background at http://127.0.0.1:$PORT"
+        exit 0
+        ;;
+    --tray|tray)
+        start_daemons
+        if [ -f "$APP_DIR/bin/cachymusic-tray.py" ]; then
+            exec python3 "$APP_DIR/bin/cachymusic-tray.py" --port "$PORT"
+        else
+            echo "Tray runner not found, running in background."
+            exit 0
+        fi
+        ;;
+    --help|-h|help)
+        echo "Usage: cachymusic [options]"
+        echo ""
+        echo "Options:"
+        echo "  (no args)       Start daemons and launch standalone app window (auto-stops on window close)"
+        echo "  --background    Start daemons in background without opening window"
+        echo "  --tray          Start daemons and run in system tray"
+        echo "  --status        Check health of background services"
+        echo "  --stop          Stop running background services"
+        echo "  --help          Display this help message"
+        exit 0
+        ;;
+    *)
+        start_daemons
+        launch_ui "$@"
+        ;;
+esac

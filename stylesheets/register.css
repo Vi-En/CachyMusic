@@ -1,0 +1,496 @@
+@font-face {
+    font-family: 'NMSFuturaProBook';
+    src: url('../resources/fonts/NMSFuturaProBook_Kerned.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+*
+{
+    font-family: 'NMSFuturaProBook';
+    box-sizing: border-box;
+    margin: 0;
+}
+
+html, body
+{
+    width: 100%;
+    height: 100%;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+body
+{
+    position: relative;
+    display: flex;
+    padding: clamp(0.5rem, 2vh, 1rem);
+    justify-content: center;
+    align-items: center;
+    background-color: black;
+}
+
+.leftText
+{
+    display: flex;
+    color: black;
+    position: absolute;
+    pointer-events: none;
+    z-index: 2;
+    left: 2%;
+    top: -100%;
+    height: 30rem;
+    width: 30rem;
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.leftText.slideTop
+{
+    top: 25%;
+}
+
+.bad-apple
+{
+    position: absolute;
+    max-width: 90vw;          
+    right: -100%;
+    top: 10%;
+    z-index: 1;
+    pointer-events: none;
+    transform: scale(0.9);
+    transition: all .6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bad-apple.slideIn
+{
+    right: -16%;
+}
+
+.registerCard
+{
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+    z-index: 10;
+
+    background-color: white;
+    width: min(40rem, 92vw);
+    max-width: 40rem;
+    height: min(56rem, calc(100dvh - 2rem));
+    padding: clamp(1rem, 2vh, 2.2rem) clamp(1rem, 3vw, 2rem);
+    box-sizing: border-box;
+
+    border-radius: .5rem;
+    border: 0.1rem solid black;
+    box-shadow: 0rem 0rem .5rem black;
+    overflow: hidden;
+}
+
+.registerCard.thick
+{
+    border: .25rem solid black;
+}
+
+.registerCard .headerContainer
+{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    margin-top: 0.2rem;
+}
+
+.registerCard h1
+{
+    display: flex;
+    justify-content: center;
+    font-size: clamp(2.4rem, 8.5vw, 4.8rem);
+    line-height: 1;
+    letter-spacing: clamp(0.04rem, 0.5vw, 0.1rem);
+    pointer-events: none;
+    text-align: center;
+}
+
+.cardSubtitle
+{
+    font-size: clamp(0.85rem, 2.8vw, 1.15rem);
+    letter-spacing: clamp(0.15rem, 1vw, 0.35rem);
+    color: #444;
+    margin-top: 0.3rem;
+    font-weight: bold;
+    pointer-events: none;
+}
+
+.registerCard form
+{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: clamp(0.8rem, 2vh, 1.2rem);
+    width: 100%;
+    max-width: 22rem;
+}
+
+.inputContainer
+{
+    position: relative;
+    margin-top: 0.8rem;
+    width: 100%;
+}
+
+.inputContainer label
+{
+    position: absolute;
+    left: 1rem;
+    top: 21%;
+    font-size: clamp(1.1rem, 3.6vw, 1.6rem);
+    pointer-events: none;
+    transition: all 0.2s ease;
+    color: black;
+}
+
+.inputContainer input
+{
+    height: clamp(3rem, 4.8vh, 3.8rem);
+    width: 100%;
+    box-sizing: border-box;
+    font-size: clamp(1.1rem, 3.6vw, 1.6rem);
+    padding-left: 1rem;
+    border-radius: 0.25rem;
+    appearance: unset;
+    outline: unset;
+    border: none;
+    border-bottom: 0.25rem solid black;
+    background-color: transparent;
+}
+
+.inputContainer input:focus + label,
+.inputContainer input:not(:placeholder-shown) + label
+{
+    top: 0;
+    transform: translateY(-25%);
+    font-size: 0.9rem;
+    color: rgb(50, 50, 50);
+}
+
+.authMessage
+{
+    font-size: clamp(0.85rem, 2.8vw, 1.15rem);
+    min-height: 1.5rem;
+    width: 100%;
+    text-align: center;
+    line-height: 1.3;
+    opacity: 0;
+    transform: translateY(-3px);
+    transition: all 0.25s ease;
+    font-weight: bold;
+}
+
+.authMessage.show
+{
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.authMessage.error
+{
+    color: #c62828;
+}
+
+.authMessage.success
+{
+    color: #1b5e20;
+}
+
+.registerCard form button[type='submit']
+{
+    all: unset;
+    display: flex;
+    align-self: flex-end;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    height: 3.8rem;
+    width: 10.5rem;
+    font-size: 1.75rem;
+    margin-right: calc((100% - 22rem) / 2);
+    border-bottom: 0.25rem solid transparent;
+    transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.registerCard form button[type='submit']:hover:not(:disabled)
+{
+    border-bottom: 0.25rem solid black;
+    font-size: 2.3rem;
+}
+
+.registerCard form button[type='submit']:disabled
+{
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.others
+{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 1.25rem;
+    margin-bottom: 1.4rem;
+    text-align: center;
+}
+
+.others p
+{
+    color: black;
+}
+
+.others a
+{
+    color: black;
+    font-weight: bold;
+    text-decoration: underline;
+    transition: opacity 0.2s ease;
+}
+
+.others a:hover
+{
+    opacity: 0.6;
+}
+
+.visualizer
+{
+    display: flex;
+    position: absolute;
+    align-self: center;
+    bottom: 0.6rem;
+    gap: .5rem;
+}
+
+.eq1,.eq2,.eq3,.eq4,.eq5
+{
+    background-color: black;
+    height: .5rem;
+    width: 0.51rem;
+    animation-name: eq;
+    transform-origin: bottom;
+    animation-iteration-count: infinite;
+    animation-duration: 1s;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+.eq1 {animation-delay: 0ms;}
+.eq2 {animation-delay: 160ms;}
+.eq3 {animation-delay: 320ms;}
+.eq4 {animation-delay: 480ms;}
+.eq5 {animation-delay: 640ms;}
+
+[class^='eq'].prepare
+{
+    animation-duration: 0.5s;
+}
+
+@keyframes eq 
+{
+    0%
+    {
+        transform: scaleY(0.15);
+    }
+
+    50%
+    {
+        transform: scaleY(5);
+    }
+
+    100%
+    {
+        transform: scaleY(0.15);
+    }
+}
+
+.disc
+{
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 75rem;
+    width: 75rem;
+    background-color: white;
+    border-radius: 100%;
+    top: 50%;
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.disc .inner
+{
+    position: absolute;
+    display: flex;
+    height: 50rem;
+    width: 50rem;
+    background-color: black;
+    border-radius: 100%;
+}
+
+.disc .middle
+{
+    position: absolute;
+    display: flex;
+    height: 57rem;
+    width: 57rem;
+    border-radius: 100%;
+    border: 2rem dashed black;
+    animation: gear 15s linear infinite;
+}
+
+.disc .outer
+{
+    position: absolute;
+    display: flex;
+    height: 60rem;
+    width: 60rem;
+    border-radius: 100%;
+    border: 2rem solid black;
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.disc .outer.puff
+{
+    border: 100rem solid black;
+}
+
+.disc.expanded
+{
+    position: absolute;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+}
+
+.disc .middle.fast
+{
+    animation-duration: 5s;
+}
+
+@keyframes gear 
+{
+    0% {transform: rotate(0);}
+
+    100% {transform: rotate(360deg);}
+}
+
+/* Responsive Media Queries for Mobile Screens */
+@media (max-width: 768px)
+{
+    body
+    {
+        padding: 0.5rem;
+    }
+
+    .bad-apple
+    {
+        max-width: 50vw;
+        opacity: 0.22;
+        top: 15%;
+    }
+
+    .bad-apple.slideIn
+    {
+        right: -6%;
+    }
+
+    .leftText
+    {
+        width: min(18rem, 45vw);
+        height: min(18rem, 45vw);
+        opacity: 0.15;
+    }
+
+    .leftText.slideTop
+    {
+        top: 15%;
+    }
+
+    .disc
+    {
+        width: min(75rem, 130vw);
+        height: min(75rem, 130vw);
+    }
+
+    .disc .inner
+    {
+        width: min(50rem, 85vw);
+        height: min(50rem, 85vw);
+    }
+
+    .disc .middle
+    {
+        width: min(57rem, 98vw);
+        height: min(57rem, 98vw);
+        border-width: clamp(0.8rem, 2.2vw, 2rem);
+    }
+
+    .disc .outer
+    {
+        width: min(60rem, 105vw);
+        height: min(60rem, 105vw);
+        border-width: clamp(0.8rem, 2.2vw, 2rem);
+    }
+}
+
+@media (max-height: 560px)
+{
+    body
+    {
+        padding: 0.4rem;
+        overflow: hidden;
+    }
+
+    .registerCard
+    {
+        height: min(56rem, calc(100dvh - 0.8rem));
+        padding: 0.5rem 1rem;
+    }
+
+    .registerCard h1
+    {
+        font-size: clamp(1.8rem, 6vw, 2.8rem);
+    }
+
+    .cardSubtitle
+    {
+        font-size: 0.75rem;
+        margin-top: 0.1rem;
+    }
+
+    .registerCard form
+    {
+        gap: 0.4rem;
+    }
+
+    .inputContainer
+    {
+        margin-top: 0.2rem;
+    }
+
+    .inputContainer input
+    {
+        height: 2.6rem;
+    }
+
+    .authMessage
+    {
+        min-height: 1rem;
+        font-size: 0.8rem;
+    }
+}

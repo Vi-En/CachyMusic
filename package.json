@@ -1,0 +1,21 @@
+{
+  "name": "cachymusic-workstation",
+  "version": "1.0.0",
+  "description": "High-fidelity audio workstation and music player with studio DSP and Soulseek integration",
+  "main": "server/soulseek-service.js",
+  "scripts": {
+    "start": "PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:8000 index.php",
+    "soulseek": "node server/soulseek-service.js"
+  },
+  "keywords": [
+    "music-player",
+    "audio-workstation",
+    "dsp",
+    "soulseek"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "slsk-client": "^2.0.2"
+  }
+}
