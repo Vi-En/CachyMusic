@@ -23,14 +23,10 @@ It is a lightweight, self-contained music player and audio workstation that runs
 
 ## Features
 
-- **Interactive Turntable Deck**: A central vinyl platter with an audio-reactive tonearm, realistic groove sheen, and playback speeds (33, 45, and 78 RPM).
-- **Balanced 3-Column Layout**: Track metadata and album artwork on the left, the main playback deck in the center, and your library, playlists, and queue on the right.
-- **Collapsible Inspector**: Press `I` or click the **Metadata** button to slide the left panel away, smoothly expanding the player deck across your screen.
 - **10-Band Graphic Equalizer**: Built-in parametric frequency shaping (32Hz to 16kHz) with one-click flat reset directly from the center deck.
 - **Real-Time Audio Specs**: Instant readout of bit depth, sample rate, bitrate, codec format, dynamic range, and peak headroom for FLAC, WAV, ALAC, MP3, AAC, and OGG.
 - **All-in-One & Zero-Config**: Runs out of the box using PHP's built-in server and atomic JSON storage. No databases (MySQL/PostgreSQL) and no Node build steps needed for playback.
 - **Installable PWA**: Works on desktop (Linux, Windows, macOS) with Window Controls Overlay (WCO) titlebar integration and mobile (Android, iOS) with offline playback.
-- **Privacy-First**: No telemetry, no background tracking, and optional Soulseek integration that stays completely offline until you explicitly connect.
 
 ---
 
