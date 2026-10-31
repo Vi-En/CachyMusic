@@ -43,3 +43,4 @@ package() {
         install -Dm644 "resources/images/icon-512.png" "${pkgdir}/usr/share/icons/hicolor/512x512/apps/cachymusic.png"
     fi
 }
+
