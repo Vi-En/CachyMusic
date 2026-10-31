@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">CachyMusic</string>
-    <string name="default_url">http://10.0.2.2:8000</string>
+    <string name="default_url"></string>
 </resources>
