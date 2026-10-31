@@ -168,7 +168,7 @@
             <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5zm0-5.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z"/></svg>
             <span class="mobileTabLabel">PLAYER</span>
         </button>
-        <button type="button" class="mobileTabBtn" data-target="trackListPanel">
+        <button type="button" class="mobileTabBtn" data-target="trackListPanel" id="mobileTracksTabBtn">
             <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
             <span class="mobileTabLabel">TRACKS</span>
         </button>
@@ -487,10 +487,13 @@
                     <button type="button" id="shufflePlayBtn" class="actionBtn" title="Shuffle Play Current List">
                         SHUFFLE
                     </button>
-                    <label for="localFileInput" class="actionBtn uploadBtn" title="Load Audio Files From Device">
-                        + LOCAL
+                    <button type="button" id="mobileScanFolderBtn" class="actionBtn mobileFolderBtn" title="Choose Music Directory / Folder">
+                        📁 + FOLDER
+                    </button>
+                    <label for="localFileInput" class="actionBtn uploadBtn" id="localFileInputLabel" title="Load Audio Files (Multi-Select)">
+                        + TRACKS
                     </label>
-                    <input type="file" id="localFileInput" accept="audio/*" multiple style="display: none;" aria-label="Load Local Audio Files">
+                    <input type="file" id="localFileInput" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.opus,.alac,.aiff" multiple style="display: none;" aria-label="Load Local Audio Files">
                 </div>
             </div>
 
@@ -818,7 +821,7 @@
             <div class="slskTransfersHeader" id="slskTransfersHeader">
                 <div class="slskTransfersTitle">
                     <span class="drawerArrow" id="slskDrawerArrow">▲</span>
-                    <strong>SOULSEEK TRANSFERS</strong>
+                    <strong class="slskDrawerTitleText"><span class="desktopOnly">SOULSEEK </span>TRANSFERS</strong>
                     <span class="counter" id="slskTransfersSummary">0 Active</span>
                 </div>
                 <div class="slskTransfersHeaderActions">
@@ -826,7 +829,8 @@
                         RESUME ALL
                     </button>
                     <button type="button" id="slskScanDownloadsBtn" class="actionBtn" title="Scan and Load All Downloaded Songs into CachyMusic Library">
-                        SYNC ALL TO LIBRARY
+                        <span class="desktopOnly">SYNC ALL TO LIBRARY</span>
+                        <span class="mobileOnly">SYNC ALL</span>
                     </button>
                     <button type="button" id="slskCloseDrawerBtn" class="closeBtn" title="Collapse Transfers" aria-label="Collapse Transfers">✕</button>
                 </div>
@@ -1397,6 +1401,10 @@
                                 <input type="text" id="settingsTabFolderPathInput" class="settingsInput" placeholder="/path/to/music/folder" aria-label="Audio directory path">
                                 <button type="button" id="settingsTabBrowseBtn" class="actionBtn" title="Choose folder from your computer">BROWSE...</button>
                                 <button type="button" id="settingsTabScanBtn" class="actionBtn primaryBtn" title="Scan directory and load tracks">SCAN &amp; LOAD</button>
+                            </div>
+                            <div class="settingsMobileFolderActions" id="settingsMobileFolderActions">
+                                <button type="button" id="settingsChooseFolderBtn" class="actionBtn" title="Choose folder via System Storage Access Framework">📁 SELECT MUSIC FOLDER</button>
+                                <button type="button" id="settingsScanDeviceMusicBtn" class="actionBtn primaryBtn" title="Scan all device music from storage">🎵 SCAN ALL DEVICE MUSIC</button>
                             </div>
                             <div class="settingsScanStatusBox" id="settingsTabScanStatus">
                                 Ready to scan local music library.

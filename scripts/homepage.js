@@ -1219,6 +1219,25 @@
             folderPathInput.value = savedDir;
         }
         await scanDirectory(initialDir, false);
+
+        // If no tracks returned from server/directory, restore from cached offline library
+        if (allTracks.length === 0) {
+            try {
+                const cachedRaw = safeStorage.getItem('cachymusic_android_tracks');
+                if (cachedRaw) {
+                    const cached = JSON.parse(cachedRaw);
+                    if (Array.isArray(cached) && cached.length > 0) {
+                        allTracks = cached;
+                        applySearchAndSort();
+                        loadTrack(0, false);
+                        setScanStatus(`Restored ${cached.length} tracks from offline library.`, false);
+                    }
+                }
+            } catch (err) {
+                console.warn('Error restoring cached tracks:', err);
+            }
+        }
+
         await restoreSessionState();
 
         // Restore saved metadata panel state (persisted across sessions)
@@ -14893,8 +14912,60 @@
             });
         }
 
-        // Folder Browse Action (Native OS Dialog -> Web Folder Picker Fallback)
+        // Native Android Bridge discovery receiver
+        window.onAndroidTracksDiscovered = function(tracks, folderName) {
+            if (!Array.isArray(tracks) || tracks.length === 0) {
+                setScanStatus(`No supported audio tracks found in "${folderName || 'Selected Folder'}".`, true);
+                return;
+            }
+
+            setScanStatus(`Loaded ${tracks.length} track(s) from "${folderName}".`, false);
+            if (folderPathInput) folderPathInput.value = folderName;
+            const sInput = document.getElementById('settingsTabFolderPathInput');
+            if (sInput) sInput.value = folderName;
+
+            allTracks = tracks;
+            try {
+                const cacheData = tracks.map(t => ({
+                    id: t.id,
+                    filename: t.filename,
+                    fullPath: t.fullPath,
+                    title: t.title,
+                    artist: t.artist,
+                    album: t.album,
+                    duration: t.duration,
+                    bitrate: t.bitrate,
+                    sampleRate: t.sampleRate,
+                    channels: t.channels || 2,
+                    format: t.format,
+                    size: t.size,
+                    src: t.src,
+                    cover: t.cover
+                }));
+                safeStorage.setItem('cachymusic_android_tracks', JSON.stringify(cacheData));
+                safeStorage.setItem('cachymusic_last_directory', folderName);
+            } catch (e) {
+                console.warn('Could not cache tracks to localStorage:', e);
+            }
+
+            applySearchAndSort();
+            if (allTracks.length > 0 && !isPlaying) {
+                loadTrack(0, false);
+            }
+        };
+
+        // Folder Browse Action (Native Android SAF -> Native OS Dialog -> Web Folder Picker Fallback)
         async function openFolderBrowser() {
+            if (window.AndroidBridge && typeof window.AndroidBridge.openFolderPicker === 'function') {
+                setScanStatus('Opening system folder directory picker...', false);
+                try {
+                    window.AndroidBridge.openFolderPicker();
+                    return;
+                } catch (err) {
+                    console.warn('AndroidBridge.openFolderPicker error:', err);
+                }
+            }
+
             setScanStatus('Opening folder selection dialog...', false);
             const curPath = (folderPathInput ? folderPathInput.value.trim() : '') || (safeStorage.getItem('cachymusic_last_directory') || '');
 
@@ -14932,6 +15003,28 @@
 
         if (browseFolderBtn) {
             browseFolderBtn.addEventListener('click', openFolderBrowser);
+        }
+
+        const mobileScanFolderBtn = document.getElementById('mobileScanFolderBtn');
+        if (mobileScanFolderBtn) {
+            mobileScanFolderBtn.addEventListener('click', openFolderBrowser);
+        }
+
+        const settingsChooseFolderBtn = document.getElementById('settingsChooseFolderBtn');
+        if (settingsChooseFolderBtn) {
+            settingsChooseFolderBtn.addEventListener('click', openFolderBrowser);
+        }
+
+        const settingsScanDeviceMusicBtn = document.getElementById('settingsScanDeviceMusicBtn');
+        if (settingsScanDeviceMusicBtn) {
+            settingsScanDeviceMusicBtn.addEventListener('click', () => {
+                if (window.AndroidBridge && typeof window.AndroidBridge.scanDeviceMusic === 'function') {
+                    setScanStatus('Scanning device music library...', false);
+                    window.AndroidBridge.scanDeviceMusic();
+                } else {
+                    setScanStatus('Native device scanner available on Android APK.', true);
+                }
+            });
         }
 
         if (folderPickerInput) {
@@ -15124,13 +15217,17 @@
         });
 
         localFileInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
+            const files = Array.from(e.target.files || []);
             if (files.length === 0) return;
 
-            setScanStatus('Reading track metadata...', false);
+            setScanStatus(`Reading ${files.length} audio file(s)...`, false);
             const importedTracks = [];
 
-            for (const file of files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (i % 5 === 0 || i === files.length - 1) {
+                    setScanStatus(`Reading track metadata (${i + 1}/${files.length})...`, false);
+                }
                 const url = URL.createObjectURL(file);
                 // Check if already in scanned server tracks
                 const existing = allTracks.find(t => t.filename === file.name || t.id === file.name);
@@ -15172,7 +15269,10 @@
             const startIdx = allTracks.length;
             allTracks = [...allTracks, ...importedTracks];
             applySearchAndSort();
-            loadTrack(startIdx, true);
+            if (importedTracks.length > 0) {
+                loadTrack(startIdx, true);
+            }
+            localFileInput.value = '';
         });
 
         speedBtns.forEach(btn => {

@@ -3,13 +3,23 @@ package org.cachymusic.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ContentUris;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.MediaStore;
+import android.util.Log;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -18,22 +28,57 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.documentfile.provider.DocumentFile;
 import androidx.webkit.WebViewAssetLoader;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends Activity {
+    private static final String TAG = "CachyMusic";
     private static final String PREFS_NAME = "cachymusic_prefs";
-    private static final String PREF_SERVER_URL = "server_url";
     private static final String STANDALONE_URL = "https://appassets.androidcache.net/index.html";
     private static final int FILECHOOSER_RESULTCODE = 1001;
+    private static final int FOLDER_PICKER_RESULTCODE = 1002;
 
     private WebView webView;
     private SharedPreferences prefs;
     private ValueCallback<Uri[]> uploadMessage;
     private WebViewAssetLoader assetLoader;
     private String currentUrl = STANDALONE_URL;
+
+    public class AndroidBridge {
+        @JavascriptInterface
+        public boolean isAndroid() {
+            return true;
+        }
+
+        @JavascriptInterface
+        public void openFolderPicker() {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+                    startActivityForResult(intent, FOLDER_PICKER_RESULTCODE);
+                } catch (Exception e) {
+                    Log.e(TAG, "Cannot launch SAF folder picker: " + e.getMessage());
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void scanDeviceMusic() {
+            scanMediaStoreAsync();
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,6 +91,12 @@ public class MainActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(0xFF0A0B0E);
+        
+        // Suppress native Android OS scrollbar overlays that cut across web contents
+        webView.setHorizontalScrollBarEnabled(false);
+        webView.setVerticalScrollBarEnabled(false);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+
         setContentView(webView);
 
         // Configure modern offline asset loader (appassets.androidcache.net is a secure https context)
@@ -72,7 +123,10 @@ public class MainActivity extends Activity {
         s.setDisplayZoomControls(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
-        // WebChromeClient with onShowFileChooser for + LOCAL file and folder picker
+        // Register AndroidBridge for native folder directory picking and MediaStore queries
+        webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
+
+        // WebChromeClient with onShowFileChooser supporting multi-track file selection
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
@@ -81,14 +135,23 @@ public class MainActivity extends Activity {
                 }
                 uploadMessage = filePathCallback;
 
-                Intent intent = fileChooserParams.createIntent();
                 try {
-                    // Ensure intent accepts audio files and allows multiple selection
-                    if (intent.getType() == null || intent.getType().equals("*/*")) {
-                        intent.setType("audio/*");
-                    }
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                        "audio/*",
+                        "application/ogg",
+                        "application/x-flac",
+                        "audio/flac",
+                        "audio/mp3",
+                        "audio/wav",
+                        "audio/m4a",
+                        "audio/aac",
+                        "audio/opus"
+                    });
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-                    startActivityForResult(Intent.createChooser(intent, "Select Audio Files"), FILECHOOSER_RESULTCODE);
+                    startActivityForResult(Intent.createChooser(intent, "Select Audio Tracks"), FILECHOOSER_RESULTCODE);
                 } catch (ActivityNotFoundException e) {
                     uploadMessage = null;
                     return false;
@@ -97,14 +160,43 @@ public class MainActivity extends Activity {
             }
         });
 
-        // WebViewClient intercepting local asset requests and mock API calls in standalone mode
+        // WebViewClient intercepting local asset requests, local media streams, and mock API calls
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 String path = uri.getPath();
 
-                // Mock PHP backend endpoints for 100% offline standalone operation
+                // 1. Direct local audio streaming via ContentResolver
+                if (path != null && path.startsWith("/android-media-art")) {
+                    String uriParam = uri.getQueryParameter("uri");
+                    if (uriParam != null) {
+                        try (MediaMetadataRetriever mmr = new MediaMetadataRetriever()) {
+                            mmr.setDataSource(MainActivity.this, Uri.parse(uriParam));
+                            byte[] art = mmr.getEmbeddedPicture();
+                            if (art != null) {
+                                return new WebResourceResponse("image/jpeg", "UTF-8", new ByteArrayInputStream(art));
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+
+                if (path != null && path.startsWith("/android-media")) {
+                    String uriParam = uri.getQueryParameter("uri");
+                    if (uriParam != null) {
+                        try {
+                            Uri mediaUri = Uri.parse(uriParam);
+                            String mime = getContentResolver().getType(mediaUri);
+                            if (mime == null) mime = "audio/mpeg";
+                            InputStream is = getContentResolver().openInputStream(mediaUri);
+                            return new WebResourceResponse(mime, "UTF-8", is);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Audio stream intercept error: " + e.getMessage());
+                        }
+                    }
+                }
+
+                // 2. Mock PHP backend endpoints for 100% offline standalone operation
                 if (path != null && path.contains("php/api/")) {
                     if (path.contains("playlists.php")) {
                         String json = "{\"success\": true, \"playlists\": []}";
@@ -154,11 +246,230 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == FILECHOOSER_RESULTCODE) {
             if (uploadMessage != null) {
-                Uri[] results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+                Uri[] results = null;
+                if (resultCode == Activity.RESULT_OK && data != null) {
+                    ClipData clip = data.getClipData();
+                    if (clip != null && clip.getItemCount() > 0) {
+                        results = new Uri[clip.getItemCount()];
+                        for (int i = 0; i < clip.getItemCount(); i++) {
+                            results[i] = clip.getItemAt(i).getUri();
+                        }
+                    } else if (data.getData() != null) {
+                        results = new Uri[]{ data.getData() };
+                    } else {
+                        results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+                    }
+                }
                 uploadMessage.onReceiveValue(results);
                 uploadMessage = null;
             }
+        } else if (requestCode == FOLDER_PICKER_RESULTCODE) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                Uri treeUri = data.getData();
+                if (treeUri != null) {
+                    try {
+                        getContentResolver().takePersistableUriPermission(
+                            treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    } catch (Exception ignored) {}
+                    scanDocumentFolderAsync(treeUri);
+                }
+            }
         }
+    }
+
+    private void scanDocumentFolderAsync(Uri treeUri) {
+        new Thread(() -> {
+            try {
+                DocumentFile pickedDir = DocumentFile.fromTreeUri(this, treeUri);
+                if (pickedDir == null) return;
+
+                String folderName = pickedDir.getName();
+                if (folderName == null) folderName = "Selected Folder";
+
+                List<JSONObject> tracksList = new ArrayList<>();
+                scanDirectoryRecursive(pickedDir, folderName, tracksList, 0);
+
+                JSONArray tracksArray = new JSONArray();
+                for (JSONObject obj : tracksList) {
+                    tracksArray.put(obj);
+                }
+
+                final String fName = folderName;
+                final String jsonString = tracksArray.toString();
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    String js = "if (window.onAndroidTracksDiscovered) { window.onAndroidTracksDiscovered("
+                            + jsonString + ", " + JSONObject.quote(fName) + "); }";
+                    webView.evaluateJavascript(js, null);
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Folder scan error: " + e.getMessage(), e);
+            }
+        }).start();
+    }
+
+    private void scanDirectoryRecursive(DocumentFile dir, String albumDefault, List<JSONObject> results, int depth) {
+        if (depth > 6 || dir == null || results.size() > 5000) return;
+        DocumentFile[] files = dir.listFiles();
+        if (files == null) return;
+
+        for (DocumentFile file : files) {
+            if (file.isDirectory()) {
+                scanDirectoryRecursive(file, file.getName(), results, depth + 1);
+            } else {
+                String name = file.getName();
+                if (name != null && isAudioFile(name)) {
+                    try {
+                        JSONObject track = createTrackMetadata(file.getUri(), name, albumDefault, file.length());
+                        if (track != null) results.add(track);
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+    }
+
+    private boolean isAudioFile(String name) {
+        String lower = name.toLowerCase();
+        return lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") ||
+               lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac") ||
+               lower.endsWith(".opus") || lower.endsWith(".alac") || lower.endsWith(".aiff");
+    }
+
+    private JSONObject createTrackMetadata(Uri uri, String filename, String defaultAlbum, long size) {
+        JSONObject obj = new JSONObject();
+        try {
+            String title = filename;
+            String artist = "Unknown Artist";
+            String album = defaultAlbum != null ? defaultAlbum : "Unknown Album";
+            long durationMs = 0;
+            int sampleRate = 44100;
+            int bitrate = 320;
+            String format = "MP3";
+
+            int dotIdx = filename.lastIndexOf('.');
+            if (dotIdx > 0) {
+                title = filename.substring(0, dotIdx);
+                format = filename.substring(dotIdx + 1).toUpperCase();
+            }
+
+            try (MediaMetadataRetriever mmr = new MediaMetadataRetriever()) {
+                mmr.setDataSource(this, uri);
+                String t = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
+                if (t != null && !t.trim().isEmpty()) title = t.trim();
+
+                String a = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+                if (a != null && !a.trim().isEmpty()) artist = a.trim();
+
+                String alb = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
+                if (alb != null && !alb.trim().isEmpty()) album = alb.trim();
+
+                String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+                if (dur != null) {
+                    try { durationMs = Long.parseLong(dur); } catch (NumberFormatException ignored) {}
+                }
+
+                String br = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE);
+                if (br != null) {
+                    try { bitrate = (int) (Long.parseLong(br) / 1000); } catch (NumberFormatException ignored) {}
+                }
+            } catch (Exception ignored) {}
+
+            String encodedUri = URLEncoder.encode(uri.toString(), "UTF-8");
+            String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri;
+
+            obj.put("id", "android_" + System.currentTimeMillis() + "_" + Math.abs(uri.hashCode()));
+            obj.put("filename", filename);
+            obj.put("fullPath", filename);
+            obj.put("title", title);
+            obj.put("artist", artist);
+            obj.put("album", album);
+            obj.put("duration", durationMs > 0 ? (durationMs / 1000.0) : 0);
+            obj.put("bitrate", bitrate > 0 ? bitrate : 320);
+            obj.put("sampleRate", sampleRate);
+            obj.put("channels", 2);
+            obj.put("format", format);
+            obj.put("size", size);
+            obj.put("src", streamUrl);
+            obj.put("cover", "https://appassets.androidcache.net/android-media-art?uri=" + encodedUri);
+            return obj;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void scanMediaStoreAsync() {
+        new Thread(() -> {
+            try {
+                Uri musicUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+                String[] projection = new String[]{
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.TITLE,
+                    MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.ALBUM,
+                    MediaStore.Audio.Media.DURATION,
+                    MediaStore.Audio.Media.SIZE,
+                    MediaStore.Audio.Media.DISPLAY_NAME
+                };
+                String selection = MediaStore.Audio.Media.IS_MUSIC + " != 0";
+                String sortOrder = MediaStore.Audio.Media.TITLE + " ASC";
+
+                List<JSONObject> list = new ArrayList<>();
+                try (Cursor cursor = getContentResolver().query(musicUri, projection, selection, null, sortOrder)) {
+                    if (cursor != null) {
+                        int idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID);
+                        int titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE);
+                        int artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST);
+                        int albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM);
+                        int durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION);
+                        int sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE);
+                        int nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME);
+
+                        while (cursor.moveToNext() && list.size() < 5000) {
+                            long id = cursor.getLong(idCol);
+                            String title = cursor.getString(titleCol);
+                            String artist = cursor.getString(artistCol);
+                            String album = cursor.getString(albumCol);
+                            long dur = cursor.getLong(durCol);
+                            long size = cursor.getLong(sizeCol);
+                            String name = cursor.getString(nameCol);
+
+                            Uri trackUri = ContentUris.withAppendedId(musicUri, id);
+                            String encodedUri = URLEncoder.encode(trackUri.toString(), "UTF-8");
+                            String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri;
+
+                            JSONObject obj = new JSONObject();
+                            obj.put("id", "android_" + id);
+                            obj.put("filename", name != null ? name : (title + ".mp3"));
+                            obj.put("fullPath", name != null ? name : (title + ".mp3"));
+                            obj.put("title", title != null ? title : "Unknown Title");
+                            obj.put("artist", (artist != null && !artist.equals("<unknown>")) ? artist : "Unknown Artist");
+                            obj.put("album", (album != null && !album.equals("<unknown>")) ? album : "Device Music");
+                            obj.put("duration", dur > 0 ? (dur / 1000.0) : 0);
+                            obj.put("bitrate", 320);
+                            obj.put("sampleRate", 44100);
+                            obj.put("channels", 2);
+                            obj.put("format", "AUDIO");
+                            obj.put("size", size);
+                            obj.put("src", streamUrl);
+                            obj.put("cover", "https://appassets.androidcache.net/android-media-art?uri=" + encodedUri);
+                            list.add(obj);
+                        }
+                    }
+                }
+
+                JSONArray tracksArray = new JSONArray();
+                for (JSONObject obj : list) {
+                    tracksArray.put(obj);
+                }
+                final String jsonString = tracksArray.toString();
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    String js = "if (window.onAndroidTracksDiscovered) { window.onAndroidTracksDiscovered("
+                            + jsonString + ", 'Device Music Library'); }";
+                    webView.evaluateJavascript(js, null);
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "MediaStore scan error: " + e.getMessage(), e);
+            }
+        }).start();
     }
 
     @Override

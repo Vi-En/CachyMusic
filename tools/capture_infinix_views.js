@@ -6,9 +6,9 @@ const outDir = '/home/lien/.gemini/antigravity/brain/8ef29818-f6ab-4782-82fa-f16
 if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
 async function capture() {
-    const proc = spawn('brave', ['--headless', '--disable-gpu', '--no-sandbox', '--remote-debugging-port=9223', '--user-data-dir=/tmp/brave_cap', 'about:blank']);
+    const proc = spawn('brave', ['--headless', '--disable-gpu', '--no-sandbox', '--remote-debugging-port=9224', '--user-data-dir=/tmp/brave_cap2', 'about:blank']);
     await new Promise(r => setTimeout(r, 1200));
-    const resp = await fetch('http://127.0.0.1:9223/json');
+    const resp = await fetch('http://127.0.0.1:9224/json');
     const list = await resp.json();
     const ws = new WebSocket(list[0].webSocketDebuggerUrl);
     let msgId = 1;
@@ -27,9 +27,10 @@ async function capture() {
     await send('Emulation.setDeviceMetricsOverride', { width: 392, height: 872, deviceScaleFactor: 2.75, mobile: true });
 
     const views = [
+        { name: 'infinix_player_fixed', tab: 'player' },
+        { name: 'infinix_tracks_fixed', tab: 'tracks' },
         { name: 'infinix_settings_fixed', tab: 'settings' },
-        { name: 'infinix_soulseek_fixed', tab: 'soulseek' },
-        { name: 'infinix_player_fixed', tab: 'player' }
+        { name: 'infinix_soulseek_fixed', tab: 'soulseek' }
     ];
 
     for (const v of views) {
@@ -41,17 +42,23 @@ async function capture() {
                 if ('${v.tab}' === 'settings') {
                     const b = document.getElementById('mobileSettingsTabBtn');
                     if (b) b.click();
-                    // simulate mini player active
                     const mini = document.getElementById('persistentMiniPlayer');
                     if (mini) mini.style.setProperty('display', 'flex', 'important');
                 } else if ('${v.tab}' === 'soulseek') {
                     const b = document.getElementById('mobileSoulseekTabBtn');
                     if (b) b.click();
+                    const drawer = document.getElementById('slskTransfersDrawer');
+                    if (drawer) drawer.classList.add('open');
                     const mini = document.getElementById('persistentMiniPlayer');
                     if (mini) mini.style.setProperty('display', 'flex', 'important');
                 } else if ('${v.tab}' === 'player') {
                     const b = document.getElementById('mobilePlayerTabBtn');
                     if (b) b.click();
+                } else if ('${v.tab}' === 'tracks') {
+                    const b = document.getElementById('mobileTracksTabBtn');
+                    if (b) b.click();
+                    const mini = document.getElementById('persistentMiniPlayer');
+                    if (mini) mini.style.setProperty('display', 'flex', 'important');
                 }
             })()`
         });
