@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**High-Fidelity Audio Workstation & Music Player with Studio DSP & Turntable Deck**
+**High-Fidelity Music Player**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Android%20%7C%20iOS-informational.svg)]()
@@ -20,14 +20,6 @@
 ---
 
 ##  Features
-
-###  Focal Centerpiece & Workstation Ergonomics
-- **Intuitive 3-Column Workstation Layout**:
-  - **Left**: Collapsible Track Metadata Inspector & embedded artwork card.
-  - **Center**: The primary vinyl turntable platter, tactile playback transport, timeline scrubber, and 10-band DSP console.
-  - **Right**: Track library, playlist manager, and dynamic queue navigation.
-- **Sliding Metadata Inspector**: One-click or hotkey (`KeyI`) sliding drawer that expands the center turntable deck across the workstation with smooth cubic-bezier transitions.
-- **Tactile Turntable Platter**: Physics-driven vinyl platter with audio-reactive tonearm tracking, speed selection (33 RPM, 45 RPM, 78 RPM), and ambient album art glow backdrops.
 
 ###  Studio DSP & Audiophile Metrics
 - **10-Band Graphic Equalizer**: Studio-grade parametric audio shaping (32Hz, 64Hz, 125Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz, 16kHz) with one-click flat reset and custom frequency profiles.
