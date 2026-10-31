@@ -2,7 +2,7 @@
 pkgname=cachymusic
 pkgver=1.0.0
 pkgrel=1
-pkgdesc="High-fidelity audio workstation and music player with studio DSP and turntable deck"
+pkgdesc="Self-contained audio workstation and music player with turntable deck and studio DSP"
 arch=('any')
 url="https://github.com/Vi-En/CachyMusic"
 license=('GPL-3.0-or-later')

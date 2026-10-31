@@ -1,7 +1,7 @@
 {
-  "name": "cachymusic-workstation",
+  "name": "cachymusic",
   "version": "1.0.0",
-  "description": "High-fidelity audio workstation and music player with studio DSP and Soulseek integration",
+  "description": "A self-contained audio player and workstation with a turntable deck and studio DSP.",
   "main": "server/soulseek-service.js",
   "scripts": {
     "start": "PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:8000 index.php",

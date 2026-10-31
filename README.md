@@ -1,4 +1,4 @@
-# CachyMusic Workstation
+# CachyMusic
 
 <div align="center">
 
@@ -13,37 +13,33 @@
 
 ---
 
-##  Overview
+## Overview
 
 **CachyMusic** is an open-source, high-fidelity music player engineered for music listeners. The name is inspired from my current OS called CachyOS.
 
+It is a lightweight, self-contained music player and audio workstation that runs directly in your browser or installs as a standalone desktop app. Built for a focused, tactile listening experience, CachyMusic combines an interactive vinyl turntable deck with a 10-band equalizer, real-time audio metrics, and straightforward local library management without unnecessary bloat.
+
 ---
 
-##  Features
+## Features
 
-###  Studio DSP & Audiophile Metrics
-- **10-Band Graphic Equalizer**: Studio-grade parametric audio shaping (32Hz, 64Hz, 125Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz, 16kHz) with one-click flat reset and custom frequency profiles.
-- **Real-Time Embedded Audio Data**: Automatic ID3 tag and audio stream inspection displaying bitrate, sample rate, bit depth, channel configuration, codec format, dynamic range, and peak headroom.
-- **Audiophile Format Support**: Native playback and streaming for FLAC, ALAC, WAV, AIFF, MP3, AAC, OGG, Opus, and WebM audio containers.
+- **Interactive Turntable Deck**: A central vinyl platter with an audio-reactive tonearm, realistic groove sheen, and playback speeds (33, 45, and 78 RPM).
+- **Balanced 3-Column Layout**: Track metadata and album artwork on the left, the main playback deck in the center, and your library, playlists, and queue on the right.
+- **Collapsible Inspector**: Press `I` or click the **Metadata** button to slide the left panel away, smoothly expanding the player deck across your screen.
+- **10-Band Graphic Equalizer**: Built-in parametric frequency shaping (32Hz to 16kHz) with one-click flat reset directly from the center deck.
+- **Real-Time Audio Specs**: Instant readout of bit depth, sample rate, bitrate, codec format, dynamic range, and peak headroom for FLAC, WAV, ALAC, MP3, AAC, and OGG.
+- **All-in-One & Zero-Config**: Runs out of the box using PHP's built-in server and atomic JSON storage. No databases (MySQL/PostgreSQL) and no Node build steps needed for playback.
+- **Installable PWA**: Works on desktop (Linux, Windows, macOS) with Window Controls Overlay (WCO) titlebar integration and mobile (Android, iOS) with offline playback.
+- **Privacy-First**: No telemetry, no background tracking, and optional Soulseek integration that stays completely offline until you explicitly connect.
 
-###  Progressive Web App & Multi-Device Freedom
-- **Cross-Platform PWA**: Installable on Linux, Windows, macOS, Android, and iOS as a standalone desktop or mobile app.
-- **Window Controls Overlay (WCO)**: Native desktop titlebar integration for modern Chromium and Edge browsers.
-- **Hardware Back-Button Navigation**: Full HTML5 History API integration handling device back gestures and ESC hotkeys seamlessly across all modal dialogs.
-- **LAN Audio Streaming**: Native multi-device streaming across your local Wi-Fi network.
+---
 
-###  Privacy & Security First
-- **Clean Slate Architecture**: Zero telemetry, zero tracking, and zero unwanted network access.
-- **Soulseek P2P Integration**: Built-in Nicotine+ headless integration that is **disconnected by default on startup**. Network connection and file sharing only initiate when explicitly requested by the user.
-- **Sandboxed Directory Confinement**: Strict route whitelisting preventing directory traversal outside authorized library folders.
-
-##  Installation & Quick Start
+## Installation & Quick Start
 
 ### Prerequisites
-- **PHP 8.2+** with `php-curl`, `php-mbstring`
-- Modern web browser (Brave, Chrome, Chromium, Firefox, Edge, Safari)
-- *Optional*: **Nicotine+** (for Soulseek P2P network sharing)
-- *Optional*: **FFmpeg** (for extended codec inspection)
+- **PHP 8.2+** with `php-curl` and `php-mbstring`
+- Any modern web browser (Brave, Chrome, Firefox, Edge, Safari)
+- *Optional*: **Nicotine+** (for Soulseek P2P sharing)
 
 ### One-Click Desktop Installation (Linux)
 Clone the repository and run the installer:
@@ -54,25 +50,24 @@ cd CachyMusic
 ./install.sh
 ```
 
-This will:
-1. Verify system dependencies.
-2. Configure permissions for `bin/cachymusic`.
-3. Symlink the launcher into `~/.local/bin/cachymusic`.
-4. Install desktop application shortcuts and 512×512 icons into `~/.local/share/applications`.
+This sets up:
+1. System dependency checks.
+2. The executable launcher at `~/.local/bin/cachymusic`.
+3. Desktop menu entries and high-resolution icons at `~/.local/share/applications`.
 
-Launch CachyMusic directly from your application menu or terminal:
+Launch CachyMusic anytime from your application menu or terminal:
 ```bash
 cachymusic
 ```
 
 ### Manual / Developer Launch
-You can also launch the server directly without installing:
+You can also launch directly without installing:
 
 ```bash
 php -S 127.0.0.1:8000 index.php
 ```
 
-Then navigate to `http://127.0.0.1:8000/` in your browser.
+Then visit `http://127.0.0.1:8000/` in your browser.
 
 ### Arch Linux / CachyOS (AUR)
 ```bash
@@ -81,41 +76,40 @@ makepkg -si
 ```
 
 ### Clean Uninstallation
-To completely remove the desktop application and launcher:
+To remove the application shortcuts and launcher:
 ```bash
 ./uninstall.sh
 ```
-*(Your music library and playlists remain untouched.)*
+*(Your music files, local library, and playlists remain untouched.)*
 
 ---
 
-##  Repository Structure
+## Repository Structure
 
 ```
 .
 ├── bin/                    # Desktop launcher script (cachymusic)
-├── index.html              # Core application workstation interface
-├── index.php               # Sandboxed static router & API dispatcher
-├── install.sh              # User desktop application installer
+├── index.html              # Main application interface
+├── index.php               # Static router & API dispatcher
+├── install.sh              # User desktop installer
 ├── manifest.json           # W3C Web App Manifest (PWA)
 ├── packaging/              # Distribution packaging (AUR, desktop entries)
-├── php/                    # Backend modular REST API
+├── php/                    # Backend REST API
 │   ├── api/                # Endpoints (scan, stream, cover, soulseek, playlists)
-│   ├── auth/               # Local authentication handlers
-│   └── storage.php         # Library database and metadata abstraction
-├── resources/              # Visual assets, SVG icons, fonts, fallback art
-├── scripts/                # Frontend client logic & Web Audio engines
+│   ├── auth/               # Local authentication
+│   └── storage.php         # Library database and file abstraction
+├── resources/              # Icons, fonts, sample tracks, and default artwork
+├── scripts/                # Frontend client logic & Web Audio engine
 │   ├── audio.js            # Web Audio API engine & 10-band DSP filters
-│   └── homepage.js         # Core UI interaction, state, and event loop
-├── stylesheets/            # Modular CSS & 12 procedural design themes
+│   └── homepage.js         # UI interactions, player state, and events
+├── stylesheets/            # Stylesheets and 12 procedural color themes
 ├── sw.js                   # Service Worker for offline PWA caching
-├── tools/                  # Packagers and helper utilities
-└── uninstall.sh            # Clean desktop uninstaller
+├── tools/                  # Helper utilities and mobile packaging
+└── uninstall.sh            # Desktop uninstaller
 ```
 
 ---
 
-##  License
+## License
 
 This project is licensed under the **GNU General Public License v3.0 or later** ([GPL-3.0-or-later](LICENSE)).
-
