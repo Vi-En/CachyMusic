@@ -3547,13 +3547,16 @@
 
         // Cover Artwork & Badge
         const coverSrc = track.cover || 'resources/images/default.svg';
+        const hasCustomCover = Boolean(track.cover && !track.cover.includes('default.svg'));
         if (deckArtworkBackdrop) {
             deckArtworkBackdrop.onerror = () => { deckArtworkBackdrop.onerror = null; deckArtworkBackdrop.src = 'resources/images/default.svg'; };
             deckArtworkBackdrop.src = coverSrc;
+            deckArtworkBackdrop.style.opacity = hasCustomCover ? '0.28' : '0.04';
         }
         if (deckArtworkAmbient) {
             deckArtworkAmbient.onerror = () => { deckArtworkAmbient.onerror = null; deckArtworkAmbient.src = 'resources/images/default.svg'; };
             deckArtworkAmbient.src = coverSrc;
+            deckArtworkAmbient.style.opacity = hasCustomCover ? '0.35' : '0';
         }
         if (vinylArt) {
             vinylArt.onerror = () => { vinylArt.onerror = null; vinylArt.src = 'resources/images/default.svg'; };
@@ -3564,6 +3567,7 @@
             coverArtPreview.src = coverSrc;
         }
         updateAmbientLighting(coverSrc);
+        appendDebugTelemetry(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
 
         if (coverBadge) {
             if (track.cover) {
@@ -3940,6 +3944,115 @@
     let consecutiveSkipCount = 0;
     window.audioPlaybackDebugLogs = [];
 
+    let debugModeActive = false;
+    try {
+        debugModeActive = safeStorage.getItem('cachymusic_debug_mode') === 'true';
+    } catch (_) {}
+
+    function updateDebugHudState() {
+        const hud = document.getElementById('debugHudContainer');
+        const pill = document.getElementById('settingsDebugPill');
+        const enableBtn = document.getElementById('debugModeEnableBtn');
+        const disableBtn = document.getElementById('debugModeDisableBtn');
+
+        if (hud) {
+            hud.style.display = debugModeActive ? 'flex' : 'none';
+        }
+        if (pill) {
+            pill.textContent = debugModeActive ? 'ENABLED (HUD)' : 'DISABLED';
+            pill.className = `settingsEnginePill ${debugModeActive ? 'active' : ''}`;
+        }
+        if (enableBtn) enableBtn.classList.toggle('active', debugModeActive);
+        if (disableBtn) disableBtn.classList.toggle('active', !debugModeActive);
+
+        if (debugModeActive) {
+            refreshDebugHudTelemetry();
+        }
+    }
+
+    function setDebugMode(enabled) {
+        debugModeActive = Boolean(enabled);
+        try {
+            safeStorage.setItem('cachymusic_debug_mode', debugModeActive ? 'true' : 'false');
+        } catch (_) {}
+        updateDebugHudState();
+        if (debugModeActive) {
+            appendDebugTelemetry(`[SYSTEM] Debug Mode enabled. Monitoring Web Audio pipeline & MediaStore IPC.`);
+            if (typeof showCachyToast === 'function') {
+                showCachyToast('Debug Mode Active', 'Real-time Audio Diagnostics HUD visible.', 'info');
+            }
+        }
+    }
+
+    function appendDebugTelemetry(msg, level = 'info') {
+        const time = new Date().toLocaleTimeString();
+        const entryText = `[${time}] ${msg}`;
+        window.audioPlaybackDebugLogs.push(entryText);
+        if (window.audioPlaybackDebugLogs.length > 80) window.audioPlaybackDebugLogs.shift();
+
+        const logList = document.getElementById('debugHudLogList');
+        if (logList) {
+            const row = document.createElement('div');
+            row.className = `debugHudLogEntry ${level}`;
+            row.textContent = entryText;
+            logList.appendChild(row);
+            while (logList.childNodes.length > 50) {
+                logList.removeChild(logList.firstChild);
+            }
+            logList.scrollTop = logList.scrollHeight;
+        }
+
+        const logBox = document.getElementById('settingsAudioDebugLog');
+        if (logBox) {
+            logBox.textContent = window.audioPlaybackDebugLogs.join('\n');
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        refreshDebugHudTelemetry();
+    }
+
+    function refreshDebugHudTelemetry() {
+        if (!debugModeActive) return;
+        const curTrack = allTracks[currentTrackIndex];
+        const trackEl = document.getElementById('debugHudTrack');
+        const codecEl = document.getElementById('debugHudCodec');
+        const html5El = document.getElementById('debugHudHtml5');
+        const ctxEl = document.getElementById('debugHudAudioCtx');
+        const srcEl = document.getElementById('debugHudSrc');
+
+        if (trackEl) {
+            trackEl.textContent = curTrack
+                ? `#${currentTrackIndex + 1}: ${curTrack.title || curTrack.filename} (${formatTime(curTrack.duration)})`
+                : 'None loaded';
+        }
+        if (codecEl && curTrack) {
+            const fmt = (curTrack.format || 'AUDIO').toUpperCase();
+            const rate = curTrack.sampleRate ? `${curTrack.sampleRate}Hz` : '44100Hz';
+            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : (curTrack.sampleRate >= 88200 ? '24-Bit' : '16-Bit');
+            codecEl.textContent = `${fmt} • ${depth} • ${rate}`;
+        }
+        if (html5El && audio) {
+            const rStates = ['0 (HAVE_NOTHING)', '1 (HAVE_METADATA)', '2 (HAVE_CURRENT_DATA)', '3 (HAVE_FUTURE_DATA)', '4 (HAVE_ENOUGH_DATA)'];
+            const nStates = ['0 (EMPTY)', '1 (IDLE)', '2 (LOADING)', '3 (NO_SOURCE)'];
+            const r = rStates[audio.readyState] || audio.readyState;
+            const n = nStates[audio.networkState] || audio.networkState;
+            const t = (audio.currentTime || 0).toFixed(1);
+            const d = (audio.duration && isFinite(audio.duration)) ? audio.duration.toFixed(1) : '--';
+            const state = audio.paused ? 'PAUSED' : 'PLAYING';
+            html5El.textContent = `${state} (${t}s / ${d}s) | R:${r} | N:${n}`;
+        }
+        if (ctxEl) {
+            const ctxState = audioContext ? audioContext.state : 'None';
+            const sRate = audioContext ? `${audioContext.sampleRate}Hz` : '--';
+            ctxEl.textContent = `State: ${ctxState} | Clock: ${sRate}`;
+        }
+        if (srcEl && audio) {
+            const srcStr = audio.src || 'none';
+            srcEl.textContent = srcStr.length > 70 ? srcStr.substring(0, 67) + '...' : srcStr;
+            srcEl.title = srcStr;
+        }
+    }
+
     function logAudioPlaybackEvent(level, msg, meta = {}) {
         const time = new Date().toLocaleTimeString();
         const entry = `[${time}] [${level.toUpperCase()}] ${msg}`;
@@ -3950,6 +4063,7 @@
             logBox.textContent = window.audioPlaybackDebugLogs.join('\n');
             logBox.scrollTop = logBox.scrollHeight;
         }
+        appendDebugTelemetry(`[${level.toUpperCase()}] ${msg}`, level);
         updateAudioDiagnosticsUi(meta);
     }
 
@@ -3989,6 +4103,7 @@
             skipVal.textContent = consecutiveSkipCount > 0 ? `${consecutiveSkipCount} skip(s) logged` : 'No abnormal skips (0)';
             skipVal.style.color = consecutiveSkipCount > 0 ? '#f59e0b' : 'inherit';
         }
+        refreshDebugHudTelemetry();
     }
 
     function showThemeLoadingOverlay(themeName) {
@@ -6056,6 +6171,58 @@
             });
         }
 
+        // 9. On-Screen Audio Diagnostics & Debug Mode Controls
+        const debugEnableBtn = document.getElementById('debugModeEnableBtn');
+        const debugDisableBtn = document.getElementById('debugModeDisableBtn');
+        if (debugEnableBtn) {
+            debugEnableBtn.addEventListener('click', () => {
+                setDebugMode(true);
+                markAudioSettingsPending('Debug Mode', 'Enabled');
+            });
+        }
+        if (debugDisableBtn) {
+            debugDisableBtn.addEventListener('click', () => {
+                setDebugMode(false);
+                markAudioSettingsPending('Debug Mode', 'Disabled');
+            });
+        }
+
+        const hudClearBtn = document.getElementById('debugHudClearBtn');
+        const hudCopyBtn = document.getElementById('debugHudCopyBtn');
+        const hudCloseBtn = document.getElementById('debugHudCloseBtn');
+        if (hudClearBtn) {
+            hudClearBtn.addEventListener('click', () => {
+                window.audioPlaybackDebugLogs = [];
+                const logList = document.getElementById('debugHudLogList');
+                if (logList) logList.innerHTML = '<div class="debugHudLogEntry system">[SYSTEM] Debug telemetry cleared.</div>';
+                const logBox = document.getElementById('settingsAudioDebugLog');
+                if (logBox) logBox.textContent = '';
+                consecutiveSkipCount = 0;
+                updateAudioDiagnosticsUi();
+            });
+        }
+        if (hudCopyBtn) {
+            hudCopyBtn.addEventListener('click', () => {
+                const logs = window.audioPlaybackDebugLogs && window.audioPlaybackDebugLogs.length > 0
+                    ? window.audioPlaybackDebugLogs.join('\n')
+                    : 'No telemetry events logged yet.';
+                navigator.clipboard.writeText(logs).then(() => {
+                    if (typeof showCachyToast === 'function') {
+                        showCachyToast('Copied', 'Debug telemetry log copied to clipboard.', 'success');
+                    }
+                }).catch(() => {
+                    if (typeof showCachyToast === 'function') {
+                        showCachyToast('Clipboard Error', 'Could not copy diagnostics to clipboard.', 'warning');
+                    }
+                });
+            });
+        }
+        if (hudCloseBtn) {
+            hudCloseBtn.addEventListener('click', () => setDebugMode(false));
+        }
+
+        updateDebugHudState();
+
         // 7. Settings Category Sub-Navigation Filter Bar (Balanced 2-Column Sub-Groupings)
         const catBtns = document.querySelectorAll('#settingsCategoryNav .settingsCatBtn');
         const settingsGrid = document.getElementById('settingsLayoutGrid');
@@ -6680,6 +6847,32 @@
             try {
                 safeStorage.removeItem('cachymusic_last_track_time');
             } catch (_) {}
+
+            const curTime = targetAudio.currentTime || 0;
+            const currentTrack = allTracks[currentTrackIndex];
+            const trackDur = targetAudio.duration || (currentTrack ? (currentTrack.duration || 0) : 0);
+            const trackTitle = currentTrack ? (currentTrack.title || currentTrack.filename || 'Current track') : 'Audio track';
+
+            // Premature Ended Guard:
+            // If the track ends within 1.5 seconds (or with >5s remaining on an established track),
+            // this is an unexpected stream disconnect/hiccup, NOT a finished song.
+            if (trackDur > 5 && curTime < 1.5) {
+                console.warn(`[AudioEngine] Premature stream end detected at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}".`);
+                logAudioPlaybackEvent('warn', `Premature stream termination at ${curTime.toFixed(2)}s on "${trackTitle}"`);
+                appendDebugTelemetry(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
+                if (trackPlaybackRetryCount === 0) {
+                    trackPlaybackRetryCount++;
+                    setTimeout(() => {
+                        if (!userExplicitlyPaused) {
+                            try { targetAudio.load(); } catch (_) {}
+                            playAudio();
+                        }
+                    }, 350);
+                    return;
+                }
+            } else {
+                appendDebugTelemetry(`[EVENT] Track finished naturally at ${curTime.toFixed(1)}s`);
+            }
 
             if (sleepTimerMode === 'end') {
                 pauseAudio();
@@ -15660,12 +15853,15 @@
         }
 
         // Native Android Bridge progress, cancellation & discovery receivers
-        window.onAndroidScanProgress = function(count, total, folderName) {
+        window.onAndroidScanProgress = function(count, total, folderName, etaSec) {
             if (isTrackLoadingCancelled) return;
             const pct = total > 0 ? Math.min(98, Math.round((count / total) * 100)) : 50;
+            const etaText = (typeof etaSec === 'number' && etaSec > 0)
+                ? ` • ETA: ~${etaSec}s`
+                : (count > 0 && total > 0 && count < total ? ' • Fast index in progress...' : '');
             showTrackLoadingOverlay(
                 'LOADING MUSIC LIBRARY...',
-                `Scanning "${folderName || 'Device Storage'}" — ${count}${total > 0 ? ' / ' + total : ''} tracks found...`,
+                `Scanning "${folderName || 'Device Storage'}" — ${count}${total > 0 ? ' / ' + total : ''} tracks indexed${etaText}`,
                 pct
             );
         };

@@ -969,7 +969,22 @@
                             </div>
                         </div>
 
-                        <!-- 5. Settings Confirmation & Apply Action -->
+                        <!-- 5. Audio Diagnostics & Debug Mode -->
+                        <div class="settingsRowItem" id="settingsRowDebugMode">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">AUDIO DIAGNOSTICS &amp; DEBUG MODE</h4>
+                                    <p class="settingsRowDesc">Display real-time telemetry, HTTP byte-ranges, audio decoder events, and track skip reasons.</p>
+                                </div>
+                                <span class="settingsEnginePill" id="settingsDebugPill">DISABLED</span>
+                            </div>
+                            <div class="settingsOptionToggles">
+                                <button type="button" class="actionBtn debugModeBtn active" id="debugModeDisableBtn" data-debug="0">DISABLED</button>
+                                <button type="button" class="actionBtn debugModeBtn" id="debugModeEnableBtn" data-debug="1">ENABLED (HUD)</button>
+                            </div>
+                        </div>
+
+                        <!-- 6. Settings Confirmation & Apply Action -->
                         <div class="settingsRowItem settingsApplyRow" id="settingsRowApplyAudio">
                             <div class="settingsApplyBar">
                                 <button type="button" id="settingsApplyAudioBtn" class="actionBtn primaryBtn settingsApplyBtn">
@@ -1838,6 +1853,34 @@
 
     <!-- Modern Floating Toast Container -->
     <div id="cachyToastContainer" class="toastContainer" aria-live="polite"></div>
+
+    <!-- On-Screen Audio Diagnostics & Debug Mode HUD -->
+    <div id="debugHudContainer" class="debugHudContainer" style="display: none;" aria-live="polite">
+        <div class="debugHudHeader">
+            <div class="debugHudTitleGroup">
+                <span class="debugHudDot"></span>
+                <span class="debugHudTitle">AUDIO DIAGNOSTICS &amp; TELEMETRY</span>
+            </div>
+            <div class="debugHudActions">
+                <button type="button" id="debugHudClearBtn" class="debugHudActionBtn" title="Clear log">CLEAR</button>
+                <button type="button" id="debugHudCopyBtn" class="debugHudActionBtn" title="Copy log to clipboard">COPY</button>
+                <button type="button" id="debugHudCloseBtn" class="debugHudActionBtn danger" title="Close Debug HUD">✕</button>
+            </div>
+        </div>
+        <div class="debugHudBody">
+            <div class="debugHudGrid">
+                <div class="debugHudMetric"><span class="debugHudLabel">TRACK:</span> <span class="debugHudValue" id="debugHudTrack">None loaded</span></div>
+                <div class="debugHudMetric"><span class="debugHudLabel">FORMAT:</span> <span class="debugHudValue" id="debugHudCodec">--</span></div>
+                <div class="debugHudMetric"><span class="debugHudLabel">HTML5 AUDIO:</span> <span class="debugHudValue" id="debugHudHtml5">--</span></div>
+                <div class="debugHudMetric"><span class="debugHudLabel">AUDIO CONTEXT:</span> <span class="debugHudValue" id="debugHudAudioCtx">--</span></div>
+                <div class="debugHudMetric fullWidth"><span class="debugHudLabel">STREAM SRC:</span> <span class="debugHudValue" id="debugHudSrc">--</span></div>
+            </div>
+            <div class="debugHudLogTitle">EVENT &amp; ERROR STREAM:</div>
+            <div class="debugHudLog" id="debugHudLogList">
+                <div class="debugHudLogEntry system">[SYSTEM] Debug HUD initialized. Ready for audio telemetry.</div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bottom Selectable Visualizer Dock -->
     <div class="visualizerDock" id="visualizerDock">

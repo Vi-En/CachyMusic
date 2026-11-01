@@ -37409,6 +37409,22 @@ html.is-firefox .visualizerDock {
     :root body .trackMenuTriggerBtn,
     body .trackMenuTriggerBtn {
         display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
+        width: 44px !important;
+        height: 44px !important;
+        border-radius: 50% !important;
+        border: 1.5px solid rgba(128, 128, 128, 0.28) !important;
+        background: rgba(128, 128, 128, 0.12) !important;
+        color: var(--text-primary, #ffffff) !important;
+        opacity: 1 !important;
+        flex-shrink: 0 !important;
+        margin-left: 0.35rem !important;
+        cursor: pointer !important;
+        box-sizing: border-box !important;
+        -webkit-tap-highlight-color: transparent !important;
     }
 
     :root body .trackItem,
@@ -49658,7 +49674,7 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
 
         .playerDeck.mobileActive .turntableCon,
         [data-theme] .playerDeck.mobileActive .turntableCon {
-            --mobile-platter-size: clamp(10.2rem, min(26.5dvh, 54vw), 13.6rem);
+            --mobile-platter-size: clamp(12rem, min(32dvh, 66vw), 16rem);
             width: var(--mobile-platter-size) !important;
             height: var(--mobile-platter-size) !important;
             min-width: var(--mobile-platter-size) !important;
@@ -49683,37 +49699,38 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         }
 
         .playerDeck.mobileActive .toneArm {
-            width: 2.2rem !important;
-            height: calc(var(--mobile-platter-size, 11.5rem) * 0.68) !important;
-            right: -0.55rem !important;
-            top: -0.1rem !important;
+            width: 2.3rem !important;
+            height: calc(var(--mobile-platter-size, 14rem) * 0.72) !important;
+            right: -0.45rem !important;
+            top: -0.15rem !important;
             transform-origin: 1.1rem 1.1rem !important;
-            transform: rotate(2deg) !important;
+            transform: rotate(-16deg) !important;
             z-index: 15 !important;
+            transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
 
         .playerDeck.mobileActive .toneArm.active {
-            transform: rotate(24deg) !important;
+            transform: rotate(10deg) !important;
         }
 
         .playerDeck.mobileActive .toneArm .armPivot {
-            width: 2.05rem !important;
-            height: 2.05rem !important;
+            width: 2.1rem !important;
+            height: 2.1rem !important;
             top: 0 !important;
             left: 0.08rem !important;
         }
 
         .playerDeck.mobileActive .toneArm .armShaft {
-            height: calc(var(--mobile-platter-size, 11.5rem) * 0.45) !important;
+            height: calc(var(--mobile-platter-size, 14rem) * 0.48) !important;
             width: 0.22rem !important;
             margin-left: 0.98rem !important;
             margin-top: 1.45rem !important;
         }
 
         .playerDeck.mobileActive .toneArm .armCartridge {
-            width: 0.65rem !important;
-            height: 1.1rem !important;
-            margin-left: 0.76rem !important;
+            width: 0.72rem !important;
+            height: 1.2rem !important;
+            margin-left: 0.73rem !important;
         }
 
         /* Mobile Settings Navigation & Choice Buttons */
@@ -50390,4 +50407,220 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
 
     [data-theme="minimalist-warm"] .trackMenuTriggerBtn {
         color: #1c1917 !important;
+    }
+
+    /* Universal Theme-Adaptive 3-Dots Track Action Button Contrast */
+    :is([data-theme="default"], [data-theme="brutalist-light"], [data-theme="minimalist-light"], [data-theme="minimalist-warm"], :root:not([data-theme])) .trackMenuTriggerBtn {
+        color: #000000 !important;
+        border-color: rgba(0, 0, 0, 0.28) !important;
+        background: rgba(0, 0, 0, 0.07) !important;
+    }
+
+    :is([data-theme="default"], [data-theme="brutalist-light"], [data-theme="minimalist-light"], [data-theme="minimalist-warm"], :root:not([data-theme])) .trackItem.active .trackMenuTriggerBtn {
+        color: #ffffff !important;
+        border-color: rgba(255, 255, 255, 0.45) !important;
+        background: rgba(255, 255, 255, 0.22) !important;
+    }
+
+    :is([data-theme="sentinel"], [data-theme="studio-dark"], [data-theme="cyberpunk"], [data-theme="neon-night"], [data-theme="midnight-amoled"], [data-theme="brutalist-dark"], [data-theme="minimalist-dark"], [data-theme="minimalist-obsidian"], [data-theme="nms"], [data-theme="atlas"], [data-theme="solar-eclipse"], [data-theme="euclid-horizon"]) .trackMenuTriggerBtn {
+        color: #ffffff !important;
+        border-color: rgba(255, 255, 255, 0.28) !important;
+        background: rgba(255, 255, 255, 0.12) !important;
+    }
+
+    :is([data-theme="sentinel"], [data-theme="studio-dark"], [data-theme="cyberpunk"], [data-theme="neon-night"], [data-theme="midnight-amoled"], [data-theme="brutalist-dark"], [data-theme="minimalist-dark"], [data-theme="minimalist-obsidian"], [data-theme="nms"], [data-theme="atlas"], [data-theme="solar-eclipse"], [data-theme="euclid-horizon"]) .trackItem.active .trackMenuTriggerBtn {
+        color: #000000 !important;
+        border-color: var(--accent, #00e5ff) !important;
+        background: var(--accent, #00e5ff) !important;
+    }
+
+    /* Mobile Library Footer & Clearance Guard */
+    @media (max-width: 768px) {
+        .libraryFooter {
+            margin-bottom: calc(var(--mobile-miniplayer-height, 64px) + 0.65rem) !important;
+            padding: 0.75rem 1rem !important;
+            position: relative !important;
+            z-index: 5 !important;
+            box-sizing: border-box !important;
+        }
+
+        #trackList {
+            padding-bottom: calc(var(--mobile-miniplayer-height, 64px) + 2.5rem) !important;
+        }
+
+        .trackListItemsContainer {
+            padding-bottom: calc(var(--mobile-miniplayer-height, 64px) + 1.5rem) !important;
+        }
+    }
+
+    /* Real-Time Audio Diagnostics & Debug Mode Floating HUD */
+    .debugHudContainer {
+        position: fixed;
+        bottom: calc(var(--mobile-miniplayer-height, 64px) + 3.8rem);
+        left: 50%;
+        transform: translateX(-50%);
+        width: min(94vw, 560px);
+        max-height: 44vh;
+        background: rgba(10, 14, 23, 0.96) !important;
+        border: 1.5px solid #00e5ff !important;
+        border-radius: 0.75rem;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8), 0 0 16px rgba(0, 229, 255, 0.35);
+        color: #f1f5f9;
+        font-family: monospace, "JetBrains Mono", Courier New, monospace;
+        z-index: 999999;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        box-sizing: border-box;
+    }
+
+    .debugHudHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 0.85rem;
+        background: rgba(0, 229, 255, 0.12);
+        border-bottom: 1px solid rgba(0, 229, 255, 0.35);
+        flex-shrink: 0;
+    }
+
+    .debugHudTitleGroup {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+    }
+
+    .debugHudDot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #00e5ff;
+        box-shadow: 0 0 8px #00e5ff;
+        animation: pulse 1.5s infinite ease-in-out;
+    }
+
+    .debugHudTitle {
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        color: #00e5ff;
+    }
+
+    .debugHudActions {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .debugHudActionBtn {
+        all: unset;
+        cursor: pointer;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.68rem;
+        font-weight: 700;
+        background: rgba(255, 255, 255, 0.12);
+        color: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        transition: background 0.15s ease;
+    }
+
+    .debugHudActionBtn:hover {
+        background: rgba(255, 255, 255, 0.22);
+    }
+
+    .debugHudActionBtn.danger {
+        color: #ff3366;
+        border-color: rgba(255, 51, 102, 0.4);
+    }
+
+    .debugHudActionBtn.danger:hover {
+        background: rgba(255, 51, 102, 0.2);
+    }
+
+    .debugHudBody {
+        padding: 0.65rem 0.85rem;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        font-size: 0.72rem;
+    }
+
+    .debugHudGrid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.35rem 0.6rem;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 0.5rem;
+        border-radius: 0.4rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .debugHudMetric {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        overflow: hidden;
+    }
+
+    .debugHudMetric.fullWidth {
+        grid-column: span 2;
+    }
+
+    .debugHudLabel {
+        font-size: 0.64rem;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.04em;
+    }
+
+    .debugHudValue {
+        font-size: 0.72rem;
+        color: #ffffff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .debugHudLogTitle {
+        font-size: 0.64rem;
+        font-weight: 800;
+        color: #94a3b8;
+        letter-spacing: 0.05em;
+        margin-top: 0.2rem;
+    }
+
+    .debugHudLog {
+        max-height: 120px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        background: rgba(0, 0, 0, 0.45);
+        padding: 0.45rem;
+        border-radius: 0.35rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .debugHudLogEntry {
+        font-size: 0.68rem;
+        line-height: 1.35;
+        color: #cbd5e1;
+        word-break: break-word;
+    }
+
+    .debugHudLogEntry.warn {
+        color: #fbbf24;
+    }
+
+    .debugHudLogEntry.error {
+        color: #f87171;
+        font-weight: 700;
+    }
+
+    .debugHudLogEntry.system {
+        color: #00e5ff;
     }
