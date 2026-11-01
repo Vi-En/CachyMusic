@@ -4,6 +4,10 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.3] - 2026-11-01
+- Fixed mobile audio skipping, turntable tonearm alignment, and layout overlap.
+- Added browser container PWA support, disabled unavailable hardware gain, and improved contrast.
+
 ## [1.1.2] - 2026-11-01
 - Fixed mobile audio skipping and decoder errors with direct file streaming.
 - Fixed tonearm needle angle to accurately follow vinyl grooves.

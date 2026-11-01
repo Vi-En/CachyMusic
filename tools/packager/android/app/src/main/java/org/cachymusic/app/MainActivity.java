@@ -303,7 +303,7 @@ public class MainActivity extends Activity {
                                 new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
                     }
                     if (path.contains("hardware_volume.php")) {
-                        String json = "{\"success\": true, \"supported\": false}";
+                        String json = "{\"success\": true, \"available\": false, \"supported\": false, \"backend\": \"android-unsupported\"}";
                         return new WebResourceResponse("application/json", "UTF-8",
                                 new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
                     }
@@ -839,7 +839,7 @@ public class MainActivity extends Activity {
                 headers.put("Access-Control-Allow-Headers", "*");
                 headers.put("Cache-Control", "no-cache");
 
-                return new WebResourceResponse(mime, null, 206, "Partial Content", headers, is);
+                return new WebResourceResponse(mime, "UTF-8", 206, "Partial Content", headers, is);
             }
 
             // Normal full stream response (or when totalSize unknown)
@@ -861,7 +861,7 @@ public class MainActivity extends Activity {
             headers.put("Access-Control-Allow-Headers", "*");
             headers.put("Cache-Control", "no-cache");
 
-            return new WebResourceResponse(mime, null, 200, "OK", headers, is);
+            return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, is);
         } catch (Exception e) {
             Log.e(TAG, "Audio stream intercept error: " + e.getMessage(), e);
             return null;
@@ -921,7 +921,8 @@ public class MainActivity extends Activity {
             String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri
                     + "&name=" + encodedName
                     + "&mime=" + encodedMime
-                    + "&size=" + size;
+                    + "&size=" + size
+                    + (filename != null && filename.startsWith("/") ? "&path=" + URLEncoder.encode(filename, "UTF-8") : "");
 
             obj.put("id", "android_" + System.currentTimeMillis() + "_" + Math.abs(uri.hashCode()));
             obj.put("filename", filename);

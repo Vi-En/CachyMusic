@@ -1,17 +1,17 @@
-// CachyMusic Audio Workstation - High-Performance Service Worker v10.52
-const CACHE_NAME = 'cachymusic-v10.52';
-const ART_CACHE = 'cachymusic-artwork-v2';
+// CachyMusic Audio Workstation - High-Performance Service Worker v1.1.3
+const CACHE_NAME = 'cachymusic-v1.1.3';
+const ART_CACHE = 'cachymusic-artwork-v3';
 const MAX_ARTWORK_ENTRIES = 150;
 
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './stylesheets/homepage.css?v=10.52',
+  './stylesheets/homepage.css?v=1.1.3',
   './stylesheets/homepage.css',
-  './scripts/homepage.js?v=10.52',
+  './scripts/homepage.js?v=1.1.3',
   './scripts/homepage.js',
-  './scripts/dsp-worklet-processor.js?v=10.52',
+  './scripts/dsp-worklet-processor.js?v=1.1.3',
   './scripts/dsp-worklet-processor.js',
   './resources/images/music-hanzi.svg',
   './resources/images/app-icon.svg',
@@ -76,7 +76,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   // 1. Audio stream and Range requests should pass directly to network
-  if (url.pathname.includes('stream.php') || request.headers.has('range') || request.method !== 'GET') {
+  if (request.destination === 'audio' || url.pathname.includes('stream.php') || url.pathname.includes('android-media') || request.headers.has('range') || request.method !== 'GET') {
     return;
   }
 

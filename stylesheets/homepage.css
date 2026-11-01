@@ -2033,6 +2033,13 @@ body.is-playing .statusDot
     transform: none !important;
 }
 
+:is([data-theme="brutalist-light"], [data-theme="minimalist-light"], [data-theme="minimalist-warm"], :root:not([data-theme])) :is(.actionBtn:disabled, .actionBtn.disabled, #settingsHwGainToggleBtn:disabled, #settingsHwGainToggleBtn.disabled)
+{
+    border-color: rgba(0, 0, 0, 0.18) !important;
+    color: rgba(0, 0, 0, 0.45) !important;
+    background: rgba(0, 0, 0, 0.05) !important;
+}
+
 .uploadBtn
 {
     display: inline-flex;
@@ -49509,14 +49516,15 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         .formatFilterPillsGroup {
             display: flex !important;
             align-items: center !important;
-            gap: 0.28rem !important;
+            gap: 0.32rem !important;
             flex-wrap: nowrap !important;
             overflow-x: auto !important;
             scrollbar-width: none !important;
             -webkit-overflow-scrolling: touch !important;
             flex: 1 1 auto !important;
             min-width: 0 !important;
-            padding-right: 0.25rem !important;
+            padding-right: 0.5rem !important;
+            margin-right: 0.55rem !important;
         }
 
         .formatFilterPillsGroup::-webkit-scrollbar {
@@ -49524,8 +49532,8 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         }
 
         .formatFilterPill {
-            padding: 0.26rem 0.5rem !important;
-            font-size: 0.65rem !important;
+            padding: 0.28rem 0.55rem !important;
+            font-size: 0.68rem !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
         }
@@ -49534,14 +49542,14 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            gap: 0.25rem !important;
-            padding: 0.26rem 0.55rem !important;
-            font-size: 0.65rem !important;
+            gap: 0.3rem !important;
+            padding: 0.28rem 0.65rem !important;
+            font-size: 0.68rem !important;
             font-weight: 800 !important;
             letter-spacing: 0.03em !important;
             border-radius: 999px !important;
-            background: rgba(255, 255, 255, 0.08) !important;
-            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
             color: var(--text-main, #f8fafc) !important;
             cursor: pointer !important;
             white-space: nowrap !important;
@@ -49699,38 +49707,49 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         }
 
         .playerDeck.mobileActive .toneArm {
-            width: 2.3rem !important;
-            height: calc(var(--mobile-platter-size, 14rem) * 0.72) !important;
-            right: -0.45rem !important;
-            top: -0.15rem !important;
+            width: 2.2rem !important;
+            height: calc(var(--mobile-platter-size, 14rem) * 0.76) !important;
+            right: -1.0rem !important;
+            top: 0.25rem !important;
             transform-origin: 1.1rem 1.1rem !important;
-            transform: rotate(8deg) !important;
+            transform: rotate(0deg) !important;
             z-index: 15 !important;
             transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            pointer-events: none !important;
         }
 
         .playerDeck.mobileActive .toneArm.active {
-            transform: rotate(-22deg) !important;
+            transform: rotate(-24deg) !important;
         }
 
         .playerDeck.mobileActive .toneArm .armPivot {
-            width: 2.1rem !important;
-            height: 2.1rem !important;
+            position: absolute !important;
             top: 0 !important;
-            left: 0.08rem !important;
+            left: 0 !important;
+            width: 2.2rem !important;
+            height: 2.2rem !important;
+            border-radius: 50% !important;
+            z-index: 3 !important;
         }
 
         .playerDeck.mobileActive .toneArm .armShaft {
-            height: calc(var(--mobile-platter-size, 14rem) * 0.48) !important;
+            position: absolute !important;
+            top: 1.0rem !important;
+            left: 0.99rem !important;
             width: 0.22rem !important;
-            margin-left: 0.98rem !important;
-            margin-top: 1.45rem !important;
+            height: calc(var(--mobile-platter-size, 14rem) * 0.52) !important;
+            margin: 0 !important;
+            z-index: 1 !important;
         }
 
         .playerDeck.mobileActive .toneArm .armCartridge {
+            position: absolute !important;
+            top: calc(1.0rem + var(--mobile-platter-size, 14rem) * 0.52 - 0.1rem) !important;
+            left: 0.74rem !important;
             width: 0.72rem !important;
             height: 1.2rem !important;
-            margin-left: 0.73rem !important;
+            margin: 0 !important;
+            z-index: 2 !important;
         }
 
         /* Mobile Settings Navigation & Choice Buttons */
@@ -50437,11 +50456,20 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
     /* Mobile Library Footer & Clearance Guard */
     @media (max-width: 768px) {
         .libraryFooter {
+            background: var(--bg-card, #121214) !important;
+            border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1)) !important;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.2) !important;
             margin-bottom: calc(var(--mobile-miniplayer-height, 64px) + 0.65rem) !important;
             padding: 0.75rem 1rem !important;
             position: relative !important;
             z-index: 5 !important;
             box-sizing: border-box !important;
+        }
+
+        :is([data-theme="brutalist-light"], [data-theme="minimalist-light"], [data-theme="minimalist-warm"], :root:not([data-theme])) .libraryFooter {
+            background: #ffffff !important;
+            border-top: 2px solid rgba(0, 0, 0, 0.12) !important;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06) !important;
         }
 
         #trackList {

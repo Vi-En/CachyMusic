@@ -3430,6 +3430,7 @@
     }
 
     let currentPlayRequestId = 0;
+    let currentTrackGeneration = 0;
     let activeLoadedMetadataHandler = null;
 
     // Load Track by Index in allTracks
@@ -3480,6 +3481,21 @@
             } catch (_) {}
         }
 
+        const isCrossOrigin = trackSrc.startsWith('http://') || trackSrc.startsWith('https://');
+        let needsCors = false;
+        if (isCrossOrigin) {
+            try {
+                needsCors = new URL(trackSrc, window.location.href).origin !== window.location.origin;
+            } catch (_) {}
+        }
+        if (needsCors) {
+            audio.crossOrigin = 'anonymous';
+        } else {
+            audio.removeAttribute('crossorigin');
+        }
+
+        currentTrackGeneration++;
+        audio._trackGeneration = currentTrackGeneration;
         audio.src = trackSrc;
         audio._isFreshTrackLoad = true;
         try { audio.load(); } catch (_) {}
@@ -5910,8 +5926,30 @@
                         audio.muted = data.muted || false;
                     }
                 }
+            } else {
+                markHwGainUnavailable();
             }
-        } catch (_) {}
+        } catch (_) {
+            markHwGainUnavailable();
+        }
+    }
+
+    function markHwGainUnavailable() {
+        isHardwareGain = false;
+        const pill = document.getElementById('settingsHardwareGainPill');
+        const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
+        const hwGainDot = document.getElementById('settingsHwGainDot');
+        const hwGainText = document.getElementById('settingsHwGainText');
+        if (pill) pill.textContent = 'UNAVAILABLE';
+        if (hwGainBtn) {
+            hwGainBtn.disabled = true;
+            hwGainBtn.classList.add('disabled');
+            hwGainBtn.classList.remove('active');
+            hwGainBtn.setAttribute('aria-disabled', 'true');
+            hwGainBtn.title = 'Hardware Analog Gain is unavailable on this platform or output interface.';
+        }
+        if (hwGainDot) hwGainDot.classList.remove('active');
+        if (hwGainText) hwGainText.textContent = 'HARDWARE GAIN: UNAVAILABLE';
     }
 
     function dispatchHardwareVolume(vol) {
@@ -6751,6 +6789,9 @@
                     showCachyToast('Playback Error', `"${trackTitle}": ${errorDesc}. Skipping track...`, 'warning');
                 }
 
+                // Reset dirty media element so subsequent tracks start with a completely fresh decoder pipeline
+                resetMediaElementForNewAudioContext();
+
                 // If in playlist or more tracks available, gracefully skip to next track without rapid flapping
                 setTimeout(() => {
                     const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
@@ -6850,6 +6891,10 @@
 
         targetAudio.addEventListener('ended', () => {
             if (targetAudio._isDisposed || targetAudio !== audio) return;
+            if (typeof targetAudio._trackGeneration === 'number' && targetAudio._trackGeneration !== currentTrackGeneration) {
+                console.log('[AudioEngine] Stale ended event discarded for superseded track generation');
+                return;
+            }
             try {
                 safeStorage.removeItem('cachymusic_last_track_time');
             } catch (_) {}
@@ -6860,20 +6905,24 @@
             const trackTitle = currentTrack ? (currentTrack.title || currentTrack.filename || 'Current track') : 'Audio track';
 
             // Premature Ended Guard:
-            // If the track ends within 1.5 seconds (or with >5s remaining on an established track),
-            // this is an unexpected stream disconnect/hiccup, NOT a finished song.
-            if (trackDur > 5 && curTime < 1.5) {
+            // If the track ends within 3.0 seconds (or with >5s remaining on an established track),
+            // this is an unexpected stream disconnect/hiccup or buffer underflow, NOT a finished song.
+            if ((trackDur > 5 && curTime < 3.0) || curTime === 0) {
                 console.warn(`[AudioEngine] Premature stream end detected at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}".`);
                 logAudioPlaybackEvent('warn', `Premature stream termination at ${curTime.toFixed(2)}s on "${trackTitle}"`);
                 appendDebugTelemetry(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
-                if (trackPlaybackRetryCount === 0) {
+                if (trackPlaybackRetryCount < 2) {
                     trackPlaybackRetryCount++;
                     setTimeout(() => {
                         if (!userExplicitlyPaused) {
                             try { targetAudio.load(); } catch (_) {}
                             playAudio();
                         }
-                    }, 350);
+                    }, 400);
+                    return;
+                } else {
+                    pauseAudio();
+                    showToast(`Playback paused on "${trackTitle}". Stream buffer interrupted.`);
                     return;
                 }
             } else {
@@ -7043,7 +7092,9 @@
         const newAudio = document.createElement('audio');
         newAudio.id = 'audioPlayer';
         newAudio.preload = 'auto';
-        newAudio.crossOrigin = 'anonymous';
+        if (oldAudio.crossOrigin) {
+            newAudio.crossOrigin = oldAudio.crossOrigin;
+        }
         newAudio.volume = oldAudio.volume;
         newAudio.muted = oldAudio.muted;
         newAudio.loop = oldAudio.loop;
@@ -15047,7 +15098,9 @@
         attachAudioListeners(audio);
 
         const ensureContextRunning = () => {
-            if (audioContext && audioContext.state === 'suspended') {
+            if (!audioContext || audioContext.state === 'closed') {
+                initAudioContext();
+            } else if (audioContext.state === 'suspended') {
                 audioContext.resume().catch(() => {});
             }
         };
@@ -17305,8 +17358,22 @@
             }
         }, 800);
 
-        installBtn.addEventListener('click', () => {
-            switchWorkspace(currentWorkspace === 'download' ? 'player' : 'download');
+        installBtn.addEventListener('click', async () => {
+            if (deferredInstallPrompt) {
+                try {
+                    deferredInstallPrompt.prompt();
+                    const choiceResult = await deferredInstallPrompt.userChoice;
+                    if (choiceResult && choiceResult.outcome === 'accepted') {
+                        console.log('[PWA] User accepted install prompt');
+                        deferredInstallPrompt = null;
+                        installBtn.style.display = 'none';
+                    }
+                } catch (err) {
+                    console.warn('[PWA] Install prompt failed:', err);
+                }
+            } else {
+                switchWorkspace(currentWorkspace === 'download' ? 'player' : 'download');
+            }
         });
 
         window.addEventListener('appinstalled', () => {

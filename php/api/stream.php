@@ -3,10 +3,11 @@
 @set_time_limit(0);
 @ini_set('max_execution_time', '0');
 @ini_set('memory_limit', '512M');
+@ignore_user_abort(true);
 if (function_exists('apache_setenv')) {
     @apache_setenv('no-gzip', '1');
 }
-@ini_set('zlib.output_compression', '0');
+@ini_set('zlib.output_compression', 'Off');
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (!empty($origin)) {
@@ -235,7 +236,7 @@ $start = 0;
 $end = $size - 1;
 $isRangeRequest = false;
 
-if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes=(\d*)-(\d*)/i', $_SERVER['HTTP_RANGE'], $matches)) {
+if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes\s*=\s*(\d*)\s*-\s*(\d*)/i', $_SERVER['HTTP_RANGE'], $matches)) {
     $isRangeRequest = true;
     if ($matches[1] === '' && $matches[2] !== '') {
         // RFC 7233 suffix range ("bytes=-N"): the LAST N bytes of the file
@@ -275,6 +276,7 @@ while (ob_get_level() > 0) {
 
 header("Content-Type: $mime");
 header("Accept-Ranges: bytes");
+header("Content-Encoding: identity");
 header("Cache-Control: public, max-age=86400");
 header("Content-Length: $length");
 

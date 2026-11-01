@@ -449,7 +449,7 @@
             </div>
 
             <!-- Audio Element -->
-            <audio id="audioPlayer" preload="auto" crossorigin="anonymous"></audio>
+            <audio id="audioPlayer" preload="auto"></audio>
         </section>
 
         <!-- Right Panel: Track Library & Playlists -->
@@ -1106,12 +1106,12 @@
                                     <h4 class="settingsRowTitle">HARDWARE ANALOG GAIN (DAC BRIDGE)</h4>
                                     <p class="settingsRowDesc">Locks digital stream at 0 dBFS and controls physical DAC volume directly.</p>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsHardwareGainPill">READY (PIPEWIRE)</span>
+                                <span class="settingsEnginePill" id="settingsHardwareGainPill">UNAVAILABLE</span>
                             </div>
                             <div class="settingsOptionToggles">
-                                <button type="button" id="settingsHwGainToggleBtn" class="actionBtn toggleActiveBtn">
+                                <button type="button" id="settingsHwGainToggleBtn" class="actionBtn toggleActiveBtn disabled" disabled aria-disabled="true" title="Hardware Analog Gain is unavailable on this platform or output interface.">
                                     <span class="toggleDot" id="settingsHwGainDot" style="display:none;"></span>
-                                    <span id="settingsHwGainText">HARDWARE GAIN: OFF</span>
+                                    <span id="settingsHwGainText">HARDWARE GAIN: UNAVAILABLE</span>
                                 </button>
                             </div>
                         </div>
