@@ -31,6 +31,8 @@ import android.webkit.WebViewClient;
 import androidx.documentfile.provider.DocumentFile;
 import androidx.webkit.WebViewAssetLoader;
 
+import android.content.res.AssetFileDescriptor;
+import android.os.ParcelFileDescriptor;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -38,11 +40,15 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MainActivity extends Activity {
     private static final String TAG = "CachyMusic";
@@ -242,10 +248,7 @@ public class MainActivity extends Activity {
                     if (uriParam != null) {
                         try {
                             Uri mediaUri = Uri.parse(uriParam);
-                            String mime = getContentResolver().getType(mediaUri);
-                            if (mime == null) mime = "audio/mpeg";
-                            InputStream is = getContentResolver().openInputStream(mediaUri);
-                            return new WebResourceResponse(mime, "UTF-8", is);
+                            return handleAndroidMediaStream(mediaUri, request);
                         } catch (Exception e) {
                             Log.e(TAG, "Audio stream intercept error: " + e.getMessage());
                         }
@@ -411,6 +414,158 @@ public class MainActivity extends Activity {
                     } catch (Exception ignored) {}
                 }
             }
+        }
+    }
+
+    private String detectMimeType(Uri uri, String defaultMime) {
+        try {
+            String mime = getContentResolver().getType(uri);
+            if (mime != null && !mime.equals("application/octet-stream") && !mime.trim().isEmpty()) {
+                return mime;
+            }
+        } catch (Exception ignored) {}
+
+        String path = uri.getPath();
+        if (path == null) path = uri.toString();
+        String lower = path.toLowerCase();
+        if (lower.endsWith(".flac")) return "audio/flac";
+        if (lower.endsWith(".wav")) return "audio/wav";
+        if (lower.endsWith(".ogg") || lower.endsWith(".oga")) return "audio/ogg";
+        if (lower.endsWith(".opus")) return "audio/opus";
+        if (lower.endsWith(".m4a")) return "audio/mp4";
+        if (lower.endsWith(".aac")) return "audio/aac";
+        if (lower.endsWith(".mp3")) return "audio/mpeg";
+        if (lower.endsWith(".wma")) return "audio/x-ms-wma";
+        if (lower.endsWith(".alac")) return "audio/alac";
+        if (lower.endsWith(".aiff") || lower.endsWith(".aif")) return "audio/aiff";
+        return defaultMime != null ? defaultMime : "audio/mpeg";
+    }
+
+    private static class LimitedInputStream extends FilterInputStream {
+        private long remaining;
+
+        public LimitedInputStream(InputStream in, long limit) {
+            super(in);
+            this.remaining = Math.max(0, limit);
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (remaining <= 0) return -1;
+            int b = super.read();
+            if (b != -1) remaining--;
+            return b;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            if (remaining <= 0) return -1;
+            int toRead = (int) Math.min(len, remaining);
+            int read = super.read(b, off, toRead);
+            if (read != -1) remaining -= read;
+            return read;
+        }
+
+        @Override
+        public int available() throws IOException {
+            return (int) Math.min(super.available(), remaining);
+        }
+    }
+
+    private WebResourceResponse handleAndroidMediaStream(Uri mediaUri, WebResourceRequest request) {
+        try {
+            long totalSize = -1;
+            try (AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(mediaUri, "r")) {
+                if (afd != null) {
+                    totalSize = afd.getLength();
+                }
+            } catch (Exception ignored) {}
+
+            if (totalSize < 0) {
+                try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(mediaUri, "r")) {
+                    if (pfd != null) {
+                        totalSize = pfd.getStatSize();
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            String mime = detectMimeType(mediaUri, "audio/mpeg");
+            Map<String, String> requestHeaders = request != null ? request.getRequestHeaders() : null;
+            String rangeHeader = requestHeaders != null ? requestHeaders.get("Range") : null;
+            if (rangeHeader == null && requestHeaders != null) {
+                rangeHeader = requestHeaders.get("range");
+            }
+
+            if (totalSize > 0 && rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+                String byteRange = rangeHeader.substring(6).trim();
+                long start = 0;
+                long end = totalSize - 1;
+
+                int dash = byteRange.indexOf('-');
+                if (dash >= 0) {
+                    String startStr = byteRange.substring(0, dash).trim();
+                    String endStr = byteRange.substring(dash + 1).trim();
+
+                    if (startStr.isEmpty() && !endStr.isEmpty()) {
+                        long suffix = Long.parseLong(endStr);
+                        start = Math.max(0, totalSize - suffix);
+                        end = totalSize - 1;
+                    } else {
+                        if (!startStr.isEmpty()) start = Long.parseLong(startStr);
+                        if (!endStr.isEmpty()) end = Long.parseLong(endStr);
+                    }
+                }
+
+                if (end >= totalSize) end = totalSize - 1;
+                if (start > end || start >= totalSize) {
+                    Map<String, String> errHeaders = new HashMap<>();
+                    errHeaders.put("Content-Range", "bytes */" + totalSize);
+                    errHeaders.put("Accept-Ranges", "bytes");
+                    return new WebResourceResponse(mime, "UTF-8", 416, "Range Not Satisfiable", errHeaders,
+                            new ByteArrayInputStream(new byte[0]));
+                }
+
+                long contentLength = end - start + 1;
+                InputStream is = getContentResolver().openInputStream(mediaUri);
+                if (is != null && start > 0) {
+                    long skipped = 0;
+                    while (skipped < start) {
+                        long s = is.skip(start - skipped);
+                        if (s <= 0) {
+                            if (is.read() == -1) break;
+                            s = 1;
+                        }
+                        skipped += s;
+                    }
+                }
+
+                InputStream limitedIs = new LimitedInputStream(is, contentLength);
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Content-Type", mime);
+                headers.put("Accept-Ranges", "bytes");
+                headers.put("Content-Range", "bytes " + start + "-" + end + "/" + totalSize);
+                headers.put("Content-Length", String.valueOf(contentLength));
+                headers.put("Access-Control-Allow-Origin", "*");
+                headers.put("Cache-Control", "no-cache");
+
+                return new WebResourceResponse(mime, "UTF-8", 206, "Partial Content", headers, limitedIs);
+            }
+
+            // Normal full stream response
+            InputStream is = getContentResolver().openInputStream(mediaUri);
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Content-Type", mime);
+            headers.put("Accept-Ranges", "bytes");
+            if (totalSize > 0) {
+                headers.put("Content-Length", String.valueOf(totalSize));
+            }
+            headers.put("Access-Control-Allow-Origin", "*");
+            headers.put("Cache-Control", "no-cache");
+
+            return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, is);
+        } catch (Exception e) {
+            Log.e(TAG, "Audio stream intercept error: " + e.getMessage(), e);
+            return null;
         }
     }
 

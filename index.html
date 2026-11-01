@@ -968,6 +968,16 @@
                                 <button type="button" class="actionBtn bufferLatencyBtn active" data-latency="playback">STABLE (~100ms)</button>
                             </div>
                         </div>
+
+                        <!-- 5. Settings Confirmation & Apply Action -->
+                        <div class="settingsRowItem settingsApplyRow" id="settingsRowApplyAudio">
+                            <div class="settingsApplyBar">
+                                <button type="button" id="settingsApplyAudioBtn" class="actionBtn primaryBtn settingsApplyBtn">
+                                    APPLY AUDIO SETTINGS
+                                </button>
+                                <span class="settingsApplyStatus" id="settingsApplyAudioStatus">All audio settings synced &amp; active.</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1130,6 +1140,42 @@
                                 </button>
                             </div>
                         </div>
+
+                        <!-- 4. Playback Diagnostics & Telemetry Log -->
+                        <div class="settingsRowItem" id="settingsCardAudioDebug">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">PLAYBACK DIAGNOSTICS &amp; DEBUG LOG</h4>
+                                    <p class="settingsRowDesc">Real-time decoder events, stream status, format specs &amp; skip telemetry.</p>
+                                </div>
+                                <span class="settingsEnginePill" id="settingsAudioDebugPill">DECODER ACTIVE</span>
+                            </div>
+                            <div class="settingsDspMetricsGrid" id="settingsAudioDebugGrid">
+                                <div class="settingsDspMetricItem">
+                                    <span class="settingsDspKey">LAST STREAM</span>
+                                    <span class="settingsDspVal" id="debugStreamStatus">Ready (200 OK)</span>
+                                </div>
+                                <div class="settingsDspMetricItem">
+                                    <span class="settingsDspKey">MEDIA FORMAT</span>
+                                    <span class="settingsDspVal" id="debugFormatVal">44.1 kHz • 16-Bit • FLAC</span>
+                                </div>
+                                <div class="settingsDspMetricItem">
+                                    <span class="settingsDspKey">PIPELINE STATE</span>
+                                    <span class="settingsDspVal" id="debugPipelineState">Ready (HAVE_ENOUGH_DATA)</span>
+                                </div>
+                                <div class="settingsDspMetricItem">
+                                    <span class="settingsDspKey">SKIP TELEMETRY</span>
+                                    <span class="settingsDspVal" id="debugSkipStatus">No abnormal skips (0)</span>
+                                </div>
+                            </div>
+                            <div class="settingsDebugLogBox" id="settingsAudioDebugLog" style="max-height: 110px; overflow-y: auto; font-family: var(--font-mono, monospace); font-size: 0.72rem; padding: 0.5rem; background: rgba(0,0,0,0.35); border-radius: 4px; margin-top: 0.5rem; border: 1px solid rgba(255,255,255,0.1); color: var(--text-dim, #94a3b8);">
+                                [AudioEngine] Telemetry active. Audio pipeline initialized.
+                            </div>
+                            <div class="settingsOptionToggles" style="margin-top: 0.5rem; gap: 0.4rem;">
+                                <button type="button" id="settingsCopyDebugLogBtn" class="actionBtn" style="flex: 1; font-size: 0.75rem;">COPY DIAGNOSTICS</button>
+                                <button type="button" id="settingsClearDebugLogBtn" class="actionBtn" style="flex: 1; font-size: 0.75rem;">CLEAR LOG</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1206,6 +1252,61 @@
             </button>
         </div>
     </aside>
+
+    <!-- Mobile & Desktop Track Options Action Sheet / Modal -->
+    <div class="modalBackdrop trackMenuBackdrop" id="trackActionMenuModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="trackMenuTitle">
+        <div class="modalCard trackMenuCard" id="trackMenuCard">
+            <div class="trackMenuHeader">
+                <img src="resources/images/default.svg" alt="Cover" class="trackMenuThumb" id="trackMenuThumb">
+                <div class="trackMenuMeta">
+                    <h3 class="trackMenuTitle" id="trackMenuTitle">Track Title</h3>
+                    <p class="trackMenuArtist" id="trackMenuArtist">Artist • Album</p>
+                    <div class="trackMenuPills">
+                        <span class="trackMenuFormatPill" id="trackMenuFormatPill">FLAC</span>
+                        <span class="trackMenuDurationPill" id="trackMenuDurationPill">3:44</span>
+                    </div>
+                </div>
+                <button type="button" class="closeModalBtn trackMenuCloseBtn" id="closeTrackMenuBtn" aria-label="Close track options">✕</button>
+            </div>
+            <div class="trackMenuItemsList" id="trackMenuItemsList">
+                <button type="button" class="trackMenuItemBtn" id="trackMenuPlayNextBtn">
+                    <span class="trackMenuIcon">⤹</span>
+                    <div class="trackMenuItemText">
+                        <span class="trackMenuItemLabel">Play Next</span>
+                        <span class="trackMenuItemSub">Play right after the current song</span>
+                    </div>
+                </button>
+                <button type="button" class="trackMenuItemBtn" id="trackMenuEnqueueBtn">
+                    <span class="trackMenuIcon">+Q</span>
+                    <div class="trackMenuItemText">
+                        <span class="trackMenuItemLabel">Add to Queue</span>
+                        <span class="trackMenuItemSub">Append to the end of Up Next queue</span>
+                    </div>
+                </button>
+                <button type="button" class="trackMenuItemBtn" id="trackMenuAddToPlaylistBtn">
+                    <span class="trackMenuIcon">📁</span>
+                    <div class="trackMenuItemText">
+                        <span class="trackMenuItemLabel">Add to Playlist</span>
+                        <span class="trackMenuItemSub">Save to favorites or a custom playlist</span>
+                    </div>
+                </button>
+                <button type="button" class="trackMenuItemBtn" id="trackMenuViewInfoBtn">
+                    <span class="trackMenuIcon">ℹ</span>
+                    <div class="trackMenuItemText">
+                        <span class="trackMenuItemLabel">View Audio &amp; ID3 Specs</span>
+                        <span class="trackMenuItemSub">Inspect sample rate, bit depth &amp; metadata</span>
+                    </div>
+                </button>
+                <button type="button" class="trackMenuItemBtn danger" id="trackMenuRemoveBtn">
+                    <span class="trackMenuIcon">✕</span>
+                    <div class="trackMenuItemText">
+                        <span class="trackMenuItemLabel" id="trackMenuRemoveLabel">Remove from List</span>
+                        <span class="trackMenuItemSub" id="trackMenuRemoveSub">Remove this track from active view</span>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Add Track To Playlist Modal -->
     <div class="modalBackdrop" id="playlistModal" style="display: none;">
@@ -1498,6 +1599,15 @@
                 <div class="trackLoadingProgressBar" id="trackLoadingProgressBar"></div>
             </div>
             <button type="button" id="cancelTrackLoadingBtn" class="actionBtn dangerBtn trackLoadingCancelBtn">CANCEL</button>
+        </div>
+    </div>
+
+    <!-- Theme Switching Loading Screen -->
+    <div class="modalBackdrop themeLoadingBackdrop" id="themeLoadingOverlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="themeLoadingTitle">
+        <div class="modalCard themeLoadingCard">
+            <div class="themeLoadingSpinner" aria-hidden="true"></div>
+            <h3 class="themeLoadingTitle" id="themeLoadingTitle">APPLYING THEME...</h3>
+            <p class="themeLoadingStatus" id="themeLoadingStatusText">Configuring workstation palette &amp; visual engine...</p>
         </div>
     </div>
 

@@ -23,14 +23,14 @@ async function capture() {
     });
     await new Promise(r => ws.onopen = r);
 
-    // Infinix Note 30 5G viewport
-    await send('Emulation.setDeviceMetricsOverride', { width: 392, height: 872, deviceScaleFactor: 2.75, mobile: true });
+    // Infinix Note 30 5G viewport (1080x2460 @ DPR 2.75)
+    await send('Emulation.setDeviceMetricsOverride', { width: 393, height: 895, deviceScaleFactor: 2.75, mobile: true });
 
     const views = [
         { name: 'infinix_player_fixed', tab: 'player' },
         { name: 'infinix_tracks_fixed', tab: 'tracks' },
-        { name: 'infinix_settings_fixed', tab: 'settings' },
-        { name: 'infinix_soulseek_fixed', tab: 'soulseek' }
+        { name: 'infinix_track_action_sheet', tab: 'tracks_menu' },
+        { name: 'infinix_settings_fixed', tab: 'settings' }
     ];
 
     for (const v of views) {
@@ -44,13 +44,15 @@ async function capture() {
                     if (b) b.click();
                     const mini = document.getElementById('persistentMiniPlayer');
                     if (mini) mini.style.setProperty('display', 'flex', 'important');
-                } else if ('${v.tab}' === 'soulseek') {
-                    const b = document.getElementById('mobileSoulseekTabBtn');
+                } else if ('${v.tab}' === 'tracks_menu') {
+                    const b = document.getElementById('mobileTracksTabBtn');
                     if (b) b.click();
-                    const drawer = document.getElementById('slskTransfersDrawer');
-                    if (drawer) drawer.classList.add('open');
                     const mini = document.getElementById('persistentMiniPlayer');
                     if (mini) mini.style.setProperty('display', 'flex', 'important');
+                    setTimeout(() => {
+                        const trigger = document.querySelector('.trackMenuTriggerBtn');
+                        if (trigger) trigger.click();
+                    }, 250);
                 } else if ('${v.tab}' === 'player') {
                     const b = document.getElementById('mobilePlayerTabBtn');
                     if (b) b.click();
@@ -63,7 +65,7 @@ async function capture() {
             })()`
         });
 
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 900));
 
         const shot = await send('Page.captureScreenshot', { format: 'png' });
         const filePath = path.join(outDir, `${v.name}.png`);

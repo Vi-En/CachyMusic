@@ -1,5 +1,13 @@
 <?php
 // CachyMusic - Secure Audio Streaming Service
+@set_time_limit(0);
+@ini_set('max_execution_time', '0');
+@ini_set('memory_limit', '512M');
+if (function_exists('apache_setenv')) {
+    @apache_setenv('no-gzip', '1');
+}
+@ini_set('zlib.output_compression', '0');
+
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (!empty($origin)) {
     $parsed = parse_url($origin);
@@ -170,12 +178,13 @@ if (!$isPathAllowed) {
 }
 
 // 5. Stream Audio with HTTP Byte-Range support
-ignore_user_abort(false);
+ignore_user_abort(true);
 
 while (ob_get_level() > 0) {
     @ob_end_clean();
 }
 
+clearstatcache(true, $realPath);
 $mime = $mimeMap[$ext];
 $size = (int)filesize($realPath);
 
@@ -202,7 +211,10 @@ if (isset($_GET['transcode']) && $_GET['transcode'] === '1') {
                     break;
                 }
                 echo $chunk;
-                @flush();
+                if (ob_get_level() > 0) {
+        @ob_flush();
+    }
+    @flush();
             }
             @pclose($proc);
             exit;
@@ -296,6 +308,9 @@ while ($remaining > 0 && !feof($fp)) {
     $remaining -= strlen($data);
     if (connection_aborted() || connection_status() !== CONNECTION_NORMAL) {
         break;
+    }
+    if (ob_get_level() > 0) {
+        @ob_flush();
     }
     @flush();
 }

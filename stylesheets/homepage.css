@@ -2017,6 +2017,22 @@ body.is-playing .statusDot
     color: white;
 }
 
+.actionBtn:disabled,
+.actionBtn.disabled,
+#settingsHwGainToggleBtn:disabled,
+#settingsHwGainToggleBtn.disabled
+{
+    opacity: 0.42 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    filter: grayscale(1) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    color: rgba(255, 255, 255, 0.45) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
 .uploadBtn
 {
     display: inline-flex;
@@ -2576,6 +2592,39 @@ body.is-playing .statusDot
     background: #ff1744;
     color: #ffffff;
     border-color: #ff1744;
+}
+
+.trackMenuTriggerBtn
+{
+    all: unset;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 0.35rem;
+    color: inherit;
+    opacity: 0.72;
+    transition: opacity 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.trackMenuTriggerBtn:hover
+{
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.trackMenuTriggerBtn:active
+{
+    transform: scale(0.92);
+    background: rgba(255, 255, 255, 0.16);
+    opacity: 1;
 }
 
 :root[data-theme="default"] .trackActionIconBtn,
@@ -4640,6 +4689,183 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     outline: none;
 }
 
+/* Track Action Menu Modal & Bottom Sheet */
+.trackMenuBackdrop {
+    align-items: center;
+    justify-content: center;
+}
+
+.trackMenuCard {
+    width: 26rem;
+    max-width: 95vw;
+    border-radius: 0.75rem;
+    padding: 1.15rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.trackMenuHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    min-width: 0;
+}
+
+.trackMenuThumb {
+    width: 3.2rem;
+    height: 3.2rem;
+    border-radius: 0.45rem;
+    object-fit: cover;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.trackMenuMeta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.trackMenuTitle {
+    font-size: 1rem;
+    font-weight: 800;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
+}
+
+.trackMenuArtist {
+    font-size: 0.78rem;
+    margin: 0;
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trackMenuPills {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.2rem;
+}
+
+.trackMenuFormatPill,
+.trackMenuDurationPill {
+    font-size: 0.64rem;
+    font-weight: 700;
+    font-family: monospace, "JetBrains Mono", sans-serif;
+    padding: 0.12rem 0.45rem;
+    border-radius: 0.25rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    letter-spacing: 0.03em;
+}
+
+.trackMenuCloseBtn {
+    margin-left: auto;
+    font-size: 1.2rem;
+    width: 2.2rem;
+    height: 2.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.trackMenuItemsList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.trackMenuItemBtn {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    width: 100%;
+    min-height: 3.1rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: inherit;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.trackMenuItemBtn:hover,
+.trackMenuItemBtn:focus-visible {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.trackMenuItemBtn:active {
+    transform: scale(0.98);
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.trackMenuIcon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.4rem;
+    background: rgba(255, 255, 255, 0.08);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+.trackMenuItemText {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.trackMenuItemLabel {
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.trackMenuItemSub {
+    font-size: 0.72rem;
+    opacity: 0.65;
+    line-height: 1.2;
+    margin-top: 0.15rem;
+}
+
+.trackMenuItemBtn.danger {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.25);
+    color: #f87171;
+}
+
+.trackMenuItemBtn.danger .trackMenuIcon {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+.trackMenuItemBtn.danger:active {
+    background: rgba(239, 68, 68, 0.2);
+}
+
 /* Bottom Selectable Visualizer Dock */
 .visualizerDock
 {
@@ -5688,8 +5914,6 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     }
 
     /* Visualizer Dock on Mobile */
-    body.mobile-tab-tracks .visualizerDock,
-    body.mobile-tab-info .visualizerDock,
     body.view-soulseek .visualizerDock
     {
         display: none !important;
@@ -37013,9 +37237,24 @@ html.is-firefox .visualizerDock {
         pointer-events: none !important;
     }
 
-    /* Suppress obscured visualizer dock under mobile bottom navigation bar */
+    /* Mobile Ambient Background Visualizer Effect */
     .visualizerDock {
-        display: none !important;
+        display: block !important;
+        position: fixed !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: calc(var(--touch-min, 3.6rem) + env(safe-area-inset-bottom, 0px)) !important;
+        height: 68px !important;
+        z-index: 2 !important;
+        pointer-events: none !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        opacity: 0.38 !important;
+    }
+
+    body:not(.mobile-tab-player) .visualizerDock {
+        opacity: 0.16 !important;
     }
 
     :root body .gridContainer,
@@ -37142,10 +37381,34 @@ html.is-firefox .visualizerDock {
         letter-spacing: 0.04em !important;
     }
 
-    /* Hide inline queue/play-next text pills on mobile to prevent crushing track title & artist */
-    :root body .trackItemActions .actionPillBtn,
-    body .trackItemActions .actionPillBtn {
+    /* Mobile Track Row Layout: Hide inline action buttons completely and show dedicated 3-vertical-dots trigger button */
+    :root body .trackItemActions,
+    body .trackItemActions,
+    :root body .trackItem:hover .trackItemActions,
+    body .trackItem:hover .trackItemActions,
+    :root body .trackItem:focus-within .trackItemActions,
+    body .trackItem:focus-within .trackItemActions {
         display: none !important;
+    }
+
+    :root body .trackDuration,
+    body .trackDuration,
+    :root body .trackItem:hover .trackDuration,
+    body .trackItem:hover .trackDuration,
+    :root body .trackItem:focus-within .trackDuration,
+    body .trackItem:focus-within .trackDuration {
+        display: inline-flex !important;
+        align-items: center !important;
+        font-size: 0.74rem !important;
+        flex-shrink: 0 !important;
+        margin-left: auto !important;
+        margin-right: 0.15rem !important;
+        opacity: 0.75 !important;
+    }
+
+    :root body .trackMenuTriggerBtn,
+    body .trackMenuTriggerBtn {
+        display: inline-flex !important;
     }
 
     :root body .trackItem,
@@ -37439,8 +37702,21 @@ html.is-firefox .visualizerDock {
     :root body .mobileTabBar .mobileTabBtn.active .mobileTabIcon,
     body .mobileTabBar .mobileTabBtn.active .mobileTabIcon {
         color: inherit !important;
+        filter: drop-shadow(0 0 3px currentColor) !important;
+    }
+
+    #mobilePlayerTabBtn .mobileTabIcon {
         fill: currentColor !important;
-        filter: drop-shadow(0 0 6px currentColor) !important;
+        stroke: none !important;
+    }
+
+    #mobileTracksTabBtn .mobileTabIcon,
+    #mobileInfoTabBtn .mobileTabIcon,
+    #mobileSoulseekTabBtn .mobileTabIcon,
+    #mobileSettingsTabBtn .mobileTabIcon {
+        fill: none !important;
+        stroke: currentColor !important;
+        stroke-width: 2 !important;
     }
 
     :root body .mobileTabBar .mobileTabBtn.active .mobileTabLabel,
@@ -41248,8 +41524,6 @@ body .dspDeck {
 }
 
 .peqSlider {
-    -webkit-appearance: slider-vertical;
-    appearance: slider-vertical;
     writing-mode: vertical-lr;
     direction: rtl;
     width: 24px;
@@ -49207,22 +49481,37 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
     @media (max-width: 768px) {
         /* Collapsible Sort & Tools Toggle Bar in Tracks Tab */
         .quickFormatFilterBar:not([style*="display: none"]) {
-            padding: 0.4rem 0.65rem !important;
-            gap: 0.35rem !important;
+            padding: 0.35rem 0.55rem !important;
+            gap: 0.45rem !important;
             flex-wrap: nowrap !important;
             justify-content: space-between !important;
+            align-items: center !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
         }
 
         .formatFilterPillsGroup {
-            gap: 0.22rem !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 0.28rem !important;
             flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            scrollbar-width: none !important;
+            -webkit-overflow-scrolling: touch !important;
+            flex: 1 1 auto !important;
             min-width: 0 !important;
+            padding-right: 0.25rem !important;
+        }
+
+        .formatFilterPillsGroup::-webkit-scrollbar {
+            display: none !important;
         }
 
         .formatFilterPill {
-            padding: 0.26rem 0.46rem !important;
+            padding: 0.26rem 0.5rem !important;
             font-size: 0.65rem !important;
             white-space: nowrap !important;
+            flex-shrink: 0 !important;
         }
 
         .libraryToolsToggleBtn:not([style*="display: none"]) {
@@ -49241,6 +49530,7 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
             cursor: pointer !important;
             white-space: nowrap !important;
             flex-shrink: 0 !important;
+            margin-left: auto !important;
         }
 
         :root[data-theme="default"] .libraryToolsToggleBtn,
@@ -49702,7 +49992,8 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         100% { transform: rotate(360deg); }
     }
 
-    .trackLoadingBackdrop {
+    .trackLoadingBackdrop,
+    .themeLoadingBackdrop {
         position: fixed !important;
         inset: 0 !important;
         z-index: 200000 !important;
@@ -49714,7 +50005,8 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         box-sizing: border-box !important;
     }
 
-    .trackLoadingCard {
+    .trackLoadingCard,
+    .themeLoadingCard {
         width: min(25rem, 92vw) !important;
         display: flex !important;
         flex-direction: column !important;
@@ -49730,13 +50022,15 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         box-sizing: border-box !important;
     }
 
-    :is([data-theme="minimalist-light"], [data-theme="brutalist-light"]) .trackLoadingCard {
+    :is([data-theme="minimalist-light"], [data-theme="brutalist-light"]) .trackLoadingCard,
+    :is([data-theme="minimalist-light"], [data-theme="brutalist-light"]) .themeLoadingCard {
         background: #ffffff !important;
         border: 2px solid #09090b !important;
         color: #09090b !important;
     }
 
-    html[data-theme="minimalist-warm"] .trackLoadingCard {
+    html[data-theme="minimalist-warm"] .trackLoadingCard,
+    html[data-theme="minimalist-warm"] .themeLoadingCard {
         background: #faf8f5 !important;
         border: 2px solid #b5a68f !important;
         color: #1c1917 !important;
@@ -49749,13 +50043,40 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         margin-bottom: 0.15rem;
     }
 
-    .trackLoadingSpinner {
+    .trackLoadingSpinner,
+    .themeLoadingSpinner {
         width: 2.5rem;
         height: 2.5rem;
         border-radius: 50%;
         border: 3px solid rgba(148, 163, 184, 0.25);
         border-top-color: var(--accent-primary, #38bdf8);
         animation: cachySpin 0.75s linear infinite;
+    }
+
+    .settingsApplyRow {
+        margin-top: 0.65rem;
+        padding-top: 0.65rem;
+        border-top: 1px dashed rgba(255, 255, 255, 0.14);
+    }
+    .settingsApplyBar {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        width: 100%;
+    }
+    .settingsApplyBtn {
+        width: 100% !important;
+        padding: 0.5rem 1rem !important;
+        font-size: 0.8rem !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.05em !important;
+        cursor: pointer !important;
+    }
+    .settingsApplyStatus {
+        font-size: 0.72rem;
+        color: var(--text-dim, #94a3b8);
+        text-align: center;
+        font-family: var(--font-mono, monospace);
     }
 
     .trackLoadingTitle {
@@ -49974,4 +50295,99 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         font-family: monospace, "JetBrains Mono";
         text-align: right;
         word-break: break-word;
+    }
+
+    /* Track Action Menu Theme Adaptations (High-Contrast AAA) */
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuCard {
+        background: #ffffff !important;
+        border: 2px solid #000000 !important;
+        color: #000000 !important;
+        box-shadow: 6px 6px 0px #000000 !important;
+    }
+
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuHeader {
+        border-bottom: 2px solid #000000 !important;
+    }
+
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuFormatPill,
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuDurationPill {
+        background: #e4e4e7 !important;
+        border: 1px solid #000000 !important;
+        color: #000000 !important;
+    }
+
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuItemBtn {
+        background: #f4f4f5 !important;
+        border: 1.5px solid #000000 !important;
+        color: #000000 !important;
+    }
+
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuItemBtn:hover,
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuItemBtn:focus-visible {
+        background: #e4e4e7 !important;
+        color: #000000 !important;
+    }
+
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuIcon {
+        background: #e4e4e7 !important;
+        color: #000000 !important;
+        border: 1px solid #000000 !important;
+    }
+
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuItemBtn.danger {
+        background: #fee2e2 !important;
+        border-color: #ef4444 !important;
+        color: #b91c1c !important;
+    }
+
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuItemBtn.danger .trackMenuIcon {
+        background: #fca5a5 !important;
+        color: #991b1b !important;
+    }
+
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .trackMenuTriggerBtn {
+        color: #000000 !important;
+    }
+
+    [data-theme="minimalist-warm"] .trackMenuCard {
+        background: #faf8f5 !important;
+        border: 1.5px solid #c2b5a3 !important;
+        color: #1c1917 !important;
+    }
+
+    [data-theme="minimalist-warm"] .trackMenuHeader {
+        border-bottom: 1px solid #dcd3c4 !important;
+    }
+
+    [data-theme="minimalist-warm"] .trackMenuFormatPill,
+    [data-theme="minimalist-warm"] .trackMenuDurationPill {
+        background: #eae2d6 !important;
+        border: 1px solid #c2b5a3 !important;
+        color: #1c1917 !important;
+    }
+
+    [data-theme="minimalist-warm"] .trackMenuItemBtn {
+        background: #f2ece1 !important;
+        border: 1px solid #dcd3c4 !important;
+        color: #1c1917 !important;
+    }
+
+    [data-theme="minimalist-warm"] .trackMenuItemBtn:hover,
+    [data-theme="minimalist-warm"] .trackMenuItemBtn:focus-visible {
+        background: #e7dfd3 !important;
+    }
+
+    [data-theme="minimalist-warm"] .trackMenuIcon {
+        background: #e7dfd3 !important;
+        color: #1c1917 !important;
+    }
+
+    [data-theme="minimalist-warm"] .trackMenuItemBtn.danger {
+        background: #fef2f2 !important;
+        border-color: #ef4444 !important;
+        color: #b91c1c !important;
+    }
+
+    [data-theme="minimalist-warm"] .trackMenuTriggerBtn {
+        color: #1c1917 !important;
     }

@@ -25,7 +25,8 @@ if (strpos($uri, "\0") !== false || strpos($uri, '\\') !== false || $uri[0] !== 
 
 // 1. Legacy /redirect aliases and direct hits on the router itself go to the canonical root
 if (preg_match('#^/redirect(?:/index\.html)?/?$#i', $uri) || $uri === '/index.php') {
-    header('Location: /', true, 302);
+    $qs = !empty($_SERVER['QUERY_STRING']) ? ('?' . $_SERVER['QUERY_STRING']) : '';
+    header('Location: /' . $qs, true, 302);
     exit;
 }
 
