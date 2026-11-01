@@ -1,6 +1,6 @@
 # Maintainer: CachyOS / CachyMusic Team
 pkgname=cachymusic
-pkgver=1.1.0
+pkgver=1.1.1
 pkgrel=1
 pkgdesc="Self-contained audio workstation and music player with turntable deck and studio DSP"
 arch=('any')

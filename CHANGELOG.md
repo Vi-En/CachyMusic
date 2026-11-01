@@ -4,6 +4,11 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.1] - 2026-11-01
+- Fixed mobile audio skipping and improved song playback stability.
+- Added 3-dot track options menu, debug audio diagnostics, and faster music folder loading.
+- Fixed turntable sizing and turntable needle layout on mobile.
+
 ## [1.1.0-beta] - 2026-11-01
 - Added a loading screen with a cancel button when scanning music folders.
 - Fixed the app forgetting your chosen music folder after restarting.
