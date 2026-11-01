@@ -1,5 +1,6 @@
 package org.cachymusic.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
@@ -7,9 +8,11 @@ import android.content.ClipData;
 import android.content.ContentUris;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -43,12 +46,15 @@ import java.io.FileOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import android.provider.OpenableColumns;
 
 public class MainActivity extends Activity {
     private static final String TAG = "CachyMusic";
@@ -151,6 +157,17 @@ public class MainActivity extends Activity {
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
 
+        // Ensure modern media and audio read permissions are granted on Android 13/14+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.READ_MEDIA_AUDIO}, 101);
+            }
+        } else {
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 101);
+            }
+        }
+
         webView = new WebView(this);
         webView.setBackgroundColor(0xFF0A0B0E);
         
@@ -237,7 +254,7 @@ public class MainActivity extends Activity {
                             mmr.setDataSource(MainActivity.this, Uri.parse(uriParam));
                             byte[] art = mmr.getEmbeddedPicture();
                             if (art != null) {
-                                return new WebResourceResponse("image/jpeg", "UTF-8", new ByteArrayInputStream(art));
+                                return new WebResourceResponse("image/jpeg", null, new ByteArrayInputStream(art));
                             }
                         } catch (Exception ignored) {}
                     }
@@ -248,7 +265,7 @@ public class MainActivity extends Activity {
                     if (uriParam != null) {
                         try {
                             Uri mediaUri = Uri.parse(uriParam);
-                            return handleAndroidMediaStream(mediaUri, request);
+                            return handleAndroidMediaStream(uri, mediaUri, request);
                         } catch (Exception e) {
                             Log.e(TAG, "Audio stream intercept error: " + e.getMessage());
                         }
@@ -417,16 +434,74 @@ public class MainActivity extends Activity {
         }
     }
 
-    private String detectMimeType(Uri uri, String defaultMime) {
+    private String normalizeMimeType(String mime) {
+        if (mime == null || mime.trim().isEmpty()) return "audio/mpeg";
+        String lower = mime.toLowerCase().trim();
+        if (lower.equals("audio/x-flac")) return "audio/flac";
+        if (lower.equals("audio/x-wav") || lower.equals("audio/wave")) return "audio/wav";
+        if (lower.equals("audio/x-m4a") || lower.equals("audio/m4a")) return "audio/mp4";
+        if (lower.equals("audio/mp3")) return "audio/mpeg";
+        if (lower.equals("audio/x-ogg") || lower.equals("application/ogg")) return "audio/ogg";
+        return lower;
+    }
+
+    private String detectMimeType(Uri uri, String filename, String defaultMime) {
+        if (filename != null && !filename.trim().isEmpty()) {
+            String lower = filename.toLowerCase().trim();
+            if (lower.endsWith(".flac")) return "audio/flac";
+            if (lower.endsWith(".wav")) return "audio/wav";
+            if (lower.endsWith(".ogg") || lower.endsWith(".oga")) return "audio/ogg";
+            if (lower.endsWith(".opus")) return "audio/opus";
+            if (lower.endsWith(".m4a")) return "audio/mp4";
+            if (lower.endsWith(".aac")) return "audio/aac";
+            if (lower.endsWith(".mp3")) return "audio/mpeg";
+            if (lower.endsWith(".wma")) return "audio/x-ms-wma";
+            if (lower.endsWith(".alac")) return "audio/alac";
+            if (lower.endsWith(".aiff") || lower.endsWith(".aif")) return "audio/aiff";
+        }
+
         try {
             String mime = getContentResolver().getType(uri);
             if (mime != null && !mime.equals("application/octet-stream") && !mime.trim().isEmpty()) {
-                return mime;
+                return normalizeMimeType(mime);
+            }
+        } catch (Exception ignored) {}
+
+        // Query MediaStore for exact MIME type and display name if available
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{
+                MediaStore.Audio.Media.MIME_TYPE,
+                MediaStore.Audio.Media.DISPLAY_NAME
+        }, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int mIdx = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE);
+                if (mIdx != -1) {
+                    String m = cursor.getString(mIdx);
+                    if (m != null && !m.trim().isEmpty() && !m.equals("application/octet-stream")) {
+                        return normalizeMimeType(m);
+                    }
+                }
+                int nIdx = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME);
+                if (nIdx != -1) {
+                    String n = cursor.getString(nIdx);
+                    if (n != null && n.contains(".")) {
+                        String lower = n.toLowerCase().trim();
+                        if (lower.endsWith(".flac")) return "audio/flac";
+                        if (lower.endsWith(".wav")) return "audio/wav";
+                        if (lower.endsWith(".ogg") || lower.endsWith(".oga")) return "audio/ogg";
+                        if (lower.endsWith(".opus")) return "audio/opus";
+                        if (lower.endsWith(".m4a")) return "audio/mp4";
+                        if (lower.endsWith(".aac")) return "audio/aac";
+                        if (lower.endsWith(".mp3")) return "audio/mpeg";
+                    }
+                }
             }
         } catch (Exception ignored) {}
 
         String path = uri.getPath();
         if (path == null) path = uri.toString();
+        try {
+            path = URLDecoder.decode(path, "UTF-8");
+        } catch (Exception ignored) {}
         String lower = path.toLowerCase();
         if (lower.endsWith(".flac")) return "audio/flac";
         if (lower.endsWith(".wav")) return "audio/wav";
@@ -438,15 +513,49 @@ public class MainActivity extends Activity {
         if (lower.endsWith(".wma")) return "audio/x-ms-wma";
         if (lower.endsWith(".alac")) return "audio/alac";
         if (lower.endsWith(".aiff") || lower.endsWith(".aif")) return "audio/aiff";
-        return defaultMime != null ? defaultMime : "audio/mpeg";
+
+        // Magic byte inspection (inspect first 16 bytes directly from stream)
+        try (InputStream is = getContentResolver().openInputStream(uri)) {
+            if (is != null) {
+                byte[] magic = new byte[16];
+                int read = is.read(magic);
+                if (read >= 4) {
+                    if (magic[0] == 'f' && magic[1] == 'L' && magic[2] == 'a' && magic[3] == 'C') {
+                        return "audio/flac";
+                    }
+                    if (magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F') {
+                        return "audio/wav";
+                    }
+                    if (magic[0] == 'O' && magic[1] == 'g' && magic[2] == 'g' && magic[3] == 'S') {
+                        return "audio/ogg";
+                    }
+                    if ((magic[0] & 0xFF) == 0xFF && (magic[1] & 0xE0) == 0xE0) {
+                        return "audio/mpeg";
+                    }
+                }
+                if (read >= 8) {
+                    if (magic[4] == 'f' && magic[5] == 't' && magic[6] == 'y' && magic[7] == 'p') {
+                        return "audio/mp4";
+                    }
+                }
+                if (read >= 3 && magic[0] == 'I' && magic[1] == 'D' && magic[2] == '3') {
+                    // ID3v2 container header found (commonly MP3, but can wrap FLAC/WAV/AAC)
+                    return "audio/mpeg";
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return normalizeMimeType(defaultMime != null ? defaultMime : "audio/mpeg");
     }
 
     private static class LimitedInputStream extends FilterInputStream {
         private long remaining;
+        private final ParcelFileDescriptor pfd;
 
-        public LimitedInputStream(InputStream in, long limit) {
+        public LimitedInputStream(InputStream in, long limit, ParcelFileDescriptor pfd) {
             super(in);
             this.remaining = Math.max(0, limit);
+            this.pfd = pfd;
         }
 
         @Override
@@ -470,26 +579,122 @@ public class MainActivity extends Activity {
         public int available() throws IOException {
             return (int) Math.min(super.available(), remaining);
         }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                super.close();
+            } finally {
+                if (pfd != null) {
+                    try { pfd.close(); } catch (Exception ignored) {}
+                }
+            }
+        }
     }
 
-    private WebResourceResponse handleAndroidMediaStream(Uri mediaUri, WebResourceRequest request) {
+    private InputStream openSeekableStream(Uri uri, long start, long length) {
         try {
+            ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r");
+            if (pfd != null) {
+                FileInputStream fis = new FileInputStream(pfd.getFileDescriptor());
+                if (start > 0) {
+                    fis.getChannel().position(start);
+                }
+                return new LimitedInputStream(fis, length, pfd);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "openFileDescriptor seek failed: " + e.getMessage());
+        }
+
+        try {
+            AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(uri, "r");
+            if (afd != null) {
+                FileInputStream fis = afd.createInputStream();
+                if (start > 0) {
+                    fis.getChannel().position(afd.getStartOffset() + start);
+                }
+                return new LimitedInputStream(fis, length, afd.getParcelFileDescriptor());
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "openAssetFileDescriptor seek failed: " + e.getMessage());
+        }
+
+        try {
+            InputStream is = getContentResolver().openInputStream(uri);
+            if (is != null) {
+                if (start > 0) {
+                    long skipped = 0;
+                    byte[] buf = new byte[16384];
+                    while (skipped < start) {
+                        long toSkip = start - skipped;
+                        long s = is.skip(toSkip);
+                        if (s <= 0) {
+                            int r = is.read(buf, 0, (int) Math.min(buf.length, toSkip));
+                            if (r <= 0) break;
+                            s = r;
+                        }
+                        skipped += s;
+                    }
+                }
+                return new LimitedInputStream(is, length, null);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "openInputStream fallback failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private WebResourceResponse handleAndroidMediaStream(Uri requestUri, Uri mediaUri, WebResourceRequest request) {
+        try {
+            String nameParam = requestUri != null ? requestUri.getQueryParameter("name") : null;
+            String mimeParam = requestUri != null ? requestUri.getQueryParameter("mime") : null;
+            String sizeParam = requestUri != null ? requestUri.getQueryParameter("size") : null;
+
             long totalSize = -1;
-            try (AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(mediaUri, "r")) {
-                if (afd != null) {
-                    totalSize = afd.getLength();
+            // 1. First query direct physical file size from underlying FileDescriptor (OS kernel fstat)
+            try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(mediaUri, "r")) {
+                if (pfd != null) {
+                    try (FileInputStream fis = new FileInputStream(pfd.getFileDescriptor())) {
+                        long sz = fis.getChannel().size();
+                        if (sz > 0) totalSize = sz;
+                    }
                 }
             } catch (Exception ignored) {}
 
-            if (totalSize < 0) {
-                try (ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(mediaUri, "r")) {
-                    if (pfd != null) {
-                        totalSize = pfd.getStatSize();
+            // 2. Fallback to AssetFileDescriptor length
+            if (totalSize <= 0) {
+                try (AssetFileDescriptor afd = getContentResolver().openAssetFileDescriptor(mediaUri, "r")) {
+                    if (afd != null && afd.getLength() > 0) {
+                        totalSize = afd.getLength();
                     }
                 } catch (Exception ignored) {}
             }
 
-            String mime = detectMimeType(mediaUri, "audio/mpeg");
+            // 3. Fallback to OpenableColumns.SIZE query
+            if (totalSize <= 0) {
+                try (Cursor cursor = getContentResolver().query(mediaUri, new String[]{OpenableColumns.SIZE}, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        int sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE);
+                        if (sizeIdx != -1) {
+                            long sz = cursor.getLong(sizeIdx);
+                            if (sz > 0) totalSize = sz;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // 4. Fallback to size parameter from URL query string
+            if (totalSize <= 0 && sizeParam != null && !sizeParam.isEmpty()) {
+                try {
+                    totalSize = Long.parseLong(sizeParam);
+                } catch (NumberFormatException ignored) {}
+            }
+
+            String mime = (mimeParam != null && !mimeParam.isEmpty() && !mimeParam.equals("application/octet-stream"))
+                    ? mimeParam
+                    : detectMimeType(mediaUri, nameParam, "audio/mpeg");
+            mime = normalizeMimeType(mime);
+
             Map<String, String> requestHeaders = request != null ? request.getRequestHeaders() : null;
             String rangeHeader = requestHeaders != null ? requestHeaders.get("Range") : null;
             if (rangeHeader == null && requestHeaders != null) {
@@ -521,25 +726,17 @@ public class MainActivity extends Activity {
                     Map<String, String> errHeaders = new HashMap<>();
                     errHeaders.put("Content-Range", "bytes */" + totalSize);
                     errHeaders.put("Accept-Ranges", "bytes");
-                    return new WebResourceResponse(mime, "UTF-8", 416, "Range Not Satisfiable", errHeaders,
+                    return new WebResourceResponse(mime, null, 416, "Range Not Satisfiable", errHeaders,
                             new ByteArrayInputStream(new byte[0]));
                 }
 
                 long contentLength = end - start + 1;
-                InputStream is = getContentResolver().openInputStream(mediaUri);
-                if (is != null && start > 0) {
-                    long skipped = 0;
-                    while (skipped < start) {
-                        long s = is.skip(start - skipped);
-                        if (s <= 0) {
-                            if (is.read() == -1) break;
-                            s = 1;
-                        }
-                        skipped += s;
-                    }
+                InputStream is = openSeekableStream(mediaUri, start, contentLength);
+                if (is == null) {
+                    Log.e(TAG, "Failed to open seekable stream for: " + mediaUri);
+                    return null;
                 }
 
-                InputStream limitedIs = new LimitedInputStream(is, contentLength);
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Content-Type", mime);
                 headers.put("Accept-Ranges", "bytes");
@@ -548,11 +745,17 @@ public class MainActivity extends Activity {
                 headers.put("Access-Control-Allow-Origin", "*");
                 headers.put("Cache-Control", "no-cache");
 
-                return new WebResourceResponse(mime, "UTF-8", 206, "Partial Content", headers, limitedIs);
+                return new WebResourceResponse(mime, null, 206, "Partial Content", headers, is);
             }
 
-            // Normal full stream response
-            InputStream is = getContentResolver().openInputStream(mediaUri);
+            // Normal full stream response (or when totalSize unknown)
+            long streamLength = totalSize > 0 ? totalSize : Long.MAX_VALUE;
+            InputStream is = openSeekableStream(mediaUri, 0, streamLength);
+            if (is == null) {
+                Log.e(TAG, "Failed to open full stream for: " + mediaUri);
+                return null;
+            }
+
             Map<String, String> headers = new HashMap<>();
             headers.put("Content-Type", mime);
             headers.put("Accept-Ranges", "bytes");
@@ -562,7 +765,7 @@ public class MainActivity extends Activity {
             headers.put("Access-Control-Allow-Origin", "*");
             headers.put("Cache-Control", "no-cache");
 
-            return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, is);
+            return new WebResourceResponse(mime, null, 200, "OK", headers, is);
         } catch (Exception e) {
             Log.e(TAG, "Audio stream intercept error: " + e.getMessage(), e);
             return null;
@@ -615,8 +818,14 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) {}
 
+            String detectedMime = detectMimeType(uri, filename, "audio/mpeg");
             String encodedUri = URLEncoder.encode(uri.toString(), "UTF-8");
-            String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri;
+            String encodedName = URLEncoder.encode(filename, "UTF-8");
+            String encodedMime = URLEncoder.encode(detectedMime, "UTF-8");
+            String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri
+                    + "&name=" + encodedName
+                    + "&mime=" + encodedMime
+                    + "&size=" + size;
 
             obj.put("id", "android_" + System.currentTimeMillis() + "_" + Math.abs(uri.hashCode()));
             obj.put("filename", filename);
@@ -650,7 +859,8 @@ public class MainActivity extends Activity {
                     MediaStore.Audio.Media.ALBUM,
                     MediaStore.Audio.Media.DURATION,
                     MediaStore.Audio.Media.SIZE,
-                    MediaStore.Audio.Media.DISPLAY_NAME
+                    MediaStore.Audio.Media.DISPLAY_NAME,
+                    MediaStore.Audio.Media.MIME_TYPE
                 };
                 String selection = MediaStore.Audio.Media.IS_MUSIC + " != 0";
                 String sortOrder = MediaStore.Audio.Media.TITLE + " ASC";
@@ -666,6 +876,7 @@ public class MainActivity extends Activity {
                         int durCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION);
                         int sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE);
                         int nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME);
+                        int mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE);
 
                         while (cursor.moveToNext() && list.size() < 5000) {
                             if (isScanCancelled) break;
@@ -676,6 +887,7 @@ public class MainActivity extends Activity {
                             long dur = cursor.getLong(durCol);
                             long size = cursor.getLong(sizeCol);
                             String name = cursor.getString(nameCol);
+                            String mediaMime = mimeCol != -1 ? cursor.getString(mimeCol) : null;
 
                             String resolvedFilename = name != null ? name : ((title != null ? title : "Track") + ".mp3");
                             String format = "MP3";
@@ -685,8 +897,14 @@ public class MainActivity extends Activity {
                             }
 
                             Uri trackUri = ContentUris.withAppendedId(musicUri, id);
+                            String detectedMime = detectMimeType(trackUri, resolvedFilename, mediaMime != null ? mediaMime : "audio/mpeg");
                             String encodedUri = URLEncoder.encode(trackUri.toString(), "UTF-8");
-                            String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri;
+                            String encodedName = URLEncoder.encode(resolvedFilename, "UTF-8");
+                            String encodedMime = URLEncoder.encode(detectedMime, "UTF-8");
+                            String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri
+                                    + "&name=" + encodedName
+                                    + "&mime=" + encodedMime
+                                    + "&size=" + size;
 
                             JSONObject obj = new JSONObject();
                             obj.put("id", "android_" + id);

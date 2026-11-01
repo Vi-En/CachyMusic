@@ -3487,9 +3487,9 @@
         // unless initialTime was explicitly provided (to restore last unfinished track on boot).
         const targetTime = (typeof initialTime === 'number' && !isNaN(initialTime) && initialTime > 0) ? initialTime : 0;
 
-        try {
-            audio.currentTime = targetTime;
-        } catch (_) {}
+        if (targetTime > 0 && audio.readyState >= 1) {
+            try { audio.currentTime = targetTime; } catch (_) {}
+        }
 
         if (targetTime === 0) {
             try {
@@ -4195,6 +4195,10 @@
     }
 
     function executeGaplessHandoff(nextIndex) {
+        // In Android WebView / mobile APK, bypass secondary audio swapping to ensure the canonical DOM-attached audio element is always used
+        if (window.AndroidBridge || /Android/i.test(navigator.userAgent) || window.innerWidth <= 768) {
+            return false;
+        }
         if (!secondaryAudio || preloadedNextTrackIndex !== nextIndex || secondaryAudio.readyState < 2) {
             return false;
         }
@@ -6533,6 +6537,18 @@
                 targetAudio.src = transcodeSrc;
                 try { targetAudio.load(); } catch (_) {}
                 playAudio();
+                return;
+            }
+
+            // If running inside Android APK and decode hiccup encountered, attempt 1 immediate recovery retry before skipping
+            if (isFatalDecodeError && trackPlaybackRetryCount === 0 && currentAttrSrc.includes('android-media')) {
+                trackPlaybackRetryCount++;
+                console.info(`[AudioEngine] Android media decode hiccup (${errorCode}) on "${trackTitle}"; attempting stream reload...`);
+                userExplicitlyPaused = false;
+                setTimeout(() => {
+                    try { targetAudio.load(); } catch (_) {}
+                    playAudio();
+                }, 300);
                 return;
             }
 

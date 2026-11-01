@@ -269,6 +269,10 @@ if ($start > $end || $start >= $size) {
 
 $length = $end - $start + 1;
 
+while (ob_get_level() > 0) {
+    @ob_end_clean();
+}
+
 header("Content-Type: $mime");
 header("Accept-Ranges: bytes");
 header("Cache-Control: public, max-age=86400");
