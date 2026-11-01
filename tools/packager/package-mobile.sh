@@ -21,11 +21,12 @@ cp "$PROJECT_ROOT/manifest.json" "$ASSETS_DIR/"
 cp -r "$PROJECT_ROOT/stylesheets" "$ASSETS_DIR/"
 cp -r "$PROJECT_ROOT/scripts" "$ASSETS_DIR/"
 cp -r "$PROJECT_ROOT/resources" "$ASSETS_DIR/"
+rm -rf "$ASSETS_DIR/resources/audio"
 
 # 2. Setup mock API stubs for offline standalone operation
 mkdir -p "$ASSETS_DIR/php/api"
 echo '{"success": true, "playlists": []}' > "$ASSETS_DIR/php/api/playlists.php"
-echo '{"success": true, "tracks": [], "count": 0, "directory": "Device Storage"}' > "$ASSETS_DIR/php/api/scan.php"
+echo '{"success": true, "tracks": [], "count": 0, "directory": "", "needsDirectory": true}' > "$ASSETS_DIR/php/api/scan.php"
 echo '{"success": false, "status": "offline", "message": "Standalone mode"}' > "$ASSETS_DIR/php/api/soulseek.php"
 echo '{"success": true, "supported": false}' > "$ASSETS_DIR/php/api/hardware_volume.php"
 echo '{"success": true, "command": null}' > "$ASSETS_DIR/php/api/mpris_state.php"

@@ -35,6 +35,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -44,6 +47,7 @@ import java.util.List;
 public class MainActivity extends Activity {
     private static final String TAG = "CachyMusic";
     private static final String PREFS_NAME = "cachymusic_prefs";
+    private static final String CACHED_LIB_FILE = "cached_library.json";
     private static final String STANDALONE_URL = "https://appassets.androidcache.net/index.html";
     private static final int FILECHOOSER_RESULTCODE = 1001;
     private static final int FOLDER_PICKER_RESULTCODE = 1002;
@@ -53,6 +57,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> uploadMessage;
     private WebViewAssetLoader assetLoader;
     private String currentUrl = STANDALONE_URL;
+    private volatile boolean isScanCancelled = false;
 
     public class AndroidBridge {
         @JavascriptInterface
@@ -77,6 +82,57 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void scanDeviceMusic() {
             scanMediaStoreAsync();
+        }
+
+        @JavascriptInterface
+        public void cancelScan() {
+            isScanCancelled = true;
+        }
+
+        @JavascriptInterface
+        public String getSavedLibraryJson() {
+            return readLibraryCacheJson();
+        }
+    }
+
+    private void saveLibraryCacheJson(JSONArray tracksArray, String directoryName) {
+        try {
+            JSONObject root = new JSONObject();
+            root.put("success", true);
+            root.put("directory", directoryName != null ? directoryName : "");
+            root.put("count", tracksArray != null ? tracksArray.length() : 0);
+            root.put("tracks", tracksArray != null ? tracksArray : new JSONArray());
+            byte[] bytes = root.toString().getBytes(StandardCharsets.UTF_8);
+            File cacheFile = new File(getFilesDir(), CACHED_LIB_FILE);
+            try (FileOutputStream fos = new FileOutputStream(cacheFile)) {
+                fos.write(bytes);
+                fos.flush();
+            }
+            if (prefs != null) {
+                prefs.edit().putString("last_directory", directoryName != null ? directoryName : "").apply();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to save library cache: " + e.getMessage());
+        }
+    }
+
+    private String readLibraryCacheJson() {
+        try {
+            File cacheFile = new File(getFilesDir(), CACHED_LIB_FILE);
+            if (!cacheFile.exists() || cacheFile.length() == 0) return "";
+            byte[] buf = new byte[(int) cacheFile.length()];
+            try (FileInputStream fis = new FileInputStream(cacheFile)) {
+                int read = 0;
+                while (read < buf.length) {
+                    int r = fis.read(buf, read, buf.length - read);
+                    if (r < 0) break;
+                    read += r;
+                }
+            }
+            return new String(buf, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to read library cache: " + e.getMessage());
+            return "";
         }
     }
 
@@ -204,7 +260,10 @@ public class MainActivity extends Activity {
                                 new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
                     }
                     if (path.contains("scan.php")) {
-                        String json = "{\"success\": true, \"tracks\": [], \"count\": 0, \"directory\": \"Device Storage\"}";
+                        String cached = readLibraryCacheJson();
+                        String json = (cached != null && !cached.isEmpty())
+                                ? cached
+                                : "{\"success\": true, \"tracks\": [], \"count\": 0, \"directory\": \"\", \"needsDirectory\": true}";
                         return new WebResourceResponse("application/json", "UTF-8",
                                 new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
                     }
@@ -278,6 +337,7 @@ public class MainActivity extends Activity {
     }
 
     private void scanDocumentFolderAsync(Uri treeUri) {
+        isScanCancelled = false;
         new Thread(() -> {
             try {
                 DocumentFile pickedDir = DocumentFile.fromTreeUri(this, treeUri);
@@ -285,16 +345,32 @@ public class MainActivity extends Activity {
 
                 String folderName = pickedDir.getName();
                 if (folderName == null) folderName = "Selected Folder";
+                final String fName = folderName;
+
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress(0, 0, " + JSONObject.quote(fName) + "); }";
+                    webView.evaluateJavascript(js, null);
+                });
 
                 List<JSONObject> tracksList = new ArrayList<>();
                 scanDirectoryRecursive(pickedDir, folderName, tracksList, 0);
+
+                if (isScanCancelled) {
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        webView.evaluateJavascript("if (window.onAndroidScanCancelled) { window.onAndroidScanCancelled(); }", null);
+                    });
+                    return;
+                }
 
                 JSONArray tracksArray = new JSONArray();
                 for (JSONObject obj : tracksList) {
                     tracksArray.put(obj);
                 }
 
-                final String fName = folderName;
+                if (tracksArray.length() > 0) {
+                    saveLibraryCacheJson(tracksArray, fName);
+                }
+
                 final String jsonString = tracksArray.toString();
                 new Handler(Looper.getMainLooper()).post(() -> {
                     String js = "if (window.onAndroidTracksDiscovered) { window.onAndroidTracksDiscovered("
@@ -308,11 +384,12 @@ public class MainActivity extends Activity {
     }
 
     private void scanDirectoryRecursive(DocumentFile dir, String albumDefault, List<JSONObject> results, int depth) {
-        if (depth > 6 || dir == null || results.size() > 5000) return;
+        if (isScanCancelled || depth > 6 || dir == null || results.size() > 5000) return;
         DocumentFile[] files = dir.listFiles();
         if (files == null) return;
 
         for (DocumentFile file : files) {
+            if (isScanCancelled) return;
             if (file.isDirectory()) {
                 scanDirectoryRecursive(file, file.getName(), results, depth + 1);
             } else {
@@ -320,7 +397,17 @@ public class MainActivity extends Activity {
                 if (name != null && isAudioFile(name)) {
                     try {
                         JSONObject track = createTrackMetadata(file.getUri(), name, albumDefault, file.length());
-                        if (track != null) results.add(track);
+                        if (track != null) {
+                            results.add(track);
+                            if (results.size() % 5 == 0) {
+                                final int count = results.size();
+                                final String fLabel = albumDefault != null ? albumDefault : "Selected Folder";
+                                new Handler(Looper.getMainLooper()).post(() -> {
+                                    String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress(" + count + ", 0, " + JSONObject.quote(fLabel) + "); }";
+                                    webView.evaluateJavascript(js, null);
+                                });
+                            }
+                        }
                     } catch (Exception ignored) {}
                 }
             }
@@ -397,6 +484,7 @@ public class MainActivity extends Activity {
     }
 
     private void scanMediaStoreAsync() {
+        isScanCancelled = false;
         new Thread(() -> {
             try {
                 Uri musicUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
@@ -415,6 +503,7 @@ public class MainActivity extends Activity {
                 List<JSONObject> list = new ArrayList<>();
                 try (Cursor cursor = getContentResolver().query(musicUri, projection, selection, null, sortOrder)) {
                     if (cursor != null) {
+                        final int totalRows = cursor.getCount();
                         int idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID);
                         int titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE);
                         int artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST);
@@ -424,6 +513,7 @@ public class MainActivity extends Activity {
                         int nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME);
 
                         while (cursor.moveToNext() && list.size() < 5000) {
+                            if (isScanCancelled) break;
                             long id = cursor.getLong(idCol);
                             String title = cursor.getString(titleCol);
                             String artist = cursor.getString(artistCol);
@@ -432,14 +522,21 @@ public class MainActivity extends Activity {
                             long size = cursor.getLong(sizeCol);
                             String name = cursor.getString(nameCol);
 
+                            String resolvedFilename = name != null ? name : ((title != null ? title : "Track") + ".mp3");
+                            String format = "MP3";
+                            int dotIdx = resolvedFilename.lastIndexOf('.');
+                            if (dotIdx > 0 && dotIdx < resolvedFilename.length() - 1) {
+                                format = resolvedFilename.substring(dotIdx + 1).toUpperCase();
+                            }
+
                             Uri trackUri = ContentUris.withAppendedId(musicUri, id);
                             String encodedUri = URLEncoder.encode(trackUri.toString(), "UTF-8");
                             String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri;
 
                             JSONObject obj = new JSONObject();
                             obj.put("id", "android_" + id);
-                            obj.put("filename", name != null ? name : (title + ".mp3"));
-                            obj.put("fullPath", name != null ? name : (title + ".mp3"));
+                            obj.put("filename", resolvedFilename);
+                            obj.put("fullPath", resolvedFilename);
                             obj.put("title", title != null ? title : "Unknown Title");
                             obj.put("artist", (artist != null && !artist.equals("<unknown>")) ? artist : "Unknown Artist");
                             obj.put("album", (album != null && !album.equals("<unknown>")) ? album : "Device Music");
@@ -447,18 +544,36 @@ public class MainActivity extends Activity {
                             obj.put("bitrate", 320);
                             obj.put("sampleRate", 44100);
                             obj.put("channels", 2);
-                            obj.put("format", "AUDIO");
+                            obj.put("format", format);
                             obj.put("size", size);
                             obj.put("src", streamUrl);
                             obj.put("cover", "https://appassets.androidcache.net/android-media-art?uri=" + encodedUri);
                             list.add(obj);
+
+                            if (list.size() % 10 == 0) {
+                                final int count = list.size();
+                                new Handler(Looper.getMainLooper()).post(() -> {
+                                    String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress(" + count + ", " + totalRows + ", 'Device Music Library'); }";
+                                    webView.evaluateJavascript(js, null);
+                                });
+                            }
                         }
                     }
+                }
+
+                if (isScanCancelled) {
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        webView.evaluateJavascript("if (window.onAndroidScanCancelled) { window.onAndroidScanCancelled(); }", null);
+                    });
+                    return;
                 }
 
                 JSONArray tracksArray = new JSONArray();
                 for (JSONObject obj : list) {
                     tracksArray.put(obj);
+                }
+                if (tracksArray.length() > 0) {
+                    saveLibraryCacheJson(tracksArray, "Device Music Library");
                 }
                 final String jsonString = tracksArray.toString();
                 new Handler(Looper.getMainLooper()).post(() -> {

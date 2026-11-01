@@ -179,6 +179,37 @@ while (ob_get_level() > 0) {
 $mime = $mimeMap[$ext];
 $size = (int)filesize($realPath);
 
+// Optional on-the-fly FFmpeg transcode fallback for non-standard codecs (e.g. AC3/DTS/WMA wrapped in .flac/.m4a)
+if (isset($_GET['transcode']) && $_GET['transcode'] === '1') {
+    $ffmpegBin = trim((string)@shell_exec('command -v ffmpeg 2>/dev/null'));
+    if ($ffmpegBin !== '') {
+        header("Content-Type: audio/mpeg");
+        header("Accept-Ranges: none");
+        header("Cache-Control: no-store");
+        http_response_code(200);
+        if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
+            exit;
+        }
+        $cmd = escapeshellcmd($ffmpegBin) . ' -v error -i ' . escapeshellarg($realPath) . ' -vn -acodec libmp3lame -b:a 320k -f mp3 pipe:1 2>/dev/null';
+        $proc = @popen($cmd, 'r');
+        if (is_resource($proc)) {
+            while (!feof($proc)) {
+                if (connection_aborted() || connection_status() !== CONNECTION_NORMAL) {
+                    break;
+                }
+                $chunk = fread($proc, 65536);
+                if ($chunk === false || $chunk === '') {
+                    break;
+                }
+                echo $chunk;
+                @flush();
+            }
+            @pclose($proc);
+            exit;
+        }
+    }
+}
+
 if ($size <= 0) {
     header("Content-Type: $mime");
     header("Accept-Ranges: bytes");
@@ -214,14 +245,6 @@ if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes=(\d*)-(\d*)/i', $_SERVER
     }
 }
 
-// Cap chunk windows (16MB per chunk) ONLY on Range requests to prevent socket starvation
-// Full-file GET requests should deliver the complete file
-if ($isRangeRequest) {
-    $maxChunk = 16 * 1024 * 1024;
-    if ($end - $start + 1 > $maxChunk) {
-        $end = $start + $maxChunk - 1;
-    }
-}
 if ($end >= $size) {
     $end = $size - 1;
 }

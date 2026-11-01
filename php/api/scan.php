@@ -30,15 +30,16 @@ if ($isDirectScanRequest) {
 
     $homeDir = getenv('HOME') ?: ($_SERVER['HOME'] ?? (getenv('USER') ? '/home/' . getenv('USER') : ''));
 
-    // Fallback to user Music directory or project resources/audio
+    // If no directory has been chosen yet, do not load placeholder tracks; prompt user to choose directory first
     if (empty($requestedDir)) {
-        if ($homeDir && is_dir($homeDir . '/Music/Main')) {
-            $requestedDir = $homeDir . '/Music/Main';
-        } elseif ($homeDir && is_dir($homeDir . '/Music')) {
-            $requestedDir = $homeDir . '/Music';
-        } else {
-            $requestedDir = realpath(__DIR__ . '/../../resources/audio') ?: '';
-        }
+        echo json_encode([
+            'success'        => true,
+            'directory'      => '',
+            'count'          => 0,
+            'tracks'         => [],
+            'needsDirectory' => true
+        ]);
+        exit;
     }
 
     if (!empty($requestedDir) && (str_starts_with($requestedDir, '~') || str_starts_with($requestedDir, '~/'))) {
@@ -55,7 +56,7 @@ if ($isDirectScanRequest) {
     if ($realDir === false || !is_dir($realDir) || !is_readable($realDir)) {
         echo json_encode([
             'success' => false,
-            'message' => "Directory does not exist or is not readable: " . htmlspecialchars($requestedDir)
+            'message' => "Directory does not exist or is not readable: " . htmlspecialchars($requestedDir) . ". Please set a valid directory manually in Settings → Library & Folders."
         ]);
         exit;
     }

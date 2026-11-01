@@ -738,6 +738,10 @@
                 b.classList.toggle('active', matches);
             });
         }
+
+        if (typeof updateSignalPathUi === 'function') {
+            updateSignalPathUi();
+        }
     }
 
     function switchWorkspace(viewName, targetMobilePanel = null) {
@@ -857,9 +861,6 @@
             if (typeof soulseekController !== 'undefined') {
                 soulseekController.stopTransfersPolling();
             }
-            if (typeof resumeVisualizerLoop === 'function') {
-                resumeVisualizerLoop();
-            }
 
             if (targetMobilePanel || window.innerWidth <= 768) {
                 const activeTarget = targetMobilePanel || 'playerDeck';
@@ -916,116 +917,195 @@
                 }
             }
 
+            if (typeof resumeVisualizerLoop === 'function') {
+                resumeVisualizerLoop();
+            }
+
             if (typeof resizeVisualizerCanvas === 'function') {
                 resizeVisualizerCanvas();
             }
         }
     }
 
-    // Fallback Sample Audio if no folder scanned
-    const fallbackTracks = [
-        {
-            id: 1,
-            tid: 1,
-            filename: 'boom.mp3',
-            fullPath: 'resources/audio/boom.mp3',
-            title: null,
-            artist: null,
-            album: null,
-            genre: null,
-            year: null,
-            track: null,
-            duration: 4.5,
-            bitrate: 176,
-            sampleRate: 44100,
-            channels: 2,
-            format: 'MP3',
-            size: '97.6 KB',
-            cover: null,
-            src: 'php/api/stream.php?path=' + encodeURIComponent('resources/audio/boom.mp3')
-        },
-        {
-            id: 2,
-            tid: 2,
-            filename: 'minute.mp3',
-            fullPath: 'resources/audio/minute.mp3',
-            title: null,
-            artist: null,
-            album: null,
-            genre: null,
-            year: null,
-            track: null,
-            duration: 1.52,
-            bitrate: 128,
-            sampleRate: 44100,
-            channels: 2,
-            format: 'MP3',
-            size: '23.7 KB',
-            cover: null,
-            src: 'php/api/stream.php?path=' + encodeURIComponent('resources/audio/minute.mp3')
-        },
-        {
-            id: 3,
-            tid: 3,
-            filename: 'faa+.mp3',
-            fullPath: 'resources/audio/faa+.mp3',
-            title: null,
-            artist: null,
-            album: null,
-            genre: null,
-            year: null,
-            track: null,
-            duration: 1.93,
-            bitrate: 192,
-            sampleRate: 44100,
-            channels: 2,
-            format: 'MP3',
-            size: '46.7 KB',
-            cover: null,
-            src: 'php/api/stream.php?path=' + encodeURIComponent('resources/audio/faa+.mp3')
-        },
-        {
-            id: 4,
-            tid: 4,
-            filename: 'yuh.mp3',
-            fullPath: 'resources/audio/yuh.mp3',
-            title: null,
-            artist: null,
-            album: null,
-            genre: null,
-            year: null,
-            track: null,
-            duration: 32.39,
-            bitrate: 64,
-            sampleRate: 44100,
-            channels: 2,
-            format: 'MP3',
-            size: '253.5 KB',
-            cover: null,
-            lyrics: "[00:00.00]Bass drop ready\n[00:04.00]Feel the groove on the vinyl\n[00:08.50]CachyMusic Workstation playing loud\n[00:14.00]Spin that rhythm all night long\n[00:20.00]Turntable rotating at high fidelity\n[00:26.00]Fade out into the beat",
-            src: 'php/api/stream.php?path=' + encodeURIComponent('resources/audio/yuh.mp3')
-        },
-        {
-            id: 5,
-            tid: 5,
-            filename: 'de100ddd-8e7c-448f-98f1-d5d0d4672ce7.mp3',
-            fullPath: 'resources/audio/de100ddd-8e7c-448f-98f1-d5d0d4672ce7.mp3',
-            title: 'www.voicy.network',
-            artist: 'www.voicy.network',
-            album: 'www.voicy.network',
-            genre: 'www.voicy.network',
-            year: 2024,
-            track: null,
-            duration: 1.04,
-            bitrate: 192,
-            sampleRate: 48000,
-            channels: 2,
-            format: 'MP3',
-            size: '27.2 KB',
-            cover: null,
-            src: 'php/api/stream.php?path=' + encodeURIComponent('resources/audio/de100ddd-8e7c-448f-98f1-d5d0d4672ce7.mp3')
+    // No sample placeholder tracks — user chooses music directory first
+    const fallbackTracks = [];
+
+    // =========================================================================
+    // Blocking Track Loading Overlay & IndexedDB Library Persistence
+    // =========================================================================
+    let isTrackLoadingCancelled = false;
+    let activeScanAbortController = null;
+
+    function showTrackLoadingOverlay(title = 'LOADING MUSIC LIBRARY...', statusText = 'Indexing audio files and metadata. Please wait...', progressPct = null) {
+        isTrackLoadingCancelled = false;
+        const overlay = document.getElementById('trackLoadingOverlay');
+        const titleEl = document.getElementById('trackLoadingTitle');
+        const statusEl = document.getElementById('trackLoadingStatusText');
+        const barEl = document.getElementById('trackLoadingProgressBar');
+        if (titleEl && title) titleEl.textContent = title;
+        if (statusEl && statusText) statusEl.textContent = statusText;
+        if (barEl) {
+            if (typeof progressPct === 'number') {
+                barEl.classList.remove('indeterminate');
+                barEl.style.width = `${Math.max(2, Math.min(100, progressPct))}%`;
+            } else {
+                barEl.classList.add('indeterminate');
+                barEl.style.width = '40%';
+            }
         }
-    ];
+        if (overlay) {
+            overlay.style.display = 'flex';
+        }
+    }
+
+    function updateTrackLoadingOverlay(statusText, progressPct = null) {
+        const statusEl = document.getElementById('trackLoadingStatusText');
+        const barEl = document.getElementById('trackLoadingProgressBar');
+        if (statusEl && statusText) statusEl.textContent = statusText;
+        if (barEl && typeof progressPct === 'number') {
+            barEl.classList.remove('indeterminate');
+            barEl.style.width = `${Math.max(2, Math.min(100, progressPct))}%`;
+        }
+    }
+
+    function hideTrackLoadingOverlay() {
+        const overlay = document.getElementById('trackLoadingOverlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+        activeScanAbortController = null;
+    }
+
+    function cancelActiveTrackLoading() {
+        isTrackLoadingCancelled = true;
+        if (activeScanAbortController) {
+            try { activeScanAbortController.abort(); } catch (_) {}
+            activeScanAbortController = null;
+        }
+        if (window.AndroidBridge && typeof window.AndroidBridge.cancelScan === 'function') {
+            try { window.AndroidBridge.cancelScan(); } catch (_) {}
+        }
+        hideTrackLoadingOverlay();
+        setScanStatus('Track loading cancelled by user.', false);
+        showToast('Track loading cancelled');
+    }
+
+    // Update Player Empty Prompt when no music directory is loaded
+    function updateEmptyPlayerState(errorMsg = '') {
+        const promptEl = document.getElementById('playerEmptyPrompt');
+        const errorHintEl = document.getElementById('playerEmptyErrorHint');
+        const hasTracks = Array.isArray(allTracks) && allTracks.length > 0;
+
+        if (promptEl) {
+            promptEl.style.display = hasTracks ? 'none' : 'flex';
+        }
+        if (errorHintEl) {
+            if (!hasTracks && errorMsg) {
+                errorHintEl.textContent = `${errorMsg} Please set the directory manually in Settings → Library & Folders.`;
+                errorHintEl.style.display = 'block';
+            } else {
+                errorHintEl.style.display = 'none';
+            }
+        }
+        if (trackName) trackName.style.display = hasTracks ? '' : 'none';
+        if (artistName) artistName.style.display = hasTracks ? '' : 'none';
+        if (albumName) albumName.style.display = hasTracks ? '' : 'none';
+        if (trackBadge) trackBadge.style.display = hasTracks ? '' : 'none';
+
+        if (!hasTracks) {
+            if (miniTitle) miniTitle.textContent = 'No Track Loaded';
+            if (miniArtist) miniArtist.textContent = 'Choose directory';
+        }
+        updateSignalPathUi();
+    }
+
+    // IndexedDB Persistence for Browser File/Directory Selection & Offline Tracks
+    function openLibraryIdb() {
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+            const req = window.indexedDB.open('cachymusic_idb_v1', 1);
+            req.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains('library')) {
+                    db.createObjectStore('library', { keyPath: 'key' });
+                }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async function saveLibraryToIndexedDB(tracks, directoryName) {
+        try {
+            const db = await openLibraryIdb();
+            const tx = db.transaction('library', 'readwrite');
+            const store = tx.objectStore('library');
+            const storableTracks = tracks.map(t => ({
+                id: t.id,
+                tid: t.tid || null,
+                filename: t.filename,
+                fullPath: t.fullPath,
+                title: t.title,
+                artist: t.artist,
+                album: t.album,
+                genre: t.genre,
+                year: t.year,
+                track: t.track,
+                duration: t.duration,
+                bitrate: t.bitrate,
+                sampleRate: t.sampleRate,
+                bitDepth: t.bitDepth,
+                channels: t.channels,
+                format: t.format,
+                size: t.size,
+                cover: t.cover,
+                lyrics: t.lyrics || null,
+                src: (t.src && !t.src.startsWith('blob:')) ? t.src : null,
+                fileBlob: t._fileBlob || null
+            }));
+            store.put({
+                key: 'saved_library',
+                directory: directoryName || '',
+                updatedAt: Date.now(),
+                tracks: storableTracks
+            });
+        } catch (err) {
+            console.warn('IndexedDB save warning:', err);
+        }
+    }
+
+    async function loadLibraryFromIndexedDB() {
+        try {
+            const db = await openLibraryIdb();
+            return await new Promise((resolve) => {
+                const tx = db.transaction('library', 'readonly');
+                const store = tx.objectStore('library');
+                const req = store.get('saved_library');
+                req.onsuccess = () => {
+                    const res = req.result;
+                    if (res && Array.isArray(res.tracks) && res.tracks.length > 0) {
+                        const hydrated = res.tracks.map(t => {
+                            let src = t.src;
+                            if (!src && t.fileBlob instanceof Blob) {
+                                src = URL.createObjectURL(t.fileBlob);
+                            }
+                            return {
+                                ...t,
+                                src: src || '',
+                                _fileBlob: t.fileBlob || null
+                            };
+                        }).filter(t => Boolean(t.src));
+                        resolve({ directory: res.directory || '', tracks: hydrated });
+                    } else {
+                        resolve(null);
+                    }
+                };
+                req.onerror = () => resolve(null);
+            });
+        } catch (_) {
+            return null;
+        }
+    }
 
     function formatTime(seconds) {
         if (!seconds || isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '0:00';
@@ -1212,15 +1292,43 @@
         startVisualizerLoop();
         await loadPlaylists();
 
-        // Scan directory (defaults to last designated directory from localStorage or server DefaultDirectory)
+        // Restore saved directory or cached library on startup
         const savedDir = (safeStorage.getItem('cachymusic_last_directory') || '').trim();
-        const initialDir = savedDir || (folderPathInput && folderPathInput.value.trim() && !folderPathInput.value.includes('music-player') ? folderPathInput.value.trim() : '');
-        if (savedDir && folderPathInput) {
-            folderPathInput.value = savedDir;
+        const savedMode = (safeStorage.getItem('cachymusic_directory_mode') || '').trim();
+        if (savedDir) {
+            if (folderPathInput) folderPathInput.value = savedDir;
+            const sInput = document.getElementById('settingsTabFolderPathInput');
+            if (sInput) sInput.value = savedDir;
         }
-        await scanDirectory(initialDir, false);
 
-        // If no tracks returned from server/directory, restore from cached offline library
+        // 1. Check Android Native Bridge saved library first (on APK)
+        if (window.AndroidBridge && typeof window.AndroidBridge.getSavedLibraryJson === 'function') {
+            try {
+                const rawJson = window.AndroidBridge.getSavedLibraryJson();
+                if (rawJson) {
+                    const parsed = JSON.parse(rawJson);
+                    if (parsed && Array.isArray(parsed.tracks) && parsed.tracks.length > 0) {
+                        allTracks = parsed.tracks;
+                        const dirName = parsed.directory || savedDir || 'Music Folder';
+                        if (folderPathInput) folderPathInput.value = dirName;
+                        const sInput = document.getElementById('settingsTabFolderPathInput');
+                        if (sInput) sInput.value = dirName;
+                        try { safeStorage.setItem('cachymusic_last_directory', dirName); } catch (_) {}
+                        applySearchAndSort();
+                        setScanStatus(`Restored ${allTracks.length} tracks from "${dirName}".`, false);
+                    }
+                }
+            } catch (err) {
+                console.warn('AndroidBridge saved library restore error:', err);
+            }
+        }
+
+        // 2. If not restored from AndroidBridge and not a pure browser-blob directory, try scanning saved server directory
+        if (allTracks.length === 0 && savedMode !== 'browser_idb') {
+            await scanDirectory(savedDir, false, true);
+        }
+
+        // 3. If still empty, check localStorage cached Android tracks
         if (allTracks.length === 0) {
             try {
                 const cachedRaw = safeStorage.getItem('cachymusic_android_tracks');
@@ -1229,8 +1337,7 @@
                     if (Array.isArray(cached) && cached.length > 0) {
                         allTracks = cached;
                         applySearchAndSort();
-                        loadTrack(0, false);
-                        setScanStatus(`Restored ${cached.length} tracks from offline library.`, false);
+                        setScanStatus(`Restored ${cached.length} tracks from saved library.`, false);
                     }
                 }
             } catch (err) {
@@ -1238,6 +1345,23 @@
             }
         }
 
+        // 4. If still empty, check IndexedDB saved library (browser folder picker / local files)
+        if (allTracks.length === 0) {
+            const idbLib = await loadLibraryFromIndexedDB();
+            if (idbLib && Array.isArray(idbLib.tracks) && idbLib.tracks.length > 0) {
+                allTracks = idbLib.tracks;
+                if (idbLib.directory) {
+                    if (folderPathInput) folderPathInput.value = idbLib.directory;
+                    const sInput = document.getElementById('settingsTabFolderPathInput');
+                    if (sInput) sInput.value = idbLib.directory;
+                    try { safeStorage.setItem('cachymusic_last_directory', idbLib.directory); } catch (_) {}
+                }
+                applySearchAndSort();
+                setScanStatus(`Restored ${allTracks.length} tracks from "${idbLib.directory || 'Saved Folder'}".`, false);
+            }
+        }
+
+        updateEmptyPlayerState();
         await restoreSessionState();
 
         // Restore saved metadata panel state (persisted across sessions)
@@ -1469,11 +1593,29 @@
     }
 
     // Scan Directory via Server API
-    async function scanDirectory(path, autoSelectTrack = true) {
-        setScanStatus('Reading embedded track metadata...', false);
+    async function scanDirectory(path, autoSelectTrack = true, isSilentBoot = false) {
+        const cleanPath = (path || '').trim();
+        let errorNotice = '';
+        if (!isSilentBoot) {
+            showTrackLoadingOverlay(
+                'LOADING MUSIC LIBRARY...',
+                cleanPath ? `Scanning "${cleanPath}" and indexing track metadata...` : 'Checking saved music directory...'
+            );
+        }
+        setScanStatus(cleanPath ? `Scanning "${cleanPath}"...` : 'Checking saved music directory...', false);
+
+        if (activeScanAbortController) {
+            try { activeScanAbortController.abort(); } catch (_) {}
+        }
+        activeScanAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
         try {
-            const endpoint = path ? `php/api/scan.php?directory=${encodeURIComponent(path)}` : 'php/api/scan.php';
-            const res = await fetch(endpoint);
+            const endpoint = cleanPath ? `php/api/scan.php?directory=${encodeURIComponent(cleanPath)}` : 'php/api/scan.php';
+            const res = await fetch(endpoint, activeScanAbortController ? { signal: activeScanAbortController.signal } : {});
+            if (isTrackLoadingCancelled) {
+                hideTrackLoadingOverlay();
+                return;
+            }
             if (res.ok) {
                 const data = await res.json();
                 if (data.success && Array.isArray(data.tracks) && data.tracks.length > 0) {
@@ -1482,33 +1624,50 @@
                     } else {
                         allTracks = data.tracks;
                     }
-                    const activeDir = data.directory || path;
+                    const activeDir = data.directory || cleanPath;
                     if (folderPathInput) folderPathInput.value = activeDir;
                     const settingsTabFolderPathInput = document.getElementById('settingsTabFolderPathInput');
                     if (settingsTabFolderPathInput) settingsTabFolderPathInput.value = activeDir;
                     if (activeDir) {
                         try {
                             safeStorage.setItem('cachymusic_last_directory', activeDir);
+                            safeStorage.setItem('cachymusic_directory_mode', 'server');
                         } catch (_) {}
                     }
-                    setScanStatus(`Scanned ${data.count} audio tracks with embedded tags from ${data.directory}`, false);
+                    setScanStatus(`Scanned ${data.count} audio tracks from ${activeDir}`, false);
+                } else if (data.needsDirectory) {
+                    setScanStatus('No music directory selected yet. Choose a directory to load tracks.', false);
                 } else if (!data.success) {
-                    setScanStatus(data.message || 'Folder scan failed.', true);
-                    if (allTracks.length === 0) allTracks = fallbackTracks;
+                    errorNotice = data.message || 'Directory scan failed.';
+                    setScanStatus(`${errorNotice} Please configure the directory manually in Settings → Library & Folders.`, true);
                 } else {
-                    setScanStatus('No supported audio files found in directory.', true);
-                    if (allTracks.length === 0) allTracks = fallbackTracks;
+                    errorNotice = cleanPath ? `No supported audio files found in "${cleanPath}".` : '';
+                    setScanStatus(
+                        cleanPath
+                            ? `No supported audio files found in "${cleanPath}". Please configure your folder manually in Settings → Library & Folders.`
+                            : 'Choose a music directory to load tracks.',
+                        Boolean(cleanPath)
+                    );
                 }
             } else {
-                setScanStatus(`Server error (${res.status}). Using fallback sample tracks.`, true);
-                if (allTracks.length === 0) allTracks = fallbackTracks;
+                errorNotice = `Could not read directory (HTTP ${res.status}).`;
+                setScanStatus(`${errorNotice} Please configure it manually in Settings → Library & Folders.`, true);
             }
         } catch (err) {
+            if (err && err.name === 'AbortError') {
+                hideTrackLoadingOverlay();
+                return;
+            }
             console.warn('Scan API error:', err);
-            setScanStatus('Network error while scanning. Using fallback tracks.', true);
-            if (allTracks.length === 0) allTracks = fallbackTracks;
+            if (!isSilentBoot) {
+                errorNotice = 'Unable to scan directory.';
+                setScanStatus('Unable to scan directory. Please configure it manually in Settings → Library & Folders.', true);
+            }
+        } finally {
+            hideTrackLoadingOverlay();
         }
 
+        updateEmptyPlayerState(errorNotice);
         applySearchAndSort();
         if (allTracks.length > 0 && autoSelectTrack) {
             let targetIdx = 0;
@@ -1719,9 +1878,7 @@
             } else {
                 audio.src = '';
                 pauseAudio();
-                trackName.textContent = 'No tracks loaded';
-                artistName.textContent = '—';
-                albumName.textContent = '—';
+                updateEmptyPlayerState();
             }
         } else if (currentTrackIndex > idxInAll) {
             currentTrackIndex--;
@@ -1738,6 +1895,7 @@
                 dismissedTracksMap.delete(key);
                 const insertIdx = Math.min(idxInAll, allTracks.length);
                 allTracks.splice(insertIdx, 0, removedTrack);
+                updateEmptyPlayerState();
                 applySearchAndSort();
                 updateRestoreBtnUi();
                 showToast(`Restored "${trackTitle}" to list`);
@@ -1751,6 +1909,19 @@
         if (isTrackListDelegated || !trackList) return;
         isTrackListDelegated = true;
         trackList.addEventListener('click', (e) => {
+            const emptyChooseBtn = e.target.closest('#emptyTrackListChooseDirBtn');
+            if (emptyChooseBtn) {
+                const chooseTrigger = document.getElementById('playerChooseDirBtn') || document.getElementById('settingsChooseFolderBtn') || browseFolderBtn;
+                if (chooseTrigger) chooseTrigger.click();
+                return;
+            }
+            const emptySettingsBtn = e.target.closest('#emptyTrackListOpenSettingsBtn');
+            if (emptySettingsBtn) {
+                switchWorkspace('settings');
+                const libCatBtn = document.querySelector('#settingsCategoryNav .settingsCatBtn[data-cat="library"]');
+                if (libCatBtn) libCatBtn.click();
+                return;
+            }
             const emptyBrowseBtn = e.target.closest('#emptyBrowseTracksBtn');
             if (emptyBrowseBtn) {
                 const plName = currentPlaylistName;
@@ -2011,6 +2182,17 @@
                         </button>
                     </div>
                 `;
+            } else if (allTracks.length === 0) {
+                trackList.innerHTML = `
+                    <div class="emptyLibraryNotice">
+                        <h3 class="emptyPlaylistTitle">No Music Directory Loaded</h3>
+                        <p class="emptyPlaylistDesc">Choose your music directory first to load tracks. In case of error, configure the folder manually in <strong>Settings &rarr; Library &amp; Folders</strong>.</p>
+                        <div class="emptyLibraryActions">
+                            <button type="button" class="actionBtn primaryBtn" id="emptyTrackListChooseDirBtn">CHOOSE DIRECTORY</button>
+                            <button type="button" class="actionBtn" id="emptyTrackListOpenSettingsBtn">MANUAL SETTINGS</button>
+                        </div>
+                    </div>
+                `;
             } else {
                 trackList.innerHTML = `
                     <div style="padding: 2.5rem 1rem; text-align: center; color: #cbd5e1; font-size: 1.05rem;">
@@ -2081,31 +2263,34 @@
             card.className = 'playlistCardItem richPlaylistCard';
             card.dataset.plid = pl.plid;
             card.innerHTML = `
-                <div class="playlistCardArtwork">
-                    <span class="playlistIcon">🎵</span>
-                </div>
-                <div class="playlistCardMain">
-                    <div class="playlistCardTitleRow">
-                        <span class="playlistCardName">${escapeHtml(pl.name)}</span>
+                <div class="playlistCardTopRow">
+                    <div class="playlistCardArtwork">
+                        <span class="playlistIcon">🎵</span>
                     </div>
-                    <div class="playlistCardMetaRow">
-                        <span class="playlistMetaPill">${count} TRACK${count === 1 ? '' : 'S'}</span>
-                        <span class="playlistMetaDuration">${estText}</span>
+                    <div class="playlistCardMain">
+                        <div class="playlistCardTitleRow">
+                            <span class="playlistCardName">${escapeHtml(pl.name)}</span>
+                        </div>
+                        <div class="playlistCardMetaRow">
+                            <span class="playlistMetaPill">${count} TRACK${count === 1 ? '' : 'S'}</span>
+                            <span class="playlistMetaDuration">${estText}</span>
+                        </div>
                     </div>
+                    <button type="button" class="playlistCardDeleteBtn" title="Delete playlist" aria-label="Delete playlist ${escapeHtml(pl.name)}" data-plid="${pl.plid}">
+                        ✕
+                    </button>
                 </div>
                 <div class="playlistCardQuickActions">
                     <button type="button" class="playlistActionPlayBtn" title="Play entire playlist now" data-plid="${pl.plid}">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>
                         <span>PLAY</span>
                     </button>
                     <button type="button" class="playlistActionShuffleBtn" title="Shuffle playlist" data-plid="${pl.plid}">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+                        <span>SHUFFLE</span>
                     </button>
                     <button type="button" class="playlistActionQueueBtn" title="Add all tracks to play queue" data-plid="${pl.plid}">
-                        <span>+Q</span>
-                    </button>
-                    <button type="button" class="playlistCardDeleteBtn" title="Delete playlist" data-plid="${pl.plid}">
-                        ✕
+                        <span>+ QUEUE</span>
                     </button>
                 </div>
             `;
@@ -2244,10 +2429,12 @@
             safeStorage.setItem('cachymusic_last_playlist_name', name || '');
         } catch (_) {}
 
+        const quickFormatBar = document.getElementById('quickFormatFilterBar');
         tabPlaylists.classList.remove('active');
         tabLibrary.classList.add('active');
         playlistsView.style.display = 'none';
         libraryControls.style.display = 'none';
+        if (quickFormatBar) quickFormatBar.style.display = 'flex';
         playlistBanner.style.display = 'flex';
         trackList.style.display = 'flex';
 
@@ -2298,10 +2485,12 @@
             safeStorage.removeItem('cachymusic_last_playlist_name');
         } catch (_) {}
 
+        const quickFormatBar = document.getElementById('quickFormatFilterBar');
         playlistBanner.style.display = 'none';
         trackList.style.display = 'none';
         if (queueView) queueView.style.display = 'none';
         libraryControls.style.display = 'none';
+        if (quickFormatBar) quickFormatBar.style.display = 'none';
         tabLibrary.classList.remove('active');
         if (tabQueue) tabQueue.classList.remove('active');
         tabPlaylists.classList.add('active');
@@ -2321,8 +2510,10 @@
             safeStorage.removeItem('cachymusic_last_playlist_name');
         } catch (_) {}
 
+        const quickFormatBar = document.getElementById('quickFormatFilterBar');
         playlistBanner.style.display = 'none';
         libraryControls.style.display = 'flex';
+        if (quickFormatBar) quickFormatBar.style.display = 'flex';
         applySearchAndSort();
     }
 
@@ -2737,57 +2928,205 @@
     }
 
     // =========================================================================
-    // Roon-Grade Audiophile Signal Path Inspector & Quality Audit
+    // Signal Path & Audit (Honest, Real-Time Pipeline Telemetry)
     // =========================================================================
+    function resolveTrackFormat(track) {
+        if (!track) return '';
+        let fmt = (track.format || '').toUpperCase().trim();
+        if (!fmt || fmt === 'AUDIO') {
+            const fname = track.filename || track.fullPath || '';
+            const dotIdx = fname.lastIndexOf('.');
+            if (dotIdx !== -1 && dotIdx < fname.length - 1) {
+                fmt = fname.substring(dotIdx + 1).toUpperCase().trim();
+            }
+        }
+        return fmt || 'PCM';
+    }
+
     function updateSignalPathUi(track = allTracks[currentTrackIndex]) {
-        const format = track ? (track.format || (track.filename ? track.filename.split('.').pop() : 'PCM')).toUpperCase() : 'PCM';
-        const isLossless = track ? ['FLAC', 'WAV', 'ALAC', 'AIFF', 'APE', 'WV', 'DSD', 'DSF'].includes(format) : true;
-        const dspActive = hasActiveDsp();
+        // Always keep player deck button label strictly as "SPA"
+        if (signalPathLabel) {
+            signalPathLabel.textContent = 'SPA';
+        }
+
         const curTheme = getActiveTheme();
         const isLightSurface = (curTheme === 'default' || curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm');
-        const bitLabel = isPrecision64 ? '64-BIT' : '32-BIT';
+        const hasTrack = Boolean(track && allTracks.length > 0);
+        const format = hasTrack ? resolveTrackFormat(track) : 'NONE';
+        const isLossless = hasTrack && ['FLAC', 'WAV', 'ALAC', 'AIFF', 'APE', 'WV', 'DSD', 'DSF', 'PCM'].includes(format);
 
-        if (isLossless && !dspActive) {
+        // Determine active DSP & EQ stages honestly
+        const hasPeq = !isPeqBypassed && Array.isArray(peqGains) && peqGains.some(g => Math.abs(g) > 0.05);
+        const maxBoostDb = (!isPeqBypassed && Array.isArray(peqGains)) ? Math.max(0, ...peqGains) : 0;
+        const activeStages = [];
+        if (isSubsonic) activeStages.push('20Hz Subsonic');
+        if (hasPeq) activeStages.push('10-Band PEQ');
+        if (isBassBoost) activeStages.push('Bass');
+        if (isVocalBoost) activeStages.push('Vocal');
+        if (isTrebleBoost) activeStages.push('Treble');
+        if (isAmpBoost || currentVolumeValue > 1.0) activeStages.push('Pre-Amp');
+        if (isCrossfeed) activeStages.push('HRTF Crossfeed');
+        if (isSurroundWidener) activeStages.push('Surround M/S');
+        if (isAmbiophonics) activeStages.push('Ambiophonics');
+        if (isPhaseInvert) activeStages.push('180° Phase');
+        if (isMonoMix) activeStages.push('Mono Sum');
+        if (isAgpEnabled) activeStages.push('AGP Guard');
+        if (isLimiter) activeStages.push('Peak Limiter');
+        if (isUltrasonic) activeStages.push(`Ultrasonic (${Math.round(ultrasonicCutoff / 1000)}kHz)`);
+        if (isReplayGain) activeStages.push('ReplayGain');
+
+        const dspActive = hasActiveDsp();
+        const workletPrecisionStr = isPrecision64 ? '64-Bit Double-Float Worklet' : '32-Bit Fast-Float Biquad';
+        const shortEngineLabel = isPrecision64 ? '64-BIT WORKLET' : '32-BIT FLOAT';
+
+        // 1. Update Top Summary Badge, Description & Indicator Dot
+        if (!hasTrack) {
             if (auditQualityBadge) {
-                auditQualityBadge.textContent = 'LOSSLESS BIT-PERFECT';
+                auditQualityBadge.textContent = `IDLE (${shortEngineLabel} READY)`;
+                auditQualityBadge.className = 'signalQualityBadge highPrecision';
+            }
+            if (auditQualityDesc) {
+                auditQualityDesc.textContent = `No audio track loaded. Browser Web Audio decodes streams to 32-bit IEEE 754 float; DSP worklet is configured for ${isPrecision64 ? '64-bit double-precision' : '32-bit single-precision'} math.`;
+            }
+            const dotCol = isLightSurface ? '#475569' : '#94a3b8';
+            if (deckSignalDot) deckSignalDot.style.color = dotCol;
+            if (auditQualityDot) auditQualityDot.style.color = dotCol;
+        } else if (isLossless && !hasPeq && !isBassBoost && !isVocalBoost && !isTrebleBoost && !isCrossfeed && !isSurroundWidener && !isAmbiophonics && !isPhaseInvert && !isMonoMix) {
+            if (auditQualityBadge) {
+                auditQualityBadge.textContent = `LOSSLESS ${format} → ${shortEngineLabel}`;
                 auditQualityBadge.className = 'signalQualityBadge bitPerfect';
             }
             if (auditQualityDesc) {
-                auditQualityDesc.textContent = 'Audio is transmitted directly from source bitstream to DAC with zero phase alteration, pristine bit-depth preservation, and true-peak protection.';
+                auditQualityDesc.textContent = `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${isUltrasonic || ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
             }
-            if (signalPathLabel) signalPathLabel.textContent = 'BIT-PERFECT';
             const dotCol = isLightSurface ? '#065f46' : '#10b981';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
-        } else if (isLossless && dspActive) {
+        } else if (isLossless) {
             if (auditQualityBadge) {
-                auditQualityBadge.textContent = `${bitLabel} DSP ENHANCED`;
+                auditQualityBadge.textContent = `LOSSLESS ${format} → ${isPrecision64 ? '64-BIT' : '32-BIT'} DSP`;
                 auditQualityBadge.className = 'signalQualityBadge dspEnhanced';
             }
             if (auditQualityDesc) {
-                auditQualityDesc.textContent = `High-resolution source processed inside ${bitLabel.toLowerCase()} floating-point Neutron-grade audio engine with Automatic Gain Protection (AGP) and studio equalization.`;
+                auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
             }
-            if (signalPathLabel) signalPathLabel.textContent = `${bitLabel} DSP`;
             const dotCol = isLightSurface ? '#9a3412' : '#fbbf24';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         } else {
             if (auditQualityBadge) {
-                auditQualityBadge.textContent = `${bitLabel} PRECISION DECODE`;
+                auditQualityBadge.textContent = `${format} LOSSY → ${dspActive ? (isPrecision64 ? '64-BIT DSP' : '32-BIT DSP') : '32-BIT DECODE'}`;
                 auditQualityBadge.className = 'signalQualityBadge highPrecision';
             }
             if (auditQualityDesc) {
-                auditQualityDesc.textContent = `Compressed format decoded into full IEEE 754 ${bitLabel.toLowerCase()} floating point internal representation with Automatic Gain Protection (AGP).`;
+                auditQualityDesc.textContent = `Compressed ${format} stream decoded by browser into 32-bit IEEE 754 floating-point PCM${activeStages.length > 0 ? `, processed via ${workletPrecisionStr} (${activeStages.join(', ')})` : ' with flat EQ response'}.`;
             }
-            if (signalPathLabel) signalPathLabel.textContent = `${bitLabel} CORE`;
             const dotCol = isLightSurface ? '#075985' : '#38bdf8';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         }
 
-        const latencyMs = (audioContext && audioContext.baseLatency ? (audioContext.baseLatency * 1000) : 5.3).toFixed(1);
+        // 2. Update Detailed 4-Stage Signal Chain Breakdown in Modal
+        const stageSourceEl = document.getElementById('auditStageSource');
+        const stageDecodeEl = document.getElementById('auditStageDecode');
+        const stageDspEl = document.getElementById('auditStageDsp');
+        const stageOutputEl = document.getElementById('auditStageOutput');
+
+        const currentRate = audioContext ? audioContext.sampleRate : ((track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100);
+        const rateStr = currentRate >= 1000 ? `${(currentRate / 1000).toFixed(1)} kHz` : `${currentRate} Hz`;
+
+        if (stageSourceEl) {
+            if (!hasTrack) {
+                stageSourceEl.textContent = 'Idle (No track loaded)';
+            } else {
+                const bd = track.bitDepth || (isLossless ? ((currentRate >= 88200) ? 24 : 16) : null);
+                const br = track.bitrate ? `${track.bitrate} kbps` : '';
+                const ch = track.channels === 1 ? 'Mono' : 'Stereo';
+                stageSourceEl.textContent = [
+                    `${format} (${isLossless ? 'Lossless' : 'Lossy'})`,
+                    bd ? `${bd}-Bit` : '',
+                    rateStr,
+                    br,
+                    ch
+                ].filter(Boolean).join(' • ');
+            }
+        }
+
+        if (stageDecodeEl) {
+            stageDecodeEl.textContent = `32-Bit IEEE 754 Float PCM @ ${rateStr}`;
+        }
+
+        if (stageDspEl) {
+            const stagesText = activeStages.length > 0 ? activeStages.join(' + ') : 'Flat Bypass';
+            stageDspEl.textContent = `${workletPrecisionStr} (${stagesText})`;
+        }
+
+        const ditherLabel = ditherMode === 'shaped'
+            ? 'Psychoacoustic Shaped (>18 kHz)'
+            : (ditherMode === 'tpdf' ? 'TPDF Flat Dither' : 'Unshaped Truncation (Off)');
+        const volPct = Math.round(currentVolumeValue * 100);
+        const gainModeStr = isHardwareGain ? `Hardware DAC Bridge (${volPct}%)` : `Digital Gain (${volPct}%)`;
+
+        if (stageOutputEl) {
+            stageOutputEl.textContent = `${ditherLabel} • ${gainModeStr}`;
+        }
+
+        // 3. Update Metrics Cards (Headroom, Latency, Precision) & Settings Telemetry
+        let maxTotalBoost = maxBoostDb;
+        if (isBassBoost) maxTotalBoost = Math.max(maxTotalBoost, 3.8);
+        if (isTrebleBoost) maxTotalBoost = Math.max(maxTotalBoost, 3.0);
+        if (isVocalBoost) maxTotalBoost = Math.max(maxTotalBoost, 2.8);
+        const preampAttenDb = maxTotalBoost > 0 ? -(maxTotalBoost * 0.70) : 0;
+        const volDb = currentVolumeValue > 0 ? (20 * Math.log10(currentVolumeValue)) : -60;
+        const netHeadroomDb = Math.max(0, -(preampAttenDb + Math.min(0, volDb)));
+        if (auditMetricHeadroom) {
+            if (maxTotalBoost > 0) {
+                auditMetricHeadroom.textContent = `${preampAttenDb.toFixed(1)} dB Pre-Amp (${netHeadroomDb.toFixed(1)} dB Guard)`;
+            } else {
+                auditMetricHeadroom.textContent = `+${Math.max(0.6, netHeadroomDb).toFixed(1)} dB (${currentVolumeValue > 1.0 ? 'Amplified' : 'Unity Guard'})`;
+            }
+        }
+
+        let latencyMs = bufferLatencyTarget === 'interactive' ? 15.0 : 100.0;
+        if (audioContext) {
+            const ctxLat = ((audioContext.baseLatency || 0) + (audioContext.outputLatency || 0)) * 1000;
+            if (ctxLat > 0) latencyMs = ctxLat;
+        }
+        const latencyModeStr = bufferLatencyTarget === 'interactive' ? 'Low-Latency' : 'Stable Buffer';
         if (auditMetricLatency) {
-            auditMetricLatency.textContent = `~${latencyMs} ms (${latencyMs < 8 ? 'Ultra-Low' : 'Low'})`;
+            auditMetricLatency.textContent = `~${latencyMs.toFixed(1)} ms (${latencyModeStr})`;
+        }
+
+        const auditMetricPrecision = document.getElementById('auditMetricPrecision');
+        const auditMetricPrecisionDesc = document.getElementById('auditMetricPrecisionDesc');
+        if (auditMetricPrecision) {
+            auditMetricPrecision.textContent = isPrecision64
+                ? '32-Bit Decode / 64-Bit DSP'
+                : '32-Bit IEEE 754 Float';
+        }
+        if (auditMetricPrecisionDesc) {
+            auditMetricPrecisionDesc.textContent = isPrecision64
+                ? 'Browser decodes audio to 32-bit float; AudioWorklet computes biquad filters and dithering in 64-bit double float.'
+                : 'Browser decodes and processes all audio stages in standard 32-bit single-precision IEEE 754 floating point.';
+        }
+
+        // Sync Settings Tab Telemetry Grid
+        const settingsDspEngineVal = document.getElementById('settingsDspEngineVal');
+        const settingsDspHeadroomVal = document.getElementById('settingsDspHeadroomVal');
+        const settingsDspLatencyVal = document.getElementById('settingsDspLatencyVal');
+        const settingsDspEqVal = document.getElementById('settingsDspEqVal');
+
+        if (settingsDspEngineVal) {
+            settingsDspEngineVal.textContent = isPrecision64 ? '64-Bit Worklet / 32-Bit Decode' : '32-Bit IEEE 754 Float';
+        }
+        if (settingsDspHeadroomVal) {
+            settingsDspHeadroomVal.textContent = maxBoostDb > 0 ? `${preampAttenDb.toFixed(1)} dB AGP Active` : '0.0 dBFS True-Peak';
+        }
+        if (settingsDspLatencyVal) {
+            settingsDspLatencyVal.textContent = `~${latencyMs.toFixed(0)} ms (${latencyModeStr})`;
+        }
+        if (settingsDspEqVal) {
+            settingsDspEqVal.textContent = activeStages.length > 0 ? activeStages.slice(0, 2).join(' + ') : 'Linear Bypass';
         }
     }
 
@@ -2930,8 +3269,9 @@
 
     // Update DAC Stream & Hardware Sample Rate Status Indicator
     function updateDacStatusUi() {
-        if (!statDacStream) return;
         const currentTrack = allTracks[currentTrackIndex];
+        updateSignalPathUi(currentTrack);
+        if (!statDacStream) return;
         const currentRate = audioContext ? audioContext.sampleRate : ((currentTrack && currentTrack.sampleRate) ? getValidSampleRate(currentTrack.sampleRate) : 44100);
         const rateStr = currentRate >= 1000 ? `${(currentRate / 1000).toFixed(1)} kHz` : `${currentRate} Hz`;
         const bd = (currentTrack && currentTrack.bitDepth) || ((currentRate >= 88200) ? 24 : 16);
@@ -2955,7 +3295,7 @@
             const dspStr = activeDsp.length > 0 ? activeDsp.join('+') : 'ACTIVE';
             statDacStream.textContent = `STUDIO DSP (${dspStr} • ${bitStr} • ${rateStr} • ${nyquistKhz}kHz)`;
             statDacStream.style.color = isLightSurface ? '#9a3412' : '#ffaa00';
-            statDacStream.title = `Processing through 64-bit floating-point Web Audio DSP stage at ${rateStr} (${nyquistKhz} kHz bandwidth).`;
+            statDacStream.title = `Processing through ${isPrecision64 ? '64-bit' : '32-bit'} floating-point Web Audio DSP stage at ${rateStr} (${nyquistKhz} kHz bandwidth).`;
         }
     }
 
@@ -2963,8 +3303,9 @@
     function updateTrackBadgeUi(track) {
         if (!trackBadge || !track) return;
         const badgeParts = [];
-        if (track.format) {
-            badgeParts.push(track.format.toUpperCase());
+        const fmt = resolveTrackFormat(track);
+        if (fmt) {
+            badgeParts.push(fmt);
         }
         const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
         if (bd) {
@@ -3062,11 +3403,21 @@
         img.src = coverUrl;
     }
 
+    let currentPlayRequestId = 0;
+    let activeLoadedMetadataHandler = null;
+
     // Load Track by Index in allTracks
     async function loadTrack(index, autoPlay = true, initialTime = 0) {
         if (!allTracks[index]) return;
         currentTrackIndex = index;
         trackPlaybackRetryCount = 0;
+        // Supersede any in-flight playAudio() call from an earlier track selection
+        currentPlayRequestId++;
+        isPlayPending = false;
+        if (playPendingTimeout) {
+            clearTimeout(playPendingTimeout);
+            playPendingTimeout = null;
+        }
         const track = allTracks[currentTrackIndex];
 
         // Cache currently loaded track state in localStorage
@@ -3153,9 +3504,14 @@
             }
         };
 
+        if (activeLoadedMetadataHandler) {
+            try { audio.removeEventListener('loadedmetadata', activeLoadedMetadataHandler); } catch (_) {}
+        }
+        activeLoadedMetadataHandler = applyTargetTime;
         audio.addEventListener('loadedmetadata', applyTargetTime, { once: true });
 
         // Center Deck Text - Real Tags or Fallback to Filename / Unknown
+        updateEmptyPlayerState();
         trackName.textContent = track.title ? track.title : (track.filename || 'Unknown');
         artistName.textContent = track.artist ? track.artist : 'Unknown';
         albumName.textContent = track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Album: Unknown';
@@ -3568,6 +3924,8 @@
             return;
         }
 
+        const reqId = ++currentPlayRequestId;
+
         // User explicitly unpaused
         userExplicitlyPaused = false;
 
@@ -3575,7 +3933,7 @@
         isPlayPending = true;
         if (playPendingTimeout) clearTimeout(playPendingTimeout);
         playPendingTimeout = setTimeout(() => {
-            if (isPlayPending) {
+            if (isPlayPending && reqId === currentPlayRequestId) {
                 console.warn('isPlayPending safety timeout triggered, unlocking.');
                 isPlayPending = false;
             }
@@ -3593,6 +3951,7 @@
                 getOrCreateAudioSourceNode();
                 updateAudioRouting();
             }
+            if (reqId !== currentPlayRequestId) return;
             if (audioContext && audioContext.state !== 'running') {
                 try {
                     await Promise.race([
@@ -3601,6 +3960,7 @@
                     ]);
                 } catch (_) {}
             }
+            if (reqId !== currentPlayRequestId) return;
             if (audio.muted) {
                 audio.muted = false;
             }
@@ -3622,9 +3982,11 @@
             }
 
             await audio.play();
+            if (reqId !== currentPlayRequestId) return;
             // Reflect actual audio state — user may have paused during the async gap
             syncPlayPauseUI(!audio.paused);
         } catch (err) {
+            if (reqId !== currentPlayRequestId) return;
             // Ignore AbortError if interrupted by a rapid pause click or track skip
             if (err.name !== 'AbortError') {
                 console.warn('Audio playback error:', err);
@@ -3633,11 +3995,13 @@
                 syncPlayPauseUI(false);
             }
         } finally {
-            if (playPendingTimeout) {
-                clearTimeout(playPendingTimeout);
-                playPendingTimeout = null;
+            if (reqId === currentPlayRequestId) {
+                if (playPendingTimeout) {
+                    clearTimeout(playPendingTimeout);
+                    playPendingTimeout = null;
+                }
+                isPlayPending = false;
             }
-            isPlayPending = false;
         }
     }
 
@@ -3746,13 +4110,15 @@
                 secondaryAudio.webkitPreservesPitch = isPitchLockTempo;
             } catch (_) {}
 
-            oldAudio.pause();
-            oldAudio.removeAttribute('src');
-
+            // Swap active audio reference BEFORE pausing/clearing oldAudio so oldAudio events are ignored
             audio = secondaryAudio;
             secondaryAudio = oldAudio;
             currentTrackIndex = nextIndex;
             preloadedNextTrackIndex = -1;
+            trackPlaybackRetryCount = 0;
+
+            oldAudio.pause();
+            oldAudio.removeAttribute('src');
 
             if (audioSourceNode) {
                 try { audioSourceNode.disconnect(); } catch (_) {}
@@ -3778,9 +4144,9 @@
                 } catch (_) {}
             }
 
+            userExplicitlyPaused = false;
             audio.play().then(() => {
-                isPlaying = true;
-                updatePlayPauseIcons();
+                syncPlayPauseUI(true);
                 if (typeof resumeVisualizerLoop === 'function') resumeVisualizerLoop();
             }).catch(console.warn);
 
@@ -3789,7 +4155,7 @@
                 if (artistName) artistName.textContent = nextTrack.artist ? nextTrack.artist : 'Unknown';
                 if (albumName) albumName.textContent = nextTrack.album ? `Album: ${nextTrack.album}${nextTrack.year ? ' (' + nextTrack.year + ')' : ''}` : 'Album: Unknown';
                 updateTrackBadgeUi(nextTrack);
-                const coverSrc = nextTrack.cover || 'resources/images/bad-apple.png';
+                const coverSrc = nextTrack.cover || 'resources/images/default.svg';
                 if (deckArtworkBackdrop) deckArtworkBackdrop.src = coverSrc;
                 if (deckArtworkAmbient) deckArtworkAmbient.src = coverSrc;
                 if (vinylArt) vinylArt.src = coverSrc;
@@ -5272,6 +5638,7 @@
                 safeStorage.setItem('cachymusic_engine_precision', isPrecision64 ? '64' : '32');
                 updatePrecisionUi();
                 updateWorkletParams();
+                updateSignalPathUi();
                 showToast(`Precision Engine: ${isPrecision64 ? '64-Bit Studio Float' : '32-Bit Fast Float'}`);
             });
         });
@@ -5304,6 +5671,7 @@
                     }
                     showToast('Hardware Analog Gain Disabled (Digital Volume)');
                 }
+                updateSignalPathUi();
             });
         }
 
@@ -5334,6 +5702,7 @@
                 updateUltrasonicUi();
                 updateWorkletParams();
                 updateAudioRouting();
+                updateSignalPathUi();
                 showToast(`Ultrasonic IMD Filter: ${isUltrasonic ? 'Active (' + Math.round(ultrasonicCutoff / 1000) + ' kHz)' : 'Bypassed'}`);
             });
         }
@@ -5343,6 +5712,7 @@
                 safeStorage.setItem('cachymusic_ultrasonic_cutoff', ultrasonicCutoff.toString());
                 updateUltrasonicUi();
                 updateWorkletParams();
+                updateSignalPathUi();
                 showToast(`Ultrasonic Cutoff: ${Math.round(ultrasonicCutoff / 1000)} kHz`);
             });
         }
@@ -5367,6 +5737,7 @@
                 updateDitherUi();
                 updateWorkletParams();
                 updateAudioRouting();
+                updateSignalPathUi();
                 showToast(`Dither: ${ditherMode === 'shaped' ? 'Psychoacoustic Shaped' : (ditherMode === 'tpdf' ? 'TPDF Flat' : 'Off')}`);
             });
         });
@@ -5394,6 +5765,7 @@
                 updateAmbiUi();
                 updateWorkletParams();
                 updateAudioRouting();
+                updateSignalPathUi();
                 showToast(`Speaker Ambiophonics: ${isAmbiophonics ? 'Enabled (Speakers Only)' : 'Disabled'}`);
             });
         }
@@ -5463,7 +5835,9 @@
                 });
             });
 
-            const savedCat = safeStorage.getItem('cachymusic_settings_cat') || 'audio';
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlCat = urlParams.get('cat');
+            const savedCat = urlCat || safeStorage.getItem('cachymusic_settings_cat') || 'audio';
             applySettingsCategory(savedCat);
         }
     }
@@ -5628,6 +6002,7 @@
             if (cw > 0 && ch > 0) {
                 cachedCenterW = cw;
                 cachedCenterH = ch;
+                if (typeof resumeVisualizerLoop === 'function') resumeVisualizerLoop();
             }
         }
     }
@@ -5644,6 +6019,9 @@
                 } else if (entry.target === turntableCenterCanvas) {
                     cachedCenterW = Math.round(entry.contentRect.width);
                     cachedCenterH = Math.round(entry.contentRect.height);
+                    if (cachedCenterW > 0 && cachedCenterH > 0 && typeof resumeVisualizerLoop === 'function') {
+                        resumeVisualizerLoop();
+                    }
                 }
             }
         });
@@ -5665,7 +6043,8 @@
             cachedCenterH = h;
         }
         if (w === 0 || h === 0) return null;
-        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+        const maxDpr = window.innerWidth <= 768 ? 1.25 : 1.5;
+        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
 
         if (w !== lastCenterW || h !== lastCenterH || dpr !== lastCenterDpr) {
             turntableCenterCanvas.width = Math.round(w * dpr);
@@ -5681,7 +6060,8 @@
     }
 
     function syncCanvasResolution(wOrRect, optH) {
-        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+        const maxDpr = window.innerWidth <= 768 ? 1.25 : 1.5;
+        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
         const w = Math.round(typeof wOrRect === 'object' && wOrRect !== null ? wOrRect.width : wOrRect);
         const h = Math.round(typeof wOrRect === 'object' && wOrRect !== null ? wOrRect.height : optH);
         const pixelW = Math.round(w * dpr);
@@ -5808,7 +6188,8 @@
     }
 
     function attachAudioListeners(targetAudio) {
-        if (!targetAudio) return;
+        if (!targetAudio || targetAudio._hasCachyListeners) return;
+        targetAudio._hasCachyListeners = true;
         let isAudioBuffering = false;
 
         targetAudio.addEventListener('play', () => {
@@ -5895,6 +6276,19 @@
             // 3 = MEDIA_ERR_DECODE (corrupted audio frame or decoding bitstream failure)
             // 4 = MEDIA_ERR_SRC_NOT_SUPPORTED (unsupported codec, 404, or unreadable source)
             const isFatalDecodeError = (errorCode === 3 || errorCode === 4);
+
+            // If native browser decoder fails (code 3 or 4) on a local stream, attempt 1 automatic FFmpeg transcode fallback
+            const currentAttrSrc = targetAudio.getAttribute('src') || targetAudio.src || '';
+            if (isFatalDecodeError && trackPlaybackRetryCount === 0 && currentAttrSrc.includes('php/api/stream.php') && !currentAttrSrc.includes('transcode=1')) {
+                trackPlaybackRetryCount++;
+                const transcodeSrc = currentAttrSrc + (currentAttrSrc.includes('?') ? '&' : '?') + 'transcode=1';
+                console.info(`[AudioEngine] Native decode error (${errorCode}) on "${trackTitle}"; attempting FFmpeg transcode fallback...`);
+                userExplicitlyPaused = false;
+                targetAudio.src = transcodeSrc;
+                try { targetAudio.load(); } catch (_) {}
+                playAudio();
+                return;
+            }
 
             if (isFatalDecodeError || trackPlaybackRetryCount >= 1) {
                 userExplicitlyPaused = true;
@@ -6180,14 +6574,22 @@
     function getOrCreateAudioSourceNode() {
         if (!audioContext || !audio) return null;
         if (audioSourceNode) return audioSourceNode;
+        if (audio._mediaSourceNode && audio._mediaSourceContext === audioContext) {
+            audioSourceNode = audio._mediaSourceNode;
+            return audioSourceNode;
+        }
         try {
             audioSourceNode = audioContext.createMediaElementSource(audio);
+            audio._mediaSourceNode = audioSourceNode;
+            audio._mediaSourceContext = audioContext;
             return audioSourceNode;
         } catch (_) {
             // Chromium safety fallback: if element was attached to an earlier context, refresh it
             resetMediaElementForNewAudioContext();
             try {
                 audioSourceNode = audioContext.createMediaElementSource(audio);
+                audio._mediaSourceNode = audioSourceNode;
+                audio._mediaSourceContext = audioContext;
             } catch (e2) {
                 console.error('Failed to create MediaElementSource on replacement element:', e2);
             }
@@ -6514,25 +6916,33 @@
             const dt = Math.min(elapsed / 1000, 0.1);
             lastRenderTime = now;
 
-            let width = cachedDockW;
-            let height = cachedDockH;
-            if (width === 0 || height === 0) {
+            const isMobileViewport = window.innerWidth <= 768;
+            if (isMobileViewport) {
+                const isDeckActive = Boolean(playerDeckEl && playerDeckEl.classList.contains('mobileActive') && !isLyricsView);
+                const isInfoActive = Boolean(settingsPanelEl && settingsPanelEl.classList.contains('mobileActive'));
+                const isSignalOpen = Boolean(signalPathModal && signalPathModal.style.display === 'flex');
+                if (!isDeckActive && !isInfoActive && !isSignalOpen) {
+                    isVisualizerLoopRunning = false;
+                    return;
+                }
+            }
+
+            let width = isMobileViewport ? 0 : cachedDockW;
+            let height = isMobileViewport ? 0 : cachedDockH;
+            if (!isMobileViewport && (width === 0 || height === 0) && visualizerDock) {
                 width = Math.round(visualizerDock.clientWidth || visualizerDock.getBoundingClientRect().width);
                 height = Math.round(visualizerDock.clientHeight || visualizerDock.getBoundingClientRect().height);
                 cachedDockW = width;
                 cachedDockH = height;
             }
 
-            if (width === 0 || height === 0) {
-                animFrameId = requestAnimationFrame(renderFrame);
-                return;
+            const hasDockCanvas = (width > 0 && height > 0 && ctx);
+            if (hasDockCanvas) {
+                const dpr = syncCanvasResolution(width, height);
+                ctx.save();
+                ctx.scale(dpr, dpr);
+                ctx.clearRect(0, 0, width, height);
             }
-
-            const dpr = syncCanvasResolution(width, height);
-
-            ctx.save();
-            ctx.scale(dpr, dpr);
-            ctx.clearRect(0, 0, width, height);
 
             // 1. Acquire Frequency & Time-domain data
             let hasRealData = false;
@@ -6622,7 +7032,12 @@
 
                         if (isSignalModalVisible && auditMetricHeadroom) {
                             const headroomDb = Math.max(0, -peakDb);
-                            const txt = `+${headroomDb.toFixed(1)} dB (Pristine)`;
+                            let maxBoost = (!isPeqBypassed && Array.isArray(peqGains)) ? Math.max(0, ...peqGains) : 0;
+                            if (isBassBoost) maxBoost = Math.max(maxBoost, 3.8);
+                            if (isTrebleBoost) maxBoost = Math.max(maxBoost, 3.0);
+                            if (isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
+                            const guardStr = maxBoost > 0 ? `-${(maxBoost * 0.7).toFixed(1)} dB Pre-Amp` : 'Live Peak';
+                            const txt = `+${headroomDb.toFixed(1)} dB (${guardStr})`;
                             if (txt !== lastHeadroomText) {
                                 auditMetricHeadroom.textContent = txt;
                                 lastHeadroomText = txt;
@@ -6749,19 +7164,22 @@
                 treblePulse = Math.max(0, treblePulse - dt * 4.8);
             }
 
-            // 4. Render Visualizer Mode with high musical expressiveness
-            switch (activeVisualizerMode) {
-                case 'dash':
-                    drawVerticalDash(ctx, width, height, smoothBands, isPlaying, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
-                    break;
-                case 'thematic':
-                case 'badapple':
-                    drawThematicWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
-                    break;
-                case 'wave':
-                default:
-                    drawSolidWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
-                    break;
+            // 4. Render Visualizer Mode with high musical expressiveness (when bottom dock is visible)
+            if (hasDockCanvas) {
+                switch (activeVisualizerMode) {
+                    case 'dash':
+                        drawVerticalDash(ctx, width, height, smoothBands, isPlaying, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
+                        break;
+                    case 'thematic':
+                    case 'badapple':
+                        drawThematicWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
+                        break;
+                    case 'wave':
+                    default:
+                        drawSolidWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
+                        break;
+                }
+                ctx.restore();
             }
 
             // 5. Turntable Center Visualizer (Theme-specific Entity or Touhou Heart)
@@ -6843,8 +7261,6 @@
                     turntableCenterCtx.restore();
                 }
             }
-
-            ctx.restore();
 
             if (isVisualizerLoopRunning) {
                 animFrameId = requestAnimationFrame(renderFrame);
@@ -14508,6 +14924,21 @@
 
 
         // Library vs Playlists vs Up Next Queue Tabs
+        const quickFormatFilterBarEl = document.getElementById('quickFormatFilterBar');
+        const libraryToolsToggleBtnEl = document.getElementById('libraryToolsToggleBtn');
+        const libraryToolsChevronEl = document.getElementById('libraryToolsChevron');
+
+        if (libraryToolsToggleBtnEl && libraryControls) {
+            libraryToolsToggleBtnEl.addEventListener('click', () => {
+                const isCollapsed = libraryControls.classList.toggle('mobileCollapsed');
+                libraryToolsToggleBtnEl.classList.toggle('active', !isCollapsed);
+                libraryToolsToggleBtnEl.setAttribute('aria-expanded', String(!isCollapsed));
+                if (libraryToolsChevronEl) {
+                    libraryToolsChevronEl.textContent = isCollapsed ? '▾' : '▴';
+                }
+            });
+        }
+
         tabLibrary.addEventListener('click', () => {
             tabLibrary.classList.add('active');
             tabPlaylists.classList.remove('active');
@@ -14515,12 +14946,15 @@
             trackList.style.display = 'flex';
             playlistsView.style.display = 'none';
             if (queueView) queueView.style.display = 'none';
+            if (quickFormatFilterBarEl) quickFormatFilterBarEl.style.display = 'flex';
             if (currentPlaylistId) {
                 playlistBanner.style.display = 'flex';
                 libraryControls.style.display = 'none';
+                if (libraryToolsToggleBtnEl) libraryToolsToggleBtnEl.style.display = 'none';
             } else {
                 playlistBanner.style.display = 'none';
                 libraryControls.style.display = 'flex';
+                if (libraryToolsToggleBtnEl) libraryToolsToggleBtnEl.style.display = '';
             }
         });
 
@@ -14530,6 +14964,7 @@
             if (tabQueue) tabQueue.classList.remove('active');
             trackList.style.display = 'none';
             libraryControls.style.display = 'none';
+            if (quickFormatFilterBarEl) quickFormatFilterBarEl.style.display = 'none';
             playlistBanner.style.display = 'none';
             if (queueView) queueView.style.display = 'none';
             playlistsView.style.display = 'flex';
@@ -14543,6 +14978,7 @@
                 tabPlaylists.classList.remove('active');
                 trackList.style.display = 'none';
                 libraryControls.style.display = 'none';
+                if (quickFormatFilterBarEl) quickFormatFilterBarEl.style.display = 'none';
                 playlistBanner.style.display = 'none';
                 playlistsView.style.display = 'none';
                 if (queueView) queueView.style.display = 'flex';
@@ -14912,10 +15348,55 @@
             });
         }
 
-        // Native Android Bridge discovery receiver
+        // Blocking Track Loading Overlay Cancel Button & Empty Player Prompt Actions
+        const cancelTrackLoadingBtnEl = document.getElementById('cancelTrackLoadingBtn');
+        if (cancelTrackLoadingBtnEl) {
+            cancelTrackLoadingBtnEl.addEventListener('click', cancelActiveTrackLoading);
+        }
+
+        const playerChooseDirBtn = document.getElementById('playerChooseDirBtn');
+        if (playerChooseDirBtn) {
+            playerChooseDirBtn.addEventListener('click', openFolderBrowser);
+        }
+
+        const playerOpenDirSettingsBtn = document.getElementById('playerOpenDirSettingsBtn');
+        if (playerOpenDirSettingsBtn) {
+            playerOpenDirSettingsBtn.addEventListener('click', () => {
+                switchWorkspace('settings');
+                const libCatBtn = document.querySelector('#settingsCategoryNav .settingsCatBtn[data-cat="library"]');
+                if (libCatBtn) libCatBtn.click();
+                setTimeout(() => {
+                    const sInput = document.getElementById('settingsTabFolderPathInput');
+                    if (sInput) sInput.focus();
+                }, 80);
+            });
+        }
+
+        // Native Android Bridge progress, cancellation & discovery receivers
+        window.onAndroidScanProgress = function(count, total, folderName) {
+            if (isTrackLoadingCancelled) return;
+            const pct = total > 0 ? Math.min(98, Math.round((count / total) * 100)) : 50;
+            showTrackLoadingOverlay(
+                'LOADING MUSIC LIBRARY...',
+                `Scanning "${folderName || 'Device Storage'}" — ${count}${total > 0 ? ' / ' + total : ''} tracks found...`,
+                pct
+            );
+        };
+
+        window.onAndroidScanCancelled = function() {
+            hideTrackLoadingOverlay();
+            setScanStatus('Directory scan cancelled.', false);
+            updateEmptyPlayerState();
+        };
+
         window.onAndroidTracksDiscovered = function(tracks, folderName) {
+            hideTrackLoadingOverlay();
+            if (isTrackLoadingCancelled) return;
+
             if (!Array.isArray(tracks) || tracks.length === 0) {
-                setScanStatus(`No supported audio tracks found in "${folderName || 'Selected Folder'}".`, true);
+                const errStr = `No supported audio tracks found in "${folderName || 'Selected Folder'}".`;
+                setScanStatus(`${errStr} Please configure your directory manually in Settings → Library & Folders.`, true);
+                updateEmptyPlayerState(errStr);
                 return;
             }
 
@@ -14942,12 +15423,15 @@
                     src: t.src,
                     cover: t.cover
                 }));
-                safeStorage.setItem('cachymusic_android_tracks', JSON.stringify(cacheData));
                 safeStorage.setItem('cachymusic_last_directory', folderName);
+                safeStorage.setItem('cachymusic_directory_mode', 'android');
+                safeStorage.setItem('cachymusic_android_tracks', JSON.stringify(cacheData));
             } catch (e) {
-                console.warn('Could not cache tracks to localStorage:', e);
+                console.warn('Could not cache tracks to localStorage, using IndexedDB:', e);
             }
+            saveLibraryToIndexedDB(tracks, folderName);
 
+            updateEmptyPlayerState();
             applySearchAndSort();
             if (allTracks.length > 0 && !isPlaying) {
                 loadTrack(0, false);
@@ -15020,9 +15504,10 @@
             settingsScanDeviceMusicBtn.addEventListener('click', () => {
                 if (window.AndroidBridge && typeof window.AndroidBridge.scanDeviceMusic === 'function') {
                     setScanStatus('Scanning device music library...', false);
+                    showTrackLoadingOverlay('SCANNING DEVICE MUSIC...', 'Searching audio files across device storage...', 15);
                     window.AndroidBridge.scanDeviceMusic();
                 } else {
-                    setScanStatus('Native device scanner available on Android APK.', true);
+                    setScanStatus('Native device scanner available on Android APK. Please choose a folder or configure path manually.', true);
                 }
             });
         }
@@ -15033,14 +15518,22 @@
                 if (files.length === 0) return;
 
                 const firstRel = files[0].webkitRelativePath || '';
-                const folderName = firstRel ? firstRel.split('/')[0] : '';
+                const folderName = firstRel ? firstRel.split('/')[0] : 'Selected Folder';
                 
                 const audioFiles = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac|opus|webm|alac|aiff)$/i.test(f.name));
                 if (audioFiles.length === 0) {
-                    setScanStatus(`No supported audio files found in chosen folder "${folderName}".`, true);
+                    const msg = `No supported audio files found in "${folderName}".`;
+                    setScanStatus(`${msg} Please choose another folder or configure path manually in Settings.`, true);
+                    updateEmptyPlayerState(msg);
+                    folderPickerInput.value = '';
                     return;
                 }
 
+                showTrackLoadingOverlay(
+                    'LOADING MUSIC LIBRARY...',
+                    `Scanning ${audioFiles.length} audio files from "${folderName}"...`,
+                    10
+                );
                 setScanStatus(`Reading ${audioFiles.length} audio files from "${folderName}"...`, false);
 
                 // Check candidate server paths matching the selected folder name
@@ -15054,20 +15547,32 @@
 
                 let serverScanned = false;
                 for (const cand of candidatePaths) {
+                    if (isTrackLoadingCancelled) break;
                     try {
-                        const res = await fetch(`php/api/scan.php?directory=${encodeURIComponent(cand)}`);
+                        activeScanAbortController = new AbortController();
+                        const res = await fetch(`php/api/scan.php?directory=${encodeURIComponent(cand)}`, {
+                            signal: activeScanAbortController.signal
+                        });
                         if (res.ok) {
                             const data = await res.json();
                             if (data.success && Array.isArray(data.tracks) && data.tracks.length > 0) {
-                                if (folderPathInput) folderPathInput.value = data.directory || cand;
+                                const resolvedDir = data.directory || cand;
+                                if (folderPathInput) folderPathInput.value = resolvedDir;
                                 const sInput = document.getElementById('settingsTabFolderPathInput');
-                                if (sInput) sInput.value = data.directory || cand;
+                                if (sInput) sInput.value = resolvedDir;
+                                try {
+                                    safeStorage.setItem('cachymusic_last_directory', resolvedDir);
+                                    safeStorage.setItem('cachymusic_directory_mode', 'server');
+                                } catch (_) {}
                                 if (dismissedTracksMap.size > 0) {
                                     allTracks = data.tracks.filter(t => !dismissedTracksMap.has(t.fullPath || t.filename || t.id));
                                 } else {
                                     allTracks = data.tracks;
                                 }
-                                setScanStatus(`Scanned ${data.count} audio tracks from ${data.directory}`, false);
+                                saveLibraryToIndexedDB(allTracks, resolvedDir);
+                                setScanStatus(`Scanned ${data.count} audio tracks from ${resolvedDir}`, false);
+                                hideTrackLoadingOverlay();
+                                updateEmptyPlayerState();
                                 applySearchAndSort();
                                 loadTrack(0, true);
                                 serverScanned = true;
@@ -15075,17 +15580,26 @@
                             }
                         }
                     } catch (err) {
-                        // Continue checking next candidate
+                        if (err && err.name === 'AbortError') break;
+                    } finally {
+                        activeScanAbortController = null;
                     }
                 }
 
                 // If not available on server path, load files directly in browser with ID3 metadata parser
-                if (!serverScanned) {
-                    if (folderPathInput) folderPathInput.value = folderName || 'Selected Folder';
+                if (!serverScanned && !isTrackLoadingCancelled) {
+                    if (folderPathInput) folderPathInput.value = folderName;
                     const sInput = document.getElementById('settingsTabFolderPathInput');
-                    if (sInput) sInput.value = folderName || 'Selected Folder';
+                    if (sInput) sInput.value = folderName;
                     const importedTracks = [];
-                    for (const file of audioFiles) {
+                    for (let i = 0; i < audioFiles.length; i++) {
+                        if (isTrackLoadingCancelled) break;
+                        const file = audioFiles[i];
+                        const pct = Math.min(98, Math.round(((i + 1) / audioFiles.length) * 100));
+                        updateTrackLoadingOverlay(
+                            `Reading track metadata (${i + 1} / ${audioFiles.length}): ${file.name}`,
+                            pct
+                        );
                         const url = URL.createObjectURL(file);
                         const parsed = await parseAudioFileMetadata(file);
                         importedTracks.push({
@@ -15102,35 +15616,32 @@
                             duration: parsed.duration || 0,
                             bitrate: parsed.bitrate,
                             sampleRate: parsed.sampleRate,
+                            bitDepth: parsed.bitDepth,
                             channels: parsed.channels,
                             format: parsed.format,
                             size: parsed.size,
                             cover: parsed.cover,
-                            src: url
+                            src: url,
+                            _fileBlob: file
                         });
                     }
-                    allTracks = importedTracks;
-                    applySearchAndSort();
-                    if (allTracks.length > 0) {
+                    hideTrackLoadingOverlay();
+                    if (!isTrackLoadingCancelled && importedTracks.length > 0) {
+                        allTracks = importedTracks;
+                        try {
+                            safeStorage.setItem('cachymusic_last_directory', folderName);
+                            safeStorage.setItem('cachymusic_directory_mode', 'browser_idb');
+                        } catch (_) {}
+                        saveLibraryToIndexedDB(allTracks, folderName);
+                        updateEmptyPlayerState();
+                        applySearchAndSort();
                         loadTrack(0, true);
+                        setScanStatus(`Loaded ${importedTracks.length} track(s) from "${folderName}".`, false);
                     }
-                    setScanStatus(`Loaded ${importedTracks.length} track(s) from "${folderName}".`, false);
+                } else {
+                    hideTrackLoadingOverlay();
                 }
-            });
-        }
-
-        // Quick Preset Directory Buttons
-        if (presetPathBtns && presetPathBtns.length > 0) {
-            presetPathBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const targetPath = btn.dataset.path || btn.textContent.trim();
-                    if (targetPath) {
-                        if (folderPathInput) folderPathInput.value = targetPath;
-                        const sInput = document.getElementById('settingsTabFolderPathInput');
-                        if (sInput) sInput.value = targetPath;
-                        scanDirectory(targetPath, true);
-                    }
-                });
+                folderPickerInput.value = '';
             });
         }
 
@@ -15220,11 +15731,19 @@
             const files = Array.from(e.target.files || []);
             if (files.length === 0) return;
 
+            showTrackLoadingOverlay(
+                'IMPORTING AUDIO TRACKS...',
+                `Reading ${files.length} audio file(s)...`,
+                10
+            );
             setScanStatus(`Reading ${files.length} audio file(s)...`, false);
             const importedTracks = [];
 
             for (let i = 0; i < files.length; i++) {
+                if (isTrackLoadingCancelled) break;
                 const file = files[i];
+                const pct = Math.min(98, Math.round(((i + 1) / files.length) * 100));
+                updateTrackLoadingOverlay(`Reading track metadata (${i + 1} / ${files.length}): ${file.name}`, pct);
                 if (i % 5 === 0 || i === files.length - 1) {
                     setScanStatus(`Reading track metadata (${i + 1}/${files.length})...`, false);
                 }
@@ -15235,7 +15754,8 @@
                     importedTracks.push({
                         ...existing,
                         id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                        src: url
+                        src: url,
+                        _fileBlob: file
                     });
                     continue;
                 }
@@ -15257,19 +15777,29 @@
                     duration: parsed.duration || 0,
                     bitrate: parsed.bitrate,
                     sampleRate: parsed.sampleRate,
+                    bitDepth: parsed.bitDepth,
                     channels: parsed.channels,
                     format: parsed.format,
                     size: parsed.size,
                     cover: parsed.cover,
-                    src: url
+                    src: url,
+                    _fileBlob: file
                 });
             }
 
-            setScanStatus(`Loaded ${importedTracks.length} local track(s).`, false);
-            const startIdx = allTracks.length;
-            allTracks = [...allTracks, ...importedTracks];
-            applySearchAndSort();
-            if (importedTracks.length > 0) {
+            hideTrackLoadingOverlay();
+            if (!isTrackLoadingCancelled && importedTracks.length > 0) {
+                setScanStatus(`Loaded ${importedTracks.length} local track(s).`, false);
+                const startIdx = allTracks.length;
+                allTracks = [...allTracks, ...importedTracks];
+                const dirName = (folderPathInput && folderPathInput.value.trim()) ? folderPathInput.value.trim() : 'Local Imported Tracks';
+                try {
+                    safeStorage.setItem('cachymusic_last_directory', dirName);
+                    safeStorage.setItem('cachymusic_directory_mode', 'browser_idb');
+                } catch (_) {}
+                saveLibraryToIndexedDB(allTracks, dirName);
+                updateEmptyPlayerState();
+                applySearchAndSort();
                 loadTrack(startIdx, true);
             }
             localFileInput.value = '';

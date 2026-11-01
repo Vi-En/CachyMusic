@@ -50,20 +50,20 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="resources/images/icon-192.png">
     <link rel="icon" type="image/svg+xml" href="resources/images/music-hanzi.svg">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=10.47">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=10.52">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 if (window.caches) {
                     caches.keys().then(function(keys) {
                         keys.forEach(function(k) {
-                            if (k !== 'cachymusic-v10.47' && !k.startsWith('cachymusic-artwork-')) {
+                            if (k !== 'cachymusic-v10.52' && !k.startsWith('cachymusic-artwork-')) {
                                 caches.delete(k);
                             }
                         });
                     }).catch(function() {});
                 }
-                navigator.serviceWorker.register('./sw.js?v=10.47').then(function(reg) {
+                navigator.serviceWorker.register('./sw.js?v=10.52').then(function(reg) {
                     reg.update();
                 }).catch(function(err) {
                     console.warn('[PWA] ServiceWorker registration failed:', err);
@@ -137,13 +137,13 @@
     <div class="folderTray" id="folderTray">
         <div class="folderTrayHeader">
             <label for="folderPathInput" class="folderTrayLabel">AUDIO DIRECTORY PATH</label>
-            <span class="folderTrayHelp">Choose a folder from your computer or select a quick path below</span>
+            <span class="folderTrayHelp">Choose a folder from your device or enter a directory path below</span>
         </div>
         <div class="folderTrayControls">
             <div class="folderInputWrapper">
                 <input type="text" id="folderPathInput" placeholder="/path/to/audio/directory" aria-label="Audio directory path">
                 <button type="button" id="browseFolderBtn" class="folderBrowseBtn" title="Choose folder from your computer">
-                    📁 BROWSE...
+                    BROWSE...
                 </button>
                 <input type="file" id="folderPickerInput" webkitdirectory directory multiple style="display: none;" aria-label="Choose folder">
             </div>
@@ -152,12 +152,6 @@
                 <span>SCAN &amp; LOAD</span>
             </button>
             <button type="button" id="closeFolderTrayBtn" class="folderTrayCloseBtn" title="Close Tray" aria-label="Close Tray">✕</button>
-        </div>
-        <div class="folderQuickPresets">
-            <span class="quickPresetsLabel">QUICK PATHS:</span>
-            <button type="button" class="presetPathBtn" data-path="~/Music">~/Music</button>
-            <button type="button" class="presetPathBtn" data-path="~/Music/Main">~/Music/Main</button>
-            <button type="button" class="presetPathBtn" data-path="~/Downloads">~/Downloads</button>
         </div>
         <div id="scanStatus" class="scanStatus"></div>
     </div>
@@ -200,7 +194,7 @@
             <div class="settingsSubPane active" id="metaPane">
                 <!-- Embedded Cover Art Card -->
                 <div class="coverCardCon">
-                    <img src="resources/images/bad-apple.png" alt="Album Art" id="coverArtPreview" class="coverArtPreview">
+                    <img src="resources/images/default.svg" alt="Album Art" id="coverArtPreview" class="coverArtPreview">
                     <div class="coverBadge" id="coverBadge">COVER ART</div>
                 </div>
 
@@ -223,63 +217,63 @@
                     <div class="metaGrid">
                         <div class="metaItem">
                             <span class="metaKey">TITLE</span>
-                            <span class="metaVal" id="statTitle">Unknown</span>
+                            <span class="metaVal" id="statTitle">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">ARTIST</span>
-                            <span class="metaVal" id="statArtist">Unknown</span>
+                            <span class="metaVal" id="statArtist">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">ALBUM</span>
-                            <span class="metaVal" id="statAlbum">Unknown</span>
+                            <span class="metaVal" id="statAlbum">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">GENRE</span>
-                            <span class="metaVal" id="statGenre">N/A</span>
+                            <span class="metaVal" id="statGenre">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">YEAR</span>
-                            <span class="metaVal" id="statYear">N/A</span>
+                            <span class="metaVal" id="statYear">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">TRACK #</span>
-                            <span class="metaVal" id="statTrack">N/A</span>
+                            <span class="metaVal" id="statTrack">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">BITRATE</span>
-                            <span class="metaVal" id="statBitrate">N/A</span>
+                            <span class="metaVal" id="statBitrate">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">SAMPLE RATE</span>
-                            <span class="metaVal" id="statSampleRate">N/A</span>
+                            <span class="metaVal" id="statSampleRate">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">BIT DEPTH</span>
-                            <span class="metaVal" id="statBitDepth">N/A</span>
+                            <span class="metaVal" id="statBitDepth">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">CHANNELS</span>
-                            <span class="metaVal" id="statChannels">N/A</span>
+                            <span class="metaVal" id="statChannels">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">FORMAT</span>
-                            <span class="metaVal" id="statFormat">N/A</span>
+                            <span class="metaVal" id="statFormat">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">SIZE</span>
-                            <span class="metaVal" id="statSize">N/A</span>
+                            <span class="metaVal" id="statSize">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">DYNAMIC RANGE</span>
-                            <span class="metaVal" id="statDynamicRange">-- dB (Analyzing)</span>
+                            <span class="metaVal" id="statDynamicRange">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">PEAK HEADROOM</span>
-                            <span class="metaVal" id="statPeakLevel">-0.0 dBFS</span>
+                            <span class="metaVal" id="statPeakLevel">—</span>
                         </div>
                         <div class="metaItem">
                             <span class="metaKey">FILE</span>
-                            <span class="metaVal" id="statPath" title="N/A">N/A</span>
+                            <span class="metaVal" id="statPath" title="—">—</span>
                         </div>
                     </div>
                 </div>
@@ -311,9 +305,9 @@
             <div class="turntableStage" id="turntableStage">
                 <!-- Embedded Artwork Layer (Positioned Behind Turntable) -->
                 <div class="deckArtworkWrapper" id="deckArtworkWrapper">
-                    <img src="resources/images/bad-apple.png" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true">
+                    <img src="resources/images/default.svg" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true">
                     <div class="deckArtworkCard" id="deckArtworkCard">
-                        <img src="resources/images/bad-apple.png" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop">
+                        <img src="resources/images/default.svg" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop">
                     </div>
                     <div class="deckArtworkScrim"></div>
                 </div>
@@ -340,7 +334,7 @@
                     <div class="vinylTurntable" id="vinylTurntable">
                         <div class="vinylGrooves"></div>
                         <div class="vinylLabel" id="vinylLabel">
-                            <img src="resources/images/bad-apple.png" alt="Cover Art" id="vinylArt">
+                            <img src="resources/images/default.svg" alt="Cover Art" id="vinylArt">
                             <div class="spindleHole"></div>
                         </div>
                     </div>
@@ -359,17 +353,28 @@
             </div>
 
             <!-- Track Metadata Header -->
-            <div class="trackMeta">
-                <div class="metaBadgeRow">
-                    <span class="formatBadge" id="trackBadge">AUDIO</span>
-                    <button type="button" id="signalPathBadgeBtn" class="signalPathBadge" title="Open Roon-Grade Audiophile Signal Path Audit">
+            <div class="trackMeta" id="trackMetaBox">
+                <div class="metaBadgeRow" id="metaBadgeRow">
+                    <span class="formatBadge" id="trackBadge" style="display: none;"></span>
+                    <button type="button" id="signalPathBadgeBtn" class="signalPathBadge" title="Signal Path &amp; Audit">
                         <span class="signalDot" id="deckSignalDot">●</span>
-                        <span id="signalPathLabel">32-BIT DIRECT</span>
+                        <span id="signalPathLabel">SPA</span>
                     </button>
                 </div>
-                <h1 id="trackName">Select A Track</h1>
-                <h2 id="artistName">CachyMusic Player</h2>
-                <p id="albumName" class="albumName">-</p>
+                <h1 id="trackName" style="display: none;"></h1>
+                <h2 id="artistName" style="display: none;"></h2>
+                <p id="albumName" class="albumName" style="display: none;"></p>
+
+                <!-- Empty State Prompt (Shown when no music directory is loaded yet) -->
+                <div class="playerEmptyPrompt" id="playerEmptyPrompt">
+                    <p class="playerEmptyTitle" id="playerEmptyTitle">No Music Directory Loaded</p>
+                    <p class="playerEmptySub" id="playerEmptySub">Choose your music folder to index and play tracks. In case of error, configure the folder manually in <strong>Settings &rarr; Library &amp; Folders</strong>.</p>
+                    <div class="playerEmptyActions">
+                        <button type="button" id="playerChooseDirBtn" class="actionBtn primaryBtn">CHOOSE DIRECTORY</button>
+                        <button type="button" id="playerOpenDirSettingsBtn" class="actionBtn">MANUAL SETTINGS</button>
+                    </div>
+                    <p class="playerEmptyErrorHint" id="playerEmptyErrorHint" style="display: none;"></p>
+                </div>
             </div>
 
             <!-- Scrubber Timeline -->
@@ -456,8 +461,22 @@
                 <button type="button" class="libTab" id="tabQueue">UP NEXT <span class="queueCountBadge" id="queueCountBadge" style="display: none;">0</span></button>
             </div>
 
+            <!-- Instant Quality Format Filter Bar + Mobile Collapsible Sort & Tools Toggle -->
+            <div class="quickFormatFilterBar" id="quickFormatFilterBar">
+                <div class="formatFilterPillsGroup">
+                    <button type="button" class="formatFilterPill active" data-filter="all">ALL</button>
+                    <button type="button" class="formatFilterPill" data-filter="hires" title="Filter for Hi-Res 24-bit/32-bit &amp; 96kHz+ tracks">HI-RES</button>
+                    <button type="button" class="formatFilterPill" data-filter="lossless" title="Filter for Lossless FLAC &amp; ALAC audio">LOSSLESS</button>
+                    <button type="button" class="formatFilterPill" data-filter="lossy" title="Filter for standard MP3 / AAC / OGG tracks">MP3 / AAC</button>
+                </div>
+                <button type="button" class="libraryToolsToggleBtn" id="libraryToolsToggleBtn" aria-expanded="false" aria-controls="libraryControls" title="Toggle Sort &amp; Library Actions">
+                    <span>⇅ SORT &amp; TOOLS</span>
+                    <span class="toolsChevron" id="libraryToolsChevron">▾</span>
+                </button>
+            </div>
+
             <!-- Library View Controls -->
-            <div class="libraryControls" id="libraryControls">
+            <div class="libraryControls mobileCollapsed" id="libraryControls">
                 <div class="sortContainer">
                     <label for="sortSelect">SORT BY:</label>
                     <select id="sortSelect" class="sortSelect">
@@ -488,21 +507,13 @@
                         SHUFFLE
                     </button>
                     <button type="button" id="mobileScanFolderBtn" class="actionBtn mobileFolderBtn" title="Choose Music Directory / Folder">
-                        📁 + FOLDER
+                        + FOLDER
                     </button>
                     <label for="localFileInput" class="actionBtn uploadBtn" id="localFileInputLabel" title="Load Audio Files (Multi-Select)">
                         + TRACKS
                     </label>
                     <input type="file" id="localFileInput" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.opus,.alac,.aiff" multiple style="display: none;" aria-label="Load Local Audio Files">
                 </div>
-            </div>
-
-            <!-- Instant Quality Format Filter Bar -->
-            <div class="quickFormatFilterBar" id="quickFormatFilterBar">
-                <button type="button" class="formatFilterPill active" data-filter="all">ALL</button>
-                <button type="button" class="formatFilterPill" data-filter="hires" title="Filter for Hi-Res 24-bit/32-bit &amp; 96kHz+ tracks">HI-RES</button>
-                <button type="button" class="formatFilterPill" data-filter="lossless" title="Filter for Lossless FLAC &amp; ALAC audio">LOSSLESS</button>
-                <button type="button" class="formatFilterPill" data-filter="lossy" title="Filter for standard MP3 / AAC / OGG tracks">MP3 / AAC</button>
             </div>
 
             <!-- Active Playlist Header (MusicBee / Musicolet Style) -->
@@ -843,403 +854,13 @@
         </div>
     </section>
 
-    <!-- Cross-Platform Downloads & Native Apps Workspace -->
-    <section class="downloadWorkspace" id="downloadWorkspace" style="display: none;">
-        <div class="downloadHubHeader">
-            <div class="downloadHubHeaderLeft">
-                <span class="downloadBadge">CROSS-PLATFORM DEPLOYMENT</span>
-                <h2>DOWNLOADS &amp; CLIENT SETUP</h2>
-                <p class="downloadSubtitle">CachyMusic is zero-dependency and runs everywhere — native Linux desktop, standalone PWA on Windows &amp; macOS, and local Wi-Fi lossless streaming to iOS and Android.</p>
-            </div>
-            <div class="downloadHubHeaderRight">
-                <button type="button" class="actionBtn primaryBtn downloadDirectPwaBtn" id="downloadPwaPromptBtn" title="Install CachyMusic directly in this browser">
-                    1-CLICK PWA INSTALL
-                </button>
-                <button type="button" class="actionBtn downloadReturnBtn" id="downloadReturnBtn" title="Return to Player (Alt+P)">
-                    RETURN TO PLAYER
-                </button>
-            </div>
-        </div>
-
-        <!-- Platform Switcher Tabs (High-Visibility Segmented Selector) -->
-        <div class="downloadTabsBar" id="downloadTabsBar" role="tablist">
-            <button type="button" class="downloadTabBtn active" data-platform="linux" role="tab" aria-selected="true" id="tabBtn-linux">
-                <div class="tabTopRow">
-                    <span class="platformName">LINUX</span>
-                    <span class="osDetectedBadge" id="osBadge-linux" style="display: none;">YOUR OS</span>
-                </div>
-                <span class="platformSub">Desktop &amp; CLI Runner</span>
-            </button>
-            <button type="button" class="downloadTabBtn" data-platform="windows" role="tab" aria-selected="false" id="tabBtn-windows">
-                <div class="tabTopRow">
-                    <span class="platformName">WINDOWS</span>
-                    <span class="osDetectedBadge" id="osBadge-windows" style="display: none;">YOUR OS</span>
-                </div>
-                <span class="platformSub">Win 10/11 Standalone</span>
-            </button>
-            <button type="button" class="downloadTabBtn" data-platform="macos" role="tab" aria-selected="false" id="tabBtn-macos">
-                <div class="tabTopRow">
-                    <span class="platformName">MACOS</span>
-                    <span class="osDetectedBadge" id="osBadge-macos" style="display: none;">YOUR OS</span>
-                </div>
-                <span class="platformSub">Apple Silicon &amp; Intel Dock</span>
-            </button>
-            <button type="button" class="downloadTabBtn" data-platform="mobile" role="tab" aria-selected="false" id="tabBtn-mobile">
-                <div class="tabTopRow">
-                    <span class="platformName">MOBILE &amp; WI-FI</span>
-                    <span class="osDetectedBadge" id="osBadge-mobile" style="display: none;">YOUR OS</span>
-                </div>
-                <span class="platformSub">iOS &amp; Android Apps</span>
-            </button>
-            <button type="button" class="downloadTabBtn" data-platform="pwa" role="tab" aria-selected="false" id="tabBtn-pwa">
-                <div class="tabTopRow">
-                    <span class="platformName">WEB / PWA</span>
-                    <span class="osDetectedBadge" id="osBadge-pwa" style="display: none;">YOUR OS</span>
-                </div>
-                <span class="platformSub">Direct Browser Runtime</span>
-            </button>
-        </div>
-
-        <!-- Platform Detail Cards Container -->
-        <div class="downloadContentArea">
-            <!-- 1. LINUX -->
-            <div class="downloadPanel active" id="platform-linux" role="tabpanel">
-                <div class="downloadCardMain">
-                    <div class="cardHeaderRow">
-                        <div class="cardHeaderLeft">
-                            <span class="clientTag linuxTag">RECOMMENDED FOR LINUX / CACHYOS</span>
-                            <h3>Linux Desktop &amp; System Integration</h3>
-                        </div>
-                        <span class="versionPill">v1.0.0-beta Native XDG</span>
-                    </div>
-
-                    <!-- Quick Start Callout Banner -->
-                    <div class="quickStartCallout">
-                        <div class="calloutHeader">
-                            <span class="calloutTag">QUICK START</span>
-                            <span class="calloutTitle">Run 1 command in terminal to integrate:</span>
-                        </div>
-                        <div class="quickCommandRow">
-                            <code>./install.sh</code>
-                            <button type="button" class="copyCodeBtn" data-copy="./install.sh" title="Copy command to clipboard">COPY</button>
-                        </div>
-                    </div>
-
-                    <p class="cardDesc">
-                        Full native system integration conforming to FreeDesktop XDG specifications. Auto-generates application launcher entries, high-resolution 512x512 vector icons, MIME type associations for audio files, and command-line daemon management.
-                    </p>
-                    
-                    <div class="codeSnippetBox">
-                        <div class="codeSnippetHeader">
-                            <span>TERMINAL INSTALLATION (ONE-LINE RUNNER)</span>
-                            <button type="button" class="copyCodeBtn" data-copy="./install.sh" title="Copy command to clipboard">
-                                COPY
-                            </button>
-                        </div>
-                        <pre><code>./install.sh</code></pre>
-                    </div>
-
-                    <div class="featureGrid">
-                        <div class="featureItem">
-                            <span class="featureDot"></span>
-                            <div>
-                                <strong>System Menu Entry</strong>
-                                <p>Search "CachyMusic" in Rofi, Dmenu, GNOME, KDE, or Hyprland.</p>
-                            </div>
-                        </div>
-                        <div class="featureItem">
-                            <span class="featureDot"></span>
-                            <div>
-                                <strong>Global CLI Launcher</strong>
-                                <p>Run <code>cachymusic</code> from any terminal to launch standalone window mode.</p>
-                            </div>
-                        </div>
-                        <div class="featureItem">
-                            <span class="featureDot"></span>
-                            <div>
-                                <strong>Audio Associations</strong>
-                                <p>Registers FLAC, MP3, WAV, OGG, and AAC file associations.</p>
-                            </div>
-                        </div>
-                        <div class="featureItem">
-                            <span class="featureDot"></span>
-                            <div>
-                                <strong>Clean Removal</strong>
-                                <p>Run <code>./uninstall.sh</code> to cleanly remove shortcuts without touching your music.</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="cardActionsRow">
-                        <a href="https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-linux.tar.gz" class="actionBtn primaryBtn">
-                            DOWNLOAD LINUX .TAR.GZ
-                        </a>
-                        <a href="install.sh" download="install.sh" class="actionBtn">
-                            DOWNLOAD INSTALL.SH
-                        </a>
-                        <a href="uninstall.sh" download="uninstall.sh" class="actionBtn">
-                            DOWNLOAD UNINSTALL.SH
-                        </a>
-                        <button type="button" class="actionBtn copyCodeBtn" data-copy="cachymusic --background">
-                            COPY BACKGROUND DAEMON CMD
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 2. WINDOWS -->
-            <div class="downloadPanel" id="platform-windows" role="tabpanel" style="display: none;">
-                <div class="downloadCardMain">
-                    <div class="cardHeaderRow">
-                        <div class="cardHeaderLeft">
-                            <span class="clientTag windowsTag">WINDOWS 10 / 11 NATIVE RUNNER</span>
-                            <h3>Windows Standalone App &amp; Launcher</h3>
-                        </div>
-                        <span class="versionPill">Batch / Edge App</span>
-                    </div>
-
-                    <!-- Quick Start Callout Banner -->
-                    <div class="quickStartCallout">
-                        <div class="calloutHeader">
-                            <span class="calloutTag">QUICK START</span>
-                            <span class="calloutTitle">Download launcher and double-click to start:</span>
-                        </div>
-                        <div class="quickCommandRow">
-                            <a href="bin/cachymusic.bat" download="cachymusic.bat" class="actionBtn primaryBtn">DOWNLOAD CACHYMUSIC.BAT</a>
-                        </div>
-                    </div>
-
-                    <p class="cardDesc">
-                        Run CachyMusic natively on Windows without installing complex software. Double-click the launcher batch file to spawn background PHP and Soulseek services and launch a dedicated windowed app via Microsoft Edge or Google Chrome.
-                    </p>
-
-                    <div class="downloadOptionsRow">
-                        <div class="optionBox">
-                            <div class="optionBadge">OPTION A (RECOMMENDED)</div>
-                            <h4>Standalone Windows Package</h4>
-                            <p>Download complete release zip with silent <code>CachyMusic.vbs</code> runner and <code>cachymusic.bat</code>.</p>
-                            <a href="https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-windows.zip" class="actionBtn primaryBtn">
-                                DOWNLOAD WINDOWS .ZIP
-                            </a>
-                        </div>
-                        <div class="optionBox">
-                            <div class="optionBadge">OPTION B</div>
-                            <h4>Batch Script &amp; PWA Mode</h4>
-                            <p>Download standalone <code>cachymusic.bat</code> or trigger native browser PWA installation.</p>
-                            <div class="cardActionsRow" style="margin-top: 0.8rem; gap: 0.5rem;">
-                                <a href="bin/cachymusic.bat" download="cachymusic.bat" class="actionBtn" title="Download batch runner">
-                                    CACHYMUSIC.BAT
-                                </a>
-                                <button type="button" class="actionBtn downloadDirectPwaBtn">
-                                    TRIGGER PWA
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="codeSnippetBox">
-                        <div class="codeSnippetHeader">
-                            <span>POWERSHELL / CMD MANUAL RUNNER</span>
-                            <button type="button" class="copyCodeBtn" data-copy="start /b php -S 0.0.0.0:8000 index.php &amp;&amp; msedge --app=http://localhost:8000" title="Copy to clipboard">
-                                COPY
-                            </button>
-                        </div>
-                        <pre><code>start /b php -S 0.0.0.0:8000 index.php &amp;&amp; msedge --app=http://localhost:8000</code></pre>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 3. MACOS -->
-            <div class="downloadPanel" id="platform-macos" role="tabpanel" style="display: none;">
-                <div class="downloadCardMain">
-                    <div class="cardHeaderRow">
-                        <div class="cardHeaderLeft">
-                            <span class="clientTag macTag">APPLE SILICON &amp; INTEL MACOS</span>
-                            <h3>macOS Standalone &amp; Dock Integration</h3>
-                        </div>
-                        <span class="versionPill">PWA / Command</span>
-                    </div>
-
-                    <!-- Quick Start Callout Banner -->
-                    <div class="quickStartCallout">
-                        <div class="calloutHeader">
-                            <span class="calloutTag">QUICK START</span>
-                            <span class="calloutTitle">Native standalone macOS setup:</span>
-                        </div>
-                        <p class="quickCalloutText">In Safari click <strong>File ➔ Add to Dock</strong>, or download the one-click launch script below.</p>
-                    </div>
-
-                    <p class="cardDesc">
-                        Seamless standalone window experience on macOS. Supports Retina display rendering, native MediaSession audio keys, and dedicated dock icon placement.
-                    </p>
-
-                    <div class="downloadOptionsRow">
-                        <div class="optionBox">
-                            <div class="optionBadge">SAFARI (SONOMA+)</div>
-                            <h4>Add to Dock</h4>
-                            <p>In Safari, click <strong>File</strong> ➔ <strong>Add to Dock</strong> to convert CachyMusic into a native Mac application.</p>
-                        </div>
-                        <div class="optionBox">
-                            <div class="optionBadge">CHROME / BRAVE</div>
-                            <h4>Install Standalone</h4>
-                            <p>Click the <strong>Install CachyMusic</strong> icon located on the right side of the URL address bar.</p>
-                        </div>
-                        <div class="optionBox">
-                            <div class="optionBadge">TERMINAL LAUNCHER</div>
-                            <h4>Command Script</h4>
-                            <p>Double-click the <code>.command</code> script to automatically run services and launch.</p>
-                            <a href="bin/cachymusic-mac.command" download="cachymusic-mac.command" class="actionBtn primaryBtn">
-                                DOWNLOAD .COMMAND
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 4. MOBILE & WI-FI STREAMING -->
-            <div class="downloadPanel" id="platform-mobile" role="tabpanel" style="display: none;">
-                <div class="downloadCardMain">
-                    <div class="cardHeaderRow">
-                        <div class="cardHeaderLeft">
-                            <span class="clientTag mobileTag">LOCAL WI-FI STREAMING &amp; MOBILE APP</span>
-                            <h3>Mobile App &amp; Local Network Stream</h3>
-                        </div>
-                        <span class="versionPill">iOS &amp; Android PWA</span>
-                    </div>
-
-                    <!-- Quick Start Callout Banner -->
-                    <div class="quickStartCallout">
-                        <div class="calloutHeader">
-                            <span class="calloutTag">QUICK START</span>
-                            <span class="calloutTitle">Lossless streaming over local Wi-Fi:</span>
-                        </div>
-                        <p class="quickCalloutText">Connect phone to same Wi-Fi network, open address below, and tap <strong>Add to Home Screen</strong>.</p>
-                    </div>
-
-                    <p class="cardDesc">
-                        Stream your entire lossless library from this computer to any smartphone or tablet on your local Wi-Fi network. Includes lock screen album art and playback controls.
-                    </p>
-
-                    <div class="lanAddressCard">
-                        <div class="lanAddressLabel">YOUR LOCAL NETWORK STREAMING ADDRESS:</div>
-                        <div class="lanAddressRow">
-                            <input type="text" id="downloadLanUrlInput" readonly value="http://localhost:8000" class="lanUrlInput">
-                            <button type="button" class="actionBtn primaryBtn copyCodeBtn" id="copyLanUrlBtn" data-copy="http://localhost:8000">
-                                COPY ADDRESS
-                            </button>
-                        </div>
-                        <p class="lanAddressHelp">Make sure your phone is connected to the same Wi-Fi network as this computer, then open this address in your mobile browser.</p>
-                    </div>
-
-                    <div class="downloadOptionsRow" style="margin-top: 1.25rem; margin-bottom: 1.25rem;">
-                        <div class="optionBox">
-                            <div class="optionBadge">IOS &amp; IPADOS</div>
-                            <h4>1-Tap iOS Profile (.mobileconfig)</h4>
-                            <p>Direct installation on iPhone and iPad Safari. Adds home screen app icon with full-screen lossless playback without App Store or sideloading tools.</p>
-                            <div class="cardActionsRow" style="margin-top: 0.8rem; gap: 0.5rem;">
-                                <a href="php/api/ios_profile.php" class="actionBtn primaryBtn" download="CachyMusic.mobileconfig">
-                                    INSTALL PROFILE
-                                </a>
-                                <a href="downloads/CachyMusic.mobileconfig" class="actionBtn" download="CachyMusic.mobileconfig" title="Download pre-generated profile">
-                                    DOWNLOAD FILE
-                                </a>
-                            </div>
-                        </div>
-                        <div class="optionBox">
-                            <div class="optionBadge">ANDROID (NATIVE APK &amp; WEBAPK)</div>
-                            <h4>Android Native Standalone APK</h4>
-                            <p>Download signed standalone APK that runs completely independent on your phone with native audio file picker and DSP workstation, or 1-tap install via Chrome/Brave.</p>
-                            <div class="cardActionsRow" style="margin-top: 0.8rem; gap: 0.5rem;">
-                                <a href="https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta.apk" class="actionBtn primaryBtn">
-                                    DOWNLOAD APK
-                                </a>
-                                <button type="button" class="actionBtn downloadDirectPwaBtn">
-                                    1-TAP PWA
-                                </button>
-                                <a href="https://github.com/Vi-En/CachyMusic/releases/download/v1.0.0/CachyMusic-v1.0.0-beta-android-project.zip" class="actionBtn" title="Download Android Studio project">
-                                    STUDIO ZIP
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mobileStepsGrid">
-                        <div class="mobileStepCard">
-                            <h4>Android (Chrome / Brave / Firefox)</h4>
-                            <ol>
-                                <li>Connect phone to same Wi-Fi network.</li>
-                                <li>Open the address above in Chrome or Brave.</li>
-                                <li>Tap the three dots menu (<strong>⋮</strong>) in the top-right corner.</li>
-                                <li>Select <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
-                                <li>CachyMusic installs as a full-screen mobile app with app drawer icon!</li>
-                            </ol>
-                        </div>
-                        <div class="mobileStepCard">
-                            <h4>iOS &amp; iPadOS (Safari WebClip)</h4>
-                            <ol>
-                                <li>Connect iPhone/iPad to same Wi-Fi network.</li>
-                                <li>Tap <strong>"INSTALL PROFILE"</strong> above (or visit <code>/php/api/ios_profile.php</code>).</li>
-                                <li>Tap <strong>Allow</strong> when iOS prompts <em>"Profile Downloaded"</em>.</li>
-                                <li>Open iOS <strong>Settings</strong> &rarr; <strong>Profile Downloaded</strong> &rarr; Tap <strong>Install</strong>.</li>
-                                <li>CachyMusic immediately appears on your home screen with custom icon!</li>
-                            </ol>
-                        </div>
-                    </div>
-
-                    <div class="codeSnippetBox" style="margin-top: 1.2rem;">
-                        <div class="codeSnippetHeader">
-                            <span>CROSS-PLATFORM MOBILE PACKAGER CLI (ANDROID &amp; IOS)</span>
-                            <button type="button" class="copyCodeBtn" data-copy="./tools/packager/package-mobile.sh all" title="Copy to clipboard">
-                                COPY
-                            </button>
-                        </div>
-                        <pre><code>./tools/packager/package-mobile.sh all</code></pre>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 5. DIRECT PWA INSTALL -->
-            <div class="downloadPanel" id="platform-pwa" role="tabpanel" style="display: none;">
-                <div class="downloadCardMain">
-                    <div class="cardHeaderRow">
-                        <div class="cardHeaderLeft">
-                            <span class="clientTag pwaTag">STANDALONE WEB APP RUNTIME</span>
-                            <h3>Direct Web App (PWA) Engine</h3>
-                        </div>
-                        <span class="versionPill" id="downloadPwaStatusPill">Browser Mode</span>
-                    </div>
-
-                    <!-- Quick Start Callout Banner -->
-                    <div class="quickStartCallout">
-                        <div class="calloutHeader">
-                            <span class="calloutTag">QUICK START</span>
-                            <span class="calloutTitle">Instant standalone window mode:</span>
-                        </div>
-                        <p class="quickCalloutText">Zero installation required — runs in an isolated desktop frame without address bar or browser tabs.</p>
-                    </div>
-
-                    <p class="cardDesc">
-                        CachyMusic includes an offline-capable Service Worker and Web App Manifest that allows any modern browser to install it into an isolated native window without browser address bars or navigation tabs.
-                    </p>
-
-                    <div class="pwaHeroAction">
-                        <button type="button" class="actionBtn primaryBtn pwaBigInstallBtn" id="downloadPwaTriggerBtn">
-                            INSTALL CACHYMUSIC DIRECTLY TO SYSTEM
-                        </button>
-                        <p class="pwaInstallHint" id="pwaInstallHint">Click above to trigger your browser's native installation prompt.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
     <!-- Dedicated Settings Workspace (Native Full Tab View) -->
     <section class="settingsWorkspace" id="settingsWorkspace" style="display: none;">
         <div class="settingsHubHeader">
             <div class="settingsHubHeaderLeft">
                 <span class="settingsBadge">SYSTEM &amp; AUDIO CONFIGURATION</span>
                 <h2>STUDIO SETTINGS &amp; PREFERENCES</h2>
-                <p class="settingsSubtitle">Select a category below to configure the 64-bit DSP engine, visual themes, local music directories, or timers.</p>
+                <p class="settingsSubtitle">Select a category below to configure the DSP engine, visual themes, local music directories, or timers.</p>
             </div>
             <div class="settingsHubHeaderRight">
                 <button type="button" class="actionBtn settingsReturnBtn" id="settingsReturnBtn" title="Return to Player (Alt+P)">
@@ -1253,7 +874,7 @@
             <button type="button" class="settingsCatBtn active" data-cat="audio">AUDIO &amp; DSP ENGINE</button>
             <button type="button" class="settingsCatBtn" data-cat="visual">THEMES &amp; VISUALIZER</button>
             <button type="button" class="settingsCatBtn" data-cat="library">LIBRARY &amp; FOLDERS</button>
-            <button type="button" class="settingsCatBtn" data-cat="system">TIMERS &amp; CLIENTS</button>
+            <button type="button" class="settingsCatBtn" data-cat="system">SLEEP TIMER</button>
             <button type="button" class="settingsCatBtn" data-cat="all">ALL OVERVIEW</button>
         </nav>
 
@@ -1282,7 +903,7 @@
                             <div class="settingsDspMetricsGrid">
                                 <div class="settingsDspMetricItem">
                                     <span class="settingsDspKey">AUDIO ENGINE</span>
-                                    <span class="settingsDspVal">64-Bit / 32-Bit IEEE</span>
+                                    <span class="settingsDspVal" id="settingsDspEngineVal">64-Bit Worklet / 32-Bit Decode</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
                                     <span class="settingsDspKey">HEADROOM</span>
@@ -1290,15 +911,15 @@
                                 </div>
                                 <div class="settingsDspMetricItem">
                                     <span class="settingsDspKey">BUFFER LATENCY</span>
-                                    <span class="settingsDspVal">Direct Hardware</span>
+                                    <span class="settingsDspVal" id="settingsDspLatencyVal">Direct Hardware</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
                                     <span class="settingsDspKey">CROSSFEED &amp; EQ</span>
-                                    <span class="settingsDspVal">Audiophile Linear</span>
+                                    <span class="settingsDspVal" id="settingsDspEqVal">Linear Bypass</span>
                                 </div>
                             </div>
                             <button type="button" id="settingsTabOpenSignalAuditBtn" class="actionBtn primaryBtn settingsFullWidthBtn signalPathAuditBtn">
-                                AUDIT COMPLETE SIGNAL PATH
+                                SIGNAL PATH &amp; AUDIT
                             </button>
                         </div>
 
@@ -1340,11 +961,11 @@
                                     <h4 class="settingsRowTitle">BUFFER &amp; LATENCY</h4>
                                     <p class="settingsRowDesc">Balance responsive controls (~15ms) against dropout-free buffering (~100ms).</p>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsBufferPill">PLAYBACK (AUDIOPHILE)</span>
+                                <span class="settingsEnginePill" id="settingsBufferPill">PLAYBACK (~100ms)</span>
                             </div>
                             <div class="settingsOptionToggles">
                                 <button type="button" class="actionBtn bufferLatencyBtn" data-latency="interactive">LOW-LATENCY (~15ms)</button>
-                                <button type="button" class="actionBtn bufferLatencyBtn active" data-latency="playback">AUDIOPHILE (~100ms)</button>
+                                <button type="button" class="actionBtn bufferLatencyBtn active" data-latency="playback">STABLE (~100ms)</button>
                             </div>
                         </div>
                     </div>
@@ -1354,20 +975,12 @@
                 <div class="settingsSectionPanel" id="settingsPanelThemesVis" data-settings-cat="visual" style="display: none;">
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
-                            <span class="settingsSectionBadge">COLOR SYSTEM</span>
                             <h3 class="settingsSectionTitle">ACTIVE THEME &amp; PALETTE</h3>
                         </div>
-                        <p class="settingsSectionDesc">Switch between 12 calibrated studio, sci-fi, and minimalist high-contrast themes.</p>
                     </div>
 
                     <div class="settingsPanelContent">
                         <div class="settingsRowItem" id="settingsCardThemes">
-                            <div class="settingsRowHeader">
-                                <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">CURRENT WORKSTATION SKIN</h4>
-                                    <p class="settingsRowDesc">Adapts surfaces, typography, turntable lighting, and visualizer colors.</p>
-                                </div>
-                            </div>
                             <button type="button" id="settingsTabOpenThemeModalBtn" class="settingsThemePickerBtn" title="Open Theme Overhaul Selector">
                                 <div class="settingsThemePickerInfo">
                                     <span class="settingsThemePickerSub">ACTIVE THEME</span>
@@ -1403,8 +1016,8 @@
                                 <button type="button" id="settingsTabScanBtn" class="actionBtn primaryBtn" title="Scan directory and load tracks">SCAN &amp; LOAD</button>
                             </div>
                             <div class="settingsMobileFolderActions" id="settingsMobileFolderActions">
-                                <button type="button" id="settingsChooseFolderBtn" class="actionBtn" title="Choose folder via System Storage Access Framework">📁 SELECT MUSIC FOLDER</button>
-                                <button type="button" id="settingsScanDeviceMusicBtn" class="actionBtn primaryBtn" title="Scan all device music from storage">🎵 SCAN ALL DEVICE MUSIC</button>
+                                <button type="button" id="settingsChooseFolderBtn" class="actionBtn" title="Choose folder via System Storage Access Framework">SELECT MUSIC FOLDER</button>
+                                <button type="button" id="settingsScanDeviceMusicBtn" class="actionBtn primaryBtn" title="Scan all device music from storage">SCAN ALL DEVICE MUSIC</button>
                             </div>
                             <div class="settingsScanStatusBox" id="settingsTabScanStatus">
                                 Ready to scan local music library.
@@ -1418,7 +1031,7 @@
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
                             <span class="settingsSectionBadge">AUTOMATION</span>
-                            <h3 class="settingsSectionTitle">AUDIOPHILE SLEEP TIMER</h3>
+                            <h3 class="settingsSectionTitle">SLEEP TIMER</h3>
                         </div>
                         <p class="settingsSectionDesc">Logarithmic volume fade-out gently lowers output before pausing playback.</p>
                     </div>
@@ -1520,89 +1133,20 @@
                     </div>
                 </div>
 
-                <!-- VISUAL SUB-CARD B: SPECTRUM VISUALIZER -->
+                <!-- VISUAL SUB-CARD B: VISUALIZER -->
                 <div class="settingsSectionPanel" id="settingsPanelVisualizer" data-settings-cat="visual" style="display: none;">
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
-                            <span class="settingsSectionBadge">SPECTRUM</span>
-                            <h3 class="settingsSectionTitle">REAL-TIME VISUALIZER</h3>
+                            <h3 class="settingsSectionTitle">VISUALIZER</h3>
                         </div>
-                        <p class="settingsSectionDesc">High-DPI 60fps frequency analyzer modes synchronized with audio playback.</p>
                     </div>
 
                     <div class="settingsPanelContent">
                         <div class="settingsRowItem" id="settingsCardVis">
-                            <div class="settingsRowHeader">
-                                <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">RENDERING TOPOLOGY</h4>
-                                    <p class="settingsRowDesc">Choose between smooth spline waves, LED bars, or theme-reactive rendering.</p>
-                                </div>
-                            </div>
                             <div class="visSelectorGrid">
                                 <button type="button" class="visModeBtn active" data-mode="wave">LIQUID WAVE</button>
                                 <button type="button" class="visModeBtn" data-mode="dash">SEGMENTED DASH</button>
                                 <button type="button" class="visModeBtn" data-mode="thematic">THEMATIC CORE</button>
-                            </div>
-                            <p class="settingsCardNote">
-                                Thematic Core automatically pauses when playback stops to eliminate idle GPU/CPU drain.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- LIBRARY SUB-CARD B: QUICK FOLDER PRESETS -->
-                <div class="settingsSectionPanel" id="settingsPanelLibraryPresets" data-settings-cat="library" style="display: none;">
-                    <div class="settingsSectionHeader">
-                        <div class="settingsSectionTitleRow">
-                            <span class="settingsSectionBadge">SHORTCUTS</span>
-                            <h3 class="settingsSectionTitle">QUICK DIRECTORY PRESETS</h3>
-                        </div>
-                        <p class="settingsSectionDesc">One-click shortcuts to standard local music and download directories.</p>
-                    </div>
-
-                    <div class="settingsPanelContent">
-                        <div class="settingsRowItem">
-                            <div class="settingsRowHeader">
-                                <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">COMMON MUSIC LOCATIONS</h4>
-                                    <p class="settingsRowDesc">Click a preset below to populate and scan the directory immediately.</p>
-                                </div>
-                            </div>
-                            <div class="settingsPresetsRow">
-                                <span class="settingsPresetLabel">QUICK PRESETS:</span>
-                                <button type="button" class="presetPathBtn" data-path="~/Music">~/Music</button>
-                                <button type="button" class="presetPathBtn" data-path="~/Music/Main">~/Music/Main</button>
-                                <button type="button" class="presetPathBtn" data-path="~/Downloads">~/Downloads</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- SYSTEM SUB-CARD B: CROSS-PLATFORM CLIENTS & PWA -->
-                <div class="settingsSectionPanel" id="settingsPanelClientApps" data-settings-cat="system" style="display: none;">
-                    <div class="settingsSectionHeader">
-                        <div class="settingsSectionTitleRow">
-                            <span class="settingsSectionBadge">DEPLOYMENT</span>
-                            <h3 class="settingsSectionTitle">APPS &amp; MOBILE STREAMING</h3>
-                        </div>
-                        <p class="settingsSectionDesc">Install as a standalone desktop/mobile app or pair over local Wi-Fi.</p>
-                    </div>
-
-                    <div class="settingsPanelContent">
-                        <div class="settingsRowItem" id="settingsCardDownload" data-settings-item-cat="system">
-                            <div class="settingsRowHeader">
-                                <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">NATIVE RUNNERS &amp; PWA</h4>
-                                    <p class="settingsRowDesc">Launch the cross-platform setup hub for Linux, Windows, macOS, Android, and iOS.</p>
-                                </div>
-                            </div>
-                            <div class="settingsDownloadQuickRow">
-                                <button type="button" id="settingsTabOpenDownloadHubBtn" class="actionBtn primaryBtn">
-                                    OPEN DOWNLOAD &amp; SETUP HUB
-                                </button>
-                                <button type="button" id="settingsTabPwaInstallBtn" class="actionBtn">
-                                    1-CLICK PWA INSTALL
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -1615,12 +1159,12 @@
     <aside class="persistentMiniPlayer" id="persistentMiniPlayer" style="display: none;" aria-label="Quick Audio Controls">
         <div class="miniPlayerLeft">
             <div class="miniTurntableThumb" id="miniTurntableThumb">
-                <img src="resources/images/bad-apple.png" alt="Mini Art" id="miniArtPreview">
+                <img src="resources/images/default.svg" alt="Mini Art" id="miniArtPreview">
                 <div class="miniSpindle"></div>
             </div>
             <div class="miniTrackInfo">
-                <div class="miniTitle" id="miniTitle">Select A Track</div>
-                <div class="miniArtist" id="miniArtist">CachyMusic Player</div>
+                <div class="miniTitle" id="miniTitle">No Track Loaded</div>
+                <div class="miniArtist" id="miniArtist">Choose directory</div>
             </div>
         </div>
 
@@ -1852,54 +1396,73 @@
         </div>
     </div>
 
-    <!-- Roon-Grade Audiophile Signal Path & Quality Audit Modal -->
+    <!-- Signal Path & Audit Modal -->
     <div class="modalBackdrop" id="signalPathModal" style="display: none;">
         <div class="modalCard signalPathCard">
             <div class="modalHeader">
                 <div class="signalPathHeaderTitle">
                     <span class="signalDot" id="auditQualityDot">●</span>
-                    <h3>SIGNAL PATH &amp; AUDIOPHILE AUDIT</h3>
+                    <h3>SIGNAL PATH &amp; AUDIT</h3>
                 </div>
-                <button type="button" id="closeSignalPathModalBtn" class="closeModalBtn" title="Close Signal Path Inspector" aria-label="Close Signal Path Inspector">✕</button>
+                <button type="button" id="closeSignalPathModalBtn" class="closeModalBtn" title="Close Signal Path &amp; Audit" aria-label="Close Signal Path &amp; Audit">✕</button>
             </div>
             <div class="signalPathSummary">
-                <div class="signalQualityBadge" id="auditQualityBadge">LOSSLESS BIT-PERFECT</div>
-                <p id="auditQualityDesc">Audio is transmitted directly from source to DAC with zero phase alteration, pristine bit-depth preservation, and true-peak overload guard.</p>
+                <div class="signalQualityBadge" id="auditQualityBadge">32-BIT FLOAT DECODE</div>
+                <p id="auditQualityDesc">Browser decodes audio into 32-bit IEEE 754 floating-point PCM. Select a track or adjust DSP settings to inspect live pipeline stages.</p>
+            </div>
+
+            <div class="auditStageChain" id="auditStageChain">
+                <div class="auditStageRow">
+                    <span class="auditStageKey">SOURCE STREAM</span>
+                    <span class="auditStageVal" id="auditStageSource">Idle (No track loaded)</span>
+                </div>
+                <div class="auditStageRow">
+                    <span class="auditStageKey">DECODER OUTPUT</span>
+                    <span class="auditStageVal" id="auditStageDecode">32-Bit IEEE 754 Float (Web Audio Standard)</span>
+                </div>
+                <div class="auditStageRow">
+                    <span class="auditStageKey">DSP WORKLET &amp; EQ</span>
+                    <span class="auditStageVal" id="auditStageDsp">64-Bit Double-Float Worklet (Bypass)</span>
+                </div>
+                <div class="auditStageRow">
+                    <span class="auditStageKey">OUTPUT &amp; DITHER</span>
+                    <span class="auditStageVal" id="auditStageOutput">Psychoacoustic Noise Shaping (&gt;18 kHz)</span>
+                </div>
             </div>
             
             <div class="signalMetricsGrid">
                 <div class="metricCard">
                     <div class="metricCardHeader">
                         <span class="metricLabel">DYNAMIC HEADROOM</span>
-                        <span class="metricVal" id="auditMetricHeadroom">+14.2 dB (Pristine)</span>
+                        <span class="metricVal" id="auditMetricHeadroom">0.0 dB (Unity)</span>
                     </div>
-                    <p class="metricExplanation">Acoustic safety margin below digital clipping ceiling (0 dBFS) to prevent inter-sample peak distortion during loud dynamic transients.</p>
+                    <p class="metricExplanation" id="auditMetricHeadroomDesc">Pre-amp attenuation and safety margin below digital clipping ceiling (0 dBFS) based on active EQ boosts and volume.</p>
                 </div>
                 <div class="metricCard">
                     <div class="metricCardHeader">
                         <span class="metricLabel">ESTIMATED LATENCY</span>
-                        <span class="metricVal" id="auditMetricLatency">~5.3 ms (Ultra-Low)</span>
+                        <span class="metricVal" id="auditMetricLatency">~100 ms (Stable)</span>
                     </div>
-                    <p class="metricExplanation">Hardware audio buffer roundtrip response time from internal DSP pipeline to physical DAC/speaker output.</p>
+                    <p class="metricExplanation" id="auditMetricLatencyDesc">Hardware audio buffer roundtrip response time from Web Audio context to physical DAC/speaker output.</p>
                 </div>
                 <div class="metricCard">
                     <div class="metricCardHeader">
-                        <span class="metricLabel">BUFFER PRECISION</span>
-                        <span class="metricVal">32-Bit Float</span>
+                        <span class="metricLabel">PIPELINE PRECISION</span>
+                        <span class="metricVal" id="auditMetricPrecision">32-Bit Decode / 64-Bit DSP</span>
                     </div>
-                    <p class="metricExplanation">IEEE 754 floating-point internal math ensuring infinite processing headroom, zero quantization distortion, and bit-level micro-dynamics.</p>
+                    <p class="metricExplanation" id="auditMetricPrecisionDesc">Web Audio decodes to 32-bit IEEE 754 float; active AudioWorklet stage computes biquads and dithering in 64-bit double float.</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Audiophile Sleep Timer Modal -->
+    <!-- Sleep Timer Modal -->
     <div class="modalBackdrop" id="sleepTimerModal" style="display: none;">
         <div class="modalCard sleepTimerCard">
             <div class="modalHeader">
                 <div class="sleepTimerHeaderTitle">
                     <span class="sleepTimerMoon">🌙</span>
-                    <h3>AUDIOPHILE SLEEP TIMER</h3>
+                    <h3>SLEEP TIMER</h3>
                 </div>
                 <button type="button" id="closeSleepTimerModalBtn" class="closeModalBtn" title="Close Sleep Timer" aria-label="Close Sleep Timer">✕</button>
             </div>
@@ -1922,6 +1485,19 @@
                 <input type="number" id="customSleepInput" min="1" max="360" placeholder="Custom minutes..." aria-label="Custom sleep minutes">
                 <button type="button" id="setCustomSleepBtn" class="actionBtn primaryBtn">SET TIMER</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Blocking Track Loading Overlay (Prevents Interruption Unless Cancelled) -->
+    <div class="modalBackdrop trackLoadingBackdrop" id="trackLoadingOverlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="trackLoadingTitle">
+        <div class="modalCard trackLoadingCard">
+            <div class="trackLoadingSpinner" aria-hidden="true"></div>
+            <h3 class="trackLoadingTitle" id="trackLoadingTitle">LOADING MUSIC LIBRARY...</h3>
+            <p class="trackLoadingStatus" id="trackLoadingStatusText">Indexing audio files and metadata. Please wait...</p>
+            <div class="trackLoadingProgressTrack">
+                <div class="trackLoadingProgressBar" id="trackLoadingProgressBar"></div>
+            </div>
+            <button type="button" id="cancelTrackLoadingBtn" class="actionBtn dangerBtn trackLoadingCancelBtn">CANCEL</button>
         </div>
     </div>
 
@@ -2159,6 +1735,6 @@
         <canvas id="visualizerCanvas" class="visualizerCanvas"></canvas>
     </div>
 
-    <script src="scripts/homepage.js?v=10.47"></script>
+    <script src="scripts/homepage.js?v=10.52"></script>
 </body>
 </html>

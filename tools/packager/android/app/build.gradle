@@ -10,8 +10,8 @@ android {
         applicationId "org.cachymusic.app"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0-beta"
+        versionCode 2
+        versionName "1.1.0-beta"
     }
     buildTypes {
         release {
@@ -32,6 +32,7 @@ tasks.register('syncWorkstationAssets', Sync) {
         include 'stylesheets/**'
         include 'scripts/**'
         include 'resources/**'
+        exclude 'resources/audio/**'
     }
     into "${projectDir}/src/main/assets"
 }

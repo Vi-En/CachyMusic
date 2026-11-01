@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0-beta] - 2026-11-01
+
+### Highlights
+- **Signal Path & Audit (`SPA`) Live Telemetry & Honest Precision Reporting**:
+  - Renamed the player badge button to **`SPA`** (*Signal Path & Audit*) and updated the audit modal (`SIGNAL PATH & AUDIT`) to respond live on both web and standalone Android APK (`localfile://` and `content://` streams).
+  - Accurately reports the 4-stage pipeline: **Source Stream** (Lossless PCM vs. Lossy Compressed with bit depth, sample rate, and bitrate), **Decoder Output** (`32-Bit IEEE 754 Float` Web Audio decoder output), **DSP Worklet & EQ** (`64-Bit Double-Float` AudioWorklet vs. `32-Bit Fast Float` biquads, active EQ bands, Crossfeed, Ambiophonics, and Pre-Amp Headroom attenuation), and **Output & Dither** (TPDF 24-bit dither, ultrasonic filter cutoff, peak limiter, and real-time hardware latency).
+- **Blocking Track Loading Overlay with Cancellation (`#trackLoadingOverlay`)**:
+  - Added a modal loading screen that prevents accidental UI interruption while directories or device storage are being indexed, displaying a live progress bar, track counter, and an immediate **`CANCEL`** button (`AbortController` on web, `AndroidAudioBridge.cancelScan()` on Android).
+- **Persistent Directory & Library State Across Restarts**:
+  - Persists the user's chosen music directory and indexed track list across restarts using native `cached_library.json` storage in the Android APK (`AndroidAudioBridge.getSavedLibraryJson()`), `IndexedDB`, and `localStorage`.
+- **Clean Empty-Library State & Removal of Sample Placeholders**:
+  - Removed bundled sample tracks (`boom.mp3`, `yuh.mp3`, etc.) and placeholder metadata/artwork when no directory is loaded, prompting the user to select a music directory first (**`CHOOSE DIRECTORY`** / **`MANUAL SETTINGS`**) with clear fallback instructions for **Settings → Library & Folders**.
+- **Streamlined Settings, Mobile Playlists & Responsive Layout**:
+  - Simplified **Visualizer** and **Active Theme & Palette** cards in Settings to go directly from header to choices without redundant subheaders or hints.
+  - Added a collapsible **`SORT & FILTER`** drawer in the Tracks tab, improved mobile playlist cards with explicit **`SHUFFLE`** and **`+ QUEUE`** labels, and removed folder/scan icons, quick directory shortcuts, and in-app deployment panels.
+  - Fixed mobile turntable geometry (`aspect-ratio: 1 / 1` circular platter and tonearm positioning), resilient audio stream recovery (HTTP 206 partial content and Android `MediaCodec` fallback), and 60 FPS mobile GPU compositing.
+
+---
+
 ## [1.0.0-beta] - 2026-10-31
 
 ### Highlights

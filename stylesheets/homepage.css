@@ -5237,7 +5237,7 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     {
         height: 2.25rem !important;
         font-size: 0.88rem !important;
-        padding: 0 0.75rem !important;
+        padding: 0 2.2rem 0 2.25rem !important;
     }
 
     /* Top Action Buttons on mobile: compact, single-row icon cluster */
@@ -5314,7 +5314,7 @@ body.is-playing .playPauseBtn .playPauseGlowRing
         max-height: calc(100dvh - 3.1rem) !important;
         overflow-y: auto !important;
         -webkit-overflow-scrolling: touch !important;
-        padding-bottom: calc(4.2rem + env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: calc(8.2rem + env(safe-area-inset-bottom, 0px)) !important;
         box-sizing: border-box !important;
     }
 
@@ -5382,8 +5382,6 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .lyricsToggleBtn
     {
-        top: 0.45rem !important;
-        right: 0.65rem !important;
         padding: 0.3rem 0.7rem !important;
         font-size: 0.74rem !important;
         border-radius: 0.35rem !important;
@@ -48963,8 +48961,1017 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
     text-shadow: 0 0 6px #38bdf8 !important;
 }
 
+    /* ========================================================================= */
+    /* Mobile Layout Overhaul: Turntable, Collapsible Sort, Playlists & Settings */
+    /* ========================================================================= */
 
+    /* 1. Desktop vs Mobile Visibility for Collapsible Library Sort & Tools */
+    .quickFormatFilterBar:not([style*="display: none"]) {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 0.4rem !important;
+        flex-wrap: wrap !important;
+    }
 
+    .quickFormatFilterBar[style*="display: none"],
+    #libraryControls[style*="display: none"] {
+        display: none !important;
+    }
 
+    .formatFilterPillsGroup {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.3rem !important;
+        flex-wrap: wrap !important;
+    }
 
+    .libraryToolsToggleBtn {
+        display: none !important;
+    }
 
+    /* Hide RESTORE (0) whenever inline style sets display: none */
+    .panelActions .actionBtn[style*="display: none"],
+    #restoreTracksBtn[style*="display: none"] {
+        display: none !important;
+    }
+
+    /* 2. Intuitive 2-Row Rich Playlist Cards (Desktop & Mobile) */
+    .playlistsView,
+    .createPlaylistHeader,
+    .playlistList {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    .createPlaylistBar {
+        display: flex !important;
+        align-items: stretch !important;
+        gap: 0.4rem !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    #newPlaylistInput,
+    #newPlaylistNameInput,
+    .createPlaylistBar input[type="text"] {
+        width: 0 !important;
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        height: 2.45rem !important;
+        padding: 0 0.7rem !important;
+        font-size: 0.82rem !important;
+        box-sizing: border-box !important;
+    }
+
+    #createPlaylistBtn {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        white-space: nowrap !important;
+        height: 2.45rem !important;
+        padding: 0 0.82rem !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 0.74rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.03em !important;
+        box-sizing: border-box !important;
+    }
+
+    .playlistQuickChips {
+        display: flex !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        gap: 0.35rem !important;
+        overflow: visible !important;
+        padding-bottom: 0.15rem !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .playlistCardItem.richPlaylistCard {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.6rem !important;
+        padding: 0.75rem 0.85rem !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    .playlistCardTopRow {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.75rem !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    .playlistCardTopRow .playlistCardMain {
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.22rem !important;
+    }
+
+    .playlistCardTopRow .playlistCardName {
+        font-size: 0.95rem !important;
+        font-weight: 800 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        display: block !important;
+    }
+
+    .playlistCardTopRow .playlistCardMetaRow {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.45rem !important;
+        flex-wrap: nowrap !important;
+        white-space: nowrap !important;
+    }
+
+    .playlistCardTopRow .playlistMetaPill,
+    .playlistCardTopRow .playlistMetaDuration {
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+
+    .playlistCardTopRow .playlistCardDeleteBtn {
+        width: 1.95rem !important;
+        height: 1.95rem !important;
+        flex: 0 0 1.95rem !important;
+        border-radius: 0.38rem !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        color: var(--text-muted, #94a3b8) !important;
+        font-size: 0.78rem !important;
+        cursor: pointer !important;
+    }
+
+    :root[data-theme="default"] .playlistCardTopRow .playlistCardDeleteBtn,
+    :root:not([data-theme]) .playlistCardTopRow .playlistCardDeleteBtn,
+    [data-theme="brutalist-light"] .playlistCardTopRow .playlistCardDeleteBtn,
+    [data-theme="minimalist-light"] .playlistCardTopRow .playlistCardDeleteBtn,
+    [data-theme="minimalist-warm"] .playlistCardTopRow .playlistCardDeleteBtn {
+        background: rgba(0, 0, 0, 0.05) !important;
+        border-color: rgba(0, 0, 0, 0.18) !important;
+        color: #334155 !important;
+    }
+
+    .playlistCardItem.richPlaylistCard .playlistCardQuickActions {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 0.45rem !important;
+        width: 100% !important;
+    }
+
+    .playlistCardItem.richPlaylistCard .playlistActionPlayBtn,
+    .playlistCardItem.richPlaylistCard .playlistActionShuffleBtn,
+    .playlistCardItem.richPlaylistCard .playlistActionQueueBtn {
+        width: 100% !important;
+        height: 2.15rem !important;
+        padding: 0 0.45rem !important;
+        font-size: 0.72rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.03em !important;
+        border-radius: 0.38rem !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0.3rem !important;
+        white-space: nowrap !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 3. Responsive Settings Choice Buttons & Option Cards (All Viewports) */
+    .settingsRowItem,
+    .settingsOptionCard {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        justify-content: flex-start !important;
+        height: auto !important;
+        min-height: 0 !important;
+        gap: 0.75rem !important;
+        padding: 1rem !important;
+        box-sizing: border-box !important;
+    }
+
+    .settingsRowTitleGroup {
+        flex: 0 0 auto !important;
+        height: auto !important;
+        min-height: 0 !important;
+        width: 100% !important;
+    }
+
+    .settingsOptionToggles {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)) !important;
+        gap: 0.48rem !important;
+        width: 100% !important;
+    }
+
+    .settingsOptionToggles .actionBtn,
+    .enginePrecisionBtn,
+    .ditherModeBtn,
+    .bufferLatencyBtn,
+    .toggleActiveBtn,
+    .settingsOptBtn {
+        width: 100% !important;
+        height: auto !important;
+        min-height: 2.65rem !important;
+        padding: 0.5rem 0.65rem !important;
+        font-size: clamp(0.72rem, 1.8vw, 0.8rem) !important;
+        font-weight: 800 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        line-height: 1.25 !important;
+        white-space: normal !important;
+        box-sizing: border-box !important;
+    }
+
+    /* 4. Mobile & Tablet Responsive Refinements (<= 768px) */
+    @media (max-width: 768px) {
+        /* Collapsible Sort & Tools Toggle Bar in Tracks Tab */
+        .quickFormatFilterBar:not([style*="display: none"]) {
+            padding: 0.4rem 0.65rem !important;
+            gap: 0.35rem !important;
+            flex-wrap: nowrap !important;
+            justify-content: space-between !important;
+        }
+
+        .formatFilterPillsGroup {
+            gap: 0.22rem !important;
+            flex-wrap: nowrap !important;
+            min-width: 0 !important;
+        }
+
+        .formatFilterPill {
+            padding: 0.26rem 0.46rem !important;
+            font-size: 0.65rem !important;
+            white-space: nowrap !important;
+        }
+
+        .libraryToolsToggleBtn:not([style*="display: none"]) {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 0.25rem !important;
+            padding: 0.26rem 0.55rem !important;
+            font-size: 0.65rem !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.03em !important;
+            border-radius: 999px !important;
+            background: rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            color: var(--text-main, #f8fafc) !important;
+            cursor: pointer !important;
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+        }
+
+        :root[data-theme="default"] .libraryToolsToggleBtn,
+        :root:not([data-theme]) .libraryToolsToggleBtn,
+        [data-theme="brutalist-light"] .libraryToolsToggleBtn,
+        [data-theme="minimalist-light"] .libraryToolsToggleBtn,
+        [data-theme="minimalist-warm"] .libraryToolsToggleBtn {
+            background: rgba(0, 0, 0, 0.06) !important;
+            border-color: rgba(0, 0, 0, 0.22) !important;
+            color: #0f172a !important;
+        }
+
+        .libraryToolsToggleBtn.active {
+            background: var(--accent-primary, #ff1744) !important;
+            border-color: var(--accent-primary, #ff1744) !important;
+            color: #ffffff !important;
+        }
+
+        [data-theme="solar-eclipse"] .libraryToolsToggleBtn.active,
+        [data-theme="euclid-horizon"] .libraryToolsToggleBtn.active,
+        [data-theme="abyssal-void"] .libraryToolsToggleBtn.active,
+        [data-theme="sentinel"] .libraryToolsToggleBtn.active,
+        [data-theme="minimalist-dark"] .libraryToolsToggleBtn.active,
+        [data-theme="minimalist-obsidian"] .libraryToolsToggleBtn.active {
+            color: #000000 !important;
+        }
+
+        #libraryControls.mobileCollapsed {
+            display: none !important;
+        }
+
+        #libraryControls:not(.mobileCollapsed):not([style*="display: none"]) {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 0.45rem !important;
+            padding: 0.45rem 0.65rem 0.55rem !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+
+        /* 6-column grid so 3 buttons sit on row 1 (span 2 each) and 2 buttons sit on row 2 (span 3 each) */
+        .panelActions {
+            display: grid !important;
+            grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+            gap: 0.38rem !important;
+            width: 100% !important;
+        }
+
+        .panelActions > #quickNewPlaylistBtn,
+        .panelActions > #refreshTracksBtn,
+        .panelActions > #shufflePlayBtn {
+            grid-column: span 2 !important;
+        }
+
+        .panelActions > #mobileScanFolderBtn,
+        .panelActions > #localFileInputLabel {
+            grid-column: span 3 !important;
+        }
+
+        .panelActions > #restoreTracksBtn:not([style*="display: none"]) {
+            grid-column: 1 / -1 !important;
+        }
+
+        /* Mobile Turntable Stage, Platter, Tonearm & Top Controls */
+        .playerDeck.mobileActive .turntableStage,
+        [data-theme] .playerDeck.mobileActive .turntableStage {
+            position: relative !important;
+            width: 100% !important;
+            max-width: 23rem !important;
+            height: clamp(13.5rem, min(34dvh, 72vw), 17.5rem) !important;
+            min-height: 13.2rem !important;
+            max-height: 35dvh !important;
+            flex: 0 0 auto !important;
+            margin: 0.1rem auto 0.2rem !important;
+            padding: 2.3rem 0.6rem 0.5rem !important;
+            border-radius: 0.9rem !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
+        }
+
+        .playerDeck.mobileActive .deckArtworkBackdrop {
+            opacity: 0.16 !important;
+            filter: blur(18px) saturate(1.2) !important;
+            transform: scale(1.15) !important;
+        }
+
+        .playerDeck.mobileActive .deckTopControls {
+            position: absolute !important;
+            top: 0.5rem !important;
+            left: 0.6rem !important;
+            right: 0.6rem !important;
+            width: auto !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 0.5rem !important;
+            z-index: 25 !important;
+            pointer-events: none !important;
+        }
+
+        .playerDeck.mobileActive .deckTopControls .deckActionBtn,
+        .playerDeck.mobileActive .deckTopControls .metadataToggleBtn,
+        .playerDeck.mobileActive .deckTopControls .lyricsToggleBtn {
+            position: relative !important;
+            top: auto !important;
+            right: auto !important;
+            left: auto !important;
+            bottom: auto !important;
+            margin: 0 !important;
+            height: 1.95rem !important;
+            padding: 0 0.72rem !important;
+            font-size: 0.7rem !important;
+            font-weight: 800 !important;
+            border-radius: 999px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 0.35rem !important;
+            pointer-events: auto !important;
+            white-space: nowrap !important;
+            box-sizing: border-box !important;
+        }
+
+        .playerDeck.mobileActive .turntableCon,
+        [data-theme] .playerDeck.mobileActive .turntableCon {
+            --mobile-platter-size: clamp(10.2rem, min(26.5dvh, 54vw), 13.6rem);
+            width: var(--mobile-platter-size) !important;
+            height: var(--mobile-platter-size) !important;
+            min-width: var(--mobile-platter-size) !important;
+            min-height: var(--mobile-platter-size) !important;
+            max-width: var(--mobile-platter-size) !important;
+            max-height: var(--mobile-platter-size) !important;
+            position: relative !important;
+            margin: auto !important;
+            aspect-ratio: 1 / 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+
+        .playerDeck.mobileActive .vinylTurntable {
+            width: 96% !important;
+            height: 96% !important;
+            max-width: 96% !important;
+            max-height: 96% !important;
+            border-radius: 50% !important;
+            margin: auto !important;
+        }
+
+        .playerDeck.mobileActive .toneArm {
+            width: 2.2rem !important;
+            height: calc(var(--mobile-platter-size, 11.5rem) * 0.68) !important;
+            right: -0.55rem !important;
+            top: -0.1rem !important;
+            transform-origin: 1.1rem 1.1rem !important;
+            transform: rotate(2deg) !important;
+            z-index: 15 !important;
+        }
+
+        .playerDeck.mobileActive .toneArm.active {
+            transform: rotate(24deg) !important;
+        }
+
+        .playerDeck.mobileActive .toneArm .armPivot {
+            width: 2.05rem !important;
+            height: 2.05rem !important;
+            top: 0 !important;
+            left: 0.08rem !important;
+        }
+
+        .playerDeck.mobileActive .toneArm .armShaft {
+            height: calc(var(--mobile-platter-size, 11.5rem) * 0.45) !important;
+            width: 0.22rem !important;
+            margin-left: 0.98rem !important;
+            margin-top: 1.45rem !important;
+        }
+
+        .playerDeck.mobileActive .toneArm .armCartridge {
+            width: 0.65rem !important;
+            height: 1.1rem !important;
+            margin-left: 0.76rem !important;
+        }
+
+        /* Mobile Settings Navigation & Choice Buttons */
+        .settingsCategoryNav {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.42rem !important;
+            overflow: visible !important;
+            padding: 0.45rem !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+
+        .settingsCategoryNav .settingsCatBtn {
+            width: 100% !important;
+            min-height: 2.5rem !important;
+            padding: 0.42rem 0.5rem !important;
+            font-size: clamp(0.68rem, 2.2vw, 0.76rem) !important;
+            font-weight: 800 !important;
+            text-align: center !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            white-space: normal !important;
+            line-height: 1.2 !important;
+            border-radius: 0.42rem !important;
+            box-sizing: border-box !important;
+        }
+
+        .settingsCategoryNav .settingsCatBtn:last-child:nth-child(odd) {
+            grid-column: 1 / -1 !important;
+        }
+
+        .settingsDspMetricsGrid,
+        .settingsTelemetryBar {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.45rem !important;
+            width: 100% !important;
+        }
+
+        .settingsDspMetricItem,
+        .settingsTelemetryItem {
+            padding: 0.55rem 0.65rem !important;
+            min-width: 0 !important;
+        }
+
+        .settingsRowHeader {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 0.38rem !important;
+            width: 100% !important;
+        }
+
+        .settingsOptionToggles {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.48rem !important;
+            width: 100% !important;
+        }
+
+        .settingsOptionToggles > :last-child:nth-child(odd) {
+            grid-column: 1 / -1 !important;
+        }
+
+        .settingsOptionToggles.settingsInlineControls {
+            grid-template-columns: 1fr !important;
+        }
+
+        .settingsOptionToggles .actionBtn,
+        .enginePrecisionBtn,
+        .ditherModeBtn,
+        .bufferLatencyBtn,
+        .toggleActiveBtn,
+        .settingsOptBtn {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 2.7rem !important;
+            padding: 0.52rem 0.65rem !important;
+            font-size: clamp(0.72rem, 2.3vw, 0.8rem) !important;
+            font-weight: 800 !important;
+            line-height: 1.25 !important;
+            white-space: normal !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            box-sizing: border-box !important;
+        }
+
+        .settingsSelect {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 2.7rem !important;
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.8rem !important;
+            box-sizing: border-box !important;
+        }
+
+        .visSelectorGrid {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.48rem !important;
+            width: 100% !important;
+        }
+
+        .visSelectorGrid .visModeBtn:last-child:nth-child(odd) {
+            grid-column: 1 / -1 !important;
+        }
+
+        .visModeBtn {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 2.7rem !important;
+            padding: 0.52rem 0.65rem !important;
+            font-size: 0.75rem !important;
+            font-weight: 800 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            box-sizing: border-box !important;
+        }
+
+        .settingsSleepQuickRow,
+        .settingsDownloadQuickRow,
+        .settingsMobileFolderActions,
+        .settingsPresetsRow {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            gap: 0.48rem !important;
+            width: 100% !important;
+        }
+
+        .settingsPresetsRow .settingsPresetLabel {
+            grid-column: 1 / -1 !important;
+            margin-bottom: 0.1rem !important;
+        }
+
+        .settingsPresetsRow .presetPathBtn:last-child,
+        .settingsSleepQuickRow > :last-child:nth-child(odd),
+        .settingsDownloadQuickRow > :last-child:nth-child(odd),
+        .settingsMobileFolderActions > :last-child:nth-child(odd) {
+            grid-column: 1 / -1 !important;
+        }
+
+        .settingsSleepQuickRow button,
+        .settingsDownloadQuickRow button,
+        .settingsMobileFolderActions .actionBtn,
+        .settingsPresetsRow .presetPathBtn {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 2.65rem !important;
+            padding: 0.5rem 0.65rem !important;
+            font-size: 0.75rem !important;
+            font-weight: 800 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: normal !important;
+            line-height: 1.25 !important;
+            box-sizing: border-box !important;
+        }
+
+        .settingsFolderInputRow {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0.5rem !important;
+            width: 100% !important;
+        }
+
+        .settingsFolderInputRow input,
+        .settingsFolderInputRow button,
+        .settingsInput {
+            flex: 0 0 auto !important;
+            width: 100% !important;
+            height: 2.7rem !important;
+            min-height: 2.7rem !important;
+            max-height: 2.7rem !important;
+            box-sizing: border-box !important;
+        }
+
+        .settingsThemePickerBtn {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 0.4rem !important;
+            padding: 0.7rem 0.85rem !important;
+            height: auto !important;
+            min-height: 3.1rem !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+
+        #settingsPanelThemesVis .settingsSectionHeader,
+        #settingsPanelVisualizer .settingsSectionHeader {
+            margin-bottom: 0.55rem !important;
+            padding-bottom: 0.45rem !important;
+        }
+
+        /* Mobile GPU & Interaction Smoothness Optimizations */
+        .ambientAuraGlow,
+        .turntableHalo {
+            display: none !important;
+            animation: none !important;
+        }
+
+        .topNavBar,
+        .panel,
+        .settingsWorkspace,
+        .settingsSectionPanel,
+        .settingsRowItem,
+        .persistentMiniPlayer,
+        .mobileBottomNav,
+        .modalBackdrop,
+        .modalCard,
+        .trackItem,
+        .playlistCard {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+
+        button,
+        .actionBtn,
+        .mobileTabBtn,
+        .settingsCatBtn,
+        .visModeBtn,
+        .trackItem,
+        .playlistCard,
+        .formatFilterPill {
+            touch-action: manipulation;
+        }
+
+        :root:not([data-theme]) #signalPathModal .signalPathCard,
+        [data-theme="default"] #signalPathModal .signalPathCard {
+            background: #0e1017 !important;
+            color: #f8fafc !important;
+            border-top: 1.5px solid rgba(255, 255, 255, 0.2) !important;
+        }
+
+        :root:not([data-theme]) #signalPathModal .modalHeader h3,
+        [data-theme="default"] #signalPathModal .modalHeader h3,
+        :root:not([data-theme]) #signalPathModal .metricVal,
+        [data-theme="default"] #signalPathModal .metricVal {
+            color: #ffffff !important;
+        }
+
+        :root:not([data-theme]) #signalPathModal #auditQualityDesc,
+        [data-theme="default"] #signalPathModal #auditQualityDesc,
+        :root:not([data-theme]) #signalPathModal .metricExplanation,
+        [data-theme="default"] #signalPathModal .metricExplanation,
+        :root:not([data-theme]) #signalPathModal .metricLabel,
+        [data-theme="default"] #signalPathModal .metricLabel {
+            color: #cbd5e1 !important;
+            opacity: 1 !important;
+        }
+
+        :root:not([data-theme]) #signalPathModal .metricCard,
+        [data-theme="default"] #signalPathModal .metricCard,
+        :root:not([data-theme]) #signalPathModal .signalPathSummary,
+        [data-theme="default"] #signalPathModal .signalPathSummary {
+            background: rgba(255, 255, 255, 0.04) !important;
+            border-color: rgba(255, 255, 255, 0.12) !important;
+        }
+    }
+
+    /* =========================================================================
+       BLOCKING TRACK LOADING OVERLAY, EMPTY DIRECTORY PROMPT & SIGNAL CHAIN
+       ========================================================================= */
+    @keyframes cachySpin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .trackLoadingBackdrop {
+        position: fixed !important;
+        inset: 0 !important;
+        z-index: 200000 !important;
+        display: flex;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 1.25rem !important;
+        background: rgba(4, 6, 12, 0.84) !important;
+        box-sizing: border-box !important;
+    }
+
+    .trackLoadingCard {
+        width: min(25rem, 92vw) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        text-align: center !important;
+        gap: 0.75rem !important;
+        padding: 1.45rem 1.25rem !important;
+        border-radius: 1rem !important;
+        background: #10131c !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+        color: #f8fafc !important;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85) !important;
+        box-sizing: border-box !important;
+    }
+
+    :is([data-theme="minimalist-light"], [data-theme="brutalist-light"]) .trackLoadingCard {
+        background: #ffffff !important;
+        border: 2px solid #09090b !important;
+        color: #09090b !important;
+    }
+
+    html[data-theme="minimalist-warm"] .trackLoadingCard {
+        background: #faf8f5 !important;
+        border: 2px solid #b5a68f !important;
+        color: #1c1917 !important;
+    }
+
+    .trackLoadingSpinnerWrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.15rem;
+    }
+
+    .trackLoadingSpinner {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 50%;
+        border: 3px solid rgba(148, 163, 184, 0.25);
+        border-top-color: var(--accent-primary, #38bdf8);
+        animation: cachySpin 0.75s linear infinite;
+    }
+
+    .trackLoadingTitle {
+        margin: 0;
+        font-size: 0.92rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .trackLoadingStatus {
+        margin: 0;
+        font-size: 0.8rem;
+        line-height: 1.4;
+        opacity: 0.88;
+        word-break: break-word;
+    }
+
+    .trackLoadingProgressTrack {
+        width: 100%;
+        height: 0.45rem;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.2);
+        overflow: hidden;
+    }
+
+    .trackLoadingProgressBar {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--accent-primary, #38bdf8);
+        transition: width 0.18s ease;
+    }
+
+    .trackLoadingHint {
+        margin: 0;
+        font-size: 0.72rem;
+        opacity: 0.7;
+    }
+
+    .trackLoadingCancelBtn {
+        width: 100% !important;
+        min-height: 2.65rem !important;
+        margin-top: 0.25rem !important;
+        font-size: 0.78rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.06em !important;
+    }
+
+    /* Empty Player Directory Prompt */
+    .playerEmptyPrompt {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.5rem;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .playerEmptyTitle {
+        font-size: clamp(0.92rem, 2.6vw, 1.08rem);
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        line-height: 1.25;
+    }
+
+    .playerEmptySub {
+        margin: 0;
+        font-size: clamp(0.74rem, 2.1vw, 0.82rem);
+        line-height: 1.38;
+        opacity: 0.84;
+        max-width: 24rem;
+    }
+
+    .playerEmptyErrorHint {
+        margin: 0.15rem 0 0;
+        padding: 0.42rem 0.65rem;
+        border-radius: 0.45rem;
+        font-size: 0.74rem;
+        font-weight: 700;
+        line-height: 1.35;
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid rgba(239, 68, 68, 0.45);
+        color: #fca5a5;
+        width: 100%;
+        max-width: 24rem;
+        box-sizing: border-box;
+    }
+
+    :is([data-theme="minimalist-light"], [data-theme="brutalist-light"], [data-theme="minimalist-warm"]) .playerEmptyErrorHint {
+        background: #fef2f2;
+        border-color: #dc2626;
+        color: #991b1b;
+    }
+
+    .playerEmptyActions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        width: 100%;
+        max-width: 23rem;
+        margin-top: 0.2rem;
+    }
+
+    .playerEmptyBtn {
+        flex: 1 1 8.5rem !important;
+        min-height: 2.45rem !important;
+        padding: 0.42rem 0.7rem !important;
+        font-size: 0.73rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.04em !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        box-sizing: border-box !important;
+    }
+
+    .emptyLibraryNotice {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 0.5rem;
+        padding: 2rem 1.1rem;
+        margin: 0.5rem 0;
+        border-radius: 0.75rem;
+        border: 1px dashed rgba(148, 163, 184, 0.3);
+        background: rgba(15, 23, 42, 0.25);
+        box-sizing: border-box;
+    }
+
+    :is([data-theme="minimalist-light"], [data-theme="brutalist-light"], [data-theme="minimalist-warm"]) .emptyLibraryNotice {
+        background: rgba(0, 0, 0, 0.025);
+        border-color: rgba(0, 0, 0, 0.2);
+    }
+
+    .emptyLibraryTitle {
+        font-size: 0.95rem;
+        font-weight: 800;
+    }
+
+    .emptyLibrarySub {
+        margin: 0;
+        font-size: 0.78rem;
+        line-height: 1.45;
+        opacity: 0.82;
+        max-width: 22rem;
+    }
+
+    .emptyLibraryActions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: 100%;
+        max-width: 22rem;
+        margin-top: 0.35rem;
+    }
+
+    .emptyLibraryActions .actionBtn {
+        flex: 1 1 8.5rem;
+        min-height: 2.55rem;
+        font-size: 0.74rem;
+        font-weight: 800;
+    }
+
+    /* 4-Stage Live Signal Chain in Signal Path & Audit Modal */
+    .auditStageChain {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin-top: 0.65rem;
+        padding: 0.65rem 0.85rem;
+        border-radius: 0.5rem;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    :is([data-theme="minimalist-light"], [data-theme="brutalist-light"], [data-theme="minimalist-warm"]) .auditStageChain {
+        background: rgba(0, 0, 0, 0.03);
+        border-color: rgba(0, 0, 0, 0.12);
+    }
+
+    .auditStageRow {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        padding: 0.25rem 0;
+        border-bottom: 1px dashed rgba(148, 163, 184, 0.16);
+    }
+
+    .auditStageRow:last-child {
+        border-bottom: none;
+    }
+
+    .auditStageKey {
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        opacity: 0.72;
+        text-transform: uppercase;
+    }
+
+    .auditStageVal {
+        font-size: 0.78rem;
+        font-weight: 700;
+        font-family: monospace, "JetBrains Mono";
+        text-align: right;
+        word-break: break-word;
+    }

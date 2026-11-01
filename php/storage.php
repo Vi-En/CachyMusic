@@ -39,10 +39,7 @@ class Storage {
         }
 
         if (!file_exists(self::$dataFile)) {
-            $userHome = getenv('HOME') ?: ($_SERVER['HOME'] ?? '');
-            $defaultDir = ($userHome && is_dir($userHome . '/Music/Main')) ? ($userHome . '/Music/Main') :
-                         (($userHome && is_dir($userHome . '/Music')) ? ($userHome . '/Music') :
-                         (realpath(__DIR__ . '/../resources/audio') ?: ''));
+            $defaultDir = '';
 
             $initData = [
                 'default_directory' => $defaultDir,
@@ -217,29 +214,36 @@ class Storage {
 
     // --- DEFAULT DIRECTORY ---
     public static function getDefaultDirectory() {
+        $placeholderAudio = realpath(__DIR__ . '/../resources/audio');
+        $isPlaceholder = function($path) use ($placeholderAudio) {
+            $trimmed = trim((string)$path);
+            if ($trimmed === '') return true;
+            if ($placeholderAudio && $trimmed === $placeholderAudio) return true;
+            if (str_ends_with(str_replace('\\', '/', $trimmed), '/resources/audio')) return true;
+            return false;
+        };
+
+        $data = self::read();
+        if (is_array($data) && array_key_exists('default_directory', $data)) {
+            $saved = trim((string)$data['default_directory']);
+            if (!$isPlaceholder($saved)) {
+                return $saved;
+            }
+            return '';
+        }
+
         if (self::hasMySQL()) {
             $conn = $GLOBALS['connection'];
             $res = @mysqli_query($conn, "SELECT default_directory FROM DefaultDirectory WHERE ddid = 1 LIMIT 1");
             if ($res && $row = mysqli_fetch_assoc($res)) {
-                if (!empty($row['default_directory'])) {
-                    return $row['default_directory'];
+                $dbDir = trim((string)($row['default_directory'] ?? ''));
+                if (!$isPlaceholder($dbDir)) {
+                    return $dbDir;
                 }
             }
         }
 
-        $data = self::read();
-        if (!empty($data['default_directory'])) {
-            return $data['default_directory'];
-        }
-
-        $userHome = getenv('HOME') ?: ($_SERVER['HOME'] ?? '');
-        if ($userHome && is_dir($userHome . '/Music/Main')) {
-            return $userHome . '/Music/Main';
-        }
-        if ($userHome && is_dir($userHome . '/Music')) {
-            return $userHome . '/Music';
-        }
-        return realpath(__DIR__ . '/../resources/audio') ?: '';
+        return '';
     }
 
     public static function setDefaultDirectory($dir) {
