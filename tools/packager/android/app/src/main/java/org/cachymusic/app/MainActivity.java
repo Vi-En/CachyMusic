@@ -56,6 +56,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import android.provider.OpenableColumns;
 
 public class MainActivity extends Activity {
@@ -366,6 +367,65 @@ public class MainActivity extends Activity {
         }
     }
 
+    private static class DiscoveredAudioItem {
+        final Uri uri;
+        final String name;
+        final String album;
+        final long size;
+        DiscoveredAudioItem(Uri uri, String name, String album, long size) {
+            this.uri = uri;
+            this.name = name;
+            this.album = album;
+            this.size = size;
+        }
+    }
+
+    private Map<String, JSONObject> buildMediaStoreFastIndex() {
+        Map<String, JSONObject> map = new HashMap<>();
+        try {
+            Uri musicUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+            String[] projection = new String[]{
+                MediaStore.Audio.Media.DISPLAY_NAME,
+                MediaStore.Audio.Media.TITLE,
+                MediaStore.Audio.Media.ARTIST,
+                MediaStore.Audio.Media.ALBUM,
+                MediaStore.Audio.Media.DURATION,
+                MediaStore.Audio.Media.SIZE,
+                MediaStore.Audio.Media.MIME_TYPE,
+                MediaStore.Audio.Media.DATA
+            };
+            try (Cursor cursor = getContentResolver().query(musicUri, projection, MediaStore.Audio.Media.IS_MUSIC + " != 0", null, null)) {
+                if (cursor != null) {
+                    int nameCol = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME);
+                    int titleCol = cursor.getColumnIndex(MediaStore.Audio.Media.TITLE);
+                    int artistCol = cursor.getColumnIndex(MediaStore.Audio.Media.ARTIST);
+                    int albumCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM);
+                    int durCol = cursor.getColumnIndex(MediaStore.Audio.Media.DURATION);
+                    int sizeCol = cursor.getColumnIndex(MediaStore.Audio.Media.SIZE);
+                    int mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE);
+                    int dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA);
+
+                    while (cursor.moveToNext()) {
+                        String name = nameCol != -1 ? cursor.getString(nameCol) : null;
+                        if (name == null || name.isEmpty()) continue;
+                        JSONObject obj = new JSONObject();
+                        if (titleCol != -1) obj.put("title", cursor.getString(titleCol));
+                        if (artistCol != -1) obj.put("artist", cursor.getString(artistCol));
+                        if (albumCol != -1) obj.put("album", cursor.getString(albumCol));
+                        if (durCol != -1) obj.put("duration", cursor.getLong(durCol));
+                        if (sizeCol != -1) obj.put("size", cursor.getLong(sizeCol));
+                        if (mimeCol != -1) obj.put("mime", cursor.getString(mimeCol));
+                        if (dataCol != -1) obj.put("path", cursor.getString(dataCol));
+                        map.put(name.toLowerCase(Locale.ROOT), obj);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "MediaStore fast index query skipped: " + e.getMessage());
+        }
+        return map;
+    }
+
     private void scanDocumentFolderAsync(Uri treeUri) {
         isScanCancelled = false;
         new Thread(() -> {
@@ -378,12 +438,51 @@ public class MainActivity extends Activity {
                 final String fName = folderName;
 
                 new Handler(Looper.getMainLooper()).post(() -> {
-                    String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress(0, 0, " + JSONObject.quote(fName) + "); }";
+                    String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress(0, 0, " + JSONObject.quote(fName) + ", 0); }";
                     webView.evaluateJavascript(js, null);
                 });
 
-                List<JSONObject> tracksList = new ArrayList<>();
-                scanDirectoryRecursive(pickedDir, folderName, tracksList, 0);
+                // Phase 1: Rapid file discovery pass
+                List<DiscoveredAudioItem> discovered = new ArrayList<>();
+                discoverAudioFilesRecursive(pickedDir, folderName, discovered, 0);
+
+                if (isScanCancelled) {
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        webView.evaluateJavascript("if (window.onAndroidScanCancelled) { window.onAndroidScanCancelled(); }", null);
+                    });
+                    return;
+                }
+
+                final int total = discovered.size();
+                Map<String, JSONObject> mediaStoreMap = buildMediaStoreFastIndex();
+                List<JSONObject> tracksList = new ArrayList<>(total);
+
+                // Phase 2: Metadata mapping with live ETA and accurate percentage
+                long procStartTime = System.currentTimeMillis();
+                for (int i = 0; i < total; i++) {
+                    if (isScanCancelled) break;
+                    DiscoveredAudioItem item = discovered.get(i);
+                    JSONObject track = createTrackMetadata(item.uri, item.name, item.album, item.size, mediaStoreMap);
+                    if (track != null) {
+                        tracksList.add(track);
+                    }
+
+                    if ((i + 1) % 5 == 0 || i == total - 1) {
+                        final int count = i + 1;
+                        long elapsed = System.currentTimeMillis() - procStartTime;
+                        int etaSec = 0;
+                        if (count > 0 && total > count && elapsed > 0) {
+                            double rate = (double) count / elapsed;
+                            etaSec = (int) Math.max(0, Math.ceil((total - count) / (rate * 1000.0)));
+                        }
+                        final int finalEta = etaSec;
+                        new Handler(Looper.getMainLooper()).post(() -> {
+                            String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress("
+                                    + count + ", " + total + ", " + JSONObject.quote(fName) + ", " + finalEta + "); }";
+                            webView.evaluateJavascript(js, null);
+                        });
+                    }
+                }
 
                 if (isScanCancelled) {
                     new Handler(Looper.getMainLooper()).post(() -> {
@@ -413,32 +512,19 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void scanDirectoryRecursive(DocumentFile dir, String albumDefault, List<JSONObject> results, int depth) {
-        if (isScanCancelled || depth > 6 || dir == null || results.size() > 5000) return;
+    private void discoverAudioFilesRecursive(DocumentFile dir, String albumDefault, List<DiscoveredAudioItem> items, int depth) {
+        if (isScanCancelled || depth > 6 || dir == null || items.size() > 5000) return;
         DocumentFile[] files = dir.listFiles();
         if (files == null) return;
 
         for (DocumentFile file : files) {
             if (isScanCancelled) return;
             if (file.isDirectory()) {
-                scanDirectoryRecursive(file, file.getName(), results, depth + 1);
+                discoverAudioFilesRecursive(file, file.getName(), items, depth + 1);
             } else {
                 String name = file.getName();
                 if (name != null && isAudioFile(name)) {
-                    try {
-                        JSONObject track = createTrackMetadata(file.getUri(), name, albumDefault, file.length());
-                        if (track != null) {
-                            results.add(track);
-                            if (results.size() % 5 == 0) {
-                                final int count = results.size();
-                                final String fLabel = albumDefault != null ? albumDefault : "Selected Folder";
-                                new Handler(Looper.getMainLooper()).post(() -> {
-                                    String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress(" + count + ", 0, " + JSONObject.quote(fLabel) + "); }";
-                                    webView.evaluateJavascript(js, null);
-                                });
-                            }
-                        }
-                    } catch (Exception ignored) {}
+                    items.add(new DiscoveredAudioItem(file.getUri(), name, albumDefault, file.length()));
                 }
             }
         }
@@ -788,8 +874,9 @@ public class MainActivity extends Activity {
                 }
             }
 
-            if (totalSize > 0 && rangeHeader != null && rangeHeader.startsWith("bytes=")) {
-                String byteRange = rangeHeader.substring(6).trim();
+            if (rangeHeader != null) rangeHeader = rangeHeader.trim();
+            if (totalSize > 0 && rangeHeader != null && rangeHeader.toLowerCase(Locale.ROOT).startsWith("bytes=")) {
+                String byteRange = rangeHeader.substring(rangeHeader.indexOf('=') + 1).trim();
                 long start = 0;
                 long end = totalSize - 1;
 
@@ -839,7 +926,7 @@ public class MainActivity extends Activity {
                 headers.put("Access-Control-Allow-Headers", "*");
                 headers.put("Cache-Control", "no-cache");
 
-                return new WebResourceResponse(mime, "UTF-8", 206, "Partial Content", headers, is);
+                return new WebResourceResponse(mime, null, 206, "Partial Content", headers, is);
             }
 
             // Normal full stream response (or when totalSize unknown)
@@ -861,7 +948,7 @@ public class MainActivity extends Activity {
             headers.put("Access-Control-Allow-Headers", "*");
             headers.put("Cache-Control", "no-cache");
 
-            return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, is);
+            return new WebResourceResponse(mime, null, 200, "OK", headers, is);
         } catch (Exception e) {
             Log.e(TAG, "Audio stream intercept error: " + e.getMessage(), e);
             return null;
@@ -869,52 +956,90 @@ public class MainActivity extends Activity {
     }
 
     private boolean isAudioFile(String name) {
-        String lower = name.toLowerCase();
+        String lower = name.toLowerCase(Locale.ROOT);
         return lower.endsWith(".mp3") || lower.endsWith(".flac") || lower.endsWith(".wav") ||
                lower.endsWith(".ogg") || lower.endsWith(".m4a") || lower.endsWith(".aac") ||
                lower.endsWith(".opus") || lower.endsWith(".alac") || lower.endsWith(".aiff");
     }
 
     private JSONObject createTrackMetadata(Uri uri, String filename, String defaultAlbum, long size) {
+        return createTrackMetadata(uri, filename, defaultAlbum, size, null);
+    }
+
+    private JSONObject createTrackMetadata(Uri uri, String filename, String defaultAlbum, long size, Map<String, JSONObject> mediaStoreMap) {
         JSONObject obj = new JSONObject();
         try {
             String title = filename;
             String artist = "Unknown Artist";
-            String album = defaultAlbum != null ? defaultAlbum : "Unknown Album";
+            String album = defaultAlbum != null ? defaultAlbum : "Selected Folder";
             long durationMs = 0;
             int sampleRate = 44100;
             int bitrate = 320;
             String format = "MP3";
+            String rawPath = null;
+            String mediaMime = null;
 
             int dotIdx = filename.lastIndexOf('.');
-            if (dotIdx > 0) {
+            if (dotIdx > 0 && dotIdx < filename.length() - 1) {
                 title = filename.substring(0, dotIdx);
-                format = filename.substring(dotIdx + 1).toUpperCase();
+                format = filename.substring(dotIdx + 1).toUpperCase(Locale.ROOT);
             }
 
-            try (MediaMetadataRetriever mmr = new MediaMetadataRetriever()) {
-                mmr.setDataSource(this, uri);
-                String t = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
-                if (t != null && !t.trim().isEmpty()) title = t.trim();
-
-                String a = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
-                if (a != null && !a.trim().isEmpty()) artist = a.trim();
-
-                String alb = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
-                if (alb != null && !alb.trim().isEmpty()) album = alb.trim();
-
-                String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-                if (dur != null) {
-                    try { durationMs = Long.parseLong(dur); } catch (NumberFormatException ignored) {}
+            // 1. Instant check: match against MediaStore in-memory index
+            JSONObject cached = (mediaStoreMap != null && filename != null) ? mediaStoreMap.get(filename.toLowerCase(Locale.ROOT)) : null;
+            if (cached != null) {
+                String t = cached.optString("title", null);
+                if (t != null && !t.isEmpty() && !t.equals("null")) title = t;
+                String a = cached.optString("artist", null);
+                if (a != null && !a.isEmpty() && !a.equals("null") && !a.equals("<unknown>")) artist = a;
+                String alb = cached.optString("album", null);
+                if (alb != null && !alb.isEmpty() && !alb.equals("null") && !alb.equals("<unknown>")) album = alb;
+                durationMs = cached.optLong("duration", 0);
+                rawPath = cached.optString("path", null);
+                mediaMime = cached.optString("mime", null);
+            } else {
+                // 2. High-speed heuristic filename pattern parsing ("Artist - Title" or "01 - Artist - Title")
+                if (title.contains(" - ")) {
+                    String[] parts = title.split(" - ", 2);
+                    if (parts.length == 2) {
+                        String p0 = parts[0].replaceAll("^\\d+[\\.\\s_-]*", "").trim();
+                        String p1 = parts[1].trim();
+                        if (!p0.isEmpty() && !p1.isEmpty()) {
+                            artist = p0;
+                            title = p1;
+                        }
+                    }
+                } else if (title.matches("^\\d+[\\.\\s_-]+.*")) {
+                    title = title.replaceAll("^\\d+[\\.\\s_-]+", "").trim();
                 }
 
-                String br = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE);
-                if (br != null) {
-                    try { bitrate = (int) (Long.parseLong(br) / 1000); } catch (NumberFormatException ignored) {}
-                }
-            } catch (Exception ignored) {}
+                // 3. Fallback to MediaMetadataRetriever only when duration is unknown
+                if (durationMs <= 0) {
+                    try (MediaMetadataRetriever mmr = new MediaMetadataRetriever()) {
+                        mmr.setDataSource(this, uri);
+                        String t = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
+                        if (t != null && !t.trim().isEmpty()) title = t.trim();
 
-            String detectedMime = detectMimeType(uri, filename, "audio/mpeg");
+                        String a = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+                        if (a != null && !a.trim().isEmpty()) artist = a.trim();
+
+                        String alb = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
+                        if (alb != null && !alb.trim().isEmpty()) album = alb.trim();
+
+                        String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+                        if (dur != null) {
+                            try { durationMs = Long.parseLong(dur); } catch (NumberFormatException ignored) {}
+                        }
+
+                        String br = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE);
+                        if (br != null) {
+                            try { bitrate = (int) (Long.parseLong(br) / 1000); } catch (NumberFormatException ignored) {}
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+
+            String detectedMime = fastDetectMime(filename, mediaMime);
             String encodedUri = URLEncoder.encode(uri.toString(), "UTF-8");
             String encodedName = URLEncoder.encode(filename, "UTF-8");
             String encodedMime = URLEncoder.encode(detectedMime, "UTF-8");
@@ -922,11 +1047,11 @@ public class MainActivity extends Activity {
                     + "&name=" + encodedName
                     + "&mime=" + encodedMime
                     + "&size=" + size
-                    + (filename != null && filename.startsWith("/") ? "&path=" + URLEncoder.encode(filename, "UTF-8") : "");
+                    + (rawPath != null && !rawPath.isEmpty() ? "&path=" + URLEncoder.encode(rawPath, "UTF-8") : "");
 
             obj.put("id", "android_" + System.currentTimeMillis() + "_" + Math.abs(uri.hashCode()));
             obj.put("filename", filename);
-            obj.put("fullPath", filename);
+            obj.put("fullPath", (rawPath != null && !rawPath.isEmpty()) ? rawPath : filename);
             obj.put("title", title);
             obj.put("artist", artist);
             obj.put("album", album);

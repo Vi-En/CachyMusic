@@ -4111,10 +4111,16 @@
             formatVal.textContent = `${rate} • ${depth} • ${fmt} ${br ? '• ' + br : ''}`;
         }
         if (pipeVal && audio) {
-            const rStates = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
-            const r = rStates[audio.readyState] || 'READY';
-            const ctxState = audioContext ? audioContext.state : 'None';
-            pipeVal.textContent = `${r} (Ctx: ${ctxState})`;
+            const rStates = [
+                'Idle (No Data)',
+                'Metadata Loaded',
+                'Decoding Frame',
+                'Buffering Stream',
+                'Ready (Buffered)'
+            ];
+            const r = rStates[audio.readyState] || 'Ready';
+            const ctxState = audioContext ? (audioContext.state === 'running' ? 'Active' : 'Standby') : 'Inactive';
+            pipeVal.textContent = `${r} • DSP: ${ctxState}`;
         }
         if (skipVal) {
             skipVal.textContent = consecutiveSkipCount > 0 ? `${consecutiveSkipCount} skip(s) logged` : 'No abnormal skips (0)';

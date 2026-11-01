@@ -4,6 +4,10 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.4] - 2026-11-01
+- Fixed FLAC audio playback on mobile, corrected turntable needle position, and centered the record player.
+- Added faster music library scanning with an accurate progress bar and estimated time remaining.
+
 ## [1.1.3] - 2026-11-01
 - Fixed mobile audio skipping, turntable tonearm alignment, and layout overlap.
 - Added browser container PWA support, disabled unavailable hardware gain, and improved contrast.

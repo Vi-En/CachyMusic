@@ -11507,6 +11507,9 @@ body.view-settings #headerSearchContainer
     font-weight: 800;
     color: var(--text-primary, #ffffff);
     font-family: monospace;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 /* Theme Quick Grid */
@@ -49623,17 +49626,16 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
             position: relative !important;
             width: 100% !important;
             max-width: 23rem !important;
-            height: clamp(13.5rem, min(34dvh, 72vw), 17.5rem) !important;
-            min-height: 13.2rem !important;
-            max-height: 35dvh !important;
+            height: auto !important;
+            min-height: calc(var(--mobile-platter-size, 13.5rem) + 3.2rem) !important;
             flex: 0 0 auto !important;
             margin: 0.1rem auto 0.2rem !important;
-            padding: 2.3rem 0.6rem 0.5rem !important;
+            padding: 2.2rem 0.6rem 0.8rem !important;
             border-radius: 0.9rem !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             box-sizing: border-box !important;
         }
 
@@ -49682,7 +49684,7 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
 
         .playerDeck.mobileActive .turntableCon,
         [data-theme] .playerDeck.mobileActive .turntableCon {
-            --mobile-platter-size: clamp(12rem, min(32dvh, 66vw), 16rem);
+            --mobile-platter-size: clamp(11.5rem, min(30dvh, 62vw), 14.5rem);
             width: var(--mobile-platter-size) !important;
             height: var(--mobile-platter-size) !important;
             min-width: var(--mobile-platter-size) !important;
@@ -49708,8 +49710,8 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
 
         .playerDeck.mobileActive .toneArm {
             width: 2.2rem !important;
-            height: calc(var(--mobile-platter-size, 14rem) * 0.76) !important;
-            right: -1.0rem !important;
+            height: calc(var(--mobile-platter-size, 13.5rem) * 0.76) !important;
+            right: -0.9rem !important;
             top: 0.25rem !important;
             transform-origin: 1.1rem 1.1rem !important;
             transform: rotate(0deg) !important;
@@ -49719,7 +49721,7 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         }
 
         .playerDeck.mobileActive .toneArm.active {
-            transform: rotate(-24deg) !important;
+            transform: rotate(24deg) !important;
         }
 
         .playerDeck.mobileActive .toneArm .armPivot {
@@ -49795,6 +49797,13 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
         .settingsTelemetryItem {
             padding: 0.55rem 0.65rem !important;
             min-width: 0 !important;
+        }
+
+        .settingsDspVal,
+        .settingsTelemetryVal {
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
         }
 
         .settingsRowHeader {
