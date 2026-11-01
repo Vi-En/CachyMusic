@@ -3481,6 +3481,7 @@
         }
 
         audio.src = trackSrc;
+        audio._isFreshTrackLoad = true;
         try { audio.load(); } catch (_) {}
 
         // Enforce timeframe: selected tracks must ALWAYS start at the beginning (0:00),
@@ -4183,7 +4184,8 @@
             }
 
             // If audio has an error state (e.g. from a past network timeout or worker stall), reload it
-            if (audio.error) {
+            // Only perform reload if it was NOT just loaded as a fresh track in loadTrack()
+            if (audio.error && !audio._isFreshTrackLoad) {
                 console.warn('Audio element has error state; recovering before play:', audio.error);
                 const isDecodeErr = (audio.error.code === 3);
                 const resumeTime = isDecodeErr ? 0 : (audio.currentTime || 0);
@@ -4194,6 +4196,7 @@
                     try { audio.currentTime = resumeTime; } catch (_) {}
                 }
             }
+            audio._isFreshTrackLoad = false;
 
             await audio.play();
             if (reqId !== currentPlayRequestId) return;
@@ -4287,6 +4290,9 @@
     }
 
     function checkAndPreloadNextTrack(currentTime, duration) {
+        if (window.AndroidBridge || /Android/i.test(navigator.userAgent) || window.innerWidth <= 768) {
+            return;
+        }
         if (!duration || isNaN(duration) || duration < 8) return;
         if (duration - currentTime <= 5.0) {
             const nextMasterIdx = peekNextTrackIndex();
@@ -15039,6 +15045,15 @@
 
         // Continuous Native Media Event Synchronization
         attachAudioListeners(audio);
+
+        const ensureContextRunning = () => {
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {});
+            }
+        };
+        ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
+            window.addEventListener(evt, ensureContextRunning, { passive: true });
+        });
 
         // Remember playback position of currently playing track when window closes / navigates away
         function persistCurrentPlaybackTimeOnExit() {

@@ -4,6 +4,11 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.2] - 2026-11-01
+- Fixed mobile audio skipping and decoder errors with direct file streaming.
+- Fixed tonearm needle angle to accurately follow vinyl grooves.
+- Guaranteed continuous audio output across all tracks.
+
 ## [1.1.1] - 2026-11-01
 - Fixed mobile audio skipping and improved song playback stability.
 - Added 3-dot track options menu, debug audio diagnostics, and faster music folder loading.

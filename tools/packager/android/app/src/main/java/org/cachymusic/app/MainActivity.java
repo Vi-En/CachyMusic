@@ -46,8 +46,10 @@ import java.io.FileOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -261,6 +263,14 @@ public class MainActivity extends Activity {
                 }
 
                 if (path != null && path.startsWith("/android-media")) {
+                    if (request != null && "OPTIONS".equalsIgnoreCase(request.getMethod())) {
+                        Map<String, String> corsHeaders = new HashMap<>();
+                        corsHeaders.put("Access-Control-Allow-Origin", "*");
+                        corsHeaders.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                        corsHeaders.put("Access-Control-Allow-Headers", "*");
+                        return new WebResourceResponse("text/plain", "UTF-8", 200, "OK", corsHeaders,
+                                new ByteArrayInputStream(new byte[0]));
+                    }
                     String uriParam = uri.getQueryParameter("uri");
                     if (uriParam != null) {
                         try {
@@ -437,18 +447,16 @@ public class MainActivity extends Activity {
     private String normalizeMimeType(String mime) {
         if (mime == null || mime.trim().isEmpty()) return "audio/mpeg";
         String lower = mime.toLowerCase().trim();
-        if (lower.equals("audio/x-flac")) return "audio/flac";
-        if (lower.equals("audio/x-wav") || lower.equals("audio/wave")) return "audio/wav";
+        if (lower.equals("audio/x-flac") || lower.equals("application/x-flac") || lower.equals("application/flac")) return "audio/flac";
+        if (lower.equals("audio/x-wav") || lower.equals("audio/wave") || lower.equals("audio/vnd.wave")) return "audio/wav";
         if (lower.equals("audio/x-m4a") || lower.equals("audio/m4a")) return "audio/mp4";
         if (lower.equals("audio/mp3")) return "audio/mpeg";
-        if (lower.equals("audio/x-ogg") || lower.equals("application/ogg")) return "audio/ogg";
+        if (lower.equals("audio/x-ogg") || lower.equals("application/ogg") || lower.equals("audio/oga")) return "audio/ogg";
+        if (lower.equals("audio/aacp")) return "audio/aac";
         return lower;
     }
 
     private String fastDetectMime(String filename, String mediaMime) {
-        if (mediaMime != null && !mediaMime.trim().isEmpty() && !mediaMime.equals("application/octet-stream")) {
-            return normalizeMimeType(mediaMime);
-        }
         if (filename != null && !filename.trim().isEmpty()) {
             String lower = filename.toLowerCase().trim();
             if (lower.endsWith(".flac")) return "audio/flac";
@@ -461,6 +469,9 @@ public class MainActivity extends Activity {
             if (lower.endsWith(".wma")) return "audio/x-ms-wma";
             if (lower.endsWith(".alac")) return "audio/alac";
             if (lower.endsWith(".aiff") || lower.endsWith(".aif")) return "audio/aiff";
+        }
+        if (mediaMime != null && !mediaMime.trim().isEmpty() && !mediaMime.equals("application/octet-stream")) {
+            return normalizeMimeType(mediaMime);
         }
         return "audio/mpeg";
     }
@@ -572,12 +583,14 @@ public class MainActivity extends Activity {
         private long remaining;
         private final ParcelFileDescriptor pfd;
         private final AssetFileDescriptor afd;
+        private final RandomAccessFile raf;
 
-        public LimitedInputStream(InputStream in, long limit, ParcelFileDescriptor pfd, AssetFileDescriptor afd) {
+        public LimitedInputStream(InputStream in, long limit, ParcelFileDescriptor pfd, AssetFileDescriptor afd, RandomAccessFile raf) {
             super(in);
             this.remaining = Math.max(0, limit);
             this.pfd = pfd;
             this.afd = afd;
+            this.raf = raf;
         }
 
         @Override
@@ -607,6 +620,9 @@ public class MainActivity extends Activity {
             try {
                 super.close();
             } finally {
+                if (raf != null) {
+                    try { raf.close(); } catch (Exception ignored) {}
+                }
                 if (pfd != null) {
                     try { pfd.close(); } catch (Exception ignored) {}
                 }
@@ -617,17 +633,38 @@ public class MainActivity extends Activity {
         }
     }
 
-    private InputStream createSeekableStream(ParcelFileDescriptor pfd, AssetFileDescriptor afd, Uri uri, long start, long length) {
+    private InputStream createSeekableStream(File directFile, ParcelFileDescriptor pfd, AssetFileDescriptor afd, Uri uri, long start, long length) {
+        if (directFile != null) {
+            try {
+                RandomAccessFile raf = new RandomAccessFile(directFile, "r");
+                if (start > 0) {
+                    raf.seek(start);
+                }
+                InputStream is = Channels.newInputStream(raf.getChannel());
+                return new LimitedInputStream(is, length, null, null, raf);
+            } catch (Exception e) {
+                Log.w(TAG, "directFile seek failed: " + e.getMessage());
+            }
+        }
+
         if (pfd != null) {
             try {
-                FileInputStream fis = new FileInputStream(pfd.getFileDescriptor());
                 if (start > 0) {
-                    fis.getChannel().position(start);
+                    android.system.Os.lseek(pfd.getFileDescriptor(), start, android.system.OsConstants.SEEK_SET);
                 }
-                return new LimitedInputStream(fis, length, pfd, null);
-            } catch (Exception e) {
-                Log.w(TAG, "pfd seek failed: " + e.getMessage());
-                try { pfd.close(); } catch (Exception ignored) {}
+                FileInputStream fis = new ParcelFileDescriptor.AutoCloseInputStream(pfd);
+                return new LimitedInputStream(fis, length, pfd, null, null);
+            } catch (Throwable e) {
+                Log.w(TAG, "pfd Os.lseek fallback: " + e.getMessage());
+                try {
+                    FileInputStream fis = new FileInputStream(pfd.getFileDescriptor());
+                    if (start > 0) {
+                        fis.getChannel().position(start);
+                    }
+                    return new LimitedInputStream(fis, length, pfd, null, null);
+                } catch (Exception e2) {
+                    try { pfd.close(); } catch (Exception ignored) {}
+                }
             }
         }
 
@@ -637,7 +674,7 @@ public class MainActivity extends Activity {
                 if (start > 0) {
                     fis.getChannel().position(afd.getStartOffset() + start);
                 }
-                return new LimitedInputStream(fis, length, null, afd);
+                return new LimitedInputStream(fis, length, null, afd, null);
             } catch (Exception e) {
                 Log.w(TAG, "afd seek failed: " + e.getMessage());
                 try { afd.close(); } catch (Exception ignored) {}
@@ -650,7 +687,7 @@ public class MainActivity extends Activity {
             if (is != null) {
                 if (start > 0) {
                     long skipped = 0;
-                    byte[] buf = new byte[16384];
+                    byte[] buf = new byte[32768];
                     while (skipped < start) {
                         long toSkip = start - skipped;
                         long s = is.skip(toSkip);
@@ -662,7 +699,7 @@ public class MainActivity extends Activity {
                         skipped += s;
                     }
                 }
-                return new LimitedInputStream(is, length, null, null);
+                return new LimitedInputStream(is, length, null, null, null);
             }
         } catch (Exception e) {
             Log.e(TAG, "InputStream fallback failed: " + e.getMessage());
@@ -675,6 +712,7 @@ public class MainActivity extends Activity {
             String nameParam = requestUri != null ? requestUri.getQueryParameter("name") : null;
             String mimeParam = requestUri != null ? requestUri.getQueryParameter("mime") : null;
             String sizeParam = requestUri != null ? requestUri.getQueryParameter("size") : null;
+            String pathParam = requestUri != null ? requestUri.getQueryParameter("path") : null;
 
             long totalSize = -1;
             if (sizeParam != null && !sizeParam.isEmpty()) {
@@ -694,47 +732,60 @@ public class MainActivity extends Activity {
                 rangeHeader = requestHeaders.get("range");
             }
 
-            // Open descriptor ONCE per request to prevent POSIX FD reuse race conditions
-            ParcelFileDescriptor pfd = null;
-            try {
-                pfd = getContentResolver().openFileDescriptor(mediaUri, "r");
-            } catch (Exception e) {
-                Log.w(TAG, "Cannot open ParcelFileDescriptor for " + mediaUri + ": " + e.getMessage());
-            }
-
-            AssetFileDescriptor afd = null;
-            if (pfd == null) {
+            File directFile = null;
+            if (pathParam != null && !pathParam.trim().isEmpty()) {
                 try {
-                    afd = getContentResolver().openAssetFileDescriptor(mediaUri, "r");
-                } catch (Exception e) {
-                    Log.w(TAG, "Cannot open AssetFileDescriptor for " + mediaUri + ": " + e.getMessage());
-                }
-            }
-
-            if (pfd != null) {
-                long sz = pfd.getStatSize();
-                if (sz > 0) {
-                    totalSize = sz;
-                } else {
-                    try {
-                        sz = android.system.Os.fstat(pfd.getFileDescriptor()).st_size;
-                        if (sz > 0) totalSize = sz;
-                    } catch (Exception ignored) {}
-                }
-            } else if (afd != null && afd.getLength() > 0) {
-                totalSize = afd.getLength();
-            }
-
-            if (totalSize <= 0) {
-                try (Cursor cursor = getContentResolver().query(mediaUri, new String[]{OpenableColumns.SIZE}, null, null, null)) {
-                    if (cursor != null && cursor.moveToFirst()) {
-                        int sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE);
-                        if (sizeIdx != -1) {
-                            long sz = cursor.getLong(sizeIdx);
-                            if (sz > 0) totalSize = sz;
-                        }
+                    File f = new File(pathParam.trim());
+                    if (f.exists() && f.canRead()) {
+                        directFile = f;
+                        totalSize = f.length();
                     }
                 } catch (Exception ignored) {}
+            }
+
+            ParcelFileDescriptor pfd = null;
+            AssetFileDescriptor afd = null;
+
+            if (directFile == null) {
+                try {
+                    pfd = getContentResolver().openFileDescriptor(mediaUri, "r");
+                } catch (Exception e) {
+                    Log.w(TAG, "Cannot open ParcelFileDescriptor for " + mediaUri + ": " + e.getMessage());
+                }
+
+                if (pfd == null) {
+                    try {
+                        afd = getContentResolver().openAssetFileDescriptor(mediaUri, "r");
+                    } catch (Exception e) {
+                        Log.w(TAG, "Cannot open AssetFileDescriptor for " + mediaUri + ": " + e.getMessage());
+                    }
+                }
+
+                if (pfd != null) {
+                    long sz = pfd.getStatSize();
+                    if (sz > 0) {
+                        totalSize = sz;
+                    } else {
+                        try {
+                            sz = android.system.Os.fstat(pfd.getFileDescriptor()).st_size;
+                            if (sz > 0) totalSize = sz;
+                        } catch (Exception ignored) {}
+                    }
+                } else if (afd != null && afd.getLength() > 0) {
+                    totalSize = afd.getLength();
+                }
+
+                if (totalSize <= 0) {
+                    try (Cursor cursor = getContentResolver().query(mediaUri, new String[]{OpenableColumns.SIZE}, null, null, null)) {
+                        if (cursor != null && cursor.moveToFirst()) {
+                            int sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE);
+                            if (sizeIdx != -1) {
+                                long sz = cursor.getLong(sizeIdx);
+                                if (sz > 0) totalSize = sz;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
             }
 
             if (totalSize > 0 && rangeHeader != null && rangeHeader.startsWith("bytes=")) {
@@ -764,12 +815,15 @@ public class MainActivity extends Activity {
                     Map<String, String> errHeaders = new HashMap<>();
                     errHeaders.put("Content-Range", "bytes */" + totalSize);
                     errHeaders.put("Accept-Ranges", "bytes");
+                    errHeaders.put("Access-Control-Allow-Origin", "*");
+                    errHeaders.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                    errHeaders.put("Access-Control-Allow-Headers", "*");
                     return new WebResourceResponse(mime, null, 416, "Range Not Satisfiable", errHeaders,
                             new ByteArrayInputStream(new byte[0]));
                 }
 
                 long contentLength = end - start + 1;
-                InputStream is = createSeekableStream(pfd, afd, mediaUri, start, contentLength);
+                InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, start, contentLength);
                 if (is == null) {
                     Log.e(TAG, "Failed to create seekable stream for: " + mediaUri);
                     return null;
@@ -781,6 +835,8 @@ public class MainActivity extends Activity {
                 headers.put("Content-Range", "bytes " + start + "-" + end + "/" + totalSize);
                 headers.put("Content-Length", String.valueOf(contentLength));
                 headers.put("Access-Control-Allow-Origin", "*");
+                headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                headers.put("Access-Control-Allow-Headers", "*");
                 headers.put("Cache-Control", "no-cache");
 
                 return new WebResourceResponse(mime, null, 206, "Partial Content", headers, is);
@@ -788,7 +844,7 @@ public class MainActivity extends Activity {
 
             // Normal full stream response (or when totalSize unknown)
             long streamLength = totalSize > 0 ? totalSize : Long.MAX_VALUE;
-            InputStream is = createSeekableStream(pfd, afd, mediaUri, 0, streamLength);
+            InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, 0, streamLength);
             if (is == null) {
                 Log.e(TAG, "Failed to create full stream for: " + mediaUri);
                 return null;
@@ -801,6 +857,8 @@ public class MainActivity extends Activity {
                 headers.put("Content-Length", String.valueOf(totalSize));
             }
             headers.put("Access-Control-Allow-Origin", "*");
+            headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+            headers.put("Access-Control-Allow-Headers", "*");
             headers.put("Cache-Control", "no-cache");
 
             return new WebResourceResponse(mime, null, 200, "OK", headers, is);
@@ -899,7 +957,8 @@ public class MainActivity extends Activity {
                     MediaStore.Audio.Media.DURATION,
                     MediaStore.Audio.Media.SIZE,
                     MediaStore.Audio.Media.DISPLAY_NAME,
-                    MediaStore.Audio.Media.MIME_TYPE
+                    MediaStore.Audio.Media.MIME_TYPE,
+                    MediaStore.Audio.Media.DATA
                 };
                 String selection = MediaStore.Audio.Media.IS_MUSIC + " != 0";
                 String sortOrder = MediaStore.Audio.Media.TITLE + " ASC";
@@ -916,6 +975,7 @@ public class MainActivity extends Activity {
                         int sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE);
                         int nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME);
                         int mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE);
+                        int dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA);
 
                         while (cursor.moveToNext() && list.size() < 5000) {
                             if (isScanCancelled) break;
@@ -927,6 +987,7 @@ public class MainActivity extends Activity {
                             long size = cursor.getLong(sizeCol);
                             String name = cursor.getString(nameCol);
                             String mediaMime = mimeCol != -1 ? cursor.getString(mimeCol) : null;
+                            String rawPath = dataCol != -1 ? cursor.getString(dataCol) : null;
 
                             String resolvedFilename = name != null ? name : ((title != null ? title : "Track") + ".mp3");
                             String format = "MP3";
@@ -944,12 +1005,13 @@ public class MainActivity extends Activity {
                             String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri
                                     + "&name=" + encodedName
                                     + "&mime=" + encodedMime
-                                    + "&size=" + size;
+                                    + "&size=" + size
+                                    + (rawPath != null && !rawPath.isEmpty() ? "&path=" + URLEncoder.encode(rawPath, "UTF-8") : "");
 
                             JSONObject obj = new JSONObject();
                             obj.put("id", "android_" + id);
                             obj.put("filename", resolvedFilename);
-                            obj.put("fullPath", resolvedFilename);
+                            obj.put("fullPath", (rawPath != null && !rawPath.isEmpty()) ? rawPath : resolvedFilename);
                             obj.put("title", title != null ? title : "Unknown Title");
                             obj.put("artist", (artist != null && !artist.equals("<unknown>")) ? artist : "Unknown Artist");
                             obj.put("album", (album != null && !album.equals("<unknown>")) ? album : "Device Music");

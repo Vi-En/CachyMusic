@@ -31,14 +31,14 @@ It is a lightweight, self-contained music player and audio workstation that runs
 
 ---
 
-## Downloads & Releases (v1.1.1)
+## Downloads & Releases (v1.1.2)
 
 | Platform | Package | Description |
 |:---|:---|:---|
-| **Android** | [`CachyMusic-v1.1.1.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v1.1.1/CachyMusic-v1.1.1.apk) | Native self-contained standalone APK. |
-| **Linux (64-bit)** | [`CachyMusic-v1.1.1-linux.tar.gz`](https://github.com/Vi-En/CachyMusic/releases/download/v1.1.1/CachyMusic-v1.1.1-linux.tar.gz) | Standalone package with native compiled `cachymusic` ELF executable. |
-| **Windows** | [`CachyMusic-v1.1.1-windows.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.1.1/CachyMusic-v1.1.1-windows.zip) | Standalone zip package with silent `CachyMusic.vbs` runner, `cachymusic.bat` launcher, and Edge/Chrome app mode. |
-| **Android Studio** | [`CachyMusic-v1.1.1-android-project.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.1.1/CachyMusic-v1.1.1-android-project.zip) | Complete source project archive ready for Android Studio import. |
+| **Android** | [`CachyMusic-v1.1.2.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v1.1.2/CachyMusic-v1.1.2.apk) | Native self-contained standalone APK. |
+| **Linux (64-bit)** | [`CachyMusic-v1.1.2-linux.tar.gz`](https://github.com/Vi-En/CachyMusic/releases/download/v1.1.2/CachyMusic-v1.1.2-linux.tar.gz) | Standalone package with native compiled `cachymusic` ELF executable. |
+| **Windows** | [`CachyMusic-v1.1.2-windows.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.1.2/CachyMusic-v1.1.2-windows.zip) | Standalone zip package with silent `CachyMusic.vbs` runner, `cachymusic.bat` launcher, and Edge/Chrome app mode. |
+| **Android Studio** | [`CachyMusic-v1.1.2-android-project.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v1.1.2/CachyMusic-v1.1.2-android-project.zip) | Complete source project archive ready for Android Studio import. |
 
 
 ---

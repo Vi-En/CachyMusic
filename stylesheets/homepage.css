@@ -3413,14 +3413,14 @@ body.is-playing .statusDot
     height: clamp(8.5rem, 22vh, 15.5rem);
     pointer-events: none;
     transform-origin: 1.1rem 1.1rem;
-    transform: rotate(-24deg);
+    transform: rotate(8deg);
     transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 5;
 }
 
 .toneArm.active
 {
-    transform: rotate(18deg);
+    transform: rotate(-22deg);
 }
 
 .armPivot
@@ -49704,13 +49704,13 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
             right: -0.45rem !important;
             top: -0.15rem !important;
             transform-origin: 1.1rem 1.1rem !important;
-            transform: rotate(-16deg) !important;
+            transform: rotate(8deg) !important;
             z-index: 15 !important;
             transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
 
         .playerDeck.mobileActive .toneArm.active {
-            transform: rotate(10deg) !important;
+            transform: rotate(-22deg) !important;
         }
 
         .playerDeck.mobileActive .toneArm .armPivot {
