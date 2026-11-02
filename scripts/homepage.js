@@ -318,6 +318,23 @@
         }
     }
 
+    function bindFastAction(el, action) {
+        if (!el) return;
+        let lastActionTime = 0;
+        const handler = (e) => {
+            if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
+            const now = performance.now();
+            if (now - lastActionTime < 320) return;
+            lastActionTime = now;
+            action(e);
+        };
+        el.addEventListener('pointerdown', handler, { passive: true });
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            handler(e);
+        });
+    }
+
     // DOM Elements - Deck Actions (Metadata Inspector & Lyrics Toggles)
     const metadataToggleBtn = document.getElementById('metadataToggleBtn');
     const lyricsToggleBtn = document.getElementById('lyricsToggleBtn');
@@ -15369,25 +15386,33 @@
             lyricsToggleBtn.addEventListener('click', () => toggleLyricsView());
         }
 
-        playPauseBtn.addEventListener('click', () => {
-            togglePlayPause();
-            playPauseBtn.blur();
-        });
-        prevBtn.addEventListener('click', () => {
-            prevTrack();
-            prevBtn.blur();
-        });
-        nextBtn.addEventListener('click', () => {
-            nextTrack();
-            nextBtn.blur();
-        });
+        if (playPauseBtn) {
+            playPauseBtn.addEventListener('click', () => {
+                togglePlayPause();
+                playPauseBtn.blur();
+            });
+        }
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => {
+                prevTrack();
+                prevBtn.blur();
+            });
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                nextTrack();
+                nextBtn.blur();
+            });
+        }
 
-        shuffleBtn.addEventListener('click', () => {
-            isShuffle = !isShuffle;
-            shuffleBtn.classList.toggle('active', isShuffle);
-            shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
-            shuffleBtn.blur();
-        });
+        if (shuffleBtn) {
+            shuffleBtn.addEventListener('click', () => {
+                isShuffle = !isShuffle;
+                shuffleBtn.classList.toggle('active', isShuffle);
+                shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
+                shuffleBtn.blur();
+            });
+        }
 
         if (shufflePlayBtn) {
             shufflePlayBtn.addEventListener('click', () => {
@@ -15401,17 +15426,19 @@
             });
         }
 
-        repeatBtn.addEventListener('click', () => {
-            if (repeatMode === 'all') {
-                repeatMode = 'one';
-            } else if (repeatMode === 'one') {
-                repeatMode = 'off';
-            } else {
-                repeatMode = 'all';
-            }
-            updateRepeatUI();
-            repeatBtn.blur();
-        });
+        if (repeatBtn) {
+            repeatBtn.addEventListener('click', () => {
+                if (repeatMode === 'all') {
+                    repeatMode = 'one';
+                } else if (repeatMode === 'one') {
+                    repeatMode = 'off';
+                } else {
+                    repeatMode = 'all';
+                }
+                updateRepeatUI();
+                repeatBtn.blur();
+            });
+        }
 
         // Continuous Native Media Event Synchronization
         attachAudioListeners(audio);
@@ -15641,34 +15668,18 @@
 
         // Mobile Viewport Navigation Switcher (Instant 0ms Pointerdown Fast-Path)
         const mobileTabBtns = document.querySelectorAll('.mobileTabBtn');
-        let lastMobileTabSwitchTime = 0;
-        let lastMobileTabSwitchTarget = '';
-
-        function activateMobileTab(btn, e) {
-            if (e && e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
-            const target = btn.dataset.target;
-            const now = performance.now();
-            if (lastMobileTabSwitchTarget === target && (now - lastMobileTabSwitchTime) < 320) {
-                return;
-            }
-            lastMobileTabSwitchTime = now;
-            lastMobileTabSwitchTarget = target;
-            if (target === 'soulseekWorkspace') {
-                switchWorkspace('soulseek');
-            } else if (target === 'downloadWorkspace') {
-                switchWorkspace('download');
-            } else if (target === 'settingsWorkspace') {
-                switchWorkspace('settings');
-            } else {
-                switchWorkspace('player', target);
-            }
-        }
-
         mobileTabBtns.forEach(btn => {
-            btn.addEventListener('pointerdown', (e) => activateMobileTab(btn, e), { passive: true });
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                activateMobileTab(btn, e);
+            bindFastAction(btn, () => {
+                const target = btn.dataset.target;
+                if (target === 'soulseekWorkspace') {
+                    switchWorkspace('soulseek');
+                } else if (target === 'downloadWorkspace') {
+                    switchWorkspace('download');
+                } else if (target === 'settingsWorkspace') {
+                    switchWorkspace('settings');
+                } else {
+                    switchWorkspace('player', target);
+                }
             });
         });
 
@@ -16063,52 +16074,22 @@
         // Top Navigation Bar & Dedicated Settings Workspace Triggers
         const topSettingsBtn = document.getElementById('topSettingsBtn');
         if (topSettingsBtn) {
-            let lastTopSettingsTime = 0;
-            const handleTopSettings = (e) => {
-                if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
-                const now = performance.now();
-                if (now - lastTopSettingsTime < 320) return;
-                lastTopSettingsTime = now;
+            bindFastAction(topSettingsBtn, () => {
                 switchWorkspace(currentWorkspace === 'settings' ? 'player' : 'settings');
-            };
-            topSettingsBtn.addEventListener('pointerdown', handleTopSettings, { passive: true });
-            topSettingsBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                handleTopSettings(e);
             });
         }
 
         const wsSettingsBtn = document.getElementById('wsSettingsBtn');
         if (wsSettingsBtn) {
-            let lastWsSettingsTime = 0;
-            const handleWsSettings = (e) => {
-                if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
-                const now = performance.now();
-                if (now - lastWsSettingsTime < 320) return;
-                lastWsSettingsTime = now;
+            bindFastAction(wsSettingsBtn, () => {
                 switchWorkspace('settings');
-            };
-            wsSettingsBtn.addEventListener('pointerdown', handleWsSettings, { passive: true });
-            wsSettingsBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                handleWsSettings(e);
             });
         }
 
         const settingsReturnBtn = document.getElementById('settingsReturnBtn');
         if (settingsReturnBtn) {
-            let lastSettingsReturnTime = 0;
-            const handleSettingsReturn = (e) => {
-                if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
-                const now = performance.now();
-                if (now - lastSettingsReturnTime < 320) return;
-                lastSettingsReturnTime = now;
+            bindFastAction(settingsReturnBtn, () => {
                 switchWorkspace('player');
-            };
-            settingsReturnBtn.addEventListener('pointerdown', handleSettingsReturn, { passive: true });
-            settingsReturnBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                handleSettingsReturn(e);
             });
         }
 
@@ -16930,23 +16911,6 @@
             nextTrack();
             miniNextBtn.blur();
         });
-        function bindFastAction(el, action) {
-            if (!el) return;
-            let lastActionTime = 0;
-            const handler = (e) => {
-                if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
-                const now = performance.now();
-                if (now - lastActionTime < 320) return;
-                lastActionTime = now;
-                action(e);
-            };
-            el.addEventListener('pointerdown', handler, { passive: true });
-            el.addEventListener('click', (e) => {
-                e.preventDefault();
-                handler(e);
-            });
-        }
-
         if (miniDeckReturnBtn) bindFastAction(miniDeckReturnBtn, () => switchWorkspace('player', 'playerDeck'));
         const miniPlayerLeftEl = document.querySelector('.miniPlayerLeft');
         if (miniPlayerLeftEl) {
