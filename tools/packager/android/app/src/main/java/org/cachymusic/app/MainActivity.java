@@ -16,6 +16,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -395,7 +396,7 @@ public class MainActivity extends Activity {
                 MediaStore.Audio.Media.MIME_TYPE,
                 MediaStore.Audio.Media.DATA
             };
-            try (Cursor cursor = getContentResolver().query(musicUri, projection, MediaStore.Audio.Media.IS_MUSIC + " != 0", null, null)) {
+            try (Cursor cursor = getContentResolver().query(musicUri, projection, null, null, null)) {
                 if (cursor != null) {
                     int nameCol = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME);
                     int titleCol = cursor.getColumnIndex(MediaStore.Audio.Media.TITLE);
@@ -409,15 +410,19 @@ public class MainActivity extends Activity {
                     while (cursor.moveToNext()) {
                         String name = nameCol != -1 ? cursor.getString(nameCol) : null;
                         if (name == null || name.isEmpty()) continue;
+                        long sz = sizeCol != -1 ? cursor.getLong(sizeCol) : 0;
                         JSONObject obj = new JSONObject();
                         if (titleCol != -1) obj.put("title", cursor.getString(titleCol));
                         if (artistCol != -1) obj.put("artist", cursor.getString(artistCol));
                         if (albumCol != -1) obj.put("album", cursor.getString(albumCol));
                         if (durCol != -1) obj.put("duration", cursor.getLong(durCol));
-                        if (sizeCol != -1) obj.put("size", cursor.getLong(sizeCol));
+                        if (sizeCol != -1) obj.put("size", sz);
                         if (mimeCol != -1) obj.put("mime", cursor.getString(mimeCol));
                         if (dataCol != -1) obj.put("path", cursor.getString(dataCol));
                         map.put(name.toLowerCase(Locale.ROOT), obj);
+                        if (sz > 0) {
+                            map.put((name + "_" + sz).toLowerCase(Locale.ROOT), obj);
+                        }
                     }
                 }
             }
@@ -443,9 +448,14 @@ public class MainActivity extends Activity {
                     webView.evaluateJavascript(js, null);
                 });
 
-                // Phase 1: Rapid file discovery pass
+                // Phase 1: Rapid file discovery pass (using high-speed DocumentsContract cursor query)
                 List<DiscoveredAudioItem> discovered = new ArrayList<>();
-                discoverAudioFilesRecursive(pickedDir, folderName, discovered, 0);
+                try {
+                    String rootDocId = DocumentsContract.getTreeDocumentId(treeUri);
+                    discoverAudioFilesFast(treeUri, rootDocId, folderName, discovered, 0);
+                } catch (Exception docEx) {
+                    discoverAudioFilesRecursive(pickedDir, folderName, discovered, 0);
+                }
 
                 if (isScanCancelled) {
                     new Handler(Looper.getMainLooper()).post(() -> {
@@ -511,6 +521,59 @@ public class MainActivity extends Activity {
                 Log.e(TAG, "Folder scan error: " + e.getMessage(), e);
             }
         }).start();
+    }
+
+    private void discoverAudioFilesFast(Uri treeUri, String parentDocId, String albumDefault, List<DiscoveredAudioItem> items, int depth) {
+        if (isScanCancelled || depth > 8 || items.size() > 10000) return;
+        try {
+            Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId);
+            String[] projection = new String[]{
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    DocumentsContract.Document.COLUMN_SIZE
+            };
+            try (Cursor cursor = getContentResolver().query(childrenUri, projection, null, null, null)) {
+                if (cursor != null) {
+                    int idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
+                    int nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+                    int mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
+                    int sizeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE);
+
+                    List<String> subdirs = new ArrayList<>();
+                    List<String> subdirNames = new ArrayList<>();
+                    while (cursor.moveToNext() && !isScanCancelled) {
+                        String docId = idCol != -1 ? cursor.getString(idCol) : null;
+                        String name = nameCol != -1 ? cursor.getString(nameCol) : null;
+                        String mime = mimeCol != -1 ? cursor.getString(mimeCol) : null;
+                        long size = sizeCol != -1 ? cursor.getLong(sizeCol) : 0;
+
+                        if (docId == null || name == null) continue;
+
+                        if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+                            subdirs.add(docId);
+                            subdirNames.add(name);
+                        } else if (isAudioFile(name)) {
+                            Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId);
+                            items.add(new DiscoveredAudioItem(docUri, name, albumDefault, size));
+                        }
+                    }
+
+                    for (int i = 0; i < subdirs.size(); i++) {
+                        if (isScanCancelled) break;
+                        discoverAudioFilesFast(treeUri, subdirs.get(i), subdirNames.get(i), items, depth + 1);
+                    }
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "DocumentsContract fast scan failed: " + e.getMessage());
+        }
+
+        DocumentFile pickedDir = DocumentFile.fromTreeUri(this, treeUri);
+        if (pickedDir != null) {
+            discoverAudioFilesRecursive(pickedDir, albumDefault, items, depth);
+        }
     }
 
     private void discoverAudioFilesRecursive(DocumentFile dir, String albumDefault, List<DiscoveredAudioItem> items, int depth) {
@@ -698,6 +761,15 @@ public class MainActivity extends Activity {
         }
 
         @Override
+        public long skip(long n) throws IOException {
+            if (remaining <= 0 || n <= 0) return 0;
+            long toSkip = Math.min(n, remaining);
+            long skipped = super.skip(toSkip);
+            if (skipped > 0) remaining -= skipped;
+            return skipped;
+        }
+
+        @Override
         public int available() throws IOException {
             return (int) Math.min(super.available(), remaining);
         }
@@ -796,6 +868,14 @@ public class MainActivity extends Activity {
 
     private WebResourceResponse handleAndroidMediaStream(Uri requestUri, Uri mediaUri, WebResourceRequest request) {
         try {
+            if (request != null && "OPTIONS".equalsIgnoreCase(request.getMethod())) {
+                Map<String, String> corsHeaders = new HashMap<>();
+                corsHeaders.put("Access-Control-Allow-Origin", "*");
+                corsHeaders.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+                corsHeaders.put("Access-Control-Allow-Headers", "*");
+                return new WebResourceResponse("text/plain", "UTF-8", 204, "No Content", corsHeaders, new ByteArrayInputStream(new byte[0]));
+            }
+
             String nameParam = requestUri != null ? requestUri.getQueryParameter("name") : null;
             String mimeParam = requestUri != null ? requestUri.getQueryParameter("mime") : null;
             String sizeParam = requestUri != null ? requestUri.getQueryParameter("size") : null;
@@ -918,7 +998,6 @@ public class MainActivity extends Activity {
                 }
 
                 Map<String, String> headers = new HashMap<>();
-                headers.put("Content-Type", mime);
                 headers.put("Accept-Ranges", "bytes");
                 headers.put("Content-Range", "bytes " + start + "-" + end + "/" + totalSize);
                 headers.put("Content-Length", String.valueOf(contentLength));
@@ -939,7 +1018,6 @@ public class MainActivity extends Activity {
             }
 
             Map<String, String> headers = new HashMap<>();
-            headers.put("Content-Type", mime);
             headers.put("Accept-Ranges", "bytes");
             if (totalSize > 0) {
                 headers.put("Content-Length", String.valueOf(totalSize));
@@ -987,7 +1065,15 @@ public class MainActivity extends Activity {
             }
 
             // 1. Instant check: match against MediaStore in-memory index
-            JSONObject cached = (mediaStoreMap != null && filename != null) ? mediaStoreMap.get(filename.toLowerCase(Locale.ROOT)) : null;
+            JSONObject cached = null;
+            if (mediaStoreMap != null && filename != null) {
+                if (size > 0) {
+                    cached = mediaStoreMap.get((filename + "_" + size).toLowerCase(Locale.ROOT));
+                }
+                if (cached == null) {
+                    cached = mediaStoreMap.get(filename.toLowerCase(Locale.ROOT));
+                }
+            }
             if (cached != null) {
                 String t = cached.optString("title", null);
                 if (t != null && !t.isEmpty() && !t.equals("null")) title = t;
@@ -1014,29 +1100,16 @@ public class MainActivity extends Activity {
                     title = title.replaceAll("^\\d+[\\.\\s_-]+", "").trim();
                 }
 
-                // 3. Fallback to MediaMetadataRetriever only when duration is unknown
-                if (durationMs <= 0) {
-                    try (MediaMetadataRetriever mmr = new MediaMetadataRetriever()) {
-                        mmr.setDataSource(this, uri);
-                        String t = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
-                        if (t != null && !t.trim().isEmpty()) title = t.trim();
-
-                        String a = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
-                        if (a != null && !a.trim().isEmpty()) artist = a.trim();
-
-                        String alb = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
-                        if (alb != null && !alb.trim().isEmpty()) album = alb.trim();
-
-                        String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-                        if (dur != null) {
-                            try { durationMs = Long.parseLong(dur); } catch (NumberFormatException ignored) {}
-                        }
-
-                        String br = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE);
-                        if (br != null) {
-                            try { bitrate = (int) (Long.parseLong(br) / 1000); } catch (NumberFormatException ignored) {}
-                        }
-                    } catch (Exception ignored) {}
+                // 3. Fast estimation when duration is not in MediaStore (prevents slow MediaMetadataRetriever blocking)
+                if (durationMs <= 0 && size > 0) {
+                    String lower = filename.toLowerCase(Locale.ROOT);
+                    int estBitrateKbps = 320;
+                    if (lower.endsWith(".flac")) estBitrateKbps = 850;
+                    else if (lower.endsWith(".wav")) estBitrateKbps = 1411;
+                    else if (lower.endsWith(".mp3") || lower.endsWith(".m4a") || lower.endsWith(".aac")) estBitrateKbps = 256;
+                    else if (lower.endsWith(".ogg") || lower.endsWith(".opus")) estBitrateKbps = 160;
+                    durationMs = (size * 8L * 1000L) / (estBitrateKbps * 1000L);
+                    bitrate = estBitrateKbps;
                 }
             }
 

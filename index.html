@@ -50,20 +50,20 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="resources/images/icon-192.png">
     <link rel="icon" type="image/svg+xml" href="resources/images/music-hanzi.svg">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=1.1.4">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=1.1.5">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 if (window.caches) {
                     caches.keys().then(function(keys) {
                         keys.forEach(function(k) {
-                            if (k !== 'cachymusic-v1.1.4' && !k.startsWith('cachymusic-artwork-')) {
+                            if (k !== 'cachymusic-v1.1.5' && !k.startsWith('cachymusic-artwork-')) {
                                 caches.delete(k);
                             }
                         });
                     }).catch(function() {});
                 }
-                navigator.serviceWorker.register('./sw.js?v=1.1.4').then(function(reg) {
+                navigator.serviceWorker.register('./sw.js?v=1.1.5').then(function(reg) {
                     reg.update();
                 }).catch(function(err) {
                     console.warn('[PWA] ServiceWorker registration failed:', err);
@@ -1888,6 +1888,6 @@
         <canvas id="visualizerCanvas" class="visualizerCanvas"></canvas>
     </div>
 
-    <script src="scripts/homepage.js?v=1.1.4"></script>
+    <script src="scripts/homepage.js?v=1.1.5"></script>
 </body>
 </html>

@@ -4,6 +4,10 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.5] - 2026-11-02
+- Fixed audio skipping on unsupported formats with universal software audio decoding.
+- Centered the mobile turntable and improved library loading speed.
+
 ## [1.1.4] - 2026-11-01
 - Fixed FLAC audio playback on mobile, corrected turntable needle position, and centered the record player.
 - Added faster music library scanning with an accurate progress bar and estimated time remaining.

@@ -1,5 +1,5 @@
-// CachyMusic Audio Workstation - High-Performance Service Worker v1.1.4
-const CACHE_NAME = 'cachymusic-v1.1.4';
+// CachyMusic Audio Workstation - High-Performance Service Worker v1.1.5
+const CACHE_NAME = 'cachymusic-v1.1.5';
 const ART_CACHE = 'cachymusic-artwork-v3';
 const MAX_ARTWORK_ENTRIES = 150;
 
@@ -7,11 +7,11 @@ const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './stylesheets/homepage.css?v=1.1.4',
+  './stylesheets/homepage.css?v=1.1.5',
   './stylesheets/homepage.css',
-  './scripts/homepage.js?v=1.1.4',
+  './scripts/homepage.js?v=1.1.5',
   './scripts/homepage.js',
-  './scripts/dsp-worklet-processor.js?v=1.1.4',
+  './scripts/dsp-worklet-processor.js?v=1.1.5',
   './scripts/dsp-worklet-processor.js',
   './resources/images/music-hanzi.svg',
   './resources/images/app-icon.svg',

@@ -49627,10 +49627,10 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
             width: 100% !important;
             max-width: 23rem !important;
             height: auto !important;
-            min-height: calc(var(--mobile-platter-size, 13.5rem) + 3.2rem) !important;
+            min-height: calc(var(--mobile-platter-size, 13.5rem) + 2.2rem) !important;
             flex: 0 0 auto !important;
             margin: 0.1rem auto 0.2rem !important;
-            padding: 2.2rem 0.6rem 0.8rem !important;
+            padding: 1.1rem 0.6rem 1.1rem !important;
             border-radius: 0.9rem !important;
             display: flex !important;
             align-items: center !important;
@@ -49647,7 +49647,7 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
 
         .playerDeck.mobileActive .deckTopControls {
             position: absolute !important;
-            top: 0.5rem !important;
+            top: 0.45rem !important;
             left: 0.6rem !important;
             right: 0.6rem !important;
             width: auto !important;
@@ -49710,9 +49710,9 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
 
         .playerDeck.mobileActive .toneArm {
             width: 2.2rem !important;
-            height: calc(var(--mobile-platter-size, 13.5rem) * 0.76) !important;
-            right: -0.9rem !important;
-            top: 0.25rem !important;
+            height: calc(var(--mobile-platter-size, 13.5rem) * 0.78) !important;
+            right: -0.65rem !important;
+            top: 0.2rem !important;
             transform-origin: 1.1rem 1.1rem !important;
             transform: rotate(0deg) !important;
             z-index: 15 !important;
@@ -49731,27 +49731,78 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
             width: 2.2rem !important;
             height: 2.2rem !important;
             border-radius: 50% !important;
-            z-index: 3 !important;
+            background: radial-gradient(circle at 35% 35%, #484848 0%, #222222 60%, #111111 100%) !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.25) !important;
+            z-index: 10 !important;
+        }
+
+        .playerDeck.mobileActive .toneArm .armPivot::after {
+            content: '' !important;
+            position: absolute !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: 0.8rem !important;
+            height: 0.8rem !important;
+            border-radius: 50% !important;
+            background: radial-gradient(circle, #888888 0%, #2a2a2a 100%) !important;
+            border: 1px solid rgba(0, 0, 0, 0.8) !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5) !important;
         }
 
         .playerDeck.mobileActive .toneArm .armShaft {
             position: absolute !important;
-            top: 1.0rem !important;
-            left: 0.99rem !important;
-            width: 0.22rem !important;
-            height: calc(var(--mobile-platter-size, 14rem) * 0.52) !important;
+            top: 0.7rem !important;
+            left: 0.98rem !important;
+            width: 0.24rem !important;
+            height: calc(var(--mobile-platter-size, 14rem) * 0.55) !important;
+            background: linear-gradient(to right, #888888, #ffffff 45%, #aaaaaa 70%, #555555) !important;
+            border-radius: 2px !important;
+            box-shadow: 1px 2px 4px rgba(0, 0, 0, 0.5) !important;
             margin: 0 !important;
-            z-index: 1 !important;
+            z-index: 5 !important;
+        }
+
+        .playerDeck.mobileActive .toneArm .armShaft::before {
+            content: '' !important;
+            position: absolute !important;
+            top: -0.25rem !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            width: 0.56rem !important;
+            height: 0.7rem !important;
+            border-radius: 2px !important;
+            background: linear-gradient(to right, #555555, #cccccc, #444444) !important;
+            border: 1px solid rgba(0, 0, 0, 0.7) !important;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
         }
 
         .playerDeck.mobileActive .toneArm .armCartridge {
             position: absolute !important;
-            top: calc(1.0rem + var(--mobile-platter-size, 14rem) * 0.52 - 0.1rem) !important;
+            top: calc(0.7rem + var(--mobile-platter-size, 14rem) * 0.55 - 0.1rem) !important;
             left: 0.74rem !important;
             width: 0.72rem !important;
-            height: 1.2rem !important;
+            height: 1.25rem !important;
             margin: 0 !important;
-            z-index: 2 !important;
+            z-index: 6 !important;
+            background: #111111 !important;
+            border: 1px solid #777777 !important;
+            border-radius: 2px !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+        }
+
+        .playerDeck.mobileActive .toneArm .armCartridge::after {
+            content: '' !important;
+            position: absolute !important;
+            bottom: -3px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            width: 4px !important;
+            height: 4px !important;
+            border-radius: 50% !important;
+            background-color: #00e5ff !important;
+            box-shadow: 0 0 6px #00e5ff !important;
         }
 
         /* Mobile Settings Navigation & Choice Buttons */

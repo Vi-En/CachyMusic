@@ -139,6 +139,17 @@
     let audioContext = null;
     let analyser = null;
     let audioSourceNode = null;
+
+    // Universal Web Audio Software Decoder Engine (for 24-bit/32-bit FLAC, ALAC, AIFF & unsupported platform codecs)
+    let isSoftwareDecoding = false;
+    let isSoftwarePaused = false;
+    let activeDecodedBuffer = null;
+    let softwareSourceNode = null;
+    let softwareSourceGainNode = null;
+    let softwarePlaybackStartTime = 0;
+    let softwarePlaybackOffset = 0;
+    let softwarePlaybackRaf = null;
+    const alwaysSoftwareDecodeUrls = new Set();
     let animFrameId = null;
     let lastRenderTime = performance.now();
     let simPhase = 0;
@@ -3438,6 +3449,9 @@
         if (!allTracks[index]) return;
         currentTrackIndex = index;
         trackPlaybackRetryCount = 0;
+        stopSoftwarePlayback();
+        activeDecodedBuffer = null;
+        isSoftwareDecoding = false;
         // Supersede any in-flight playAudio() call from an earlier track selection
         currentPlayRequestId++;
         isPlayPending = false;
@@ -3460,6 +3474,11 @@
 
         let trackSrc = track.src || '';
         if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
+
+        if (alwaysSoftwareDecodeUrls.has(trackSrc) || (track.src && alwaysSoftwareDecodeUrls.has(track.src))) {
+            playWithSoftwareDecoder(track, initialTime);
+            return;
+        }
 
         // Ensure studio-fidelity AudioContext clock rate matches track (44.1k, 48k, 88.2k, 96k, 176.4k, 192k)
         const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
@@ -4048,15 +4067,22 @@
             const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : (curTrack.sampleRate >= 88200 ? '24-Bit' : '16-Bit');
             codecEl.textContent = `${fmt} • ${depth} • ${rate}`;
         }
-        if (html5El && audio) {
-            const rStates = ['0 (HAVE_NOTHING)', '1 (HAVE_METADATA)', '2 (HAVE_CURRENT_DATA)', '3 (HAVE_FUTURE_DATA)', '4 (HAVE_ENOUGH_DATA)'];
-            const nStates = ['0 (EMPTY)', '1 (IDLE)', '2 (LOADING)', '3 (NO_SOURCE)'];
-            const r = rStates[audio.readyState] || audio.readyState;
-            const n = nStates[audio.networkState] || audio.networkState;
-            const t = (audio.currentTime || 0).toFixed(1);
-            const d = (audio.duration && isFinite(audio.duration)) ? audio.duration.toFixed(1) : '--';
-            const state = audio.paused ? 'PAUSED' : 'PLAYING';
-            html5El.textContent = `${state} (${t}s / ${d}s) | R:${r} | N:${n}`;
+        if (html5El) {
+            if (isSoftwareDecoding && activeDecodedBuffer) {
+                const cur = softwarePlaybackOffset + (audioContext && !isSoftwarePaused ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
+                const dur = activeDecodedBuffer.duration;
+                const state = isSoftwarePaused ? 'PAUSED' : 'PLAYING';
+                html5El.textContent = `SOFTWARE ENGINE • ${state} (${cur.toFixed(1)}s / ${dur.toFixed(1)}s) • 32-bit Float PCM`;
+                html5El.title = `Decoded: ${activeDecodedBuffer.sampleRate}Hz, ${activeDecodedBuffer.numberOfChannels}ch, Web Audio Buffer`;
+            } else if (audio) {
+                const rLabels = ['No Data', 'Metadata Loaded', 'Current Frame Ready', 'Buffering', 'Ready to Play'];
+                const rText = rLabels[audio.readyState] || `State ${audio.readyState}`;
+                const t = (audio.currentTime || 0).toFixed(1);
+                const d = (audio.duration && isFinite(audio.duration)) ? audio.duration.toFixed(1) : '--';
+                const state = audio.paused ? 'PAUSED' : 'PLAYING';
+                html5El.textContent = `${state} • ${rText} (${t}s / ${d}s)`;
+                html5El.title = `HTML5 Media Pipeline: readyState ${audio.readyState}, networkState ${audio.networkState}`;
+            }
         }
         if (ctxEl) {
             const ctxState = audioContext ? audioContext.state : 'None';
@@ -4151,6 +4177,12 @@
 
     // Play Audio (guarded against concurrent async race conditions and AbortError)
     async function playAudio(userInitiated = false) {
+        if (isSoftwareDecoding) {
+            userExplicitlyPaused = false;
+            syncPlayPauseUI(true);
+            resumeSoftwarePlayback();
+            return;
+        }
         if (!audio.src || audio.src === window.location.href) {
             // No track loaded — snap UI back to paused state and do nothing
             syncPlayPauseUI(false);
@@ -4247,6 +4279,11 @@
     // Pause Audio
     function pauseAudio() {
         userExplicitlyPaused = true;
+        if (isSoftwareDecoding) {
+            pauseSoftwarePlayback();
+            syncPlayPauseUI(false);
+            return;
+        }
         try {
             audio.pause();
         } catch (err) {
@@ -4257,6 +4294,16 @@
 
     // Toggle Play/Pause (uses native audio.paused as ground truth)
     function togglePlayPause() {
+        if (isSoftwareDecoding) {
+            if (!isSoftwarePaused) {
+                userExplicitlyPaused = true;
+                pauseAudio();
+            } else {
+                userExplicitlyPaused = false;
+                playAudio(true);
+            }
+            return;
+        }
         // Nothing loaded yet — if library has tracks, start playback on current/first track
         if (!audio.src || audio.src === window.location.href) {
             if (allTracks && allTracks.length > 0) {
@@ -6654,6 +6701,209 @@
         }
     }
 
+    // =========================================================================
+    // Universal Web Audio Software Decoder Engine (Zero-Skip Hybrid Pipeline)
+    // =========================================================================
+    function updatePlaybackProgress(cur, dur) {
+        if (isDraggingScrubber) return;
+        const currentTrack = allTracks[currentTrackIndex];
+        if (!isFinite(dur) || isNaN(dur) || dur <= 0) {
+            if (currentTrack && currentTrack.duration && isFinite(currentTrack.duration)) {
+                dur = Number(currentTrack.duration);
+            }
+        }
+        if (currentTimeEl) currentTimeEl.textContent = formatTime(cur);
+        if (miniCurrentTime) miniCurrentTime.textContent = formatTime(cur);
+
+        if (dur && isFinite(dur) && dur > 0) {
+            const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
+            if (progressBar) progressBar.style.width = `${pct}%`;
+            if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
+        }
+
+        if (cur > 1.0 && consecutiveSkipCount > 0) {
+            consecutiveSkipCount = 0;
+        }
+
+        if (isLyricsView) {
+            updateActiveLyric(cur);
+        }
+    }
+
+    function startSoftwareProgressLoop() {
+        cancelSoftwareProgressLoop();
+        function tick() {
+            if (!isSoftwareDecoding || isSoftwarePaused || !activeDecodedBuffer) return;
+            const cur = softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
+            const dur = activeDecodedBuffer.duration;
+            updatePlaybackProgress(cur, dur);
+            if (cur >= dur) {
+                onSoftwarePlaybackEnded();
+                return;
+            }
+            softwarePlaybackRaf = requestAnimationFrame(tick);
+        }
+        softwarePlaybackRaf = requestAnimationFrame(tick);
+    }
+
+    function cancelSoftwareProgressLoop() {
+        if (softwarePlaybackRaf) {
+            cancelAnimationFrame(softwarePlaybackRaf);
+            softwarePlaybackRaf = null;
+        }
+    }
+
+    function startSoftwareBufferPlayback() {
+        if (!audioContext || !activeDecodedBuffer) return;
+        if (softwareSourceNode) {
+            try {
+                softwareSourceNode.onended = null;
+                softwareSourceNode.stop();
+                softwareSourceNode.disconnect();
+            } catch (_) {}
+            softwareSourceNode = null;
+        }
+
+        softwareSourceNode = audioContext.createBufferSource();
+        softwareSourceNode.buffer = activeDecodedBuffer;
+
+        if (!softwareSourceGainNode) {
+            softwareSourceGainNode = audioContext.createGain();
+        }
+        softwareSourceNode.connect(softwareSourceGainNode);
+        updateAudioRouting();
+
+        softwarePlaybackStartTime = audioContext.currentTime;
+        softwareSourceNode.start(0, softwarePlaybackOffset);
+        isSoftwarePaused = false;
+        syncPlayPauseUI(true);
+        startSoftwareProgressLoop();
+
+        softwareSourceNode.onended = () => {
+            if (!isSoftwareDecoding || isSoftwarePaused) return;
+            const cur = softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
+            if (cur >= (activeDecodedBuffer.duration - 0.5)) {
+                onSoftwarePlaybackEnded();
+            }
+        };
+    }
+
+    function pauseSoftwarePlayback() {
+        if (!isSoftwareDecoding || isSoftwarePaused) return;
+        cancelSoftwareProgressLoop();
+        if (audioContext && softwarePlaybackStartTime > 0) {
+            softwarePlaybackOffset += (audioContext.currentTime - softwarePlaybackStartTime);
+        }
+        if (softwareSourceNode) {
+            try {
+                softwareSourceNode.onended = null;
+                softwareSourceNode.stop();
+                softwareSourceNode.disconnect();
+            } catch (_) {}
+            softwareSourceNode = null;
+        }
+        isSoftwarePaused = true;
+        syncPlayPauseUI(false);
+    }
+
+    function resumeSoftwarePlayback() {
+        if (!isSoftwareDecoding || !activeDecodedBuffer) return;
+        if (audioContext && audioContext.state !== 'running') {
+            try { audioContext.resume(); } catch (_) {}
+        }
+        startSoftwareBufferPlayback();
+    }
+
+    function seekSoftwarePlayback(targetSec) {
+        if (!isSoftwareDecoding || !activeDecodedBuffer) return;
+        const dur = activeDecodedBuffer.duration;
+        softwarePlaybackOffset = Math.max(0, Math.min(dur, targetSec));
+        if (!isSoftwarePaused) {
+            startSoftwareBufferPlayback();
+        } else {
+            updatePlaybackProgress(softwarePlaybackOffset, dur);
+        }
+    }
+
+    function stopSoftwarePlayback() {
+        cancelSoftwareProgressLoop();
+        if (softwareSourceNode) {
+            try {
+                softwareSourceNode.onended = null;
+                softwareSourceNode.stop();
+                softwareSourceNode.disconnect();
+            } catch (_) {}
+            softwareSourceNode = null;
+        }
+        isSoftwareDecoding = false;
+        isSoftwarePaused = false;
+        softwarePlaybackStartTime = 0;
+        softwarePlaybackOffset = 0;
+    }
+
+    function onSoftwarePlaybackEnded() {
+        stopSoftwarePlayback();
+        try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
+        if (repeatMode === 'one') {
+            loadTrack(currentTrackIndex, true, 0);
+        } else {
+            nextTrack();
+        }
+    }
+
+    async function playWithSoftwareDecoder(track, startTime = 0) {
+        if (!track) return;
+        isSoftwareDecoding = true;
+        isSoftwarePaused = false;
+        userExplicitlyPaused = false;
+        syncPlayPauseUI(true);
+
+        try {
+            if (audio) {
+                try { audio.pause(); } catch (_) {}
+            }
+
+            const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
+            await ensureAudioEngineForSampleRate(targetRate);
+            if (audioContext && audioContext.state !== 'running') {
+                try { await audioContext.resume(); } catch (_) {}
+            }
+
+            let src = track.src || '';
+            if (src.startsWith('../')) src = src.substring(3);
+
+            logAudioPlaybackEvent('info', `Fetching stream bitstream for 32-bit software decode: "${track.title || track.filename}"`);
+            if (typeof showCachyToast === 'function') {
+                showCachyToast('Software Audio Engine', `Decoding 24-bit/audiophile stream: "${track.title || track.filename}"`, 'info');
+            }
+
+            const res = await fetch(src);
+            if (!res.ok) throw new Error(`HTTP ${res.status} fetch failure`);
+            const arrayBuf = await res.arrayBuffer();
+
+            logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
+            const decodedBuffer = await audioContext.decodeAudioData(arrayBuf);
+            activeDecodedBuffer = decodedBuffer;
+
+            track.duration = decodedBuffer.duration;
+            if (totalDurationEl) totalDurationEl.textContent = formatTime(decodedBuffer.duration);
+            if (miniTotalDuration) miniTotalDuration.textContent = formatTime(decodedBuffer.duration);
+
+            softwarePlaybackOffset = Math.max(0, Math.min(decodedBuffer.duration, startTime));
+            startSoftwareBufferPlayback();
+            consecutiveSkipCount = 0;
+            logAudioPlaybackEvent('info', `Web Audio Software Engine playing "${track.title || track.filename}" at ${decodedBuffer.sampleRate}Hz, ${decodedBuffer.numberOfChannels}ch, ${decodedBuffer.duration.toFixed(1)}s.`);
+        } catch (err) {
+            console.error('[AudioEngine] Software decoder fallback failed:', err);
+            logAudioPlaybackEvent('error', `Web Audio software decode failure: ${err.message}`);
+            isSoftwareDecoding = false;
+            if (typeof showCachyToast === 'function') {
+                showCachyToast('Playback Error', `File corrupted or unreadable. Skipping track...`, 'error');
+            }
+            setTimeout(() => nextTrack(), 1000);
+        }
+    }
+
     function attachAudioListeners(targetAudio) {
         if (!targetAudio || targetAudio._hasCachyListeners) return;
         targetAudio._hasCachyListeners = true;
@@ -6757,15 +7007,13 @@
                 return;
             }
 
-            // If running inside Android APK and decode hiccup encountered, attempt 1 immediate recovery retry before skipping
-            if (isFatalDecodeError && trackPlaybackRetryCount === 0 && currentAttrSrc.includes('android-media')) {
-                trackPlaybackRetryCount++;
-                console.info(`[AudioEngine] Android media decode hiccup (${errorCode}) on "${trackTitle}"; attempting stream reload...`);
-                userExplicitlyPaused = false;
-                setTimeout(() => {
-                    try { targetAudio.load(); } catch (_) {}
-                    playAudio();
-                }, 300);
+            // Universal Web Audio Software Decoder Fallback (for 24-bit FLAC, ALAC, AIFF & unsupported Android/browser codecs)
+            if (isFatalDecodeError && currentTrack && !isSoftwareDecoding) {
+                alwaysSoftwareDecodeUrls.add(currentAttrSrc);
+                alwaysSoftwareDecodeUrls.add(targetAudio.src);
+                console.info(`[AudioEngine] HTML5 <audio> decode failure (${errorCode}) on "${trackTitle}". Switching to Web Audio Software Decoder...`);
+                logAudioPlaybackEvent('info', `Native decoder unsuited for "${trackTitle}" (code ${errorCode}). Playing via 32-bit Web Audio Software Engine.`);
+                playWithSoftwareDecoder(currentTrack, targetAudio.currentTime || 0);
                 return;
             }
 
@@ -6852,6 +7100,7 @@
         let lastPersistedTime = 0;
         targetAudio.addEventListener('timeupdate', () => {
             if (targetAudio._isDisposed || targetAudio !== audio) return;
+            if (isSoftwareDecoding) return;
             if (isDraggingScrubber) return;
             const cur = targetAudio.currentTime;
             let dur = targetAudio.duration;
@@ -6861,22 +7110,7 @@
                     dur = Number(currentTrack.duration);
                 }
             }
-            currentTimeEl.textContent = formatTime(cur);
-            if (miniCurrentTime) miniCurrentTime.textContent = formatTime(cur);
-
-            if (dur && isFinite(dur) && dur > 0) {
-                const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
-                progressBar.style.width = `${pct}%`;
-                if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
-            }
-
-            if (cur > 1.0 && consecutiveSkipCount > 0) {
-                consecutiveSkipCount = 0;
-            }
-
-            if (isLyricsView) {
-                updateActiveLyric(cur);
-            }
+            updatePlaybackProgress(cur, dur);
 
             // Periodically persist playback timeframe (throttled to 1.0s deltas)
             // so closing or refreshing the program remembers the unfinished timeframe
@@ -7148,6 +7382,9 @@
         if (!audioSourceNode) return;
         try {
             audioSourceNode.disconnect();
+            if (softwareSourceGainNode) {
+                try { softwareSourceGainNode.disconnect(); } catch (_) {}
+            }
             if (subsonicFilter) subsonicFilter.disconnect();
             if (replayGainNode) replayGainNode.disconnect();
             if (preAmpGainNode) preAmpGainNode.disconnect();
@@ -7167,10 +7404,13 @@
             // Headroom Pre-Amp Gain
             updatePreAmpGain(audioContext.currentTime);
 
+            // Active source: if in software decoding buffer mode, route through softwareSourceGainNode
+            const activeSource = (isSoftwareDecoding && softwareSourceGainNode) ? softwareSourceGainNode : audioSourceNode;
+
             // Root node after source: Subsonic (only if worklet is not active, avoiding duplicate 24dB/oct roll-off) + ReplayGain + Pre-Amp headroom
-            let rootNode = audioSourceNode;
+            let rootNode = activeSource;
             if (isSubsonic && subsonicFilter && !dspWorkletNode) {
-                audioSourceNode.connect(subsonicFilter);
+                activeSource.connect(subsonicFilter);
                 rootNode = subsonicFilter;
             }
             if (replayGainNode) {
@@ -15208,14 +15448,23 @@
             if (isNaN(pct) || !isFinite(pct)) return;
             pendingSeekPct = pct;
             progressBar.style.width = `${pct * 100}%`;
-            if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
-                currentTimeEl.textContent = formatTime(pct * audio.duration);
+            const dur = (isSoftwareDecoding && activeDecodedBuffer)
+                ? activeDecodedBuffer.duration
+                : (audio.duration || ((allTracks[currentTrackIndex] && allTracks[currentTrackIndex].duration) || 0));
+            if (dur && !isNaN(dur) && isFinite(dur)) {
+                currentTimeEl.textContent = formatTime(pct * dur);
             }
         }
 
         function commitSeek() {
             if (pendingSeekPct !== null && typeof pendingSeekPct === 'number' && !isNaN(pendingSeekPct) && isFinite(pendingSeekPct)) {
-                if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+                if (isSoftwareDecoding) {
+                    const totalDur = activeDecodedBuffer ? activeDecodedBuffer.duration : ((allTracks[currentTrackIndex] && allTracks[currentTrackIndex].duration) || 0);
+                    if (totalDur > 0) {
+                        const targetSec = Math.max(0, Math.min(totalDur, pendingSeekPct * totalDur));
+                        seekSoftwarePlayback(targetSec);
+                    }
+                } else if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
                     const targetSec = Math.max(0, Math.min(audio.duration, pendingSeekPct * audio.duration));
                     if (!isNaN(targetSec) && isFinite(targetSec)) {
                         audio.currentTime = targetSec;
@@ -16536,6 +16785,13 @@
             if (isNaN(pct) || !isFinite(pct)) return;
             if (miniProgressBar) miniProgressBar.style.width = `${pct * 100}%`;
             if (progressBar) progressBar.style.width = `${pct * 100}%`;
+            if (isSoftwareDecoding) {
+                const totalDur = activeDecodedBuffer ? activeDecodedBuffer.duration : ((allTracks[currentTrackIndex] && allTracks[currentTrackIndex].duration) || 0);
+                if (totalDur > 0) {
+                    seekSoftwarePlayback(pct * totalDur);
+                }
+                return;
+            }
             if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
                 const targetSec = Math.max(0, Math.min(audio.duration, pct * audio.duration));
                 if (!isNaN(targetSec) && isFinite(targetSec)) {
@@ -17545,6 +17801,8 @@
         scanDirectory,
         setDspBoost,
         toggleReplayGain,
+        playWithSoftwareDecoder,
+        isSoftwareDecoding: () => isSoftwareDecoding,
         peq: {
             frequencies: PEQ_FREQS,
             getGains: () => [...peqGains],
