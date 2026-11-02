@@ -3854,16 +3854,20 @@
             lyricsToggleBtn.setAttribute('title', 'Return to Turntable View (L)');
             const textSpan = lyricsToggleBtn.querySelector('span');
             if (textSpan) textSpan.textContent = 'TURNTABLE';
-            turntableCon.style.display = 'none';
-            lyricsCon.style.display = 'flex';
+            turntableCon.style.setProperty('display', 'none', 'important');
+            turntableCon.classList.add('lyricsActiveHidden');
+            lyricsCon.classList.remove('lyricsActiveHidden');
+            lyricsCon.style.setProperty('display', 'flex', 'important');
             updateLyricsDisplay(allTracks[currentTrackIndex]);
         } else {
             lyricsToggleBtn.classList.remove('active');
             lyricsToggleBtn.setAttribute('title', 'Toggle Lyrics View (L)');
             const textSpan = lyricsToggleBtn.querySelector('span');
             if (textSpan) textSpan.textContent = 'LYRICS';
-            lyricsCon.style.display = 'none';
-            turntableCon.style.display = 'flex';
+            turntableCon.classList.remove('lyricsActiveHidden');
+            turntableCon.style.removeProperty('display');
+            lyricsCon.classList.add('lyricsActiveHidden');
+            lyricsCon.style.setProperty('display', 'none', 'important');
         }
     }
 

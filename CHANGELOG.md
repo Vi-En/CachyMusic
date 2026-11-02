@@ -4,6 +4,11 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.7] - 2026-11-02
+- Fixed lyrics displayer layout and eliminated rogue scrollbars causing mobile deck misalignment.
+- Enforced strict zero-overflow boundaries on turntable stage and player deck during lyrics view.
+- Added responsive lyrics padding and smooth vertical-only autoscroll for synchronized playback.
+
 ## [1.1.6] - 2026-11-02
 - Resolved playback freeze on FLAC tracks with embedded high-resolution artwork by sanitizing stream headers on-the-fly.
 - Prevented duplicate error cascades from halting the player during audio pipeline transitions.
