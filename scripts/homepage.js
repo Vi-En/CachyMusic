@@ -3475,10 +3475,7 @@
         let trackSrc = track.src || '';
         if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
 
-        if (alwaysSoftwareDecodeUrls.has(trackSrc) || (track.src && alwaysSoftwareDecodeUrls.has(track.src))) {
-            playWithSoftwareDecoder(track, initialTime);
-            return;
-        }
+        const isKnownSoftware = alwaysSoftwareDecodeUrls.has(trackSrc) || (track.src && alwaysSoftwareDecodeUrls.has(track.src));
 
         // Ensure studio-fidelity AudioContext clock rate matches track (44.1k, 48k, 88.2k, 96k, 176.4k, 192k)
         const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
@@ -3515,9 +3512,17 @@
 
         currentTrackGeneration++;
         audio._trackGeneration = currentTrackGeneration;
-        audio.src = trackSrc;
-        audio._isFreshTrackLoad = true;
-        try { audio.load(); } catch (_) {}
+        if (!isKnownSoftware) {
+            audio.src = trackSrc;
+            audio._isFreshTrackLoad = true;
+            try { audio.load(); } catch (_) {}
+        } else {
+            try {
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+            } catch (_) {}
+        }
 
         // Enforce timeframe: selected tracks must ALWAYS start at the beginning (0:00),
         // unless initialTime was explicitly provided (to restore last unfinished track on boot).
@@ -3570,7 +3575,9 @@
             try { audio.removeEventListener('loadedmetadata', activeLoadedMetadataHandler); } catch (_) {}
         }
         activeLoadedMetadataHandler = applyTargetTime;
-        audio.addEventListener('loadedmetadata', applyTargetTime, { once: true });
+        if (!isKnownSoftware) {
+            audio.addEventListener('loadedmetadata', applyTargetTime, { once: true });
+        }
 
         // Center Deck Text - Real Tags or Fallback to Filename / Unknown
         updateEmptyPlayerState();
@@ -3692,6 +3699,16 @@
                     ]
                 });
             } catch (_) {}
+        }
+
+        if (isKnownSoftware) {
+            if (autoPlay) {
+                playWithSoftwareDecoder(track, initialTime);
+            } else {
+                isSoftwarePaused = true;
+                syncPlayPauseUI(false);
+            }
+            return;
         }
 
         if (autoPlay) {
@@ -3890,12 +3907,16 @@
         if ('mediaSession' in navigator) {
             try {
                 navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
-                if ('setPositionState' in navigator.mediaSession && audio.duration && !isNaN(audio.duration) && isFinite(audio.duration) && audio.duration > 0) {
-                    navigator.mediaSession.setPositionState({
-                        duration: Math.max(0, audio.duration),
-                        playbackRate: audio.playbackRate || 1.0,
-                        position: Math.max(0, Math.min(audio.duration, audio.currentTime || 0))
-                    });
+                if ('setPositionState' in navigator.mediaSession) {
+                    const dur = isSoftwareDecoding ? (activeDecodedBuffer ? activeDecodedBuffer.duration : 0) : audio.duration;
+                    const pos = isSoftwareDecoding ? (softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0)) : (audio.currentTime || 0);
+                    if (dur && !isNaN(dur) && isFinite(dur) && dur > 0) {
+                        navigator.mediaSession.setPositionState({
+                            duration: Math.max(0, dur),
+                            playbackRate: 1.0,
+                            position: Math.max(0, Math.min(dur, pos || 0))
+                        });
+                    }
                 }
             } catch (_) {}
         }
@@ -4183,6 +4204,19 @@
             resumeSoftwarePlayback();
             return;
         }
+
+        const currentTrack = allTracks[currentTrackIndex];
+        const currentSrc = currentTrack ? (currentTrack.src || '') : '';
+        const cleanSrc = currentSrc.startsWith('../') ? currentSrc.substring(3) : currentSrc;
+        const isKnownSoftware = currentTrack && (alwaysSoftwareDecodeUrls.has(cleanSrc) || (currentTrack.src && alwaysSoftwareDecodeUrls.has(currentTrack.src)));
+
+        if (isKnownSoftware && !isSoftwareDecoding) {
+            userExplicitlyPaused = false;
+            syncPlayPauseUI(true);
+            playWithSoftwareDecoder(currentTrack, 0);
+            return;
+        }
+
         if (!audio.src || audio.src === window.location.href) {
             // No track loaded — snap UI back to paused state and do nothing
             syncPlayPauseUI(false);
@@ -6860,7 +6894,11 @@
 
         try {
             if (audio) {
-                try { audio.pause(); } catch (_) {}
+                try {
+                    audio.pause();
+                    audio.removeAttribute('src');
+                    audio.load();
+                } catch (_) {}
             }
 
             const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
@@ -6882,7 +6920,16 @@
             const arrayBuf = await res.arrayBuffer();
 
             logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
-            const decodedBuffer = await audioContext.decodeAudioData(arrayBuf);
+            const decodedBuffer = await new Promise((resolve, reject) => {
+                const p = audioContext.decodeAudioData(
+                    arrayBuf,
+                    buf => resolve(buf),
+                    err => reject(err || new Error('decodeAudioData callback returned error'))
+                );
+                if (p && typeof p.then === 'function') {
+                    p.then(resolve, reject);
+                }
+            });
             activeDecodedBuffer = decodedBuffer;
 
             track.duration = decodedBuffer.duration;
@@ -6968,8 +7015,8 @@
             }
         });
         targetAudio.addEventListener('error', () => {
-            // Discard errors from disposed audio elements or intentional src clears
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            // Discard errors from disposed audio elements, intentional src clears, or while software decoding is active
+            if (targetAudio._isDisposed || targetAudio !== audio || isSoftwareDecoding) return;
             if (!targetAudio.src || targetAudio.src === window.location.href || !targetAudio.getAttribute('src')) {
                 return;
             }
@@ -7011,6 +7058,11 @@
             if (isFatalDecodeError && currentTrack && !isSoftwareDecoding) {
                 alwaysSoftwareDecodeUrls.add(currentAttrSrc);
                 alwaysSoftwareDecodeUrls.add(targetAudio.src);
+                try {
+                    targetAudio.pause();
+                    targetAudio.removeAttribute('src');
+                    targetAudio.load();
+                } catch (_) {}
                 console.info(`[AudioEngine] HTML5 <audio> decode failure (${errorCode}) on "${trackTitle}". Switching to Web Audio Software Decoder...`);
                 logAudioPlaybackEvent('info', `Native decoder unsuited for "${trackTitle}" (code ${errorCode}). Playing via 32-bit Web Audio Software Engine.`);
                 playWithSoftwareDecoder(currentTrack, targetAudio.currentTime || 0);

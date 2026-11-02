@@ -729,25 +729,89 @@ public class MainActivity extends Activity {
         return normalizeMimeType(defaultMime != null ? defaultMime : "audio/mpeg");
     }
 
+    private final Map<String, Map<Long, Byte>> flacPatchesCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private Map<Long, Byte> getFlacPatches(Uri uri) {
+        if (uri == null) return java.util.Collections.emptyMap();
+        String key = uri.toString();
+        Map<Long, Byte> cached = flacPatchesCache.get(key);
+        if (cached != null) return cached;
+
+        Map<Long, Byte> patches = new HashMap<>();
+        try (InputStream is = getContentResolver().openInputStream(uri)) {
+            if (is != null) {
+                byte[] magic = new byte[4];
+                int r = is.read(magic);
+                if (r == 4 && magic[0] == 'f' && magic[1] == 'L' && magic[2] == 'a' && magic[3] == 'C') {
+                    long offset = 4;
+                    byte[] hdr = new byte[4];
+                    while (offset < 16 * 1024 * 1024) {
+                        int hr = is.read(hdr);
+                        if (hr < 4) break;
+                        boolean isLast = (hdr[0] & 0x80) != 0;
+                        int btype = hdr[0] & 0x7F;
+                        long len = ((long)(hdr[1] & 0xFF) << 16) | ((long)(hdr[2] & 0xFF) << 8) | (hdr[3] & 0xFF);
+                        if (btype == 6) { // PICTURE block: convert to PADDING so Chromium media demuxer does not choke on embedded mjpeg video stream
+                            byte patched = (byte) ((isLast ? 0x80 : 0x00) | 0x01);
+                            patches.put(offset, patched);
+                        }
+                        // Skip block data
+                        long skipped = 0;
+                        while (skipped < len) {
+                            long s = is.skip(len - skipped);
+                            if (s <= 0) {
+                                int toRead = (int) Math.min(len - skipped, 16384);
+                                int bRead = is.read(new byte[toRead]);
+                                if (bRead <= 0) break;
+                                s = bRead;
+                            }
+                            skipped += s;
+                        }
+                        offset += 4 + len;
+                        if (isLast) break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "FLAC patch scan error for " + uri + ": " + e.getMessage());
+        }
+
+        flacPatchesCache.put(key, patches);
+        return patches;
+    }
+
     private static class LimitedInputStream extends FilterInputStream {
         private long remaining;
         private final ParcelFileDescriptor pfd;
         private final AssetFileDescriptor afd;
         private final RandomAccessFile raf;
+        private final Map<Long, Byte> patches;
+        private long currentPos;
 
-        public LimitedInputStream(InputStream in, long limit, ParcelFileDescriptor pfd, AssetFileDescriptor afd, RandomAccessFile raf) {
+        public LimitedInputStream(InputStream in, long limit, ParcelFileDescriptor pfd, AssetFileDescriptor afd, RandomAccessFile raf, long startPos, Map<Long, Byte> patches) {
             super(in);
             this.remaining = Math.max(0, limit);
             this.pfd = pfd;
             this.afd = afd;
             this.raf = raf;
+            this.currentPos = startPos;
+            this.patches = patches;
         }
 
         @Override
         public int read() throws IOException {
             if (remaining <= 0) return -1;
             int b = super.read();
-            if (b != -1) remaining--;
+            if (b != -1) {
+                if (patches != null && !patches.isEmpty()) {
+                    Byte p = patches.get(currentPos);
+                    if (p != null) {
+                        b = p.intValue() & 0xFF;
+                    }
+                }
+                currentPos++;
+                remaining--;
+            }
             return b;
         }
 
@@ -756,7 +820,19 @@ public class MainActivity extends Activity {
             if (remaining <= 0) return -1;
             int toRead = (int) Math.min(len, remaining);
             int read = super.read(b, off, toRead);
-            if (read != -1) remaining -= read;
+            if (read > 0) {
+                if (patches != null && !patches.isEmpty()) {
+                    for (Map.Entry<Long, Byte> entry : patches.entrySet()) {
+                        long patchPos = entry.getKey();
+                        if (patchPos >= currentPos && patchPos < currentPos + read) {
+                            int bufIdx = off + (int)(patchPos - currentPos);
+                            b[bufIdx] = entry.getValue();
+                        }
+                    }
+                }
+                currentPos += read;
+                remaining -= read;
+            }
             return read;
         }
 
@@ -765,7 +841,10 @@ public class MainActivity extends Activity {
             if (remaining <= 0 || n <= 0) return 0;
             long toSkip = Math.min(n, remaining);
             long skipped = super.skip(toSkip);
-            if (skipped > 0) remaining -= skipped;
+            if (skipped > 0) {
+                currentPos += skipped;
+                remaining -= skipped;
+            }
             return skipped;
         }
 
@@ -792,7 +871,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private InputStream createSeekableStream(File directFile, ParcelFileDescriptor pfd, AssetFileDescriptor afd, Uri uri, long start, long length) {
+    private InputStream createSeekableStream(File directFile, ParcelFileDescriptor pfd, AssetFileDescriptor afd, Uri uri, long start, long length, Map<Long, Byte> patches) {
         if (directFile != null) {
             try {
                 RandomAccessFile raf = new RandomAccessFile(directFile, "r");
@@ -800,7 +879,7 @@ public class MainActivity extends Activity {
                     raf.seek(start);
                 }
                 InputStream is = Channels.newInputStream(raf.getChannel());
-                return new LimitedInputStream(is, length, null, null, raf);
+                return new LimitedInputStream(is, length, null, null, raf, start, patches);
             } catch (Exception e) {
                 Log.w(TAG, "directFile seek failed: " + e.getMessage());
             }
@@ -812,7 +891,7 @@ public class MainActivity extends Activity {
                     android.system.Os.lseek(pfd.getFileDescriptor(), start, android.system.OsConstants.SEEK_SET);
                 }
                 FileInputStream fis = new ParcelFileDescriptor.AutoCloseInputStream(pfd);
-                return new LimitedInputStream(fis, length, pfd, null, null);
+                return new LimitedInputStream(fis, length, pfd, null, null, start, patches);
             } catch (Throwable e) {
                 Log.w(TAG, "pfd Os.lseek fallback: " + e.getMessage());
                 try {
@@ -820,7 +899,7 @@ public class MainActivity extends Activity {
                     if (start > 0) {
                         fis.getChannel().position(start);
                     }
-                    return new LimitedInputStream(fis, length, pfd, null, null);
+                    return new LimitedInputStream(fis, length, pfd, null, null, start, patches);
                 } catch (Exception e2) {
                     try { pfd.close(); } catch (Exception ignored) {}
                 }
@@ -833,7 +912,7 @@ public class MainActivity extends Activity {
                 if (start > 0) {
                     fis.getChannel().position(afd.getStartOffset() + start);
                 }
-                return new LimitedInputStream(fis, length, null, afd, null);
+                return new LimitedInputStream(fis, length, null, afd, null, start, patches);
             } catch (Exception e) {
                 Log.w(TAG, "afd seek failed: " + e.getMessage());
                 try { afd.close(); } catch (Exception ignored) {}
@@ -858,7 +937,7 @@ public class MainActivity extends Activity {
                         skipped += s;
                     }
                 }
-                return new LimitedInputStream(is, length, null, null, null);
+                return new LimitedInputStream(is, length, null, null, null, start, patches);
             }
         } catch (Exception e) {
             Log.e(TAG, "InputStream fallback failed: " + e.getMessage());
@@ -991,7 +1070,8 @@ public class MainActivity extends Activity {
                 }
 
                 long contentLength = end - start + 1;
-                InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, start, contentLength);
+                Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
+                InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, start, contentLength, patches);
                 if (is == null) {
                     Log.e(TAG, "Failed to create seekable stream for: " + mediaUri);
                     return null;
@@ -1011,7 +1091,8 @@ public class MainActivity extends Activity {
 
             // Normal full stream response (or when totalSize unknown)
             long streamLength = totalSize > 0 ? totalSize : Long.MAX_VALUE;
-            InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, 0, streamLength);
+            Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
+            InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, 0, streamLength, patches);
             if (is == null) {
                 Log.e(TAG, "Failed to create full stream for: " + mediaUri);
                 return null;

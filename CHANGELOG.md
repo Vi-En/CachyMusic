@@ -4,6 +4,11 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.6] - 2026-11-02
+- Resolved playback freeze on FLAC tracks with embedded high-resolution artwork by sanitizing stream headers on-the-fly.
+- Prevented duplicate error cascades from halting the player during audio pipeline transitions.
+- Synchronized track metadata, artwork, and playback progress seamlessly when using software audio decoding.
+
 ## [1.1.5] - 2026-11-02
 - Fixed audio skipping on unsupported formats with universal software audio decoding.
 - Centered the mobile turntable and improved library loading speed.
