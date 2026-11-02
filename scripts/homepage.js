@@ -2909,6 +2909,8 @@
                 settingsTabSleepStatusBadge.textContent = 'PAUSE AT END OF TRACK';
                 settingsTabSleepStatusBadge.classList.add('active');
             }
+            const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
+            if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = '';
             showToast('Sleep timer set: Pauses at end of track');
             closeSleepTimerModal();
             return;
@@ -2924,6 +2926,8 @@
         updateSleepTimerStatusUi();
         if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
         if (sleepTimerBtn) sleepTimerBtn.classList.add('hasActiveTimer');
+        const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
+        if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = '';
         showToast(`Sleep timer set: ${mins} minute${mins === 1 ? '' : 's'}`);
         closeSleepTimerModal();
 
@@ -2985,6 +2989,8 @@
             settingsTabSleepStatusBadge.textContent = 'INACTIVE';
             settingsTabSleepStatusBadge.classList.remove('active');
         }
+        const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
+        if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = 'none';
         if (showFeedback) showToast('Sleep timer cancelled');
     }
 
@@ -6388,6 +6394,126 @@
         }
         if (hudCloseBtn) {
             hudCloseBtn.addEventListener('click', () => setDebugMode(false));
+        }
+
+        // Make Diagnostics HUD Draggable by Header
+        const hudEl = document.getElementById('debugHudContainer');
+        const hudHeaderEl = hudEl ? hudEl.querySelector('.debugHudHeader') : null;
+        if (hudEl && hudHeaderEl) {
+            let isDragging = false;
+            let startPointerX = 0;
+            let startPointerY = 0;
+            let startLeft = 0;
+            let startTop = 0;
+
+            const headerBtns = hudHeaderEl.querySelectorAll('button');
+            headerBtns.forEach(btn => {
+                btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+            });
+
+            hudHeaderEl.addEventListener('pointerdown', (e) => {
+                if (e.button !== 0) return;
+                isDragging = true;
+                try {
+                    hudHeaderEl.setPointerCapture(e.pointerId);
+                } catch (_) {}
+                const rect = hudEl.getBoundingClientRect();
+                startPointerX = e.clientX;
+                startPointerY = e.clientY;
+                startLeft = rect.left;
+                startTop = rect.top;
+
+                hudEl.style.bottom = 'auto';
+                hudEl.style.transform = 'none';
+                hudEl.style.left = `${startLeft}px`;
+                hudEl.style.top = `${startTop}px`;
+            });
+
+            hudHeaderEl.addEventListener('pointermove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - startPointerX;
+                const dy = e.clientY - startPointerY;
+                const rect = hudEl.getBoundingClientRect();
+                const maxLeft = Math.max(0, window.innerWidth - rect.width);
+                const maxTop = Math.max(0, window.innerHeight - rect.height);
+                const newLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
+                const newTop = Math.max(0, Math.min(maxTop, startTop + dy));
+                hudEl.style.left = `${newLeft}px`;
+                hudEl.style.top = `${newTop}px`;
+            });
+
+            const stopDrag = (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+                try {
+                    hudHeaderEl.releasePointerCapture(e.pointerId);
+                } catch (_) {}
+            };
+            hudHeaderEl.addEventListener('pointerup', stopDrag);
+            hudHeaderEl.addEventListener('pointercancel', stopDrag);
+        }
+
+        // DAC Capability Detection & Feature Gating
+        async function checkDacCapabilities() {
+            let hasDac = false;
+            let dacLabel = '';
+            try {
+                if (audioContext && audioContext.sampleRate > 48000) {
+                    hasDac = true;
+                    dacLabel = `${Math.round(audioContext.sampleRate / 1000)}kHz Hi-Res Interface`;
+                }
+                if (!hasDac && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const dacDev = devices.find(d => 
+                        d.kind === 'audiooutput' && 
+                        /dac|hi-?res|headphone|usb|external|interface|fiio|topping|schiit|audioquest|chord/i.test(d.label)
+                    );
+                    if (dacDev) {
+                        hasDac = true;
+                        dacLabel = dacDev.label || 'Connected DAC';
+                    }
+                }
+            } catch (_) {}
+
+            const dacBtn = document.getElementById('dacShapedDitherBtn');
+            const dacPill = document.getElementById('settingsDacRequiredPill');
+            if (dacBtn) {
+                if (hasDac) {
+                    dacBtn.removeAttribute('disabled');
+                    dacBtn.classList.remove('disabled');
+                    dacBtn.setAttribute('title', `Active DAC detected: ${dacLabel}`);
+                } else {
+                    dacBtn.setAttribute('disabled', 'true');
+                    dacBtn.classList.add('disabled');
+                    dacBtn.setAttribute('title', 'Requires connected USB DAC or high-res audio interface (96kHz+)');
+                    if (ditherMode === 'shaped') {
+                        ditherMode = 'tpdf';
+                        try {
+                            safeStorage.setItem('cachymusic_dither_mode', 'tpdf');
+                        } catch (_) {}
+                        const ditherBtns = document.querySelectorAll('.ditherModeBtn');
+                        ditherBtns.forEach(b => {
+                            b.classList.toggle('active', b.getAttribute('data-dither') === 'tpdf');
+                        });
+                        const ditherPillEl = document.getElementById('settingsDitherPill');
+                        if (ditherPillEl) ditherPillEl.textContent = 'TPDF FLAT';
+                    }
+                }
+            }
+            if (dacPill) {
+                dacPill.textContent = hasDac ? 'DAC READY' : 'REQUIRES DAC';
+                dacPill.classList.toggle('active', hasDac);
+            }
+        }
+        checkDacCapabilities();
+        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+            navigator.mediaDevices.addEventListener('devicechange', checkDacCapabilities);
+        }
+
+        // Ensure sleep timer cancel button is hidden initially if no timer is active
+        const initCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
+        if (initCancelSleepBtn && !sleepTimerMode) {
+            initCancelSleepBtn.style.display = 'none';
         }
 
         updateDebugHudState();

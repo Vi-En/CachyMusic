@@ -871,7 +871,7 @@
 
         <!-- Settings Category Sub-Navigation Bar (Focused 2-Column Sub-Groupings) -->
         <nav class="settingsCategoryNav" id="settingsCategoryNav" aria-label="Settings Categories">
-            <button type="button" class="settingsCatBtn active" data-cat="audio">AUDIO &amp; DSP ENGINE</button>
+            <button type="button" class="settingsCatBtn active" data-cat="audio">AUDIO</button>
             <button type="button" class="settingsCatBtn" data-cat="visual">THEMES &amp; VISUALIZER</button>
             <button type="button" class="settingsCatBtn" data-cat="library">LIBRARY &amp; FOLDERS</button>
             <button type="button" class="settingsCatBtn" data-cat="system">SLEEP TIMER</button>
@@ -881,14 +881,13 @@
         <div class="settingsLayoutGrid" id="settingsLayoutGrid" data-active-cat="audio">
             <!-- COLUMN 1: PRIMARY SUB-GROUP CARDS -->
             <div class="settingsCol" id="settingsColAudio" data-settings-col="audio">
-                <!-- AUDIO SUB-CARD A: CORE DSP & PRECISION -->
+                <!-- AUDIO SUB-CARD A: CORE AUDIO & PRECISION -->
                 <div class="settingsSectionPanel" id="settingsPanelAudioDsp" data-settings-cat="audio">
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
-                            <span class="settingsSectionBadge">CORE DSP</span>
+                            <span class="settingsSectionBadge">AUDIO</span>
                             <h3 class="settingsSectionTitle">PRECISION &amp; SIGNAL CHAIN</h3>
                         </div>
-                        <p class="settingsSectionDesc">Floating-point bit depth, psychoacoustic dithering, and hardware buffer calibration.</p>
                     </div>
 
                     <div class="settingsPanelContent">
@@ -896,8 +895,7 @@
                         <div class="settingsRowItem" id="settingsCardDsp">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">SIGNAL CHAIN TELEMETRY</h4>
-                                    <p class="settingsRowDesc">Real-time Web Audio pipeline status &amp; true-peak headroom.</p>
+                                    <h4 class="settingsRowTitle">SIGNAL CHAIN TELEMETRY<button type="button" class="settingHintBtn" title="Shows real-time information about sound quality, volume headroom, and audio stream." aria-label="Feature explanation">!</button></h4>
                                 </div>
                             </div>
                             <div class="settingsDspMetricsGrid">
@@ -927,8 +925,7 @@
                         <div class="settingsRowItem" id="settingsRowPrecision">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">MATH PRECISION</h4>
-                                    <p class="settingsRowDesc">64-bit double-float AudioWorklet prevents biquad rounding noise.</p>
+                                    <h4 class="settingsRowTitle">MATH PRECISION<button type="button" class="settingHintBtn" title="Controls calculation accuracy for audio filters. 64-bit provides studio clarity, while 32-bit saves CPU battery." aria-label="Feature explanation">!</button></h4>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsEnginePrecisionPill">64-BIT DOUBLE FLOAT</span>
                             </div>
@@ -942,15 +939,14 @@
                         <div class="settingsRowItem" id="settingsRowDither">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">DITHERING &amp; NOISE SHAPING</h4>
-                                    <p class="settingsRowDesc">Shapes quantization noise above 18 kHz during DAC output conversion.</p>
+                                    <h4 class="settingsRowTitle">DITHERING &amp; NOISE SHAPING<button type="button" class="settingHintBtn" title="Smooths digital sound when sending audio to your speakers or DAC. Advanced psychoacoustic shaping requires a connected DAC." aria-label="Feature explanation">!</button></h4>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsDitherPill">SHAPED (&gt;18 kHz)</span>
+                                <span class="settingsEnginePill" id="settingsDitherPill">TPDF FLAT</span>
                             </div>
                             <div class="settingsOptionToggles">
                                 <button type="button" class="actionBtn ditherModeBtn" data-dither="off">OFF (TRUNCATE)</button>
-                                <button type="button" class="actionBtn ditherModeBtn" data-dither="tpdf">TPDF FLAT</button>
-                                <button type="button" class="actionBtn ditherModeBtn active" data-dither="shaped">PSYCHOACOUSTIC SHAPED</button>
+                                <button type="button" class="actionBtn ditherModeBtn active" data-dither="tpdf">TPDF FLAT</button>
+                                <button type="button" class="actionBtn ditherModeBtn" id="dacShapedDitherBtn" data-dither="shaped" title="Requires connected USB DAC or high-res audio interface" disabled>PSYCHOACOUSTIC (DAC ONLY)</button>
                             </div>
                         </div>
 
@@ -958,8 +954,7 @@
                         <div class="settingsRowItem" id="settingsRowBuffer">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">BUFFER &amp; LATENCY</h4>
-                                    <p class="settingsRowDesc">Balance responsive controls (~15ms) against dropout-free buffering (~100ms).</p>
+                                    <h4 class="settingsRowTitle">BUFFER &amp; LATENCY<button type="button" class="settingHintBtn" title="Low-latency makes buttons react faster, while Stable buffer prevents audio stuttering on busy systems." aria-label="Feature explanation">!</button></h4>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsBufferPill">PLAYBACK (~100ms)</span>
                             </div>
@@ -973,8 +968,7 @@
                         <div class="settingsRowItem" id="settingsRowDebugMode">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">AUDIO DIAGNOSTICS &amp; DEBUG MODE</h4>
-                                    <p class="settingsRowDesc">Display real-time telemetry, HTTP byte-ranges, audio decoder events, and track skip reasons.</p>
+                                    <h4 class="settingsRowTitle">AUDIO DIAGNOSTICS &amp; DEBUG MODE<button type="button" class="settingHintBtn" title="Opens a movable, on-screen window showing live telemetry, decoder events, and audio health." aria-label="Feature explanation">!</button></h4>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsDebugPill">DISABLED</span>
                             </div>
@@ -1017,36 +1011,20 @@
                     </div>
                 </div>
 
-                <!-- LIBRARY SUB-CARD A: LOCAL FOLDER SCANNER -->
-                <div class="settingsSectionPanel" id="settingsPanelLibrarySystem" data-settings-cat="library" style="display: none;">
-                    <div class="settingsSectionHeader">
-                        <div class="settingsSectionTitleRow">
-                            <span class="settingsSectionBadge">INDEXER</span>
-                            <h3 class="settingsSectionTitle">LOCAL DIRECTORY SCANNER</h3>
+                <!-- LIBRARY SUB-CARD A: LOCAL FOLDER SCANNER (Streamlined, Container Removed) -->
+                <div class="settingsSectionPanel settingsPanelClean" id="settingsPanelLibrarySystem" data-settings-cat="library" style="display: none;">
+                    <div class="settingsPanelContent settingsCleanContent" id="settingsCardFolders" data-settings-item-cat="library">
+                        <div class="settingsFolderInputRow">
+                            <input type="text" id="settingsTabFolderPathInput" class="settingsInput" placeholder="/path/to/music/folder" aria-label="Audio directory path">
+                            <button type="button" id="settingsTabBrowseBtn" class="actionBtn" title="Choose folder from your computer">BROWSE...</button>
+                            <button type="button" id="settingsTabScanBtn" class="actionBtn primaryBtn" title="Scan directory and load tracks">SCAN &amp; LOAD</button>
                         </div>
-                        <p class="settingsSectionDesc">Index local directories for lossless FLAC, WAV, ALAC, and high-bitrate audio.</p>
-                    </div>
-
-                    <div class="settingsPanelContent">
-                        <div class="settingsRowItem" id="settingsCardFolders" data-settings-item-cat="library">
-                            <div class="settingsRowHeader">
-                                <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">SOURCE DIRECTORY PATH</h4>
-                                    <p class="settingsRowDesc">Enter a local folder path or browse your filesystem to index tracks.</p>
-                                </div>
-                            </div>
-                            <div class="settingsFolderInputRow">
-                                <input type="text" id="settingsTabFolderPathInput" class="settingsInput" placeholder="/path/to/music/folder" aria-label="Audio directory path">
-                                <button type="button" id="settingsTabBrowseBtn" class="actionBtn" title="Choose folder from your computer">BROWSE...</button>
-                                <button type="button" id="settingsTabScanBtn" class="actionBtn primaryBtn" title="Scan directory and load tracks">SCAN &amp; LOAD</button>
-                            </div>
-                            <div class="settingsMobileFolderActions" id="settingsMobileFolderActions">
-                                <button type="button" id="settingsChooseFolderBtn" class="actionBtn" title="Choose folder via System Storage Access Framework">SELECT MUSIC FOLDER</button>
-                                <button type="button" id="settingsScanDeviceMusicBtn" class="actionBtn primaryBtn" title="Scan all device music from storage">SCAN ALL DEVICE MUSIC</button>
-                            </div>
-                            <div class="settingsScanStatusBox" id="settingsTabScanStatus">
-                                Ready to scan local music library.
-                            </div>
+                        <div class="settingsMobileFolderActions" id="settingsMobileFolderActions">
+                            <button type="button" id="settingsChooseFolderBtn" class="actionBtn" title="Choose folder via System Storage Access Framework">SELECT MUSIC FOLDER</button>
+                            <button type="button" id="settingsScanDeviceMusicBtn" class="actionBtn primaryBtn" title="Scan all device music from storage">SCAN ALL DEVICE MUSIC</button>
+                        </div>
+                        <div class="settingsScanStatusBox" id="settingsTabScanStatus">
+                            Ready to scan local music library.
                         </div>
                     </div>
                 </div>
@@ -1076,7 +1054,7 @@
                                 <button type="button" class="actionBtn settingsSleepPresetBtn" data-mins="45">45 MIN</button>
                                 <button type="button" class="actionBtn settingsSleepPresetBtn" data-mins="60">60 MIN</button>
                                 <button type="button" class="actionBtn settingsSleepPresetBtn" data-mins="end">END OF TRACK</button>
-                                <button type="button" id="settingsTabCancelSleepBtn" class="actionBtn dangerBtn">CANCEL TIMER</button>
+                                <button type="button" id="settingsTabCancelSleepBtn" class="actionBtn dangerBtn" style="display: none;">CANCEL TIMER</button>
                             </div>
                             <button type="button" id="settingsTabOpenSleepModalBtn" class="actionBtn settingsFullWidthBtn">
                                 CONFIGURE CUSTOM SLEEP TIMER
@@ -1206,7 +1184,7 @@
                         <div class="settingsRowItem" id="settingsCardVis">
                             <div class="visSelectorGrid">
                                 <button type="button" class="visModeBtn active" data-mode="wave">LIQUID WAVE</button>
-                                <button type="button" class="visModeBtn" data-mode="dash">SEGMENTED DASH</button>
+                                <button type="button" class="visModeBtn" data-mode="dash">SEGMENTED BARS</button>
                                 <button type="button" class="visModeBtn" data-mode="thematic">THEMATIC CORE</button>
                             </div>
                         </div>
