@@ -160,10 +160,10 @@ def create_deck():
     # SHOWCASE SLIDES (Slides 3 to 6): Pure Screenshots, No Descriptions
     # =========================================================================
     showcase_slides = [
-        ("Slide 3: Main Player Deck & Turntable", "showcase_player.png", "The interactive player deck with animated tonearm, vinyl record, and real-time audio visualizer."),
-        ("Slide 4: Standalone File Playback", "showcase_standalone.png", "Instant standalone playback for external audio files without modifying or polluting the main library."),
-        ("Slide 5: Peer-to-Peer Sharing Network (Seek)", "showcase_seek.png", "The integrated Seek workspace connecting to decentralized peer networks for direct file exchange."),
-        ("Slide 6: Parametric Equalizer & Audio DSP", "showcase_settings.png", "Audiophile 10-band equalizer, headphone crossfeed, and subsonic rumble filter.")
+        ("Slide 3: Main Player Deck & Turntable", "showcase_player.png", "The interactive player deck with animated tonearm, vinyl record, tracklist, and metadata inspector."),
+        ("Slide 4: Turntable Focus Stage (Tracks & Metadata Untoggled)", "showcase_zen_player.png", "Focus view with tracklist and metadata inspector untoggled, dedicating 100% of the screen to the tactile turntable deck and real-time audio visualizer."),
+        ("Slide 5: Settings & Studio Audio DSP", "showcase_settings.png", "Audiophile settings suite with 10-band parametric equalizer, Bauer binaural crossfeed, and subsonic rumble filter."),
+        ("Slide 6: Peer-to-Peer Sharing Network (Seek)", "showcase_seek.png", "The integrated Seek workspace connecting to decentralized peer networks for direct music discovery and file exchange.")
     ]
 
     # Target geometry for screenshots: 1440x763 aspect ratio = 1.887
