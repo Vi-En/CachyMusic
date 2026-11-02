@@ -276,7 +276,6 @@ while (ob_get_level() > 0) {
 
 header("Content-Type: $mime");
 header("Accept-Ranges: bytes");
-header("Content-Encoding: identity");
 header("Cache-Control: public, max-age=86400");
 header("Content-Length: $length");
 

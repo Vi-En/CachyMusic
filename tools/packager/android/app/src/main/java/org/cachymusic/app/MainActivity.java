@@ -59,6 +59,7 @@ import java.util.Map;
 import java.util.Locale;
 import android.provider.OpenableColumns;
 
+@SuppressWarnings("deprecation")
 public class MainActivity extends Activity {
     private static final String TAG = "CachyMusic";
     private static final String PREFS_NAME = "cachymusic_prefs";
