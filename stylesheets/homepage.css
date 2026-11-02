@@ -3,6 +3,7 @@
     src: url('../resources/fonts/NMSFuturaProBook_Kerned.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
+    font-display: swap;
 }
 
 *
@@ -52,7 +53,7 @@
     /* Adaptive Component Dimensions */
     --topbar-height: clamp(3.0rem, 5.5dvh, 4.0rem);
     --bottom-deck-height: clamp(4.5rem, 9.0dvh, 6.0rem);
-    --turntable-size: clamp(20.25rem, min(95cqi, 60dvh), 34.5rem);
+    --turntable-size: clamp(13.5rem, min(75cqi, 38dvh), 22.5rem);
 
     /* Border Radius Scale */
     --radius-xs: 3px;
@@ -586,10 +587,7 @@ body.is-playing .ambientAuraGlow
     justify-content: space-between;
     align-items: center;
     height: var(--topbar-height, 3.5rem);
-    padding: 0 var(--space-md, 1rem);
-    padding-top: var(--safe-top, 0.5rem);
-    padding-left: max(var(--space-md, 1rem), var(--safe-left, 0px));
-    padding-right: max(var(--space-md, 1rem), var(--safe-right, 0px));
+    padding: 0 max(var(--space-md, 1rem), var(--safe-right, 0px)) 0 max(var(--space-md, 1rem), var(--safe-left, 0px));
     background-color: var(--bg-surface-1, rgba(6, 6, 8, 0.88));
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -673,8 +671,9 @@ body.is-playing .brandLiveMeter .b4 { animation: brandEq4 0.78s ease-in-out infi
     position: relative;
     display: flex;
     align-items: center;
-    flex: 1 1 auto;
-    max-width: 28rem;
+    margin-left: auto;
+    margin-right: 0.5rem;
+    max-width: clamp(8rem, 16vw, 18rem);
     min-width: 8rem;
 }
 
@@ -753,11 +752,17 @@ body.is-playing .brandLiveMeter .b4 { animation: brandEq4 0.78s ease-in-out infi
     background-color: rgba(26, 26, 32, 0.75);
     border: 0.1rem solid rgba(255, 255, 255, 0.1);
     border-radius: 0.45rem;
-    padding: 0.4rem 0.75rem;
+    height: 2.15rem;
+    min-height: 2.15rem;
+    min-width: 6.8rem;
+    padding: 0 0.85rem;
+    box-sizing: border-box;
     letter-spacing: 0.04rem;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.45rem;
+    white-space: nowrap;
     transition: all 0.2s cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 
@@ -2065,6 +2070,80 @@ body.is-playing .statusDot
     }
 }
 
+/* Standalone / External File Playback Banner (VLC Style) */
+.standaloneBanner
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.55rem 0.85rem;
+    background-color: var(--bg-surface-2, rgba(22, 22, 28, 0.95));
+    border: 1px solid var(--accent-color, #00e5ff);
+    border-radius: 0.45rem;
+    margin-bottom: 0.55rem;
+    gap: 0.5rem;
+    box-sizing: border-box;
+}
+
+.standaloneBannerContent
+{
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.standaloneBannerBadge
+{
+    display: inline-flex;
+    align-items: center;
+    background: var(--accent-color, #00e5ff);
+    color: var(--text-on-accent, #000000);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.45rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+    text-transform: uppercase;
+}
+
+.standaloneBannerTitle
+{
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-primary, #ffffff);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.standaloneBannerActions
+{
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.standaloneResumeBtn
+{
+    font-size: 0.72rem !important;
+    padding: 0.28rem 0.6rem !important;
+    font-weight: 700 !important;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.standaloneCloseBtn
+{
+    padding: 0.28rem 0.55rem !important;
+    font-size: 0.8rem !important;
+    cursor: pointer;
+    line-height: 1;
+}
+
 /* Playlist Banner */
 .playlistBanner
 {
@@ -2415,6 +2494,8 @@ body.is-playing .statusDot
 
 .trackItem
 {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 64px;
     contain: layout;
     display: flex;
     align-items: center;
@@ -2850,18 +2931,24 @@ body.is-playing .statusDot
 
 .deckActionBtn,
 .lyricsToggleBtn,
-.metadataToggleBtn
+.metadataToggleBtn,
+.tracklistToggleBtn
 {
     position: relative;
     top: auto;
     right: auto;
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    justify-content: center;
+    gap: 0.45rem;
     background: #f4f4f4;
     border: 0.12rem solid #888888;
     border-radius: 0.45rem;
-    padding: 0.35rem 0.75rem;
+    height: 2.15rem;
+    min-height: 2.15rem;
+    min-width: 6.4rem;
+    padding: 0 0.8rem;
+    box-sizing: border-box;
     cursor: pointer;
     font-size: 0.8rem;
     font-weight: 800;
@@ -2872,11 +2959,13 @@ body.is-playing .statusDot
     line-height: 1;
     box-shadow: 0 0.1rem 0.3rem rgba(0, 0, 0, 0.08);
     user-select: none;
+    white-space: nowrap;
 }
 
 .deckActionBtn svg,
 .lyricsToggleBtn svg,
-.metadataToggleBtn svg
+.metadataToggleBtn svg,
+.tracklistToggleBtn svg
 {
     fill: currentColor;
     flex-shrink: 0;
@@ -2885,7 +2974,8 @@ body.is-playing .statusDot
 
 .deckActionBtn:hover,
 .lyricsToggleBtn:hover,
-.metadataToggleBtn:hover
+.metadataToggleBtn:hover,
+.tracklistToggleBtn:hover
 {
     border-color: #000000;
     background-color: #000000;
@@ -2896,7 +2986,8 @@ body.is-playing .statusDot
 
 .deckActionBtn:hover svg,
 .lyricsToggleBtn:hover svg,
-.metadataToggleBtn:hover svg
+.metadataToggleBtn:hover svg,
+.tracklistToggleBtn:hover svg
 {
     fill: #ffffff;
     stroke: #ffffff;
@@ -2904,7 +2995,8 @@ body.is-playing .statusDot
 
 .deckActionBtn.active,
 .lyricsToggleBtn.active,
-.metadataToggleBtn.active
+.metadataToggleBtn.active,
+.tracklistToggleBtn.active
 {
     background-color: #000000 !important;
     border: 0.12rem solid #000000 !important;
@@ -2914,7 +3006,8 @@ body.is-playing .statusDot
 
 .deckActionBtn.active svg,
 .lyricsToggleBtn.active svg,
-.metadataToggleBtn.active svg
+.metadataToggleBtn.active svg,
+.tracklistToggleBtn.active svg
 {
     fill: #ffffff !important;
     stroke: #ffffff !important;
@@ -2922,7 +3015,8 @@ body.is-playing .statusDot
 
 .deckActionBtn.active:hover,
 .lyricsToggleBtn.active:hover,
-.metadataToggleBtn.active:hover
+.metadataToggleBtn.active:hover,
+.tracklistToggleBtn.active:hover
 {
     background-color: #222222 !important;
     transform: translateY(-1px);
@@ -3254,12 +3348,12 @@ body.is-playing .statusDot
 {
     position: relative;
     z-index: 2;
-    width: var(--turntable-size, clamp(20.25rem, min(95cqi, 60dvh), 34.5rem));
-    height: var(--turntable-size, clamp(20.25rem, min(95cqi, 60dvh), 34.5rem));
-    min-width: var(--turntable-size, clamp(20.25rem, min(95cqi, 60dvh), 34.5rem));
-    min-height: var(--turntable-size, clamp(20.25rem, min(95cqi, 60dvh), 34.5rem));
-    max-width: var(--turntable-size, clamp(20.25rem, min(95cqi, 60dvh), 34.5rem));
-    max-height: var(--turntable-size, clamp(20.25rem, min(95cqi, 60dvh), 34.5rem));
+    width: var(--turntable-size, clamp(13.5rem, min(75cqi, 38dvh), 22.5rem));
+    height: var(--turntable-size, clamp(13.5rem, min(75cqi, 38dvh), 22.5rem));
+    min-width: var(--turntable-size, clamp(13.5rem, min(75cqi, 38dvh), 22.5rem));
+    min-height: var(--turntable-size, clamp(13.5rem, min(75cqi, 38dvh), 22.5rem));
+    max-width: var(--turntable-size, clamp(13.5rem, min(75cqi, 38dvh), 22.5rem));
+    max-height: var(--turntable-size, clamp(13.5rem, min(75cqi, 38dvh), 22.5rem));
     aspect-ratio: 1 / 1;
     flex-shrink: 0;
     margin: 0 auto;
@@ -3472,51 +3566,51 @@ body.is-playing .statusDot
 .toneArm
 {
     position: absolute;
-    right: -0.35rem;
-    top: -0.35rem;
-    width: clamp(3.6rem, 6vw, 5.7rem);
-    height: clamp(12.75rem, 33vh, 23.25rem);
+    right: -0.25rem;
+    top: -0.25rem;
+    width: clamp(2.4rem, 4vw, 3.8rem);
+    height: clamp(8.5rem, 22vh, 15.5rem);
     pointer-events: none;
-    transform-origin: 1.65rem 1.65rem;
-    transform: rotate(8deg);
+    transform-origin: 1.1rem 1.1rem;
+    transform: rotate(-22deg);
     transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 5;
 }
 
 .toneArm.active
 {
-    transform: rotate(-22deg);
+    transform: rotate(8deg);
 }
 
 .armPivot
 {
-    width: 3.3rem;
-    height: 3.3rem;
+    width: 2.2rem;
+    height: 2.2rem;
     border-radius: 50%;
     background: #252525;
-    border: 0.25rem solid black;
-    box-shadow: 0 0.3rem 0.75rem rgba(0, 0, 0, 0.35);
+    border: 0.18rem solid black;
+    box-shadow: 0 0.2rem 0.5rem rgba(0, 0, 0, 0.35);
 }
 
 .armShaft
 {
-    width: 0.38rem;
-    height: clamp(8.25rem, 22.5vh, 15.75rem);
+    width: 0.25rem;
+    height: clamp(5.5rem, 15vh, 10.5rem);
     background: linear-gradient(to right, #555, #aaa, #444);
-    margin-left: 1.45rem;
-    border-radius: 0.25rem;
-    box-shadow: 0.15rem 0.3rem 0.6rem rgba(0,0,0,0.3);
+    margin-left: 0.95rem;
+    border-radius: 0.2rem;
+    box-shadow: 0.1rem 0.2rem 0.4rem rgba(0,0,0,0.3);
 }
 
 .armCartridge
 {
-    width: clamp(1.25rem, 1.8vw, 1.65rem);
-    height: clamp(1.95rem, 3vh, 2.55rem);
+    width: clamp(0.85rem, 1.2vw, 1.1rem);
+    height: clamp(1.3rem, 2vh, 1.7rem);
     background: black;
-    border-radius: 0.25rem;
-    margin-left: 0.85rem;
-    border: 0.15rem solid #666;
-    box-shadow: 0.15rem 0.22rem 0.45rem rgba(0,0,0,0.4);
+    border-radius: 0.2rem;
+    margin-left: 0.55rem;
+    border: 0.1rem solid #666;
+    box-shadow: 0.1rem 0.15rem 0.3rem rgba(0,0,0,0.4);
     position: relative;
 }
 
@@ -3814,16 +3908,18 @@ body.is-playing .armCartridge::after
     transition: filter 0.2s;
 }
 
-.skipBtn:hover
-{
-    transform: translateY(-2px) scale(1.08);
-    background-color: black;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
+@media (hover: hover) and (pointer: fine) {
+    .skipBtn:hover
+    {
+        transform: translateY(-2px) scale(1.08);
+        background-color: black;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
 
-.skipBtn:hover img
-{
-    filter: invert(1);
+    .skipBtn:hover img
+    {
+        filter: invert(1);
+    }
 }
 
 .skipBtn:active
@@ -4764,7 +4860,7 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     width: 26rem;
     max-width: 95vw;
     border-radius: 0.75rem;
-    padding: 1.15rem 1.25rem;
+    padding: 1.15rem 1.25rem calc(1.15rem + env(safe-area-inset-bottom, 0px));
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
@@ -5080,12 +5176,12 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .turntableCon
     {
-        width: clamp(17.25rem, min(50vh, 39vw), 32.25rem);
-        height: clamp(17.25rem, min(50vh, 39vw), 32.25rem);
-        min-width: clamp(17.25rem, min(50vh, 39vw), 32.25rem);
-        min-height: clamp(17.25rem, min(50vh, 39vw), 32.25rem);
-        max-width: clamp(17.25rem, min(50vh, 39vw), 32.25rem);
-        max-height: clamp(17.25rem, min(50vh, 39vw), 32.25rem);
+        width: clamp(11.5rem, min(33vh, 26vw), 21.5rem);
+        height: clamp(11.5rem, min(33vh, 26vw), 21.5rem);
+        min-width: clamp(11.5rem, min(33vh, 26vw), 21.5rem);
+        min-height: clamp(11.5rem, min(33vh, 26vw), 21.5rem);
+        max-width: clamp(11.5rem, min(33vh, 26vw), 21.5rem);
+        max-height: clamp(11.5rem, min(33vh, 26vw), 21.5rem);
         aspect-ratio: 1 / 1;
         flex-shrink: 0;
     }
@@ -5103,7 +5199,7 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .toneArm
     {
-        height: clamp(8rem, 20vh, 14rem);
+        height: clamp(5.5rem, 14vh, 9.5rem);
     }
 
     #trackName
@@ -5133,12 +5229,12 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .turntableCon
     {
-        width: clamp(15rem, min(45vh, 36vw), 27.75rem);
-        height: clamp(15rem, min(45vh, 36vw), 27.75rem);
-        min-width: clamp(15rem, min(45vh, 36vw), 27.75rem);
-        min-height: clamp(15rem, min(45vh, 36vw), 27.75rem);
-        max-width: clamp(15rem, min(45vh, 36vw), 27.75rem);
-        max-height: clamp(15rem, min(45vh, 36vw), 27.75rem);
+        width: clamp(10.5rem, min(30vh, 24vw), 18.5rem);
+        height: clamp(10.5rem, min(30vh, 24vw), 18.5rem);
+        min-width: clamp(10.5rem, min(30vh, 24vw), 18.5rem);
+        min-height: clamp(10.5rem, min(30vh, 24vw), 18.5rem);
+        max-width: clamp(10.5rem, min(30vh, 24vw), 18.5rem);
+        max-height: clamp(10.5rem, min(30vh, 24vw), 18.5rem);
         aspect-ratio: 1 / 1;
         flex-shrink: 0;
     }
@@ -5156,12 +5252,12 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .toneArm
     {
-        height: clamp(7.2rem, 18vh, 12rem);
+        height: clamp(4.8rem, 12vh, 8.0rem);
     }
 
     .toneArm .armShaft
     {
-        height: clamp(4.6rem, 12vh, 8rem);
+        height: clamp(3.0rem, 8vh, 5.2rem);
     }
 
     #trackName
@@ -5285,30 +5381,30 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
     .toneArm
     {
-        width: 4.2rem;
-        height: clamp(10.5rem, 25.5vh, 15.75rem);
-        right: -0.35rem;
-        top: -0.35rem;
-        transform-origin: 1.65rem 1.65rem;
+        width: 2.8rem;
+        height: clamp(7rem, 17vh, 10.5rem);
+        right: -0.25rem;
+        top: -0.25rem;
+        transform-origin: 1.1rem 1.1rem;
     }
 
     .toneArm .armPivot
     {
-        width: 3.3rem;
-        height: 3.3rem;
+        width: 2.2rem;
+        height: 2.2rem;
     }
 
     .toneArm .armShaft
     {
-        height: clamp(6.6rem, 16.5vh, 10.5rem);
-        margin-left: 1.45rem;
+        height: clamp(4.4rem, 11vh, 7rem);
+        margin-left: 0.95rem;
     }
 
     .toneArm .armCartridge
     {
-        width: 1.25rem;
-        height: 2.0rem;
-        margin-left: 0.82rem;
+        width: 0.85rem;
+        height: 1.35rem;
+        margin-left: 0.55rem;
     }
 
     .trackMeta
@@ -5391,12 +5487,12 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 {
     .turntableCon
     {
-        width: clamp(13.2rem, 37.5vh, 21rem);
-        height: clamp(13.2rem, 37.5vh, 21rem);
-        min-width: clamp(13.2rem, 37.5vh, 21rem);
-        min-height: clamp(13.2rem, 37.5vh, 21rem);
-        max-width: clamp(13.2rem, 37.5vh, 21rem);
-        max-height: clamp(13.2rem, 37.5vh, 21rem);
+        width: clamp(8.8rem, 25vh, 14rem);
+        height: clamp(8.8rem, 25vh, 14rem);
+        min-width: clamp(8.8rem, 25vh, 14rem);
+        min-height: clamp(8.8rem, 25vh, 14rem);
+        max-width: clamp(8.8rem, 25vh, 14rem);
+        max-height: clamp(8.8rem, 25vh, 14rem);
         aspect-ratio: 1 / 1;
         flex-shrink: 0;
     }
@@ -6606,6 +6702,7 @@ body.is-playing .playPauseBtn .playPauseGlowRing
         gap: 0.65rem !important;
         padding: 0.65rem 0.85rem !important;
         height: calc(100vh - 3.8rem) !important;
+        height: calc(100dvh - 3.8rem) !important;
     }
 
     .panel.trackListPanel
@@ -6869,12 +6966,19 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 {
     display: flex;
     align-items: center;
+    justify-content: center;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     background-color: #0c0c0c;
     border: 0.12rem solid #282828;
     border-radius: 0.4rem;
     padding: 0.2rem;
     gap: 0.25rem;
-    margin-left: 0.5rem;
+    margin: 0;
+    z-index: 10;
+    box-sizing: border-box;
 }
 
 .wsTabBtn
@@ -7080,9 +7184,18 @@ body.view-settings .persistentMiniPlayer
 
 body.view-soulseek #headerSearchContainer,
 body.view-download #headerSearchContainer,
-body.view-settings #headerSearchContainer
+body.view-settings #headerSearchContainer,
+body.tracklist-collapsed #headerSearchContainer
 {
-    display: none;
+    display: none !important;
+}
+
+@media (max-width: 768px)
+{
+    body:not(.mobile-tab-tracks) #headerSearchContainer
+    {
+        display: none !important;
+    }
 }
 
 /* Soulseek Main Workspace Layout */
@@ -9880,6 +9993,7 @@ body.view-settings #headerSearchContainer
     left: 0;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     background-color: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(4px);
     display: flex;
@@ -13108,19 +13222,21 @@ body.view-settings #headerSearchContainer
     transition: transform 0.2s ease, filter 0.2s ease !important;
 }
 
-[data-theme="nms"] .mediaBtn.skipBtn:hover,
-[data-theme="atlas"] .mediaBtn.skipBtn:hover
-{
-    background: rgba(225, 29, 72, 0.15) !important;
-    border-color: rgba(255, 42, 85, 0.5) !important;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 12px rgba(255, 42, 85, 0.25) !important;
-    transform: scale(1.08) !important;
-}
+@media (hover: hover) and (pointer: fine) {
+    [data-theme="nms"] .mediaBtn.skipBtn:hover,
+    [data-theme="atlas"] .mediaBtn.skipBtn:hover
+    {
+        background: rgba(225, 29, 72, 0.15) !important;
+        border-color: rgba(255, 42, 85, 0.5) !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 12px rgba(255, 42, 85, 0.25) !important;
+        transform: scale(1.08) !important;
+    }
 
-[data-theme="nms"] .mediaBtn.skipBtn:hover img,
-[data-theme="atlas"] .mediaBtn.skipBtn:hover img
-{
-    filter: brightness(0) invert(1) drop-shadow(0 0 4px rgba(255, 255, 255, 0.7)) !important;
+    [data-theme="nms"] .mediaBtn.skipBtn:hover img,
+    [data-theme="atlas"] .mediaBtn.skipBtn:hover img
+    {
+        filter: brightness(0) invert(1) drop-shadow(0 0 4px rgba(255, 255, 255, 0.7)) !important;
+    }
 }
 
 [data-theme="nms"] .mediaBtn.skipBtn:active,
@@ -25717,11 +25833,13 @@ body.view-settings #headerSearchContainer
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.7) !important;
 }
 
-[data-theme="sentinel"] .skipBtn:hover
-{
-    background: rgba(0, 229, 255, 0.25) !important;
-    border-color: #00e5ff !important;
-    box-shadow: 0 0 14px rgba(0, 229, 255, 0.6) !important;
+@media (hover: hover) and (pointer: fine) {
+    [data-theme="sentinel"] .skipBtn:hover
+    {
+        background: rgba(0, 229, 255, 0.25) !important;
+        border-color: #00e5ff !important;
+        box-shadow: 0 0 14px rgba(0, 229, 255, 0.6) !important;
+    }
 }
 
 [data-theme="sentinel"] .skipBtn img
@@ -31402,12 +31520,23 @@ body.view-settings #headerSearchContainer
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
 }
 
-/* Completely strip extraneous decorative noise & watermarks */
-:is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .bgWatermark,
-:is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .bgDisc {
+/* Minimalist & Brutalist Themes: Completely strip extraneous background vinyl circle (bgDisc), watermarks & ambient halos */
+:is(
+    [data-theme="brutalist-light"],
+    [data-theme="minimalist-light"],
+    [data-theme="brutalist-dark"],
+    [data-theme="minimalist-dark"],
+    [data-theme="minimalist-warm"],
+    [data-theme="minimalist-obsidian"],
+    html[data-theme="minimalist-warm"],
+    html[data-theme="minimalist-obsidian"],
+    html[data-theme*="minimalist"],
+    [data-theme*="minimalist"]
+) :is(.bgWatermark, .bgDisc, .disc, .ambientAtmosphere, .ambientAuraGlow) {
     display: none !important;
     opacity: 0 !important;
     visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 /* 2. Top Navigation Bar */
@@ -32093,13 +32222,15 @@ body.view-settings #headerSearchContainer
     color: #000000 !important;
 }
 
-:is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .skipBtn:hover {
-    background: #000000 !important;
-    background-color: #000000 !important;
-}
+@media (hover: hover) and (pointer: fine) {
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .skipBtn:hover {
+        background: #000000 !important;
+        background-color: #000000 !important;
+    }
 
-:is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .skipBtn:hover img {
-    filter: invert(1) brightness(2) !important;
+    :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .skipBtn:hover img {
+        filter: invert(1) brightness(2) !important;
+    }
 }
 
 :is([data-theme="brutalist-light"], [data-theme="minimalist-light"]) .subBtn:hover {
@@ -33743,12 +33874,12 @@ body.view-settings #headerSearchContainer
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
 }
 
-/* Completely strip extraneous decorative noise & watermarks */
-:is([data-theme="brutalist-dark"], [data-theme="minimalist-dark"]) .bgWatermark,
-:is([data-theme="brutalist-dark"], [data-theme="minimalist-dark"]) .bgDisc {
+/* Completely strip extraneous decorative noise, background discs & watermarks */
+:is([data-theme="brutalist-dark"], [data-theme="minimalist-dark"]) :is(.bgWatermark, .bgDisc, .disc, .ambientAtmosphere, .ambientAuraGlow) {
     display: none !important;
     opacity: 0 !important;
     visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 /* 2. Top Navigation Bar */
@@ -34432,14 +34563,16 @@ body.view-settings #headerSearchContainer
     color: #ffffff !important;
 }
 
-:is([data-theme="brutalist-dark"], [data-theme="minimalist-dark"]) .skipBtn:hover {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
-    border-color: #ffffff !important;
-}
+@media (hover: hover) and (pointer: fine) {
+    :is([data-theme="brutalist-dark"], [data-theme="minimalist-dark"]) .skipBtn:hover {
+        background: #ffffff !important;
+        background-color: #ffffff !important;
+        border-color: #ffffff !important;
+    }
 
-:is([data-theme="brutalist-dark"], [data-theme="minimalist-dark"]) .skipBtn:hover img {
-    filter: none !important;
+    :is([data-theme="brutalist-dark"], [data-theme="minimalist-dark"]) .skipBtn:hover img {
+        filter: none !important;
+    }
 }
 
 :is([data-theme="brutalist-dark"], [data-theme="minimalist-dark"]) .subBtn:hover {
@@ -41041,6 +41174,25 @@ body .dspDeck {
         transform: scale(0.92) !important;
     }
 
+    /* Mobile Skip Button Isolation: Strict zero-hover, touch-press active state */
+    .skipBtn:hover,
+    #prevBtn:hover,
+    #nextBtn:hover,
+    .mediaBtn.skipBtn:hover {
+        transform: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+
+    .skipBtn:active,
+    #prevBtn:active,
+    #nextBtn:active,
+    .mediaBtn.skipBtn:active {
+        transform: scale(0.90) !important;
+        opacity: 0.70 !important;
+        transition: transform 0.05s ease, opacity 0.05s ease !important;
+    }
+
     /* Volume Deck */
     .volumeDeck {
         width: min(18rem, 88%) !important;
@@ -44639,6 +44791,16 @@ body .dspDeck {
    ========================================================================== */
 
 /* 1. Minimalist Warm & Minimalist Obsidian Turntable, Scrim, Meta & Footer Fixes */
+[data-theme="minimalist-warm"] :is(.bgWatermark, .bgDisc, .disc, .ambientAtmosphere, .ambientAuraGlow),
+html[data-theme="minimalist-warm"] :is(.bgWatermark, .bgDisc, .disc, .ambientAtmosphere, .ambientAuraGlow),
+[data-theme="minimalist-obsidian"] :is(.bgWatermark, .bgDisc, .disc, .ambientAtmosphere, .ambientAuraGlow),
+html[data-theme="minimalist-obsidian"] :is(.bgWatermark, .bgDisc, .disc, .ambientAtmosphere, .ambientAuraGlow) {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 [data-theme="minimalist-warm"] .deckArtworkScrim {
     background: radial-gradient(circle, rgba(244, 239, 230, 0.12) 0%, rgba(244, 239, 230, 0) 70%) !important;
 }
@@ -47053,10 +47215,12 @@ html[data-theme="minimalist-warm"] .muteBtn img {
     filter: brightness(0) opacity(0.85) !important;
 }
 
-html[data-theme="minimalist-warm"] .skipBtn:hover,
-html[data-theme="minimalist-warm"] .muteBtn:hover {
-    background: #ebe4d8 !important;
-    border-color: #9a3412 !important;
+@media (hover: hover) and (pointer: fine) {
+    html[data-theme="minimalist-warm"] .skipBtn:hover,
+    html[data-theme="minimalist-warm"] .muteBtn:hover {
+        background: #ebe4d8 !important;
+        border-color: #9a3412 !important;
+    }
 }
 
 html[data-theme="minimalist-warm"] .visualizerDock {
@@ -48824,7 +48988,7 @@ html[data-theme="minimalist-warm"] .themeModalBtn #topThemeLabel,
 }
 
 /* ========================================================================= */
-/* Collapsible / Sliding Metadata Inspector Panel                            */
+/* Collapsible / Sliding Metadata & Tracklist Panels (Desktop Zen Stage)    */
 /* ========================================================================= */
 .gridContainer {
     transition: grid-template-columns 0.35s cubic-bezier(0.16, 1, 0.3, 1), gap 0.35s cubic-bezier(0.16, 1, 0.3, 1);
@@ -48842,24 +49006,69 @@ html[data-theme="minimalist-warm"] .themeModalBtn #topThemeLabel,
     will-change: transform, opacity;
 }
 
+.trackListPanel {
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                max-width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                min-width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                padding 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                margin 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: right center;
+    will-change: transform, opacity;
+}
+
 @media (min-width: 1025px) {
     body.metadata-collapsed .gridContainer {
         grid-template-columns: 0px 1fr minmax(18rem, 25rem) !important;
         gap: 0 clamp(0.5rem, 1vw, 1.2rem) !important;
     }
 
-    body.metadata-collapsed .turntableStage {
-        max-height: 48vh !important;
+    body.tracklist-collapsed .gridContainer {
+        grid-template-columns: minmax(16rem, 21.5rem) 1fr 0px !important;
+        gap: 0 clamp(0.5rem, 1vw, 1.2rem) !important;
     }
 
-    body.metadata-collapsed .turntableCon {
-        --turntable-size: clamp(21.75rem, min(95cqi, 66dvh), 40.5rem) !important;
+    body.metadata-collapsed.tracklist-collapsed .gridContainer {
+        grid-template-columns: 0px 1fr 0px !important;
+        gap: 0 !important;
+    }
+
+    body.metadata-collapsed .turntableStage,
+    body.tracklist-collapsed .turntableStage,
+    body.metadata-collapsed.tracklist-collapsed .turntableStage {
+        max-height: 52vh !important;
+    }
+
+    body.metadata-collapsed .turntableCon,
+    body.tracklist-collapsed .turntableCon {
+        --turntable-size: clamp(14.5rem, min(80cqi, 42dvh), 25.5rem) !important;
+    }
+
+    body.metadata-collapsed.tracklist-collapsed .turntableCon {
+        --turntable-size: clamp(15.5rem, min(85cqi, 45dvh), 27.0rem) !important;
     }
 
     body.metadata-collapsed .settingsPanel {
         opacity: 0 !important;
         pointer-events: none !important;
         transform: translateX(-45px) scaleX(0.7) !important;
+        max-width: 0 !important;
+        min-width: 0 !important;
+        width: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        border-width: 0 !important;
+        overflow: hidden !important;
+        visibility: hidden !important;
+    }
+
+    body.tracklist-collapsed .trackListPanel {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: translateX(45px) scaleX(0.7) !important;
         max-width: 0 !important;
         min-width: 0 !important;
         width: 0 !important;
@@ -48879,7 +49088,29 @@ html[data-theme="minimalist-warm"] .themeModalBtn #topThemeLabel,
         gap: 0 0.6rem !important;
     }
 
+    body.tracklist-collapsed .gridContainer {
+        grid-template-columns: minmax(16rem, 19.5rem) 1fr 0px !important;
+        gap: 0 0.6rem !important;
+    }
+
+    body.metadata-collapsed.tracklist-collapsed .gridContainer {
+        grid-template-columns: 0px 1fr 0px !important;
+        gap: 0 !important;
+    }
+
     body.metadata-collapsed .settingsPanel {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        max-width: 0 !important;
+        min-width: 0 !important;
+        width: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border-width: 0 !important;
+        display: none !important;
+    }
+
+    body.tracklist-collapsed .trackListPanel {
         opacity: 0 !important;
         pointer-events: none !important;
         max-width: 0 !important;
@@ -49836,14 +50067,14 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
             right: -0.65rem !important;
             top: 0.2rem !important;
             transform-origin: 1.1rem 1.1rem !important;
-            transform: rotate(6deg) !important;
+            transform: rotate(-22deg) !important;
             z-index: 15 !important;
             transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1) !important;
             pointer-events: none !important;
         }
 
         .playerDeck.mobileActive .toneArm.active {
-            transform: rotate(-22deg) !important;
+            transform: rotate(6deg) !important;
         }
 
         .playerDeck.mobileActive .toneArm .armPivot {
@@ -50909,3 +51140,36 @@ html[data-theme="minimalist-obsidian"] #deckSignalDot {
     .debugHudLogEntry.system {
         color: #00e5ff;
     }
+
+/* Mobile & Touch Global Invariant: Skip buttons eliminate persistent hover, delegate exclusively to active press */
+@media (hover: none), (pointer: coarse) {
+    .skipBtn:hover,
+    #prevBtn:hover,
+    #nextBtn:hover,
+    .mediaBtn.skipBtn:hover,
+    [data-theme] .skipBtn:hover,
+    [data-theme] #prevBtn:hover,
+    [data-theme] #nextBtn:hover,
+    html[data-theme] .skipBtn:hover,
+    html[data-theme] #prevBtn:hover,
+    html[data-theme] #nextBtn:hover {
+        transform: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+
+    .skipBtn:active,
+    #prevBtn:active,
+    #nextBtn:active,
+    .mediaBtn.skipBtn:active,
+    [data-theme] .skipBtn:active,
+    [data-theme] #prevBtn:active,
+    [data-theme] #nextBtn:active,
+    html[data-theme] .skipBtn:active,
+    html[data-theme] #prevBtn:active,
+    html[data-theme] #nextBtn:active {
+        transform: scale(0.90) !important;
+        opacity: 0.70 !important;
+        transition: transform 0.05s ease, opacity 0.05s ease !important;
+    }
+}

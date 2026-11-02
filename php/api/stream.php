@@ -1,5 +1,8 @@
 <?php
 // CachyMusic - Secure Audio Streaming Service
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 @set_time_limit(0);
 @ini_set('max_execution_time', '0');
 @ini_set('memory_limit', '512M');
@@ -297,7 +300,7 @@ if (!$fp) {
 }
 
 fseek($fp, $start);
-$buffer = 262144; // 256KB buffer for high throughput
+$buffer = 65536; // 64KB chunk buffer: streams without whole-file buffering
 $remaining = $length;
 
 while ($remaining > 0 && !feof($fp)) {

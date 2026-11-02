@@ -2,10 +2,9 @@
 // CachyMusic - Dedicated High-Performance Cover Artwork Endpoint
 // Serves embedded album artwork and lightweight thumbnails with persistent disk & HTTP caching
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
 }
-session_write_close();
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (!empty($origin)) {
@@ -262,17 +261,27 @@ foreach ($commonCovers as $cc) {
         }
 
         if ($isThumb && file_exists($cacheThumb) && filesize($cacheThumb) > 0) {
+            $etag = '"' . $cacheHash . '-thumb"';
+            if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+                http_response_code(304);
+                exit;
+            }
             header("Content-Type: image/jpeg");
             header("Cache-Control: public, max-age=31536000, immutable");
-            header("ETag: \"" . $cacheHash . "-thumb\"");
+            header("ETag: $etag");
             header("Content-Length: " . filesize($cacheThumb));
             readfile($cacheThumb);
             exit;
         }
 
+        $etag = '"' . $cacheHash . '"';
+        if (isset($_SERVER['HTTP_IF_NONE_MATCH']) && trim($_SERVER['HTTP_IF_NONE_MATCH']) === $etag) {
+            http_response_code(304);
+            exit;
+        }
         header("Content-Type: $cMime");
         header("Cache-Control: public, max-age=31536000, immutable");
-        header("ETag: \"" . $cacheHash . "\"");
+        header("ETag: $etag");
         readfile($candidate);
         exit;
     }

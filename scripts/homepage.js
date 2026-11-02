@@ -1,6 +1,10 @@
-// CachyMusic Workstation Audio Engine v4.0 - High-Fidelity Audio & Selectable Visualizers
+// CachyMusic Workstation Audio Engine v4.0 - Modular Unified Bundle
 (function() {
     'use strict';
+
+
+    // --- Sub-Module: utils.js ---
+// CachyMusic - Utilities & Performance Shields
 
     // Cross-Browser Engine Optimization & Safe Storage Initialization
     const isFirefox = typeof navigator !== 'undefined' && /firefox|fxios/i.test(navigator.userAgent);
@@ -92,184 +96,307 @@
     }
 
 
-    // State
-    let isInitialized = false;
-    let allTracks = [];
-    let displayedTracks = [];
-    let playlists = [];
-    let currentPlaylistId = null;
-    let currentPlaylistName = '';
-    let currentTrackIndex = 0;
-    let isPlaying = false;
-    let isShuffle = false;
-    let repeatMode = safeStorage.getItem('cachymusic_repeat_mode') || 'all'; // 'off' | 'all' | 'one'
-    const VALID_SORT_OPTIONS = [
-        'default',
-        'title-asc',
-        'title-desc',
-        'artist-asc',
-        'artist-desc',
-        'album-asc',
-        'album-desc',
-        'duration-asc',
-        'duration-desc',
-        'year-desc',
-        'year-asc'
-    ];
-    let currentSort = 'default';
-    try {
-        const urlSort = new URLSearchParams(window.location.search).get('sort');
-        const savedSort = urlSort || safeStorage.getItem('cachymusic_track_sort');
-        if (savedSort && VALID_SORT_OPTIONS.includes(savedSort)) {
-            currentSort = savedSort;
+
+    function formatTime(seconds) {
+        if (!seconds || isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '0:00';
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        if (hrs > 0) {
+            return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
         }
-    } catch (_) {}
-    let searchQuery = '';
-    let isDraggingScrubber = false;
-    let selectedTrackForPlaylist = null;
-    let isLyricsView = false;
-    let parsedLyrics = null;
-    let activeLyricIndex = -1;
-
-    // Visualizer State & Physics
-    const urlVisParam = new URLSearchParams(window.location.search).get('vis');
-    let savedMode = urlVisParam || safeStorage.getItem('cachymusic_vis_mode') || 'wave';
-    if (savedMode === 'badapple') savedMode = 'thematic';
-    let activeVisualizerMode = savedMode; // 'wave' | 'dash' | 'thematic'
-    let audioContext = null;
-    let analyser = null;
-    let audioSourceNode = null;
-
-    // Universal Web Audio Software Decoder Engine (for 24-bit/32-bit FLAC, ALAC, AIFF & unsupported platform codecs)
-    let isSoftwareDecoding = false;
-    let isSoftwarePaused = false;
-    let activeDecodedBuffer = null;
-    let softwareSourceNode = null;
-    let softwareSourceGainNode = null;
-    let softwarePlaybackStartTime = 0;
-    let softwarePlaybackOffset = 0;
-    let softwarePlaybackRaf = null;
-    const alwaysSoftwareDecodeUrls = new Set();
-    let animFrameId = null;
-    let lastRenderTime = performance.now();
-    let simPhase = 0;
-    let isVisualizerLoopRunning = false;
-    let resumeVisualizerLoop = function() {};
-    let smoothTurntableFidelity = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple') ? 1.0 : 0.0;
-
-    // Audio DSP States (persisted in localStorage, bypass by default for pure native playback)
-    let isAmpBoost = safeStorage.getItem('cachymusic_amp_boost') === 'true';
-    let isBassBoost = safeStorage.getItem('cachymusic_bass_boost') === 'true';
-    let isVocalBoost = safeStorage.getItem('cachymusic_vocal_boost') === 'true';
-    let isTrebleBoost = safeStorage.getItem('cachymusic_treble_boost') === 'true';
-    let isLimiter = safeStorage.getItem('cachymusic_limiter') === 'true';
-    let isReplayGain = safeStorage.getItem('cachymusic_replaygain') !== 'false';
-    let isCrossfeed = safeStorage.getItem('cachymusic_crossfeed') === 'true';
-    let isSubsonic = safeStorage.getItem('cachymusic_subsonic') !== 'false';
-    let currentVolumeValue = parseFloat(safeStorage.getItem('cachymusic_volume') || '0.8');
-    if (isNaN(currentVolumeValue)) currentVolumeValue = 0.8;
-
-    // Neutron HiFi™ Audio Engine & Output Configuration
-    let isPrecision64 = safeStorage.getItem('cachymusic_precision_64') !== null
-        ? safeStorage.getItem('cachymusic_precision_64') === 'true'
-        : safeStorage.getItem('cachymusic_engine_precision') !== '32';
-    let isAgpEnabled = safeStorage.getItem('cachymusic_agp') !== 'false';
-    let isSurroundWidener = safeStorage.getItem('cachymusic_surround_ms') === 'true';
-    let isPhaseInvert = safeStorage.getItem('cachymusic_phase_invert') === 'true';
-    let isMonoMix = safeStorage.getItem('cachymusic_mono_mix') === 'true';
-    let stereoBalance = parseFloat(safeStorage.getItem('cachymusic_stereo_balance') || '0');
-    if (isNaN(stereoBalance)) stereoBalance = 0;
-    let isPitchLockTempo = safeStorage.getItem('cachymusic_pitch_lock') === 'true';
-    let currentPlaybackSpeed = 1.0;
-    let isHardwareGain = safeStorage.getItem('cachymusic_hardware_gain') === 'true' || safeStorage.getItem('cachymusic_hw_gain') === 'true';
-    let isUltrasonic = safeStorage.getItem('cachymusic_ultrasonic') !== 'false';
-    let ultrasonicCutoff = parseInt(safeStorage.getItem('cachymusic_ultrasonic_cutoff') || '32000', 10);
-    let ditherMode = safeStorage.getItem('cachymusic_dither_mode') || 'shaped';
-    let isAmbiophonics = safeStorage.getItem('cachymusic_ambiophonics') === 'true';
-    let bufferLatencyTarget = safeStorage.getItem('cachymusic_buffer_latency') || 'playback';
-    let isPeqBypassed = safeStorage.getItem('cachymusic_peq_bypassed') === 'true';
-    let dspWorkletNode = null;
-    let hwVolumeBackend = 'none';
-
-    // 10-Band Parametric Equalizer (ISO standard 1-octave frequencies from 31 Hz to 16 kHz)
-    const PEQ_FREQS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
-    const PEQ_Q_STEPS = [0.71, 1.0, 1.41, 2.2, 3.5];
-    let peqGains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    let peqQs = [1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41];
-    try {
-        const savedPeq = JSON.parse(safeStorage.getItem('cachymusic_peq_gains') || '[]');
-        if (Array.isArray(savedPeq) && savedPeq.length === 10) {
-            peqGains = savedPeq.map(v => typeof v === 'number' && !isNaN(v) ? Math.max(-15, Math.min(15, v)) : 0);
-        }
-        const savedQs = JSON.parse(safeStorage.getItem('cachymusic_peq_qs') || '[]');
-        if (Array.isArray(savedQs) && savedQs.length === 10) {
-            peqQs = savedQs.map(v => typeof v === 'number' && !isNaN(v) ? Math.max(0.4, Math.min(8.0, v)) : 1.41);
-        }
-    } catch (_) {}
-    let peqNodes = [];
-
-    // Dual-Buffer Gapless Playback Engine
-    let secondaryAudio = null;
-    let preloadedNextTrackIndex = -1;
-    let isGaplessTransitioning = false;
-
-    function hasActiveDsp() {
-        const hasPeq = !isPeqBypassed && peqGains.some(g => g !== 0);
-        const hasWorkletDsp = isUltrasonic || (ditherMode !== 'off') || isAmbiophonics || isSurroundWidener || isPhaseInvert || isMonoMix || (Math.abs(stereoBalance) > 0.005);
-        return isAmpBoost || isBassBoost || isVocalBoost || isTrebleBoost || isLimiter || isCrossfeed || isSubsonic || hasPeq || hasWorkletDsp || (currentVolumeValue > 1.0);
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     }
 
-    // Web Audio BiquadFilter DSP, ReplayGain, PEQ, Amplification, Crossfeed & Limiter nodes
-    let subsonicFilter = null;
-    let preAmpGainNode = null;
-    let xfeedNetwork = null;
-    let replayGainNode = null;
-    let bassFilter = null;
-    let vocalFilter = null;
-    let trebleFilter = null;
-    let ampGainNode = null;
-    let ampSoftClipper = null;
-    let dspLimiter = null;
-    let ceilingTrimGain = null;
-
-    // 60-band perceptual logarithmic frequency array & smoothing physics
-    const NUM_BANDS = 60;
-    const smoothBands = new Float32Array(NUM_BANDS);
-    let smoothBass = 0;
-    let smoothTreble = 0;
-
-    // Dash mode peak caps physics & smooth column interpolation
-    const peakValues = new Float32Array(NUM_BANDS);
-    const peakVelocity = new Float32Array(NUM_BANDS);
-    const peakHold = new Int32Array(NUM_BANDS);
-    const smoothDashLevels = new Float32Array(NUM_BANDS);
-
-    // Thematic Wave continuous angle integration & smoothed pulse
-    let yinYangAngle = 0;
-    let runeRingAngle = 0;
-    let smoothHeartPulse = 1.0;
-
-    // Turntable center expanding acoustic shockwave ripples
-    const turntableShockwaves = [];
-    function emitTurntableShockwave(x, y, minRadius, maxRadius, initialAlpha = 0.65, color = '#ff1744') {
-        if (turntableShockwaves.length >= 10) turntableShockwaves.shift();
-        turntableShockwaves.push({
-            x,
-            y,
-            r: minRadius,
-            minR: minRadius,
-            maxR: maxRadius,
-            alpha: initialAlpha,
-            color: color,
-            speed: (maxRadius - minRadius) * 2.4
+    function escapeHtml(str) {
+        return (str || '').toString().replace(/[&<>"']/g, function(m) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
         });
     }
 
-    // Bad Apple / Wave floating particles
-    const particles = [];
-    const MAX_PARTICLES = 36;
+    function escapeRegex(str) {
+        return (str || '').toString().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // App Initialization
+    window.__cachyMusic = {
+        getAudioContext: () => audioContext,
+        getAudio: () => audio,
+        hasActiveDsp: () => hasActiveDsp(),
+        getAllTracks: () => allTracks,
+        loadTrack: (idx, autoPlay, initialTime) => loadTrack(idx, autoPlay, initialTime)
+    };
+
+    // =========================================================================
+    // Linux MPRIS2 D-Bus & Desktop Media Control Bridge
+    // =========================================================================
+
+    function formatFileSize(bytes) {
+        if (!bytes) return 'N/A';
+        if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
+        return (bytes / 1024).toFixed(1) + ' KB';
+    }
+
+    // Scan Directory via Server API
+
+    function showToast(message, actionText = null, actionCallback = null, duration = 3500) {
+        let container = document.getElementById('cachyToastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'cachyToastContainer';
+            container.className = 'toastContainer';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = 'cachyToast';
+
+        const msgSpan = document.createElement('span');
+        msgSpan.className = 'toastMsg';
+        msgSpan.textContent = message;
+        toast.appendChild(msgSpan);
+
+        if (actionText && typeof actionCallback === 'function') {
+            const actBtn = document.createElement('button');
+            actBtn.type = 'button';
+            actBtn.className = 'toastUndoBtn';
+            actBtn.textContent = actionText;
+            actBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                try { actionCallback(); } catch (err) { console.warn('Toast action error:', err); }
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                setTimeout(() => toast.remove(), 200);
+            });
+            toast.appendChild(actBtn);
+        }
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                setTimeout(() => toast.remove(), 200);
+            }
+        }, duration);
+    }
+
+    if (typeof window !== 'undefined') {
+        Object.assign(window, {
+            isFirefox,
+            safeStorage,
+            escapeHtml,
+            formatTime,
+            formatFileSize,
+            showToast
+        });
+    }
+
+
+
+
+    // --- Sub-Module: state.js ---
+// CachyMusic - Centralized Workstation State
+
+const _g = typeof window !== 'undefined' ? window : globalThis;
+
+// State Variables initialized on global window scope
+_g.isInitialized = _g.isInitialized ?? false;
+_g.allTracks = _g.allTracks ?? [];
+_g.displayedTracks = _g.displayedTracks ?? [];
+_g.playlists = _g.playlists ?? [];
+_g.currentPlaylistId = _g.currentPlaylistId ?? null;
+_g.currentPlaylistName = _g.currentPlaylistName ?? '';
+_g.currentTrackIndex = _g.currentTrackIndex ?? 0;
+_g.isPlaying = _g.isPlaying ?? false;
+_g.isShuffle = _g.isShuffle ?? false;
+_g.repeatMode = _g.repeatMode ?? (safeStorage.getItem('cachymusic_repeat_mode') || 'all'); // 'off' | 'all' | 'one'
+
+const VALID_SORT_OPTIONS = [
+    'default',
+    'title-asc',
+    'title-desc',
+    'artist-asc',
+    'artist-desc',
+    'album-asc',
+    'album-desc',
+    'duration-asc',
+    'duration-desc',
+    'year-desc',
+    'year-asc'
+];
+_g.VALID_SORT_OPTIONS = VALID_SORT_OPTIONS;
+
+_g.currentSort = _g.currentSort ?? 'default';
+try {
+    const urlSort = new URLSearchParams(window.location.search).get('sort');
+    const savedSort = urlSort || safeStorage.getItem('cachymusic_track_sort');
+    if (savedSort && VALID_SORT_OPTIONS.includes(savedSort)) {
+        _g.currentSort = savedSort;
+    }
+} catch (_) {}
+
+_g.searchQuery = _g.searchQuery ?? '';
+_g.isDraggingScrubber = _g.isDraggingScrubber ?? false;
+_g.selectedTrackForPlaylist = _g.selectedTrackForPlaylist ?? null;
+_g.isLyricsView = _g.isLyricsView ?? false;
+_g.parsedLyrics = _g.parsedLyrics ?? null;
+_g.activeLyricIndex = _g.activeLyricIndex ?? -1;
+
+// Visualizer State & Physics
+const urlVisParam = new URLSearchParams(window.location.search).get('vis');
+let savedMode = urlVisParam || safeStorage.getItem('cachymusic_vis_mode') || 'wave';
+if (savedMode === 'badapple') savedMode = 'thematic';
+_g.activeVisualizerMode = _g.activeVisualizerMode ?? savedMode; // 'wave' | 'dash' | 'thematic'
+_g.audioContext = _g.audioContext ?? null;
+_g.analyser = _g.analyser ?? null;
+_g.audioSourceNode = _g.audioSourceNode ?? null;
+
+// Universal Web Audio Software Decoder Engine (for 24-bit/32-bit FLAC, ALAC, AIFF & unsupported platform codecs)
+_g.isSoftwareDecoding = _g.isSoftwareDecoding ?? false;
+_g.isSoftwarePaused = _g.isSoftwarePaused ?? false;
+_g.activeDecodedBuffer = _g.activeDecodedBuffer ?? null;
+_g.softwareSourceNode = _g.softwareSourceNode ?? null;
+_g.softwareSourceGainNode = _g.softwareSourceGainNode ?? null;
+_g.softwarePlaybackStartTime = _g.softwarePlaybackStartTime ?? 0;
+_g.softwarePlaybackOffset = _g.softwarePlaybackOffset ?? 0;
+_g.softwarePlaybackRaf = _g.softwarePlaybackRaf ?? null;
+_g.alwaysSoftwareDecodeUrls = _g.alwaysSoftwareDecodeUrls ?? new Set();
+_g.animFrameId = _g.animFrameId ?? null;
+_g.lastRenderTime = _g.lastRenderTime ?? performance.now();
+_g.simPhase = _g.simPhase ?? 0;
+_g.isVisualizerLoopRunning = _g.isVisualizerLoopRunning ?? false;
+_g.resumeVisualizerLoop = _g.resumeVisualizerLoop ?? function() {};
+_g.smoothTurntableFidelity = _g.smoothTurntableFidelity ?? ((_g.activeVisualizerMode === 'thematic' || _g.activeVisualizerMode === 'badapple') ? 1.0 : 0.0);
+_g.isStandalonePlayback = _g.isStandalonePlayback ?? false;
+_g.standaloneTrackList = _g.standaloneTrackList ?? [];
+_g.standaloneTrackIndex = _g.standaloneTrackIndex ?? 0;
+
+// Audio DSP States (persisted in localStorage, bypass by default for pure native playback)
+_g.isAmpBoost = _g.isAmpBoost ?? (safeStorage.getItem('cachymusic_amp_boost') === 'true');
+_g.isBassBoost = _g.isBassBoost ?? (safeStorage.getItem('cachymusic_bass_boost') === 'true');
+_g.isVocalBoost = _g.isVocalBoost ?? (safeStorage.getItem('cachymusic_vocal_boost') === 'true');
+_g.isTrebleBoost = _g.isTrebleBoost ?? (safeStorage.getItem('cachymusic_treble_boost') === 'true');
+_g.isLimiter = _g.isLimiter ?? (safeStorage.getItem('cachymusic_limiter') === 'true');
+_g.isReplayGain = _g.isReplayGain ?? (safeStorage.getItem('cachymusic_replaygain') !== 'false');
+_g.isCrossfeed = _g.isCrossfeed ?? (safeStorage.getItem('cachymusic_crossfeed') === 'true');
+_g.isSubsonic = _g.isSubsonic ?? (safeStorage.getItem('cachymusic_subsonic') !== 'false');
+let initVol = parseFloat(safeStorage.getItem('cachymusic_volume') || '0.8');
+if (isNaN(initVol)) initVol = 0.8;
+_g.currentVolumeValue = _g.currentVolumeValue ?? initVol;
+
+// Neutron HiFi™ Audio Engine & Output Configuration
+_g.isPrecision64 = _g.isPrecision64 ?? (safeStorage.getItem('cachymusic_precision_64') !== null
+    ? safeStorage.getItem('cachymusic_precision_64') === 'true'
+    : safeStorage.getItem('cachymusic_engine_precision') !== '32');
+_g.isAgpEnabled = _g.isAgpEnabled ?? (safeStorage.getItem('cachymusic_agp') !== 'false');
+_g.isSurroundWidener = _g.isSurroundWidener ?? (safeStorage.getItem('cachymusic_surround_ms') === 'true');
+_g.isPhaseInvert = _g.isPhaseInvert ?? (safeStorage.getItem('cachymusic_phase_invert') === 'true');
+_g.isMonoMix = _g.isMonoMix ?? (safeStorage.getItem('cachymusic_mono_mix') === 'true');
+let initBalance = parseFloat(safeStorage.getItem('cachymusic_stereo_balance') || '0');
+if (isNaN(initBalance)) initBalance = 0;
+_g.stereoBalance = _g.stereoBalance ?? initBalance;
+_g.isPitchLockTempo = _g.isPitchLockTempo ?? (safeStorage.getItem('cachymusic_pitch_lock') === 'true');
+_g.currentPlaybackSpeed = _g.currentPlaybackSpeed ?? 1.0;
+_g.isHardwareGain = _g.isHardwareGain ?? (safeStorage.getItem('cachymusic_hardware_gain') === 'true' || safeStorage.getItem('cachymusic_hw_gain') === 'true');
+_g.isUltrasonic = _g.isUltrasonic ?? (safeStorage.getItem('cachymusic_ultrasonic') !== 'false');
+_g.ultrasonicCutoff = _g.ultrasonicCutoff ?? parseInt(safeStorage.getItem('cachymusic_ultrasonic_cutoff') || '32000', 10);
+_g.ditherMode = _g.ditherMode ?? (safeStorage.getItem('cachymusic_dither_mode') || 'shaped');
+_g.isAmbiophonics = _g.isAmbiophonics ?? (safeStorage.getItem('cachymusic_ambiophonics') === 'true');
+_g.bufferLatencyTarget = _g.bufferLatencyTarget ?? (safeStorage.getItem('cachymusic_buffer_latency') || 'playback');
+_g.isPeqBypassed = _g.isPeqBypassed ?? (safeStorage.getItem('cachymusic_peq_bypassed') === 'true');
+_g.dspWorkletNode = _g.dspWorkletNode ?? null;
+_g.hwVolumeBackend = _g.hwVolumeBackend ?? 'none';
+
+// 10-Band Parametric Equalizer (ISO standard 1-octave frequencies from 31 Hz to 16 kHz)
+const PEQ_FREQS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const PEQ_Q_STEPS = [0.71, 1.0, 1.41, 2.2, 3.5];
+_g.PEQ_FREQS = PEQ_FREQS;
+_g.PEQ_Q_STEPS = PEQ_Q_STEPS;
+_g.peqGains = _g.peqGains ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+_g.peqQs = _g.peqQs ?? [1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41];
+try {
+    const savedPeq = JSON.parse(safeStorage.getItem('cachymusic_peq_gains') || '[]');
+    if (Array.isArray(savedPeq) && savedPeq.length === 10) {
+        _g.peqGains = savedPeq.map(v => typeof v === 'number' && !isNaN(v) ? Math.max(-15, Math.min(15, v)) : 0);
+    }
+    const savedQs = JSON.parse(safeStorage.getItem('cachymusic_peq_qs') || '[]');
+    if (Array.isArray(savedQs) && savedQs.length === 10) {
+        _g.peqQs = savedQs.map(v => typeof v === 'number' && !isNaN(v) ? Math.max(0.4, Math.min(8.0, v)) : 1.41);
+    }
+} catch (_) {}
+_g.peqNodes = _g.peqNodes ?? [];
+
+// Dual-Buffer Gapless Playback Engine
+_g.secondaryAudio = _g.secondaryAudio ?? null;
+_g.preloadedNextTrackIndex = _g.preloadedNextTrackIndex ?? -1;
+_g.isGaplessTransitioning = _g.isGaplessTransitioning ?? false;
+
+function hasActiveDsp() {
+    const hasPeq = !_g.isPeqBypassed && _g.peqGains.some(g => g !== 0);
+    const hasWorkletDsp = _g.isUltrasonic || (_g.ditherMode !== 'off') || _g.isAmbiophonics || _g.isSurroundWidener || _g.isPhaseInvert || _g.isMonoMix || (Math.abs(_g.stereoBalance) > 0.005);
+    return _g.isAmpBoost || _g.isBassBoost || _g.isVocalBoost || _g.isTrebleBoost || _g.isLimiter || _g.isCrossfeed || _g.isSubsonic || hasPeq || hasWorkletDsp || (_g.currentVolumeValue > 1.0);
+}
+_g.hasActiveDsp = hasActiveDsp;
+
+// Web Audio BiquadFilter DSP, ReplayGain, PEQ, Amplification, Crossfeed & Limiter nodes
+_g.subsonicFilter = _g.subsonicFilter ?? null;
+_g.preAmpGainNode = _g.preAmpGainNode ?? null;
+_g.xfeedNetwork = _g.xfeedNetwork ?? null;
+_g.replayGainNode = _g.replayGainNode ?? null;
+_g.bassFilter = _g.bassFilter ?? null;
+_g.vocalFilter = _g.vocalFilter ?? null;
+_g.trebleFilter = _g.trebleFilter ?? null;
+_g.ampGainNode = _g.ampGainNode ?? null;
+_g.ampSoftClipper = _g.ampSoftClipper ?? null;
+_g.dspLimiter = _g.dspLimiter ?? null;
+_g.ceilingTrimGain = _g.ceilingTrimGain ?? null;
+
+// 60-band perceptual logarithmic frequency array & smoothing physics
+const NUM_BANDS = 60;
+_g.NUM_BANDS = NUM_BANDS;
+_g.smoothBands = _g.smoothBands ?? new Float32Array(NUM_BANDS);
+_g.smoothBass = _g.smoothBass ?? 0;
+_g.smoothTreble = _g.smoothTreble ?? 0;
+
+// Dash mode peak caps physics & smooth column interpolation
+_g.peakValues = _g.peakValues ?? new Float32Array(NUM_BANDS);
+_g.peakVelocity = _g.peakVelocity ?? new Float32Array(NUM_BANDS);
+_g.peakHold = _g.peakHold ?? new Int32Array(NUM_BANDS);
+_g.smoothDashLevels = _g.smoothDashLevels ?? new Float32Array(NUM_BANDS);
+
+// Thematic Wave continuous angle integration & smoothed pulse
+_g.yinYangAngle = _g.yinYangAngle ?? 0;
+_g.runeRingAngle = _g.runeRingAngle ?? 0;
+_g.atlasRotationAngle = _g.atlasRotationAngle ?? 0;
+_g.atlasPrecessionAngle = _g.atlasPrecessionAngle ?? 0;
+_g.smoothHeartPulse = _g.smoothHeartPulse ?? 1.0;
+
+// Turntable center expanding acoustic shockwave ripples
+_g.turntableShockwaves = _g.turntableShockwaves ?? [];
+function emitTurntableShockwave(x, y, minRadius, maxRadius, initialAlpha = 0.65, color = '#ff1744') {
+    if (_g.turntableShockwaves.length >= 10) _g.turntableShockwaves.shift();
+    _g.turntableShockwaves.push({
+        x,
+        y,
+        r: minRadius,
+        minR: minRadius,
+        maxR: maxRadius,
+        alpha: initialAlpha,
+        color: color,
+        speed: (maxRadius - minRadius) * 2.4
+    });
+}
+_g.emitTurntableShockwave = emitTurntableShockwave;
+
+// Bad Apple / Wave floating particles
+_g.particles = _g.particles ?? [];
+const MAX_PARTICLES = 36;
+_g.MAX_PARTICLES = MAX_PARTICLES;
+if (_g.particles.length === 0) {
     for (let p = 0; p < MAX_PARTICLES; p++) {
-        particles.push({
+        _g.particles.push({
             x: Math.random(),
             y: Math.random(),
             vx: (Math.random() - 0.5) * 0.08,
@@ -280,7 +407,12 @@
             vRot: (Math.random() - 0.5) * 0.04
         });
     }
+}
 
+
+
+    // --- Sub-Module: ui-elements.js ---
+// CachyMusic - UI Elements & Workspace Shell
     // DOM Elements - Player & Audio
     let audio = document.getElementById('audioPlayer');
     if (audio) audio.crossOrigin = 'anonymous';
@@ -418,6 +550,10 @@
     const currentPlaylistTitle = document.getElementById('currentPlaylistTitle');
     const backToLibraryBtn = document.getElementById('backToLibraryBtn');
     const deleteCurrentPlaylistBtn = document.getElementById('deleteCurrentPlaylistBtn');
+    const standaloneBanner = document.getElementById('standaloneBanner');
+    const standaloneBannerTitle = document.getElementById('standaloneBannerTitle');
+    const standaloneResumeLibraryBtn = document.getElementById('standaloneResumeLibraryBtn');
+    const standaloneCloseBtn = document.getElementById('standaloneCloseBtn');
     const trackList = document.getElementById('trackList');
     const playlistsView = document.getElementById('playlistsView');
     const playlistList = document.getElementById('playlistList');
@@ -485,7 +621,14 @@
         activeTheme = (activeTheme === 'atlas' || activeTheme === 'spotify' || activeTheme === 'apple') ? 'nms' : 'default';
     }
     function getActiveTheme() {
-        return activeTheme;
+        if (typeof document !== 'undefined' && document.documentElement) {
+            const dt = document.documentElement.getAttribute('data-theme');
+            if (dt) return dt;
+        }
+        if (typeof window !== 'undefined' && window.activeTheme) {
+            return window.activeTheme;
+        }
+        return activeTheme || (typeof safeStorage !== 'undefined' ? safeStorage.getItem('cachymusic_active_theme') : null) || 'default';
     }
     function isAtlasThemeActive() {
         return getActiveTheme() === 'nms';
@@ -795,6 +938,7 @@
         currentWorkspace = viewName;
 
         if (viewName === 'soulseek') {
+            if (typeof window.getP2pModule === 'function') window.getP2pModule();
             document.body.classList.remove('view-player', 'view-download', 'view-settings');
             document.body.classList.add('view-soulseek');
 
@@ -825,6 +969,7 @@
                 soulseekController.startTransfersPolling();
             }
         } else if (viewName === 'download') {
+            if (typeof window.getP2pModule === 'function') window.getP2pModule();
             document.body.classList.remove('view-player', 'view-soulseek', 'view-settings');
             document.body.classList.add('view-download');
 
@@ -858,6 +1003,7 @@
                 fetchLanStreamingUrl();
             }
         } else if (viewName === 'settings') {
+            if (typeof window.getSettingsModule === 'function') window.getSettingsModule();
             document.body.classList.remove('view-player', 'view-soulseek', 'view-download');
             document.body.classList.add('view-settings');
 
@@ -980,6 +1126,7 @@
     const fallbackTracks = [];
 
     // =========================================================================
+
     // Blocking Track Loading Overlay & IndexedDB Library Persistence
     // =========================================================================
     let isTrackLoadingCancelled = false;
@@ -1068,6 +1215,278 @@
         updateSignalPathUi();
     }
 
+
+    // Attach top-level UI elements and helpers to window for cross-module accessibility
+    if (typeof window !== "undefined") {
+        try { window.activeListLabel = activeListLabel; } catch (_) {}
+        try { window.activeScanAbortController = activeScanAbortController; } catch (_) {}
+        try { window.activeTheme = activeTheme; } catch (_) {}
+        try { window.albumName = albumName; } catch (_) {}
+        try { window.artistName = artistName; } catch (_) {}
+        try { window.audio = audio; } catch (_) {}
+        try { window.auditMetricHeadroom = auditMetricHeadroom; } catch (_) {}
+        try { window.auditMetricLatency = auditMetricLatency; } catch (_) {}
+        try { window.auditQualityBadge = auditQualityBadge; } catch (_) {}
+        try { window.auditQualityDesc = auditQualityDesc; } catch (_) {}
+        try { window.auditQualityDot = auditQualityDot; } catch (_) {}
+        try { window.backToLibraryBtn = backToLibraryBtn; } catch (_) {}
+        try { window.bannerAddTracksBtn = bannerAddTracksBtn; } catch (_) {}
+        try { window.bgDisc = bgDisc; } catch (_) {}
+        try { window.bindFastAction = bindFastAction; } catch (_) {}
+        try { window.browseFolderBtn = browseFolderBtn; } catch (_) {}
+        try { window.cachedAllPanelsList = cachedAllPanelsList; } catch (_) {}
+        try { window.cachedMobileTabBtns = cachedMobileTabBtns; } catch (_) {}
+        try { window.cancelActiveTrackLoading = cancelActiveTrackLoading; } catch (_) {}
+        try { window.cancelSleepTimerBtn = cancelSleepTimerBtn; } catch (_) {}
+        try { window.clearQueueBtn = clearQueueBtn; } catch (_) {}
+        try { window.closeFolderTrayBtn = closeFolderTrayBtn; } catch (_) {}
+        try { window.closeModalBtn = closeModalBtn; } catch (_) {}
+        try { window.closePeqModal = closePeqModal; } catch (_) {}
+        try { window.closeSignalPathModalBtn = closeSignalPathModalBtn; } catch (_) {}
+        try { window.closeSleepTimerModalBtn = closeSleepTimerModalBtn; } catch (_) {}
+        try { window.closeThemeModalBtn = closeThemeModalBtn; } catch (_) {}
+        try { window.coverArtPreview = coverArtPreview; } catch (_) {}
+        try { window.coverBadge = coverBadge; } catch (_) {}
+        try { window.createPlaylistBtn = createPlaylistBtn; } catch (_) {}
+        try { window.ctx = ctx; } catch (_) {}
+        try { window.currentFormatFilter = currentFormatFilter; } catch (_) {}
+        try { window.currentPlaylistTitle = currentPlaylistTitle; } catch (_) {}
+        try { window.currentTimeEl = currentTimeEl; } catch (_) {}
+        try { window.currentWorkspace = currentWorkspace; } catch (_) {}
+        try { window.customSleepInput = customSleepInput; } catch (_) {}
+        try { window.deckArtworkAmbient = deckArtworkAmbient; } catch (_) {}
+        try { window.deckArtworkBackdrop = deckArtworkBackdrop; } catch (_) {}
+        try { window.deckSignalDot = deckSignalDot; } catch (_) {}
+        try { window.deferredInstallPrompt = deferredInstallPrompt; } catch (_) {}
+        try { window.deleteCurrentPlaylistBtn = deleteCurrentPlaylistBtn; } catch (_) {}
+        try { window.dismissedTracksMap = dismissedTracksMap; } catch (_) {}
+        try { window.downloadWorkspace = downloadWorkspace; } catch (_) {}
+        try { window.fallbackTracks = fallbackTracks; } catch (_) {}
+        try { window.folderPathInput = folderPathInput; } catch (_) {}
+        try { window.folderPickerInput = folderPickerInput; } catch (_) {}
+        try { window.folderTray = folderTray; } catch (_) {}
+        try { window.getActiveTheme = getActiveTheme; } catch (_) {}
+        try { window.gridContainer = gridContainer; } catch (_) {}
+        try { window.hideTrackLoadingOverlay = hideTrackLoadingOverlay; } catch (_) {}
+        try { window.infoPanelEl = infoPanelEl; } catch (_) {}
+        try { window.installAppBtn = installAppBtn; } catch (_) {}
+        try { window.isAtlasThemeActive = isAtlasThemeActive; } catch (_) {}
+        try { window.isTrackLoadingCancelled = isTrackLoadingCancelled; } catch (_) {}
+        try { window.lastRenderedMiniTrack = lastRenderedMiniTrack; } catch (_) {}
+        try { window.libraryControls = libraryControls; } catch (_) {}
+        try { window.localFileInput = localFileInput; } catch (_) {}
+        try { window.lyricsArtistName = lyricsArtistName; } catch (_) {}
+        try { window.lyricsCon = lyricsCon; } catch (_) {}
+        try { window.lyricsContent = lyricsContent; } catch (_) {}
+        try { window.lyricsScrollArea = lyricsScrollArea; } catch (_) {}
+        try { window.lyricsToggleBtn = lyricsToggleBtn; } catch (_) {}
+        try { window.lyricsTrackName = lyricsTrackName; } catch (_) {}
+        try { window.metadataToggleBtn = metadataToggleBtn; } catch (_) {}
+        try { window.miniArtPreview = miniArtPreview; } catch (_) {}
+        try { window.miniArtist = miniArtist; } catch (_) {}
+        try { window.miniCurrentTime = miniCurrentTime; } catch (_) {}
+        try { window.miniDeckReturnBtn = miniDeckReturnBtn; } catch (_) {}
+        try { window.miniMuteBtn = miniMuteBtn; } catch (_) {}
+        try { window.miniNextBtn = miniNextBtn; } catch (_) {}
+        try { window.miniPlayBtn = miniPlayBtn; } catch (_) {}
+        try { window.miniPlayImg = miniPlayImg; } catch (_) {}
+        try { window.miniPrevBtn = miniPrevBtn; } catch (_) {}
+        try { window.miniProgressBar = miniProgressBar; } catch (_) {}
+        try { window.miniProgressCon = miniProgressCon; } catch (_) {}
+        try { window.miniTitle = miniTitle; } catch (_) {}
+        try { window.miniTotalDuration = miniTotalDuration; } catch (_) {}
+        try { window.miniTurntableThumb = miniTurntableThumb; } catch (_) {}
+        try { window.miniVolumeSlider = miniVolumeSlider; } catch (_) {}
+        try { window.modalCreateAndAddBtn = modalCreateAndAddBtn; } catch (_) {}
+        try { window.modalNewPlaylistName = modalNewPlaylistName; } catch (_) {}
+        try { window.modalPlaylistList = modalPlaylistList; } catch (_) {}
+        try { window.modalTrackTitle = modalTrackTitle; } catch (_) {}
+        try { window.muteBtn = muteBtn; } catch (_) {}
+        try { window.newPlaylistInput = newPlaylistInput; } catch (_) {}
+        try { window.nextBtn = nextBtn; } catch (_) {}
+        try { window.openPeqModal = openPeqModal; } catch (_) {}
+        try { window.openSignalAuditBtn = openSignalAuditBtn; } catch (_) {}
+        try { window.persistentMiniPlayer = persistentMiniPlayer; } catch (_) {}
+        try { window.playPauseBtn = playPauseBtn; } catch (_) {}
+        try { window.playPauseImg = playPauseImg; } catch (_) {}
+        try { window.playQueue = playQueue; } catch (_) {}
+        try { window.playerDeckEl = playerDeckEl; } catch (_) {}
+        try { window.playlistBanner = playlistBanner; } catch (_) {}
+        try { window.playlistList = playlistList; } catch (_) {}
+        try { window.playlistModal = playlistModal; } catch (_) {}
+        try { window.playlistsView = playlistsView; } catch (_) {}
+        try { window.presetPathBtns = presetPathBtns; } catch (_) {}
+        try { window.prevBtn = prevBtn; } catch (_) {}
+        try { window.progressBar = progressBar; } catch (_) {}
+        try { window.progressCon = progressCon; } catch (_) {}
+        try { window.progressHover = progressHover; } catch (_) {}
+        try { window.queueCountBadge = queueCountBadge; } catch (_) {}
+        try { window.queueCountSummary = queueCountSummary; } catch (_) {}
+        try { window.queueList = queueList; } catch (_) {}
+        try { window.queueView = queueView; } catch (_) {}
+        try { window.quickNewPlaylistBtn = quickNewPlaylistBtn; } catch (_) {}
+        try { window.refreshTracksBtn = refreshTracksBtn; } catch (_) {}
+        try { window.repeatBtn = repeatBtn; } catch (_) {}
+        try { window.restoreTracksBtn = restoreTracksBtn; } catch (_) {}
+        try { window.scanFolderBtn = scanFolderBtn; } catch (_) {}
+        try { window.scanStatus = scanStatus; } catch (_) {}
+        try { window.setCustomSleepBtn = setCustomSleepBtn; } catch (_) {}
+        try { window.setMobilePanelsInactive = setMobilePanelsInactive; } catch (_) {}
+        try { window.setMobileSearchPanelCollapsed = setMobileSearchPanelCollapsed; } catch (_) {}
+        try { window.setMobileTabActive = setMobileTabActive; } catch (_) {}
+        try { window.settingsPanelEl = settingsPanelEl; } catch (_) {}
+        try { window.settingsReturnBtn = settingsReturnBtn; } catch (_) {}
+        try { window.settingsWorkspace = settingsWorkspace; } catch (_) {}
+        try { window.showTrackLoadingOverlay = showTrackLoadingOverlay; } catch (_) {}
+        try { window.shuffleBtn = shuffleBtn; } catch (_) {}
+        try { window.shufflePlayBtn = shufflePlayBtn; } catch (_) {}
+        try { window.signalPathBadgeBtn = signalPathBadgeBtn; } catch (_) {}
+        try { window.signalPathLabel = signalPathLabel; } catch (_) {}
+        try { window.signalPathModal = signalPathModal; } catch (_) {}
+        try { window.sleepStatusCard = sleepStatusCard; } catch (_) {}
+        try { window.sleepStatusRemaining = sleepStatusRemaining; } catch (_) {}
+        try { window.sleepTimerBtn = sleepTimerBtn; } catch (_) {}
+        try { window.sleepTimerInterval = sleepTimerInterval; } catch (_) {}
+        try { window.sleepTimerLabel = sleepTimerLabel; } catch (_) {}
+        try { window.sleepTimerModal = sleepTimerModal; } catch (_) {}
+        try { window.sleepTimerMode = sleepTimerMode; } catch (_) {}
+        try { window.sleepTimerOriginalVolume = sleepTimerOriginalVolume; } catch (_) {}
+        try { window.sleepTimerRemainingSec = sleepTimerRemainingSec; } catch (_) {}
+        try { window.standaloneBanner = standaloneBanner; } catch (_) {}
+        try { window.standaloneBannerTitle = standaloneBannerTitle; } catch (_) {}
+        try { window.standaloneResumeLibraryBtn = standaloneResumeLibraryBtn; } catch (_) {}
+        try { window.standaloneCloseBtn = standaloneCloseBtn; } catch (_) {}
+        try { window.slskAccountAlert = slskAccountAlert; } catch (_) {}
+        try { window.slskAccountBtn = slskAccountBtn; } catch (_) {}
+        try { window.slskAccountModal = slskAccountModal; } catch (_) {}
+        try { window.slskActiveSearchMeta = slskActiveSearchMeta; } catch (_) {}
+        try { window.slskChangeDirBtn = slskChangeDirBtn; } catch (_) {}
+        try { window.slskChangeSharedDirBtn = slskChangeSharedDirBtn; } catch (_) {}
+        try { window.slskClearSubFilterBtn = slskClearSubFilterBtn; } catch (_) {}
+        try { window.slskCloseAccountModalBtn = slskCloseAccountModalBtn; } catch (_) {}
+        try { window.slskCloseDrawerBtn = slskCloseDrawerBtn; } catch (_) {}
+        try { window.slskControlsPanel = slskControlsPanel; } catch (_) {}
+        try { window.slskDownloadsPathText = slskDownloadsPathText; } catch (_) {}
+        try { window.slskExcludeFilterClearBtn = slskExcludeFilterClearBtn; } catch (_) {}
+        try { window.slskExcludeFilterInput = slskExcludeFilterInput; } catch (_) {}
+        try { window.slskFilterChips = slskFilterChips; } catch (_) {}
+        try { window.slskInResultFilterClearBtn = slskInResultFilterClearBtn; } catch (_) {}
+        try { window.slskInResultFilterInput = slskInResultFilterInput; } catch (_) {}
+        try { window.slskIncludeFilterClearBtn = slskIncludeFilterClearBtn; } catch (_) {}
+        try { window.slskIncludeFilterInput = slskIncludeFilterInput; } catch (_) {}
+        try { window.slskLogoutBtn = slskLogoutBtn; } catch (_) {}
+        try { window.slskMobileActiveFilter = slskMobileActiveFilter; } catch (_) {}
+        try { window.slskMobileTransferCount = slskMobileTransferCount; } catch (_) {}
+        try { window.slskMobileTransfersBtn = slskMobileTransfersBtn; } catch (_) {}
+        try { window.slskModalDownloadDir = slskModalDownloadDir; } catch (_) {}
+        try { window.slskModalPassword = slskModalPassword; } catch (_) {}
+        try { window.slskModalPowerBtn = slskModalPowerBtn; } catch (_) {}
+        try { window.slskModalSharedDir = slskModalSharedDir; } catch (_) {}
+        try { window.slskModalSyncPlayerDirBtn = slskModalSyncPlayerDirBtn; } catch (_) {}
+        try { window.slskModalSyncSharePlayerDirBtn = slskModalSyncSharePlayerDirBtn; } catch (_) {}
+        try { window.slskModalUsername = slskModalUsername; } catch (_) {}
+        try { window.slskPanelToggleBar = slskPanelToggleBar; } catch (_) {}
+        try { window.slskPanelToggleChevron = slskPanelToggleChevron; } catch (_) {}
+        try { window.slskPlaceholder = slskPlaceholder; } catch (_) {}
+        try { window.slskPowerBtn = slskPowerBtn; } catch (_) {}
+        try { window.slskPowerBtnText = slskPowerBtnText; } catch (_) {}
+        try { window.slskRefreshStatusBtn = slskRefreshStatusBtn; } catch (_) {}
+        try { window.slskResultCount = slskResultCount; } catch (_) {}
+        try { window.slskResultsList = slskResultsList; } catch (_) {}
+        try { window.slskSaveAccountBtn = slskSaveAccountBtn; } catch (_) {}
+        try { window.slskScanDownloadsBtn = slskScanDownloadsBtn; } catch (_) {}
+        try { window.slskSearchClearBtn = slskSearchClearBtn; } catch (_) {}
+        try { window.slskSearchInput = slskSearchInput; } catch (_) {}
+        try { window.slskSearchSubmitBtn = slskSearchSubmitBtn; } catch (_) {}
+        try { window.slskSearchingState = slskSearchingState; } catch (_) {}
+        try { window.slskSearchingTitle = slskSearchingTitle; } catch (_) {}
+        try { window.slskSharedPathText = slskSharedPathText; } catch (_) {}
+        try { window.slskSortSelect = slskSortSelect; } catch (_) {}
+        try { window.slskStartDaemonBtn = slskStartDaemonBtn; } catch (_) {}
+        try { window.slskStatusDot = slskStatusDot; } catch (_) {}
+        try { window.slskStatusPill = slskStatusPill; } catch (_) {}
+        try { window.slskStatusText = slskStatusText; } catch (_) {}
+        try { window.slskSuggestedChips = slskSuggestedChips; } catch (_) {}
+        try { window.slskSuggestedRow = slskSuggestedRow; } catch (_) {}
+        try { window.slskSyncCurrentDirBtn = slskSyncCurrentDirBtn; } catch (_) {}
+        try { window.slskToggleTransfersBtn = slskToggleTransfersBtn; } catch (_) {}
+        try { window.slskTransferCount = slskTransferCount; } catch (_) {}
+        try { window.slskTransfersDrawer = slskTransfersDrawer; } catch (_) {}
+        try { window.slskTransfersHeader = slskTransfersHeader; } catch (_) {}
+        try { window.slskTransfersList = slskTransfersList; } catch (_) {}
+        try { window.slskTransfersSummary = slskTransfersSummary; } catch (_) {}
+        try { window.slskUsername = slskUsername; } catch (_) {}
+        try { window.sortSelect = sortSelect; } catch (_) {}
+        try { window.soulseekWorkspace = soulseekWorkspace; } catch (_) {}
+        try { window.speedBtns = speedBtns; } catch (_) {}
+        try { window.statAlbum = statAlbum; } catch (_) {}
+        try { window.statArtist = statArtist; } catch (_) {}
+        try { window.statBitDepth = statBitDepth; } catch (_) {}
+        try { window.statBitrate = statBitrate; } catch (_) {}
+        try { window.statChannels = statChannels; } catch (_) {}
+        try { window.statDacStream = statDacStream; } catch (_) {}
+        try { window.statDynamicRange = statDynamicRange; } catch (_) {}
+        try { window.statFormat = statFormat; } catch (_) {}
+        try { window.statGenre = statGenre; } catch (_) {}
+        try { window.statPath = statPath; } catch (_) {}
+        try { window.statPeakLevel = statPeakLevel; } catch (_) {}
+        try { window.statSampleRate = statSampleRate; } catch (_) {}
+        try { window.statSize = statSize; } catch (_) {}
+        try { window.statTitle = statTitle; } catch (_) {}
+        try { window.statTrack = statTrack; } catch (_) {}
+        try { window.statYear = statYear; } catch (_) {}
+        try { window.switchWorkspace = switchWorkspace; } catch (_) {}
+        try { window.syncSettingsTabValues = syncSettingsTabValues; } catch (_) {}
+        try { window.tabLibrary = tabLibrary; } catch (_) {}
+        try { window.tabPlaylists = tabPlaylists; } catch (_) {}
+        try { window.tabQueue = tabQueue; } catch (_) {}
+        try { window.themeModal = themeModal; } catch (_) {}
+        try { window.themeModalBtn = themeModalBtn; } catch (_) {}
+        try { window.themeQuickBtns = themeQuickBtns; } catch (_) {}
+        try { window.themeSelectCards = themeSelectCards; } catch (_) {}
+        try { window.toggleFolderBtn = toggleFolderBtn; } catch (_) {}
+        try { window.toggleMobileSearchPanel = toggleMobileSearchPanel; } catch (_) {}
+        try { window.toneArm = toneArm; } catch (_) {}
+        try { window.topSettingsBtn = topSettingsBtn; } catch (_) {}
+        try { window.topThemeLabel = topThemeLabel; } catch (_) {}
+        try { window.totalDurationEl = totalDurationEl; } catch (_) {}
+        try { window.trackBadge = trackBadge; } catch (_) {}
+        try { window.trackCount = trackCount; } catch (_) {}
+        try { window.trackList = trackList; } catch (_) {}
+        try { window.trackListPanelEl = trackListPanelEl; } catch (_) {}
+        try { window.trackName = trackName; } catch (_) {}
+        try { window.trackSearch = trackSearch; } catch (_) {}
+        try { window.turntableCenterCanvas = turntableCenterCanvas; } catch (_) {}
+        try { window.turntableCenterCtx = turntableCenterCtx; } catch (_) {}
+        try { window.turntableCenterVis = turntableCenterVis; } catch (_) {}
+        try { window.turntableCon = turntableCon; } catch (_) {}
+        try { window.upcomingLibraryList = upcomingLibraryList; } catch (_) {}
+        try { window.updateEmptyPlayerState = updateEmptyPlayerState; } catch (_) {}
+        try { window.updateMiniPlayerInfo = updateMiniPlayerInfo; } catch (_) {}
+        try { window.updateMiniPlayerPlayState = updateMiniPlayerPlayState; } catch (_) {}
+        try { window.updateTrackLoadingOverlay = updateTrackLoadingOverlay; } catch (_) {}
+        try { window.validThemeIds = validThemeIds; } catch (_) {}
+        try { window.vinylArt = vinylArt; } catch (_) {}
+        try { window.vinylLabel = vinylLabel; } catch (_) {}
+        try { window.vinylTurntable = vinylTurntable; } catch (_) {}
+        try { window.visModeBtns = visModeBtns; } catch (_) {}
+        try { window.visPillBtns = visPillBtns; } catch (_) {}
+        try { window.visualizerCanvas = visualizerCanvas; } catch (_) {}
+        try { window.visualizerDock = visualizerDock; } catch (_) {}
+        try { window.volumeIcon = volumeIcon; } catch (_) {}
+        try { window.volumeLevel = volumeLevel; } catch (_) {}
+        try { window.volumeSlider = volumeSlider; } catch (_) {}
+        try { window.wsDownloadBtn = wsDownloadBtn; } catch (_) {}
+        try { window.wsPlayerBtn = wsPlayerBtn; } catch (_) {}
+        try { window.wsSettingsBtn = wsSettingsBtn; } catch (_) {}
+        try { window.wsSoulseekBadge = wsSoulseekBadge; } catch (_) {}
+        try { window.wsSoulseekBtn = wsSoulseekBtn; } catch (_) {}
+    }
+
+
+
+    // --- Sub-Module: library.js ---
+// CachyMusic - Audio Library, ID3 Parser, Playlists & Queue
     // IndexedDB Persistence for Browser File/Directory Selection & Offline Tracks
     function openLibraryIdb() {
         return new Promise((resolve, reject) => {
@@ -1156,273 +1575,6 @@
         }
     }
 
-    function formatTime(seconds) {
-        if (!seconds || isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '0:00';
-        const hrs = Math.floor(seconds / 3600);
-        const mins = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-        if (hrs > 0) {
-            return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        }
-        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-    }
-
-    function escapeHtml(str) {
-        return (str || '').toString().replace(/[&<>"']/g, function(m) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
-        });
-    }
-
-    function escapeRegex(str) {
-        return (str || '').toString().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    // App Initialization
-    window.__cachyMusic = {
-        getAudioContext: () => audioContext,
-        getAudio: () => audio,
-        hasActiveDsp: () => hasActiveDsp(),
-        getAllTracks: () => allTracks,
-        loadTrack: (idx, autoPlay, initialTime) => loadTrack(idx, autoPlay, initialTime)
-    };
-
-    // =========================================================================
-    // Linux MPRIS2 D-Bus & Desktop Media Control Bridge
-    // =========================================================================
-    function initMprisBridge() {
-        let lastReportedStatus = '';
-        let lastReportedTitle = '';
-        let lastReportedPos = -1;
-
-        function reportState(force = false) {
-            const track = allTracks[currentTrackIndex];
-            const isPlaying = !audio.paused && !audio.ended;
-            const status = isPlaying ? 'Playing' : (audio.currentTime > 0 ? 'Paused' : 'Stopped');
-            const pos = Math.floor(audio.currentTime || 0);
-            const title = track ? (track.title || track.filename || '') : '';
-
-            if (!force && status === lastReportedStatus && title === lastReportedTitle && Math.abs(pos - lastReportedPos) < 2) {
-                return;
-            }
-
-            lastReportedStatus = status;
-            lastReportedTitle = title;
-            lastReportedPos = pos;
-
-            const payload = {
-                status,
-                position: audio.currentTime || 0,
-                duration: audio.duration || (track ? track.duration : 0) || 0,
-                title: track ? (track.title || track.filename || 'Unknown') : 'CachyMusic',
-                artist: track ? (track.artist || 'Unknown Artist') : 'CachyOS',
-                album: track ? (track.album || '') : '',
-                artUrl: track && track.cover ? (track.cover.startsWith('http') ? track.cover : window.location.origin + '/' + track.cover) : '',
-                volume: audio.volume,
-                shuffle: isShuffle,
-                repeat: repeatMode
-            };
-
-            fetch('php/api/mpris_state.php?action=update_state', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            }).catch(() => {});
-        }
-
-        let isPollingCommands = false;
-        let consecutiveIdlePolls = 0;
-        async function pollCommands() {
-            if (isPollingCommands) {
-                setTimeout(pollCommands, 500);
-                return;
-            }
-            isPollingCommands = true;
-            let hadCommand = false;
-            try {
-                if (document.hidden) {
-                    consecutiveIdlePolls = 10;
-                    return;
-                }
-                const res = await fetch('php/api/mpris_state.php?action=get_command');
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.command) {
-                        hadCommand = true;
-                        consecutiveIdlePolls = 0;
-                        const cmd = data.command;
-                        if (cmd === 'PlayPause') {
-                            if (audio.paused) playAudio(true);
-                            else pauseAudio();
-                        } else if (cmd === 'Play') {
-                            playAudio(true);
-                        } else if (cmd === 'Pause') {
-                            pauseAudio();
-                        } else if (cmd === 'Stop') {
-                            pauseAudio();
-                            audio.currentTime = 0;
-                        } else if (cmd === 'Next') {
-                            nextTrack();
-                        } else if (cmd === 'Previous') {
-                            prevTrack();
-                        } else if (cmd === 'Seek' && typeof data.offset === 'number') {
-                            audio.currentTime = Math.max(0, Math.min(audio.duration || 0, audio.currentTime + data.offset));
-                        } else if (cmd === 'SeekTo' && typeof data.position === 'number') {
-                            audio.currentTime = Math.max(0, Math.min(audio.duration || 0, data.position));
-                        } else if (cmd === 'SetVolume' && typeof data.volume === 'number') {
-                            setVolume(Math.max(0, Math.min(1.5, data.volume)), true);
-                        } else if (cmd === 'ToggleShuffle') {
-                            isShuffle = !isShuffle;
-                            if (shuffleBtn) {
-                                shuffleBtn.classList.toggle('active', isShuffle);
-                                shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
-                            }
-                        } else if (cmd === 'SetShuffle' && typeof data.shuffle === 'boolean') {
-                            isShuffle = data.shuffle;
-                            if (shuffleBtn) {
-                                shuffleBtn.classList.toggle('active', isShuffle);
-                                shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
-                            }
-                        } else if (cmd === 'SetLoopStatus' && typeof data.loopStatus === 'string') {
-                            const ls = data.loopStatus.toLowerCase();
-                            if (ls === 'track') repeatMode = 'one';
-                            else if (ls === 'playlist') repeatMode = 'all';
-                            else repeatMode = 'off';
-                            if (typeof updateRepeatUI === 'function') updateRepeatUI();
-                        }
-                        reportState(true);
-                    } else {
-                        consecutiveIdlePolls++;
-                    }
-                }
-            } catch (_) {
-                consecutiveIdlePolls += 2;
-            } finally {
-                isPollingCommands = false;
-                let nextDelay = 350;
-                if (document.hidden) {
-                    nextDelay = 2500;
-                } else if (consecutiveIdlePolls > 10) {
-                    nextDelay = 1200;
-                } else if (consecutiveIdlePolls > 3) {
-                    nextDelay = 700;
-                }
-                setTimeout(pollCommands, nextDelay);
-            }
-        }
-
-        audio.addEventListener('play', () => reportState(true));
-        audio.addEventListener('playing', () => reportState(true));
-        audio.addEventListener('pause', () => reportState(true));
-        audio.addEventListener('ended', () => reportState(true));
-        audio.addEventListener('timeupdate', () => reportState(false));
-
-        setTimeout(pollCommands, 500);
-    }
-
-    async function init() {
-        if (isInitialized) return;
-        isInitialized = true;
-
-        setupEventListeners();
-        if (currentWorkspace === 'player') {
-            const urlParams = new URLSearchParams(window.location.search);
-            const initPanel = urlParams.get('panel') || 'playerDeck';
-            if (window.innerWidth <= 768 || urlParams.get('panel')) {
-                switchWorkspace('player', initPanel);
-            }
-        }
-        setupVisualizerMode();
-        setupDspControls();
-        initPeqWorkstation();
-        setupNeutronSettingsControls();
-        checkHardwareGainStatus();
-        setVolume(currentVolumeValue, true);
-        setupCanvas();
-        startVisualizerLoop();
-        await loadPlaylists();
-
-        // Restore saved directory or cached library on startup
-        const savedDir = (safeStorage.getItem('cachymusic_last_directory') || '').trim();
-        const savedMode = (safeStorage.getItem('cachymusic_directory_mode') || '').trim();
-        if (savedDir) {
-            if (folderPathInput) folderPathInput.value = savedDir;
-            const sInput = document.getElementById('settingsTabFolderPathInput');
-            if (sInput) sInput.value = savedDir;
-        }
-
-        // 1. Check Android Native Bridge saved library first (on APK)
-        if (window.AndroidBridge && typeof window.AndroidBridge.getSavedLibraryJson === 'function') {
-            try {
-                const rawJson = window.AndroidBridge.getSavedLibraryJson();
-                if (rawJson) {
-                    const parsed = JSON.parse(rawJson);
-                    if (parsed && Array.isArray(parsed.tracks) && parsed.tracks.length > 0) {
-                        allTracks = parsed.tracks;
-                        const dirName = parsed.directory || savedDir || 'Music Folder';
-                        if (folderPathInput) folderPathInput.value = dirName;
-                        const sInput = document.getElementById('settingsTabFolderPathInput');
-                        if (sInput) sInput.value = dirName;
-                        try { safeStorage.setItem('cachymusic_last_directory', dirName); } catch (_) {}
-                        applySearchAndSort();
-                        setScanStatus(`Restored ${allTracks.length} tracks from "${dirName}".`, false);
-                    }
-                }
-            } catch (err) {
-                console.warn('AndroidBridge saved library restore error:', err);
-            }
-        }
-
-        // 2. If not restored from AndroidBridge and not a pure browser-blob directory, try scanning saved server directory
-        if (allTracks.length === 0 && savedMode !== 'browser_idb') {
-            await scanDirectory(savedDir, false, true);
-        }
-
-        // 3. If still empty, check localStorage cached Android tracks
-        if (allTracks.length === 0) {
-            try {
-                const cachedRaw = safeStorage.getItem('cachymusic_android_tracks');
-                if (cachedRaw) {
-                    const cached = JSON.parse(cachedRaw);
-                    if (Array.isArray(cached) && cached.length > 0) {
-                        allTracks = cached;
-                        applySearchAndSort();
-                        setScanStatus(`Restored ${cached.length} tracks from saved library.`, false);
-                    }
-                }
-            } catch (err) {
-                console.warn('Error restoring cached tracks:', err);
-            }
-        }
-
-        // 4. If still empty, check IndexedDB saved library (browser folder picker / local files)
-        if (allTracks.length === 0) {
-            const idbLib = await loadLibraryFromIndexedDB();
-            if (idbLib && Array.isArray(idbLib.tracks) && idbLib.tracks.length > 0) {
-                allTracks = idbLib.tracks;
-                if (idbLib.directory) {
-                    if (folderPathInput) folderPathInput.value = idbLib.directory;
-                    const sInput = document.getElementById('settingsTabFolderPathInput');
-                    if (sInput) sInput.value = idbLib.directory;
-                    try { safeStorage.setItem('cachymusic_last_directory', idbLib.directory); } catch (_) {}
-                }
-                applySearchAndSort();
-                setScanStatus(`Restored ${allTracks.length} tracks from "${idbLib.directory || 'Saved Folder'}".`, false);
-            }
-        }
-
-        updateEmptyPlayerState();
-        await restoreSessionState();
-
-        // Restore saved metadata panel state (persisted across sessions)
-        try {
-            const savedMetaVisible = safeStorage.getItem('cachymusic_metadata_visible');
-            if (savedMetaVisible === 'false' && window.innerWidth > 768) {
-                toggleMetadataPanel(false);
-            }
-        } catch (_) {}
-
-        initMprisBridge();
-    }
 
     // Client-side Binary Audio Metadata Parser (FLAC, MP3, M4A)
     async function parseAudioFileMetadata(file) {
@@ -1635,13 +1787,7 @@
         return meta;
     }
 
-    function formatFileSize(bytes) {
-        if (!bytes) return 'N/A';
-        if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
-        return (bytes / 1024).toFixed(1) + ' KB';
-    }
 
-    // Scan Directory via Server API
     async function scanDirectory(path, autoSelectTrack = true, isSilentBoot = false) {
         const cleanPath = (path || '').trim();
         let errorNotice = '';
@@ -1773,8 +1919,199 @@
         } catch (e) {}
     }
 
-    // Search and Sort Engine
+    // ID3 Genre Normalization Table & Multi-Field Search Engine
+    const ID3_GENRE_MAP = {
+        0: 'Blues', 1: 'Classic Rock', 2: 'Country', 3: 'Dance', 4: 'Disco', 5: 'Funk',
+        6: 'Grunge', 7: 'Hip-Hop', 8: 'Jazz', 9: 'Metal', 10: 'New Age', 11: 'Oldies',
+        12: 'Other', 13: 'Pop', 14: 'R&B', 15: 'Rap', 16: 'Reggae', 17: 'Rock',
+        18: 'Techno', 19: 'Industrial', 20: 'Alternative', 21: 'Ska', 22: 'Death Metal',
+        23: 'Pranks', 24: 'Soundtrack', 25: 'Euro-Techno', 26: 'Ambient', 27: 'Trip-Hop',
+        28: 'Vocal', 29: 'Jazz+Funk', 30: 'Fusion', 31: 'Trance', 32: 'Classical',
+        33: 'Instrumental', 34: 'Acid', 35: 'House', 36: 'Game', 37: 'Sound Clip',
+        38: 'Gospel', 39: 'Noise', 40: 'AlternRock', 41: 'Bass', 42: 'Soul',
+        43: 'Punk', 44: 'Space', 45: 'Meditative', 46: 'Instrumental Pop',
+        47: 'Instrumental Rock', 48: 'Ethnic', 49: 'Gothic', 50: 'Darkwave',
+        51: 'Techno-Industrial', 52: 'Electronic', 53: 'Pop-Folk', 54: 'Eurodance',
+        55: 'Dream', 56: 'Southern Rock', 57: 'Comedy', 58: 'Cult', 59: 'Gangsta',
+        60: 'Top 40', 61: 'Christian Rap', 62: 'Pop/Funk', 63: 'Jungle',
+        64: 'Native American', 65: 'Cabaret', 66: 'New Wave', 67: 'Psychadelic',
+        68: 'Rave', 69: 'Showtunes', 70: 'Trailer', 71: 'Lo-Fi', 72: 'Tribal',
+        73: 'Acid Punk', 74: 'Acid Jazz', 75: 'Polka', 76: 'Retro', 77: 'Musical',
+        78: 'Rock & Roll', 79: 'Hard Rock'
+    };
+
+    function normalizeGenre(rawGenre) {
+        if (!rawGenre) return '';
+        const str = String(rawGenre).trim();
+        const match = str.match(/^\(?(\d+)\)?$/);
+        if (match) {
+            const id = parseInt(match[1], 10);
+            if (ID3_GENRE_MAP[id]) return ID3_GENRE_MAP[id];
+        }
+        const combinedMatch = str.match(/^\((\d+)\)\s*(.*)$/);
+        if (combinedMatch) {
+            const id = parseInt(combinedMatch[1], 10);
+            const rest = combinedMatch[2].trim();
+            const mapped = ID3_GENRE_MAP[id];
+            return mapped ? (rest ? `${mapped} ${rest}` : mapped) : (rest || str);
+        }
+        return str;
+    }
+
+    function getTrackSearchString(t) {
+        if (t._searchStr !== undefined) return t._searchStr;
+        const title = t.title || '';
+        const artist = t.artist || '';
+        const album = t.album || '';
+        const rawGenre = t.genre || '';
+        const normGenre = normalizeGenre(rawGenre);
+        const genrePart = normGenre ? (rawGenre.toLowerCase() !== normGenre.toLowerCase() ? `${rawGenre} ${normGenre}` : rawGenre) : rawGenre;
+        const filename = t.filename || '';
+        t._searchStr = `${title} ${artist} ${album} ${genrePart} ${filename}`.toLowerCase();
+        return t._searchStr;
+    }
+
+    // Search and Sort Engine with Dedicated Web Worker Offloading
+    let libraryWorker = null;
+    let libraryWorkerRequestId = 0;
+
+    function getLibraryWorker() {
+        if (!libraryWorker && typeof Worker !== 'undefined' && typeof Blob !== 'undefined') {
+            try {
+                const workerCode = `
+                    self.onmessage = function(e) {
+                        const { requestId, tracks, query, sort, formatFilter, currentPlaylistId } = e.data;
+                        let pool = tracks.slice();
+
+                        if (currentPlaylistId !== null) {
+                            pool = pool.filter(t => t.inCurrentPlaylist);
+                        }
+
+                        if (formatFilter && formatFilter !== 'all') {
+                            pool = pool.filter(t => {
+                                const fmt = (t.format || '').toLowerCase();
+                                const ext = (t.filename || '').split('.').pop().toLowerCase();
+                                const bd = t.bitDepth || ((t.sampleRate && t.sampleRate >= 88200) ? 24 : 16);
+                                const sr = t.sampleRate || 0;
+
+                                if (formatFilter === 'hires') {
+                                    return (bd >= 24) || (sr >= 88200) || ['dsd', 'dsf'].includes(fmt) || ['dsd', 'dsf'].includes(ext);
+                                } else if (formatFilter === 'lossless') {
+                                    return ['flac', 'wav', 'alac', 'aiff', 'ape', 'wv', 'dsd', 'dsf'].includes(fmt) ||
+                                           ['flac', 'wav', 'alac', 'aiff', 'ape', 'wv'].includes(ext);
+                                } else if (formatFilter === 'lossy') {
+                                    return ['mp3', 'aac', 'm4a', 'ogg', 'opus', 'wma'].includes(fmt) ||
+                                           ['mp3', 'm4a', 'aac', 'ogg', 'opus', 'wma'].includes(ext);
+                                }
+                                return true;
+                            });
+                        }
+
+                        if (query && query.trim() !== '') {
+                            const rawQ = query.toLowerCase().trim();
+                            const isGenre = rawQ.startsWith('genre:');
+                            const q = isGenre ? rawQ.slice(6).trim() : rawQ;
+                            const words = q.split(/\\s+/).filter(Boolean);
+
+                            pool = pool.filter(t => {
+                                if (isGenre) {
+                                    const g = (t.genre || '').toLowerCase();
+                                    return words.every(w => g.includes(w));
+                                }
+                                const str = (t.searchStr || '').toLowerCase();
+                                return words.every(w => str.includes(w));
+                            });
+                        }
+
+                        switch (sort) {
+                            case 'title-asc':
+                                pool.sort((a, b) => (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'title-desc':
+                                pool.sort((a, b) => (b.title || b.filename || '').localeCompare(a.title || a.filename || ''));
+                                break;
+                            case 'artist-asc':
+                                pool.sort((a, b) => (a.artist || 'Unknown').localeCompare(b.artist || 'Unknown') || (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'artist-desc':
+                                pool.sort((a, b) => (b.artist || 'Unknown').localeCompare(a.artist || 'Unknown') || (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'album-asc':
+                                pool.sort((a, b) => (a.album || 'Unknown').localeCompare(b.album || 'Unknown') || (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'album-desc':
+                                pool.sort((a, b) => (b.album || 'Unknown').localeCompare(a.album || 'Unknown') || (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'duration-asc':
+                                pool.sort((a, b) => (a.duration || 0) - (b.duration || 0) || (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'duration-desc':
+                                pool.sort((a, b) => (b.duration || 0) - (a.duration || 0) || (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'year-desc':
+                                pool.sort((a, b) => (parseInt(b.year, 10) || 0) - (parseInt(a.year, 10) || 0) || (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'year-asc':
+                                pool.sort((a, b) => (parseInt(a.year, 10) || 0) - (parseInt(b.year, 10) || 0) || (a.title || a.filename || '').localeCompare(b.title || b.filename || ''));
+                                break;
+                            case 'default':
+                            default:
+                                break;
+                        }
+
+                        const resultIndices = pool.map(t => t.origIdx);
+                        self.postMessage({ requestId, resultIndices });
+                    };
+                `;
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                libraryWorker = new Worker(URL.createObjectURL(blob));
+                libraryWorker.onmessage = function(e) {
+                    if (e.data && e.data.requestId === libraryWorkerRequestId) {
+                        const indices = e.data.resultIndices;
+                        displayedTracks = indices.map(i => allTracks[i]).filter(Boolean);
+                        renderTrackList();
+                    }
+                };
+            } catch (e) {
+                console.warn('Worker creation failed, falling back to sync search', e);
+                libraryWorker = null;
+            }
+        }
+        return libraryWorker;
+    }
+
     function applySearchAndSort() {
+        const worker = getLibraryWorker();
+        if (worker && allTracks.length > 200) {
+            const reqId = ++libraryWorkerRequestId;
+            const lightweightTracks = allTracks.map((t, idx) => {
+                return {
+                    origIdx: idx,
+                    title: t.title,
+                    artist: t.artist,
+                    album: t.album,
+                    genre: normalizeGenre(t.genre) || t.genre,
+                    filename: t.filename,
+                    format: t.format,
+                    bitDepth: t.bitDepth,
+                    sampleRate: t.sampleRate,
+                    duration: t.duration,
+                    year: t.year,
+                    inCurrentPlaylist: Boolean(t.inCurrentPlaylist),
+                    searchStr: getTrackSearchString(t)
+                };
+            });
+            worker.postMessage({
+                requestId: reqId,
+                tracks: lightweightTracks,
+                query: searchQuery,
+                sort: currentSort,
+                formatFilter: currentFormatFilter,
+                currentPlaylistId
+            });
+            return;
+        }
+
         let pool = [...allTracks];
 
         // Filter by Current Playlist
@@ -1803,14 +2140,20 @@
             });
         }
 
-        // Filter by Search Query (Title, Artist, Album, Filename)
+        // Filter by Search Query (Title, Artist, Album, Genre, Filename)
         if (searchQuery.trim() !== '') {
-            const q = searchQuery.toLowerCase().trim();
+            const rawQ = searchQuery.toLowerCase().trim();
+            const isGenre = rawQ.startsWith('genre:');
+            const q = isGenre ? rawQ.slice(6).trim() : rawQ;
+            const words = q.split(/\s+/).filter(Boolean);
+
             pool = pool.filter(t => {
-                if (t._searchStr === undefined) {
-                    t._searchStr = `${t.title || ''} ${t.artist || ''} ${t.album || ''} ${t.filename || ''}`.toLowerCase();
+                if (isGenre) {
+                    const g = (t.genre ? `${t.genre} ${normalizeGenre(t.genre)}` : '').toLowerCase();
+                    return words.every(w => g.includes(w));
                 }
-                return t._searchStr.includes(q);
+                const searchStr = getTrackSearchString(t);
+                return words.every(w => searchStr.includes(w));
             });
         }
 
@@ -1856,48 +2199,6 @@
     }
 
     // Interactive Floating Toast Notification System
-    function showToast(message, actionText = null, actionCallback = null, duration = 3500) {
-        let container = document.getElementById('cachyToastContainer');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'cachyToastContainer';
-            container.className = 'toastContainer';
-            document.body.appendChild(container);
-        }
-
-        const toast = document.createElement('div');
-        toast.className = 'cachyToast';
-
-        const msgSpan = document.createElement('span');
-        msgSpan.className = 'toastMsg';
-        msgSpan.textContent = message;
-        toast.appendChild(msgSpan);
-
-        if (actionText && typeof actionCallback === 'function') {
-            const actBtn = document.createElement('button');
-            actBtn.type = 'button';
-            actBtn.className = 'toastUndoBtn';
-            actBtn.textContent = actionText;
-            actBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                try { actionCallback(); } catch (err) { console.warn('Toast action error:', err); }
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateY(10px)';
-                setTimeout(() => toast.remove(), 200);
-            });
-            toast.appendChild(actBtn);
-        }
-
-        container.appendChild(toast);
-
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateY(10px)';
-                setTimeout(() => toast.remove(), 200);
-            }
-        }, duration);
-    }
 
     function updateRestoreBtnUi() {
         if (!restoreTracksBtn) return;
@@ -2114,7 +2415,7 @@
                 <div class="miniEq">
                     <span></span><span></span><span></span>
                 </div>
-                <img src="${escapeHtml(coverSrc)}" alt="Cover" class="trackThumb" loading="eager" decoding="async" onerror="this.onerror=null;this.src='resources/images/default.svg'">
+                <img src="${escapeHtml(coverSrc)}" alt="Cover" class="trackThumb" width="40" height="40" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='resources/images/default.svg'">
                 <div class="trackDetails">
                     <div class="trackTitle">${displayTitle}</div>
                     <div class="trackArtist">${displayArtist}${displayAlbum}</div>
@@ -2693,7 +2994,7 @@
                 row.className = 'batchAddRow';
                 const isInPlaylist = Boolean(track.inCurrentPlaylist);
                 row.innerHTML = `
-                    <img src="${escapeHtml(track.cover || 'resources/images/default.svg')}" alt="" class="batchAddThumb">
+                    <img src="${escapeHtml(track.cover || 'resources/images/default.svg')}" alt="" class="batchAddThumb" width="40" height="40" loading="lazy" decoding="async">
                     <div class="batchAddInfo">
                         <span class="batchAddTitle">${escapeHtml(track.title || track.filename || 'Unknown')}</span>
                         <span class="batchAddArtist">${escapeHtml(track.artist || 'Unknown')}${track.album ? ' • ' + escapeHtml(track.album) : ''}</span>
@@ -2822,7 +3123,7 @@
 
                 item.innerHTML = `
                     <span class="queueIndex">#${idx + 1}</span>
-                    <img src="${escapeHtml(coverSrc)}" alt="Cover" class="queueThumb" loading="lazy">
+                    <img src="${escapeHtml(coverSrc)}" alt="Cover" class="queueThumb" width="40" height="40" loading="lazy" decoding="async">
                     <div class="queueDetails">
                         <div class="queueTitle">${displayTitle}</div>
                         <div class="queueArtist">${displayArtist}</div>
@@ -2873,7 +3174,7 @@
                     const tId = track.id || track.tid || track.filename;
                     uItem.innerHTML = `
                         <span class="queueIndex libraryOrder">»</span>
-                        <img src="${escapeHtml(coverSrc)}" alt="Cover" class="queueThumb" loading="lazy">
+                        <img src="${escapeHtml(coverSrc)}" alt="Cover" class="queueThumb" width="40" height="40" loading="lazy" decoding="async">
                         <div class="queueDetails">
                             <div class="queueTitle">${displayTitle}</div>
                             <div class="queueArtist">${displayArtist}</div>
@@ -2892,1762 +3193,7 @@
     }
 
     // =========================================================================
-    // Audiophile Sleep Timer Engine
-    // Gentle 12-second logarithmic volume fade-out prevents sleep interruption
-    // =========================================================================
-    function setSleepTimer(minutes) {
-        cancelSleepTimer(false);
-        if (minutes === 'end') {
-            sleepTimerMode = 'end';
-            sleepTimerRemainingSec = 0;
-            if (sleepTimerLabel) sleepTimerLabel.textContent = '🌙 End of Track';
-            if (sleepStatusRemaining) sleepStatusRemaining.textContent = 'Pauses at end of current track';
-            if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
-            if (sleepTimerBtn) sleepTimerBtn.classList.add('hasActiveTimer');
-            const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
-            if (settingsTabSleepStatusBadge) {
-                settingsTabSleepStatusBadge.textContent = 'PAUSE AT END OF TRACK';
-                settingsTabSleepStatusBadge.classList.add('active');
-            }
-            const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
-            if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = '';
-            showToast('Sleep timer set: Pauses at end of track');
-            closeSleepTimerModal();
-            return;
-        }
 
-        const mins = parseInt(minutes, 10);
-        if (isNaN(mins) || mins <= 0) return;
-
-        sleepTimerMode = 'countdown';
-        sleepTimerRemainingSec = mins * 60;
-        sleepTimerOriginalVolume = currentVolumeValue;
-
-        updateSleepTimerStatusUi();
-        if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
-        if (sleepTimerBtn) sleepTimerBtn.classList.add('hasActiveTimer');
-        const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
-        if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = '';
-        showToast(`Sleep timer set: ${mins} minute${mins === 1 ? '' : 's'}`);
-        closeSleepTimerModal();
-
-        sleepTimerInterval = setInterval(() => {
-            sleepTimerRemainingSec--;
-            updateSleepTimerStatusUi();
-
-            // Audiophile 12-second logarithmic gentle fade-out
-            if (sleepTimerRemainingSec <= 12 && sleepTimerRemainingSec > 0) {
-                if (sleepTimerOriginalVolume === null) sleepTimerOriginalVolume = currentVolumeValue;
-                const ratio = Math.max(0, sleepTimerRemainingSec / 12);
-                const fadedVol = sleepTimerOriginalVolume * Math.pow(ratio, 1.4);
-                setVolume(fadedVol, false);
-            }
-
-            if (sleepTimerRemainingSec <= 0) {
-                clearInterval(sleepTimerInterval);
-                sleepTimerInterval = null;
-                pauseAudio();
-                if (sleepTimerOriginalVolume !== null) {
-                    setVolume(sleepTimerOriginalVolume, true);
-                    sleepTimerOriginalVolume = null;
-                }
-                cancelSleepTimer(false);
-                showToast('🌙 Sleep timer finished: Playback paused.');
-            }
-        }, 1000);
-    }
-
-    function updateSleepTimerStatusUi() {
-        const m = Math.floor(sleepTimerRemainingSec / 60);
-        const s = sleepTimerRemainingSec % 60;
-        const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
-        if (sleepTimerLabel) sleepTimerLabel.textContent = `🌙 ${timeStr}`;
-        if (sleepStatusRemaining) sleepStatusRemaining.textContent = `${timeStr} remaining`;
-        const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
-        if (settingsTabSleepStatusBadge) {
-            settingsTabSleepStatusBadge.textContent = `${timeStr} REMAINING`;
-            settingsTabSleepStatusBadge.classList.add('active');
-        }
-    }
-
-    function cancelSleepTimer(showFeedback = true) {
-        if (sleepTimerInterval) {
-            clearInterval(sleepTimerInterval);
-            sleepTimerInterval = null;
-        }
-        if (sleepTimerOriginalVolume !== null) {
-            setVolume(sleepTimerOriginalVolume, true);
-            sleepTimerOriginalVolume = null;
-        }
-        sleepTimerMode = null;
-        sleepTimerRemainingSec = 0;
-        if (sleepTimerLabel) sleepTimerLabel.textContent = 'SLEEP TIMER';
-        if (sleepStatusCard) sleepStatusCard.style.display = 'none';
-        if (sleepTimerBtn) sleepTimerBtn.classList.remove('hasActiveTimer');
-        const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
-        if (settingsTabSleepStatusBadge) {
-            settingsTabSleepStatusBadge.textContent = 'INACTIVE';
-            settingsTabSleepStatusBadge.classList.remove('active');
-        }
-        const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
-        if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = 'none';
-        if (showFeedback) showToast('Sleep timer cancelled');
-    }
-
-    function openSleepTimerModal() {
-        if (sleepTimerModal) sleepTimerModal.style.display = 'flex';
-        pushModalState('sleepTimerModal');
-    }
-
-    function closeSleepTimerModal() {
-        if (sleepTimerModal) sleepTimerModal.style.display = 'none';
-        popModalState('sleepTimerModal');
-    }
-
-    // =========================================================================
-    // Signal Path & Audit (Honest, Real-Time Pipeline Telemetry)
-    // =========================================================================
-    function resolveTrackFormat(track) {
-        if (!track) return '';
-        let fmt = (track.format || '').toUpperCase().trim();
-        if (!fmt || fmt === 'AUDIO') {
-            const fname = track.filename || track.fullPath || '';
-            const dotIdx = fname.lastIndexOf('.');
-            if (dotIdx !== -1 && dotIdx < fname.length - 1) {
-                fmt = fname.substring(dotIdx + 1).toUpperCase().trim();
-            }
-        }
-        return fmt || 'PCM';
-    }
-
-    function updateSignalPathUi(track = allTracks[currentTrackIndex]) {
-        // Always keep player deck button label strictly as "SPA"
-        if (signalPathLabel) {
-            signalPathLabel.textContent = 'SPA';
-        }
-
-        const curTheme = getActiveTheme();
-        const isLightSurface = (curTheme === 'default' || curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm');
-        const hasTrack = Boolean(track && allTracks.length > 0);
-        const format = hasTrack ? resolveTrackFormat(track) : 'NONE';
-        const isLossless = hasTrack && ['FLAC', 'WAV', 'ALAC', 'AIFF', 'APE', 'WV', 'DSD', 'DSF', 'PCM'].includes(format);
-
-        // Determine active DSP & EQ stages honestly
-        const hasPeq = !isPeqBypassed && Array.isArray(peqGains) && peqGains.some(g => Math.abs(g) > 0.05);
-        const maxBoostDb = (!isPeqBypassed && Array.isArray(peqGains)) ? Math.max(0, ...peqGains) : 0;
-        const activeStages = [];
-        if (isSubsonic) activeStages.push('20Hz Subsonic');
-        if (hasPeq) activeStages.push('10-Band PEQ');
-        if (isBassBoost) activeStages.push('Bass');
-        if (isVocalBoost) activeStages.push('Vocal');
-        if (isTrebleBoost) activeStages.push('Treble');
-        if (isAmpBoost || currentVolumeValue > 1.0) activeStages.push('Pre-Amp');
-        if (isCrossfeed) activeStages.push('HRTF Crossfeed');
-        if (isSurroundWidener) activeStages.push('Surround M/S');
-        if (isAmbiophonics) activeStages.push('Ambiophonics');
-        if (isPhaseInvert) activeStages.push('180° Phase');
-        if (isMonoMix) activeStages.push('Mono Sum');
-        if (isAgpEnabled) activeStages.push('AGP Guard');
-        if (isLimiter) activeStages.push('Peak Limiter');
-        if (isUltrasonic) activeStages.push(`Ultrasonic (${Math.round(ultrasonicCutoff / 1000)}kHz)`);
-        if (isReplayGain) activeStages.push('ReplayGain');
-
-        const dspActive = hasActiveDsp();
-        const workletPrecisionStr = isPrecision64 ? '64-Bit Double-Float Worklet' : '32-Bit Fast-Float Biquad';
-        const shortEngineLabel = isPrecision64 ? '64-BIT WORKLET' : '32-BIT FLOAT';
-
-        // 1. Update Top Summary Badge, Description & Indicator Dot
-        if (!hasTrack) {
-            if (auditQualityBadge) {
-                auditQualityBadge.textContent = `IDLE (${shortEngineLabel} READY)`;
-                auditQualityBadge.className = 'signalQualityBadge highPrecision';
-            }
-            if (auditQualityDesc) {
-                auditQualityDesc.textContent = `No audio track loaded. Browser Web Audio decodes streams to 32-bit IEEE 754 float; DSP worklet is configured for ${isPrecision64 ? '64-bit double-precision' : '32-bit single-precision'} math.`;
-            }
-            const dotCol = isLightSurface ? '#475569' : '#94a3b8';
-            if (deckSignalDot) deckSignalDot.style.color = dotCol;
-            if (auditQualityDot) auditQualityDot.style.color = dotCol;
-        } else if (isLossless && !hasPeq && !isBassBoost && !isVocalBoost && !isTrebleBoost && !isCrossfeed && !isSurroundWidener && !isAmbiophonics && !isPhaseInvert && !isMonoMix) {
-            if (auditQualityBadge) {
-                auditQualityBadge.textContent = `LOSSLESS ${format} → ${shortEngineLabel}`;
-                auditQualityBadge.className = 'signalQualityBadge bitPerfect';
-            }
-            if (auditQualityDesc) {
-                auditQualityDesc.textContent = `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${isUltrasonic || ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
-            }
-            const dotCol = isLightSurface ? '#065f46' : '#10b981';
-            if (deckSignalDot) deckSignalDot.style.color = dotCol;
-            if (auditQualityDot) auditQualityDot.style.color = dotCol;
-        } else if (isLossless) {
-            if (auditQualityBadge) {
-                auditQualityBadge.textContent = `LOSSLESS ${format} → ${isPrecision64 ? '64-BIT' : '32-BIT'} DSP`;
-                auditQualityBadge.className = 'signalQualityBadge dspEnhanced';
-            }
-            if (auditQualityDesc) {
-                auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
-            }
-            const dotCol = isLightSurface ? '#9a3412' : '#fbbf24';
-            if (deckSignalDot) deckSignalDot.style.color = dotCol;
-            if (auditQualityDot) auditQualityDot.style.color = dotCol;
-        } else {
-            if (auditQualityBadge) {
-                auditQualityBadge.textContent = `${format} LOSSY → ${dspActive ? (isPrecision64 ? '64-BIT DSP' : '32-BIT DSP') : '32-BIT DECODE'}`;
-                auditQualityBadge.className = 'signalQualityBadge highPrecision';
-            }
-            if (auditQualityDesc) {
-                auditQualityDesc.textContent = `Compressed ${format} stream decoded by browser into 32-bit IEEE 754 floating-point PCM${activeStages.length > 0 ? `, processed via ${workletPrecisionStr} (${activeStages.join(', ')})` : ' with flat EQ response'}.`;
-            }
-            const dotCol = isLightSurface ? '#075985' : '#38bdf8';
-            if (deckSignalDot) deckSignalDot.style.color = dotCol;
-            if (auditQualityDot) auditQualityDot.style.color = dotCol;
-        }
-
-        // 2. Update Detailed 4-Stage Signal Chain Breakdown in Modal
-        const stageSourceEl = document.getElementById('auditStageSource');
-        const stageDecodeEl = document.getElementById('auditStageDecode');
-        const stageDspEl = document.getElementById('auditStageDsp');
-        const stageOutputEl = document.getElementById('auditStageOutput');
-
-        const currentRate = audioContext ? audioContext.sampleRate : ((track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100);
-        const rateStr = currentRate >= 1000 ? `${(currentRate / 1000).toFixed(1)} kHz` : `${currentRate} Hz`;
-
-        if (stageSourceEl) {
-            if (!hasTrack) {
-                stageSourceEl.textContent = 'Idle (No track loaded)';
-            } else {
-                const bd = track.bitDepth || (isLossless ? ((currentRate >= 88200) ? 24 : 16) : null);
-                const br = track.bitrate ? `${track.bitrate} kbps` : '';
-                const ch = track.channels === 1 ? 'Mono' : 'Stereo';
-                stageSourceEl.textContent = [
-                    `${format} (${isLossless ? 'Lossless' : 'Lossy'})`,
-                    bd ? `${bd}-Bit` : '',
-                    rateStr,
-                    br,
-                    ch
-                ].filter(Boolean).join(' • ');
-            }
-        }
-
-        if (stageDecodeEl) {
-            stageDecodeEl.textContent = `32-Bit IEEE 754 Float PCM @ ${rateStr}`;
-        }
-
-        if (stageDspEl) {
-            const stagesText = activeStages.length > 0 ? activeStages.join(' + ') : 'Flat Bypass';
-            stageDspEl.textContent = `${workletPrecisionStr} (${stagesText})`;
-        }
-
-        const ditherLabel = ditherMode === 'shaped'
-            ? 'Psychoacoustic Shaped (>18 kHz)'
-            : (ditherMode === 'tpdf' ? 'TPDF Flat Dither' : 'Unshaped Truncation (Off)');
-        const volPct = Math.round(currentVolumeValue * 100);
-        const gainModeStr = isHardwareGain ? `Hardware DAC Bridge (${volPct}%)` : `Digital Gain (${volPct}%)`;
-
-        if (stageOutputEl) {
-            stageOutputEl.textContent = `${ditherLabel} • ${gainModeStr}`;
-        }
-
-        // 3. Update Metrics Cards (Headroom, Latency, Precision) & Settings Telemetry
-        let maxTotalBoost = maxBoostDb;
-        if (isBassBoost) maxTotalBoost = Math.max(maxTotalBoost, 3.8);
-        if (isTrebleBoost) maxTotalBoost = Math.max(maxTotalBoost, 3.0);
-        if (isVocalBoost) maxTotalBoost = Math.max(maxTotalBoost, 2.8);
-        const preampAttenDb = maxTotalBoost > 0 ? -(maxTotalBoost * 0.70) : 0;
-        const volDb = currentVolumeValue > 0 ? (20 * Math.log10(currentVolumeValue)) : -60;
-        const netHeadroomDb = Math.max(0, -(preampAttenDb + Math.min(0, volDb)));
-        if (auditMetricHeadroom) {
-            if (maxTotalBoost > 0) {
-                auditMetricHeadroom.textContent = `${preampAttenDb.toFixed(1)} dB Pre-Amp (${netHeadroomDb.toFixed(1)} dB Guard)`;
-            } else {
-                auditMetricHeadroom.textContent = `+${Math.max(0.6, netHeadroomDb).toFixed(1)} dB (${currentVolumeValue > 1.0 ? 'Amplified' : 'Unity Guard'})`;
-            }
-        }
-
-        let latencyMs = bufferLatencyTarget === 'interactive' ? 15.0 : 100.0;
-        if (audioContext) {
-            const ctxLat = ((audioContext.baseLatency || 0) + (audioContext.outputLatency || 0)) * 1000;
-            if (ctxLat > 0) latencyMs = ctxLat;
-        }
-        const latencyModeStr = bufferLatencyTarget === 'interactive' ? 'Low-Latency' : 'Stable Buffer';
-        if (auditMetricLatency) {
-            auditMetricLatency.textContent = `~${latencyMs.toFixed(1)} ms (${latencyModeStr})`;
-        }
-
-        const auditMetricPrecision = document.getElementById('auditMetricPrecision');
-        const auditMetricPrecisionDesc = document.getElementById('auditMetricPrecisionDesc');
-        if (auditMetricPrecision) {
-            auditMetricPrecision.textContent = isPrecision64
-                ? '32-Bit Decode / 64-Bit DSP'
-                : '32-Bit IEEE 754 Float';
-        }
-        if (auditMetricPrecisionDesc) {
-            auditMetricPrecisionDesc.textContent = isPrecision64
-                ? 'Browser decodes audio to 32-bit float; AudioWorklet computes biquad filters and dithering in 64-bit double float.'
-                : 'Browser decodes and processes all audio stages in standard 32-bit single-precision IEEE 754 floating point.';
-        }
-
-        // Sync Settings Tab Telemetry Grid
-        const settingsDspEngineVal = document.getElementById('settingsDspEngineVal');
-        const settingsDspHeadroomVal = document.getElementById('settingsDspHeadroomVal');
-        const settingsDspLatencyVal = document.getElementById('settingsDspLatencyVal');
-        const settingsDspEqVal = document.getElementById('settingsDspEqVal');
-
-        if (settingsDspEngineVal) {
-            settingsDspEngineVal.textContent = isPrecision64 ? '64-Bit Worklet / 32-Bit Decode' : '32-Bit IEEE 754 Float';
-        }
-        if (settingsDspHeadroomVal) {
-            settingsDspHeadroomVal.textContent = maxBoostDb > 0 ? `${preampAttenDb.toFixed(1)} dB AGP Active` : '0.0 dBFS True-Peak';
-        }
-        if (settingsDspLatencyVal) {
-            settingsDspLatencyVal.textContent = `~${latencyMs.toFixed(0)} ms (${latencyModeStr})`;
-        }
-        if (settingsDspEqVal) {
-            settingsDspEqVal.textContent = activeStages.length > 0 ? activeStages.slice(0, 2).join(' + ') : 'Linear Bypass';
-        }
-    }
-
-    function openSignalPathModal() {
-        updateSignalPathUi();
-        if (signalPathModal) signalPathModal.style.display = 'flex';
-        pushModalState('signalPathModal');
-    }
-
-    function closeSignalPathModal() {
-        if (signalPathModal) signalPathModal.style.display = 'none';
-        popModalState('signalPathModal');
-    }
-
-    // Locate track in a candidate pool matching saved localStorage attributes
-    function findTrackIndexBySavedState(pool) {
-        if (!pool || pool.length === 0) return -1;
-        const savedTid = safeStorage.getItem('cachymusic_last_track_tid');
-        const savedPath = safeStorage.getItem('cachymusic_last_track_path');
-        const savedFilename = safeStorage.getItem('cachymusic_last_track_filename');
-        const savedId = safeStorage.getItem('cachymusic_last_track_id');
-        const savedTitle = safeStorage.getItem('cachymusic_last_track_title');
-
-        if (!savedTid && !savedPath && !savedFilename && !savedId && !savedTitle) {
-            return -1;
-        }
-
-        // 1. Exact TID or ID match
-        let idx = pool.findIndex(t => {
-            if (savedTid && t.tid && t.tid.toString() === savedTid.toString()) return true;
-            if (savedId && t.id && t.id.toString() === savedId.toString()) return true;
-            return false;
-        });
-        if (idx !== -1) return idx;
-
-        // 2. Exact fullPath match
-        if (savedPath) {
-            idx = pool.findIndex(t => t.fullPath && t.fullPath === savedPath);
-            if (idx !== -1) return idx;
-        }
-
-        // 3. Filename match
-        if (savedFilename) {
-            idx = pool.findIndex(t => t.filename && t.filename.toLowerCase() === savedFilename.toLowerCase());
-            if (idx !== -1) return idx;
-        }
-
-        // 4. Title match
-        if (savedTitle) {
-            idx = pool.findIndex(t => t.title && t.title.toLowerCase() === savedTitle.toLowerCase());
-            if (idx !== -1) return idx;
-        }
-
-        return -1;
-    }
-
-    // Restore cached session state: active playlist and last played song (loaded in paused state)
-    async function restoreSessionState() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const reqTrack = urlParams.get('track');
-
-        if (urlParams.get('tab') === 'playlists' || window.location.hash === '#playlists') {
-            if (tabPlaylists) tabPlaylists.click();
-        }
-
-        // Restore active playlist if previously open and still exists
-        const savedPlid = safeStorage.getItem('cachymusic_last_playlist_id');
-        const savedPlName = safeStorage.getItem('cachymusic_last_playlist_name');
-        if (savedPlid) {
-            const matchedPl = playlists.find(p => p.plid == savedPlid);
-            if (matchedPl) {
-                await openPlaylist(matchedPl.plid, matchedPl.name || savedPlName);
-            } else {
-                try {
-                    safeStorage.removeItem('cachymusic_last_playlist_id');
-                    safeStorage.removeItem('cachymusic_last_playlist_name');
-                } catch (_) {}
-            }
-        }
-
-        if (allTracks.length === 0) return;
-
-        // Determine target track to load (paused on boot)
-        let targetIdx = 0;
-        if (reqTrack !== null && !isNaN(parseInt(reqTrack, 10)) && allTracks[parseInt(reqTrack, 10)]) {
-            targetIdx = parseInt(reqTrack, 10);
-        } else {
-            // First search within displayedTracks (if a playlist is active)
-            const pool = (currentPlaylistId !== null && displayedTracks.length > 0) ? displayedTracks : allTracks;
-            let foundPoolIdx = findTrackIndexBySavedState(pool);
-            if (foundPoolIdx !== -1) {
-                const tr = pool[foundPoolIdx];
-                const masterIdx = allTracks.findIndex(t => (tr.tid && t.tid == tr.tid) || (tr.fullPath && t.fullPath === tr.fullPath) || (t.id == tr.id));
-                targetIdx = masterIdx !== -1 ? masterIdx : 0;
-            } else {
-                // If not found in current playlist, check global allTracks
-                let foundGlobalIdx = findTrackIndexBySavedState(allTracks);
-                if (foundGlobalIdx !== -1) {
-                    targetIdx = foundGlobalIdx;
-                } else if (currentPlaylistId !== null && displayedTracks.length > 0) {
-                    const firstPlTrack = displayedTracks[0];
-                    const masterIdx = allTracks.findIndex(t => (firstPlTrack.tid && t.tid == firstPlTrack.tid) || (firstPlTrack.fullPath && t.fullPath === firstPlTrack.fullPath) || (t.id == firstPlTrack.id));
-                    targetIdx = masterIdx !== -1 ? masterIdx : 0;
-                } else {
-                    targetIdx = 0;
-                }
-            }
-        }
-
-        // Retrieve remembered playback timeframe from previous session if track has not ended
-        let savedTime = 0;
-        try {
-            const rawTime = safeStorage.getItem('cachymusic_last_track_time');
-            if (rawTime !== null && !isNaN(parseFloat(rawTime))) {
-                const parsed = parseFloat(rawTime);
-                const targetTrack = allTracks[targetIdx];
-                const trackDur = (targetTrack && targetTrack.duration) ? Number(targetTrack.duration) : 0;
-                // Only resume if the song had not finished playing (< dur - 1)
-                if (parsed > 0 && (!trackDur || parsed < (trackDur - 1))) {
-                    savedTime = parsed;
-                }
-            }
-        } catch (_) {}
-
-        if (allTracks[targetIdx]) {
-            await loadTrack(targetIdx, false, savedTime);
-            if (isLyricsView) {
-                updateLyricsDisplay(allTracks[targetIdx]);
-            }
-        }
-    }
-
-    // Hardware Sample Rate Validator: respects native integer clocking (44.1k, 48k, 88.2k, 96k, 176.4k, 192k)
-    function getValidSampleRate(rate) {
-        const r = Number(rate);
-        const validRates = [44100, 48000, 88200, 96000, 176400, 192000];
-        if (validRates.includes(r)) return r;
-        return 44100;
-    }
-
-    // Update DAC Stream & Hardware Sample Rate Status Indicator
-    function updateDacStatusUi() {
-        const currentTrack = allTracks[currentTrackIndex];
-        updateSignalPathUi(currentTrack);
-        if (!statDacStream) return;
-        const currentRate = audioContext ? audioContext.sampleRate : ((currentTrack && currentTrack.sampleRate) ? getValidSampleRate(currentTrack.sampleRate) : 44100);
-        const rateStr = currentRate >= 1000 ? `${(currentRate / 1000).toFixed(1)} kHz` : `${currentRate} Hz`;
-        const bd = (currentTrack && currentTrack.bitDepth) || ((currentRate >= 88200) ? 24 : 16);
-        const bitStr = `${bd}-BIT`;
-        const nyquistKhz = (currentRate / 2000).toFixed(1).replace(/\.0$/, '');
-
-        const curTheme = getActiveTheme();
-        const isLightSurface = (curTheme === 'default' || curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm');
-
-        if (!hasActiveDsp()) {
-            statDacStream.textContent = `BIT-PERFECT DIRECT (${bitStr} • ${rateStr} • ${nyquistKhz}kHz BANDWIDTH)`;
-            statDacStream.style.color = isLightSurface ? '#047857' : '#00ff88';
-            statDacStream.title = `Direct hardware stream matching ${bitStr} • ${rateStr} (${nyquistKhz} kHz Nyquist bandwidth) with zero downsampling and zero DSP coloration.`;
-        } else {
-            const activeDsp = [];
-            if (isAmpBoost) activeDsp.push('AMP');
-            if (isBassBoost) activeDsp.push('BASS');
-            if (isVocalBoost) activeDsp.push('VOCAL');
-            if (isTrebleBoost) activeDsp.push('TREBLE');
-            if (isLimiter) activeDsp.push('LIMITER');
-            const dspStr = activeDsp.length > 0 ? activeDsp.join('+') : 'ACTIVE';
-            statDacStream.textContent = `STUDIO DSP (${dspStr} • ${bitStr} • ${rateStr} • ${nyquistKhz}kHz)`;
-            statDacStream.style.color = isLightSurface ? '#9a3412' : '#ffaa00';
-            statDacStream.title = `Processing through ${isPrecision64 ? '64-bit' : '32-bit'} floating-point Web Audio DSP stage at ${rateStr} (${nyquistKhz} kHz bandwidth).`;
-        }
-    }
-
-    // Dynamic Audio Specifications Badge (Strict audio attributes, no fluff)
-    function updateTrackBadgeUi(track) {
-        if (!trackBadge || !track) return;
-        const badgeParts = [];
-        const fmt = resolveTrackFormat(track);
-        if (fmt) {
-            badgeParts.push(fmt);
-        }
-        const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
-        if (bd) {
-            badgeParts.push(`${bd}-Bit`);
-        }
-        if (track.sampleRate) {
-            badgeParts.push(track.sampleRate >= 1000 ? `${(track.sampleRate / 1000).toFixed(1)} kHz` : `${track.sampleRate} Hz`);
-        }
-        if (track.bitrate) {
-            badgeParts.push(`${track.bitrate} kbps`);
-        }
-        if (track.channels === 2) {
-            badgeParts.push('Stereo');
-        } else if (track.channels === 1) {
-            badgeParts.push('Mono');
-        } else if (track.channels) {
-            badgeParts.push(`${track.channels} ch`);
-        }
-        trackBadge.textContent = badgeParts.length > 0 ? badgeParts.join(' • ') : 'AUDIO';
-    }
-
-    // Dynamic Ambient Atmosphere Lighting (Samples dominant vibrancy from album art)
-    let ambientCanvas = null;
-    let ambientCtx = null;
-    const ambientColorCache = new Map();
-
-    function updateAmbientLighting(coverUrl) {
-        if (!coverUrl) return;
-
-        if (ambientColorCache.has(coverUrl)) {
-            const [c1, c2] = ambientColorCache.get(coverUrl);
-            document.documentElement.style.setProperty('--ambient-aura-1', c1);
-            document.documentElement.style.setProperty('--ambient-aura-2', c2);
-            return;
-        }
-
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-            try {
-                if (!ambientCanvas) {
-                    ambientCanvas = document.createElement('canvas');
-                    ambientCanvas.width = 16;
-                    ambientCanvas.height = 16;
-                    ambientCtx = ambientCanvas.getContext('2d', { willReadFrequently: true });
-                }
-                ambientCtx.drawImage(img, 0, 0, 16, 16);
-                const imgData = ambientCtx.getImageData(0, 0, 16, 16).data;
-
-                let rSum = 0, gSum = 0, bSum = 0, count = 0;
-                let maxSat = -1;
-                let satR = 230, satG = 20, satB = 20;
-
-                for (let i = 0; i < imgData.length; i += 4) {
-                    const r = imgData[i];
-                    const g = imgData[i + 1];
-                    const b = imgData[i + 2];
-                    const a = imgData[i + 3];
-                    if (a < 128) continue;
-
-                    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                    if (lum > 25 && lum < 235) {
-                        rSum += r;
-                        gSum += g;
-                        bSum += b;
-                        count++;
-
-                        const max = Math.max(r, g, b);
-                        const min = Math.min(r, g, b);
-                        const sat = (max - min) / (max || 1);
-                        if (sat > maxSat) {
-                            maxSat = sat;
-                            satR = r;
-                            satG = g;
-                            satB = b;
-                        }
-                    }
-                }
-
-                let secR = satR, secG = satG, secB = satB;
-                if (count > 0) {
-                    secR = Math.round(rSum / count);
-                    secG = Math.round(gSum / count);
-                    secB = Math.round(bSum / count);
-                }
-
-                const c1 = `rgba(${satR}, ${satG}, ${satB}, 0.22)`;
-                const c2 = `rgba(${secR}, ${secG}, ${secB}, 0.05)`;
-
-                ambientColorCache.set(coverUrl, [c1, c2]);
-                document.documentElement.style.setProperty('--ambient-aura-1', c1);
-                document.documentElement.style.setProperty('--ambient-aura-2', c2);
-            } catch (_) {}
-        };
-        img.src = coverUrl;
-    }
-
-    let currentPlayRequestId = 0;
-    let currentTrackGeneration = 0;
-    let activeLoadedMetadataHandler = null;
-
-    // Load Track by Index in allTracks
-    async function loadTrack(index, autoPlay = true, initialTime = 0) {
-        if (!allTracks[index]) return;
-        currentTrackIndex = index;
-        trackPlaybackRetryCount = 0;
-        stopSoftwarePlayback();
-        activeDecodedBuffer = null;
-        isSoftwareDecoding = false;
-        // Supersede any in-flight playAudio() call from an earlier track selection
-        currentPlayRequestId++;
-        isPlayPending = false;
-        if (playPendingTimeout) {
-            clearTimeout(playPendingTimeout);
-            playPendingTimeout = null;
-        }
-        const track = allTracks[currentTrackIndex];
-
-        // Cache currently loaded track state in localStorage
-        if (track) {
-            try {
-                if (track.tid) safeStorage.setItem('cachymusic_last_track_tid', track.tid.toString());
-                if (track.fullPath) safeStorage.setItem('cachymusic_last_track_path', track.fullPath);
-                if (track.filename) safeStorage.setItem('cachymusic_last_track_filename', track.filename);
-                if (track.id) safeStorage.setItem('cachymusic_last_track_id', track.id.toString());
-                if (track.title) safeStorage.setItem('cachymusic_last_track_title', track.title);
-            } catch (_) {}
-        }
-
-        let trackSrc = track.src || '';
-        if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
-
-        const isKnownSoftware = alwaysSoftwareDecodeUrls.has(trackSrc) || (track.src && alwaysSoftwareDecodeUrls.has(track.src));
-
-        // Ensure studio-fidelity AudioContext clock rate matches track (44.1k, 48k, 88.2k, 96k, 176.4k, 192k)
-        const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
-        await ensureAudioEngineForSampleRate(targetRate);
-
-        if (currentTrackIndex !== index) return; // Guard against rapid skipping during context change
-
-        // Apply EBU R128 / ReplayGain Loudness Leveling with -0.3 dBFS True-Peak protection (safeguards MP3/M4A ISPs)
-        if (replayGainNode && audioContext) {
-            let targetGain = 1.0;
-            if (isReplayGain && typeof track.replayGain === 'number' && !isNaN(track.replayGain)) {
-                targetGain = Math.pow(10, track.replayGain / 20);
-                if (typeof track.replayPeak === 'number' && track.replayPeak > 0 && (targetGain * track.replayPeak) > 0.965) {
-                    targetGain = 0.965 / track.replayPeak; // -0.31 dBFS true-peak guard band
-                }
-            }
-            try {
-                replayGainNode.gain.setTargetAtTime(targetGain, audioContext.currentTime, 0.04);
-            } catch (_) {}
-        }
-
-        const isCrossOrigin = trackSrc.startsWith('http://') || trackSrc.startsWith('https://');
-        let needsCors = false;
-        if (isCrossOrigin) {
-            try {
-                needsCors = new URL(trackSrc, window.location.href).origin !== window.location.origin;
-            } catch (_) {}
-        }
-        if (needsCors) {
-            audio.crossOrigin = 'anonymous';
-        } else {
-            audio.removeAttribute('crossorigin');
-        }
-
-        currentTrackGeneration++;
-        audio._trackGeneration = currentTrackGeneration;
-        if (!isKnownSoftware) {
-            audio.src = trackSrc;
-            audio._isFreshTrackLoad = true;
-            try { audio.load(); } catch (_) {}
-        } else {
-            try {
-                audio.pause();
-                audio.removeAttribute('src');
-                audio.load();
-            } catch (_) {}
-        }
-
-        // Enforce timeframe: selected tracks must ALWAYS start at the beginning (0:00),
-        // unless initialTime was explicitly provided (to restore last unfinished track on boot).
-        const targetTime = (typeof initialTime === 'number' && !isNaN(initialTime) && initialTime > 0) ? initialTime : 0;
-
-        if (targetTime > 0 && audio.readyState >= 1) {
-            try { audio.currentTime = targetTime; } catch (_) {}
-        }
-
-        if (targetTime === 0) {
-            try {
-                safeStorage.removeItem('cachymusic_last_track_time');
-            } catch (_) {}
-        }
-
-        const applyTargetTime = () => {
-            if (targetTime > 0 && audio.duration && !isNaN(audio.duration) && targetTime >= (audio.duration - 1)) {
-                // If saved time exceeded or reached duration, treat as ended and restart at 0:00
-                audio.currentTime = 0;
-                currentTimeEl.textContent = '0:00';
-                if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
-                progressBar.style.width = '0%';
-                if (miniProgressBar) miniProgressBar.style.width = '0%';
-                try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
-                return;
-            }
-
-            try {
-                audio.currentTime = targetTime;
-            } catch (_) {}
-
-            if (targetTime === 0) {
-                currentTimeEl.textContent = '0:00';
-                if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
-                progressBar.style.width = '0%';
-                if (miniProgressBar) miniProgressBar.style.width = '0%';
-            } else {
-                currentTimeEl.textContent = formatTime(targetTime);
-                if (miniCurrentTime) miniCurrentTime.textContent = formatTime(targetTime);
-                const dur = audio.duration || track.duration || 0;
-                if (dur > 0) {
-                    const pct = Math.min(100, Math.max(0, (targetTime / dur) * 100));
-                    progressBar.style.width = `${pct}%`;
-                    if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
-                }
-            }
-        };
-
-        if (activeLoadedMetadataHandler) {
-            try { audio.removeEventListener('loadedmetadata', activeLoadedMetadataHandler); } catch (_) {}
-        }
-        activeLoadedMetadataHandler = applyTargetTime;
-        if (!isKnownSoftware) {
-            audio.addEventListener('loadedmetadata', applyTargetTime, { once: true });
-        }
-
-        // Center Deck Text - Real Tags or Fallback to Filename / Unknown
-        updateEmptyPlayerState();
-        trackName.textContent = track.title ? track.title : (track.filename || 'Unknown');
-        artistName.textContent = track.artist ? track.artist : 'Unknown';
-        albumName.textContent = track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Album: Unknown';
-
-        // Dynamic Audio Specifications Badge
-        updateTrackBadgeUi(track);
-
-        // Cover Artwork & Badge
-        const coverSrc = track.cover || 'resources/images/default.svg';
-        const hasCustomCover = Boolean(track.cover && !track.cover.includes('default.svg'));
-        if (deckArtworkBackdrop) {
-            deckArtworkBackdrop.onerror = () => { deckArtworkBackdrop.onerror = null; deckArtworkBackdrop.src = 'resources/images/default.svg'; };
-            deckArtworkBackdrop.src = coverSrc;
-            deckArtworkBackdrop.style.opacity = hasCustomCover ? '0.28' : '0.04';
-        }
-        if (deckArtworkAmbient) {
-            deckArtworkAmbient.onerror = () => { deckArtworkAmbient.onerror = null; deckArtworkAmbient.src = 'resources/images/default.svg'; };
-            deckArtworkAmbient.src = coverSrc;
-            deckArtworkAmbient.style.opacity = hasCustomCover ? '0.35' : '0';
-        }
-        if (vinylArt) {
-            vinylArt.onerror = () => { vinylArt.onerror = null; vinylArt.src = 'resources/images/default.svg'; };
-            vinylArt.src = coverSrc;
-        }
-        if (coverArtPreview) {
-            coverArtPreview.onerror = () => { coverArtPreview.onerror = null; coverArtPreview.src = 'resources/images/default.svg'; };
-            coverArtPreview.src = coverSrc;
-        }
-        updateAmbientLighting(coverSrc);
-        appendDebugTelemetry(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
-
-        if (coverBadge) {
-            if (track.cover) {
-                coverBadge.textContent = 'COVER ART';
-                coverBadge.style.color = 'inherit';
-            } else {
-                coverBadge.textContent = 'MUSIC ICON';
-                coverBadge.style.color = '#888888';
-            }
-        }
-
-        // Right Panel Metadata Inspector - Exact Embedded Tags or Unknown / N/A
-        statTitle.textContent = track.title ? track.title : 'Unknown';
-        statArtist.textContent = track.artist ? track.artist : 'Unknown';
-        statAlbum.textContent = track.album ? track.album : 'Unknown';
-        statGenre.textContent = track.genre ? track.genre : 'N/A';
-        statYear.textContent = track.year ? track.year.toString() : 'N/A';
-        if (statTrack) statTrack.textContent = track.track ? track.track.toString() : 'N/A';
-        statBitrate.textContent = track.bitrate ? `${track.bitrate} kbps` : 'N/A';
-        if (statSampleRate) statSampleRate.textContent = track.sampleRate ? `${track.sampleRate} Hz` : 'N/A';
-        if (statBitDepth) {
-            const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
-            statBitDepth.textContent = bd ? `${bd}-Bit` : 'N/A';
-            statBitDepth.style.color = 'inherit';
-        }
-        updateDacStatusUi();
-        if (statChannels) {
-            statChannels.textContent = track.channels === 2 ? 'Stereo' : (track.channels === 1 ? 'Mono' : (track.channels ? `${track.channels} ch` : 'N/A'));
-        }
-        statFormat.textContent = track.format ? track.format.toUpperCase() : 'N/A';
-        statSize.textContent = track.size ? track.size : 'N/A';
-        statPath.textContent = track.filename ? track.filename : 'N/A';
-        statPath.title = track.fullPath || track.filename || 'N/A';
-
-        // Highlight active track in the list and handle virtualized window scrolling
-        renderVirtualTrackWindow(true);
-        const displayedIdx = displayedTracks.findIndex(t => (
-            (track.id && t.id) ? t.id === track.id :
-            ((track.tid && t.tid) ? t.tid === track.tid : t.filename === track.filename)
-        ));
-        if (displayedIdx !== -1) {
-            const activeEl = trackList.querySelector(`.trackItem[data-index="${displayedIdx}"]`);
-            if (activeEl) {
-                activeEl.classList.add('active');
-                activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            } else {
-                scrollToTrackIndex(displayedIdx, true);
-            }
-        }
-
-        if (targetTime > 0) {
-            currentTimeEl.textContent = formatTime(targetTime);
-            if (miniCurrentTime) miniCurrentTime.textContent = formatTime(targetTime);
-            const totalSec = track.duration || 0;
-            if (totalSec > 0) {
-                const pct = Math.min(100, Math.max(0, (targetTime / totalSec) * 100));
-                progressBar.style.width = `${pct}%`;
-                if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
-            }
-        } else {
-            progressBar.style.width = '0%';
-            if (miniProgressBar) miniProgressBar.style.width = '0%';
-            currentTimeEl.textContent = '0:00';
-            if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
-        }
-        totalDurationEl.textContent = formatTime(track.duration);
-        if (miniTotalDuration) miniTotalDuration.textContent = formatTime(track.duration);
-        updateMiniPlayerInfo(track);
-        updateLyricsDisplay(track);
-        if (targetTime > 0 && isLyricsView) {
-            updateActiveLyric(targetTime);
-        }
-
-        // Native MediaSession Metadata sync (informs OS & browser of currently loaded track)
-        if ('mediaSession' in navigator && window.MediaMetadata) {
-            try {
-                const resolvedCover = track.cover
-                    ? new URL(track.cover, window.location.href).href
-                    : new URL('resources/images/default.svg', window.location.href).href;
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: track.title || track.filename || 'Unknown Title',
-                    artist: track.artist || 'Unknown Artist',
-                    album: track.album || 'CachyMusic Workstation',
-                    artwork: [
-                        { src: resolvedCover, sizes: '512x512', type: track.cover ? 'image/png' : 'image/svg+xml' }
-                    ]
-                });
-            } catch (_) {}
-        }
-
-        if (isKnownSoftware) {
-            if (autoPlay) {
-                playWithSoftwareDecoder(track, initialTime);
-            } else {
-                isSoftwarePaused = true;
-                syncPlayPauseUI(false);
-            }
-            return;
-        }
-
-        if (autoPlay) {
-            playAudio();
-        } else {
-            pauseAudio();
-        }
-    }
-
-    // =========================================================================
-    // Lyrics Displayer & Turntable Toggle Logic
-    // =========================================================================
-
-    // Parse Lyrics (supporting standard text and timestamped LRC format [mm:ss.xx])
-    function parseLyrics(raw) {
-        if (!raw || typeof raw !== 'string' || !raw.trim()) return null;
-        const lines = raw.split(/\r?\n/);
-        const parsed = [];
-        const lrcRegex = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g;
-        let hasTimestamps = false;
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-
-            const timeMatches = [...trimmed.matchAll(lrcRegex)];
-            if (timeMatches.length > 0) {
-                hasTimestamps = true;
-                const textOnly = trimmed.replace(lrcRegex, '').trim();
-                for (const match of timeMatches) {
-                    const min = parseInt(match[1], 10);
-                    const sec = parseInt(match[2], 10);
-                    const ms = match[3] ? parseInt(match[3].padEnd(3, '0').slice(0, 3), 10) : 0;
-                    const time = min * 60 + sec + (ms / 1000);
-                    parsed.push({ time, text: textOnly || '♪' });
-                }
-            } else if (!trimmed.match(/^\[[a-zA-Z]+:.*\]$/)) {
-                // Regular line (ignore ID tags like [ar:Artist])
-                parsed.push({ time: -1, text: trimmed });
-            }
-        }
-
-        if (hasTimestamps) {
-            parsed.sort((a, b) => a.time - b.time);
-        }
-
-        return { isSynced: hasTimestamps, lines: parsed, raw };
-    }
-
-    // Update Lyrics Displayer Content
-    function updateLyricsDisplay(track) {
-        if (!lyricsTrackName || !lyricsArtistName || !lyricsContent) return;
-
-        activeLyricIndex = -1;
-        const title = track ? (track.title || track.filename || 'Select A Track') : '—';
-        const artist = track ? (track.artist || 'Unknown Artist') : '—';
-        lyricsTrackName.textContent = title;
-        lyricsArtistName.textContent = artist;
-
-        const lyricsRaw = track ? track.lyrics : null;
-        parsedLyrics = parseLyrics(lyricsRaw);
-
-        if (!parsedLyrics || parsedLyrics.lines.length === 0) {
-            lyricsContent.innerHTML = `
-                <div class="lyricsPlaceholder">
-                    <div class="lyricsPlaceholderIcon">♪</div>
-                    <p>No lyrics available for this track.</p>
-                    <span>Lyrics can be embedded via the<br>USLT/LYRICS tag in your audio files or in a .lrc file.</span>
-                </div>
-            `;
-            return;
-        }
-
-        let html = '';
-        parsedLyrics.lines.forEach((item, idx) => {
-            const timeAttr = item.time >= 0 ? ` data-time="${item.time.toFixed(2)}"` : '';
-            const isClickable = item.time >= 0 ? ' clickable' : '';
-            const clickTitle = isClickable ? ' title="Click to jump playback to this line"' : '';
-            html += `<div class="lyricLine lyricsLine${isClickable}" data-index="${idx}"${timeAttr}${clickTitle}>${escapeHtml(item.text)}</div>`;
-        });
-        lyricsContent.innerHTML = html;
-
-        // Interactive seeking when clicking synced lyric lines
-        if (parsedLyrics.isSynced) {
-            lyricsContent.querySelectorAll('.lyricLine.clickable').forEach(el => {
-                el.addEventListener('click', () => {
-                    const t = parseFloat(el.dataset.time);
-                    if (!isNaN(t)) {
-                        audio.currentTime = t;
-                        try {
-                            const dur = audio.duration;
-                            if (t > 0 && (!dur || isNaN(dur) || t < (dur - 1))) {
-                                safeStorage.setItem('cachymusic_last_track_time', t.toFixed(2));
-                            }
-                        } catch (_) {}
-                        playAudio();
-                    }
-                });
-            });
-            updateActiveLyric(audio.currentTime);
-        }
-    }
-
-    // Highlight and Scroll Active Lyric Line for Synced LRC
-    function updateActiveLyric(currentTime) {
-        if (!isLyricsView || !parsedLyrics || !parsedLyrics.isSynced || !lyricsContent) return;
-        const lines = parsedLyrics.lines;
-        let newIdx = -1;
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].time <= currentTime + 0.15) {
-                newIdx = i;
-            } else {
-                break;
-            }
-        }
-
-        if (newIdx !== activeLyricIndex) {
-            activeLyricIndex = newIdx;
-            const allEls = lyricsContent.querySelectorAll('.lyricLine');
-            allEls.forEach((el, i) => {
-                if (i === activeLyricIndex) {
-                    el.classList.add('active');
-                    if (lyricsScrollArea) {
-                        const elTop = el.offsetTop - lyricsScrollArea.offsetTop;
-                        const targetScroll = elTop - (lyricsScrollArea.clientHeight / 2) + (el.clientHeight / 2);
-                        lyricsScrollArea.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
-                    }
-                } else {
-                    el.classList.remove('active');
-                }
-            });
-        }
-    }
-
-    // Toggle Lyrics Displayer (takes over turntable upon toggle, returns to turntable upon disable)
-    function toggleLyricsView(forcedState) {
-        if (!lyricsToggleBtn || !lyricsCon || !turntableCon) return;
-
-        isLyricsView = (forcedState !== undefined) ? !!forcedState : !isLyricsView;
-
-        if (isLyricsView) {
-            lyricsToggleBtn.classList.add('active');
-            lyricsToggleBtn.setAttribute('title', 'Return to Turntable View (L)');
-            const textSpan = lyricsToggleBtn.querySelector('span');
-            if (textSpan) textSpan.textContent = 'TURNTABLE';
-            turntableCon.style.setProperty('display', 'none', 'important');
-            turntableCon.classList.add('lyricsActiveHidden');
-            lyricsCon.classList.remove('lyricsActiveHidden');
-            lyricsCon.style.setProperty('display', 'flex', 'important');
-            updateLyricsDisplay(allTracks[currentTrackIndex]);
-        } else {
-            lyricsToggleBtn.classList.remove('active');
-            lyricsToggleBtn.setAttribute('title', 'Toggle Lyrics View (L)');
-            const textSpan = lyricsToggleBtn.querySelector('span');
-            if (textSpan) textSpan.textContent = 'LYRICS';
-            turntableCon.classList.remove('lyricsActiveHidden');
-            turntableCon.style.removeProperty('display');
-            lyricsCon.classList.add('lyricsActiveHidden');
-            lyricsCon.style.setProperty('display', 'none', 'important');
-        }
-    }
-
-    // Toggle Collapsible / Sliding Metadata Inspector Panel
-    function toggleMetadataPanel(forcedState) {
-        if (window.innerWidth <= 768) {
-            // Mobile View: toggle directly between playerDeck and settingsPanel (Metadata Inspector)
-            const isInfoActive = (infoPanelEl && infoPanelEl.classList.contains('mobileActive')) || document.body.classList.contains('mobile-tab-info');
-            if (isInfoActive) {
-                switchWorkspace('player', 'playerDeck');
-            } else {
-                switchWorkspace('player', 'settingsPanel');
-            }
-            return;
-        }
-
-        const isCollapsed = document.body.classList.contains('metadata-collapsed');
-        const willCollapse = (forcedState !== undefined) ? !forcedState : !isCollapsed;
-
-        document.body.classList.toggle('metadata-collapsed', willCollapse);
-        if (metadataToggleBtn) {
-            metadataToggleBtn.classList.toggle('active', !willCollapse);
-            metadataToggleBtn.setAttribute('aria-pressed', String(!willCollapse));
-            metadataToggleBtn.setAttribute('title', willCollapse ? 'Expand Metadata Inspector (I)' : 'Collapse Metadata Inspector (I)');
-        }
-
-        try {
-            safeStorage.setItem('cachymusic_metadata_visible', willCollapse ? 'false' : 'true');
-        } catch (_) {}
-    }
-
-    // Centralized Play/Pause UI Synchronizer
-    let lastSyncedPlayingState = null;
-    function syncPlayPauseUI(playing, force = false) {
-        playing = !!playing;
-        if (!force && lastSyncedPlayingState === playing) return;
-        lastSyncedPlayingState = playing;
-        isPlaying = playing;
-
-        // Sync native MediaSession playbackState (stops OS & Chromium from falsely unpausing)
-        if ('mediaSession' in navigator) {
-            try {
-                navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
-                if ('setPositionState' in navigator.mediaSession) {
-                    const dur = isSoftwareDecoding ? (activeDecodedBuffer ? activeDecodedBuffer.duration : 0) : audio.duration;
-                    const pos = isSoftwareDecoding ? (softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0)) : (audio.currentTime || 0);
-                    if (dur && !isNaN(dur) && isFinite(dur) && dur > 0) {
-                        navigator.mediaSession.setPositionState({
-                            duration: Math.max(0, dur),
-                            playbackRate: 1.0,
-                            position: Math.max(0, Math.min(dur, pos || 0))
-                        });
-                    }
-                }
-            } catch (_) {}
-        }
-
-        // Center Player Deck Controls — icon toggled via CSS .playing class (instant, no image load)
-        if (playPauseBtn) {
-            playPauseBtn.setAttribute('title', playing ? 'Pause (Space)' : 'Play (Space)');
-            playPauseBtn.classList.toggle('playing', playing);
-        }
-
-        // Vinyl Turntable, Tonearm, Background Disc Animation
-        const isThematicActive = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple');
-        if (vinylTurntable) {
-            vinylTurntable.classList.toggle('thematicFidelity', isThematicActive);
-            vinylTurntable.classList.toggle('spinning', playing);
-        }
-        if (toneArm) toneArm.classList.toggle('active', playing);
-        if (bgDisc) bgDisc.classList.toggle('fast', playing && isThematicActive);
-
-        // Persistent Mini-Player Sync
-        updateMiniPlayerPlayState(playing);
-
-        // Synchronize Global Playback State Class on Body for Reactive CSS Hardware Animations
-        document.body.classList.toggle('is-playing', playing);
-
-        // Synchronize Header Studio Status Indicator
-        const studioStatusEl = document.getElementById('studioUserStatus');
-        if (studioStatusEl) {
-            const textEl = studioStatusEl.querySelector('.statusText');
-            if (textEl) {
-                textEl.textContent = playing ? 'PLAYING' : 'READY';
-            }
-        }
-
-        if (playing && typeof resumeVisualizerLoop === 'function') {
-            resumeVisualizerLoop();
-        }
-    }
-
-    // Render Repeat Button UI (with bold centered "1" for Repeat Current Track)
-    function updateRepeatUI() {
-        if (!repeatBtn) return;
-        safeStorage.setItem('cachymusic_repeat_mode', repeatMode);
-
-        if (repeatMode === 'one') {
-            repeatBtn.classList.add('active', 'repeat-one');
-            repeatBtn.setAttribute('title', 'Repeat Current Track (1) Active — Click to Turn Off');
-            repeatBtn.style.opacity = '1';
-            repeatBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
-                    <text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="900" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" fill="currentColor">1</text>
-                </svg>
-            `;
-        } else if (repeatMode === 'all') {
-            repeatBtn.classList.add('active');
-            repeatBtn.classList.remove('repeat-one');
-            repeatBtn.setAttribute('title', 'Repeat All Tracks Active — Click for Repeat One');
-            repeatBtn.style.opacity = '1';
-            repeatBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
-                </svg>
-            `;
-        } else { // 'off'
-            repeatBtn.classList.remove('active', 'repeat-one');
-            repeatBtn.setAttribute('title', 'Repeat Off — Click for Repeat All');
-            repeatBtn.style.opacity = '0.45';
-            repeatBtn.innerHTML = `
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
-                </svg>
-            `;
-        }
-    }
-
-    let isPlayPending = false;
-    let playPendingTimeout = null;
-    // Explicit pause lock: when user pauses or starts app, locks out background unpausing
-    let userExplicitlyPaused = true;
-    let trackPlaybackRetryCount = 0;
-    let consecutiveSkipCount = 0;
-    window.audioPlaybackDebugLogs = [];
-
-    let debugModeActive = false;
-    try {
-        debugModeActive = safeStorage.getItem('cachymusic_debug_mode') === 'true';
-    } catch (_) {}
-
-    function updateDebugHudState() {
-        const hud = document.getElementById('debugHudContainer');
-        const pill = document.getElementById('settingsDebugPill');
-        const enableBtn = document.getElementById('debugModeEnableBtn');
-        const disableBtn = document.getElementById('debugModeDisableBtn');
-
-        if (hud) {
-            hud.style.display = debugModeActive ? 'flex' : 'none';
-        }
-        if (pill) {
-            pill.textContent = debugModeActive ? 'ENABLED (HUD)' : 'DISABLED';
-            pill.className = `settingsEnginePill ${debugModeActive ? 'active' : ''}`;
-        }
-        if (enableBtn) enableBtn.classList.toggle('active', debugModeActive);
-        if (disableBtn) disableBtn.classList.toggle('active', !debugModeActive);
-
-        if (debugModeActive) {
-            refreshDebugHudTelemetry();
-        }
-    }
-
-    function setDebugMode(enabled) {
-        debugModeActive = Boolean(enabled);
-        try {
-            safeStorage.setItem('cachymusic_debug_mode', debugModeActive ? 'true' : 'false');
-        } catch (_) {}
-        updateDebugHudState();
-        if (debugModeActive) {
-            appendDebugTelemetry(`[SYSTEM] Debug Mode enabled. Monitoring Web Audio pipeline & MediaStore IPC.`);
-            if (typeof showCachyToast === 'function') {
-                showCachyToast('Debug Mode Active', 'Real-time Audio Diagnostics HUD visible.', 'info');
-            }
-        }
-    }
-
-    function appendDebugTelemetry(msg, level = 'info') {
-        const time = new Date().toLocaleTimeString();
-        const entryText = `[${time}] ${msg}`;
-        window.audioPlaybackDebugLogs.push(entryText);
-        if (window.audioPlaybackDebugLogs.length > 80) window.audioPlaybackDebugLogs.shift();
-
-        const logList = document.getElementById('debugHudLogList');
-        if (logList) {
-            const row = document.createElement('div');
-            row.className = `debugHudLogEntry ${level}`;
-            row.textContent = entryText;
-            logList.appendChild(row);
-            while (logList.childNodes.length > 50) {
-                logList.removeChild(logList.firstChild);
-            }
-            logList.scrollTop = logList.scrollHeight;
-        }
-
-        const logBox = document.getElementById('settingsAudioDebugLog');
-        if (logBox) {
-            logBox.textContent = window.audioPlaybackDebugLogs.join('\n');
-            logBox.scrollTop = logBox.scrollHeight;
-        }
-
-        refreshDebugHudTelemetry();
-    }
-
-    function refreshDebugHudTelemetry() {
-        if (!debugModeActive) return;
-        const curTrack = allTracks[currentTrackIndex];
-        const trackEl = document.getElementById('debugHudTrack');
-        const codecEl = document.getElementById('debugHudCodec');
-        const html5El = document.getElementById('debugHudHtml5');
-        const ctxEl = document.getElementById('debugHudAudioCtx');
-        const srcEl = document.getElementById('debugHudSrc');
-
-        if (trackEl) {
-            trackEl.textContent = curTrack
-                ? `#${currentTrackIndex + 1}: ${curTrack.title || curTrack.filename} (${formatTime(curTrack.duration)})`
-                : 'None loaded';
-        }
-        if (codecEl && curTrack) {
-            const fmt = (curTrack.format || 'AUDIO').toUpperCase();
-            const rate = curTrack.sampleRate ? `${curTrack.sampleRate}Hz` : '44100Hz';
-            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : (curTrack.sampleRate >= 88200 ? '24-Bit' : '16-Bit');
-            codecEl.textContent = `${fmt} • ${depth} • ${rate}`;
-        }
-        if (html5El) {
-            if (isSoftwareDecoding && activeDecodedBuffer) {
-                const cur = softwarePlaybackOffset + (audioContext && !isSoftwarePaused ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
-                const dur = activeDecodedBuffer.duration;
-                const state = isSoftwarePaused ? 'PAUSED' : 'PLAYING';
-                html5El.textContent = `SOFTWARE ENGINE • ${state} (${cur.toFixed(1)}s / ${dur.toFixed(1)}s) • 32-bit Float PCM`;
-                html5El.title = `Decoded: ${activeDecodedBuffer.sampleRate}Hz, ${activeDecodedBuffer.numberOfChannels}ch, Web Audio Buffer`;
-            } else if (audio) {
-                const rLabels = ['No Data', 'Metadata Loaded', 'Current Frame Ready', 'Buffering', 'Ready to Play'];
-                const rText = rLabels[audio.readyState] || `State ${audio.readyState}`;
-                const t = (audio.currentTime || 0).toFixed(1);
-                const d = (audio.duration && isFinite(audio.duration)) ? audio.duration.toFixed(1) : '--';
-                const state = audio.paused ? 'PAUSED' : 'PLAYING';
-                html5El.textContent = `${state} • ${rText} (${t}s / ${d}s)`;
-                html5El.title = `HTML5 Media Pipeline: readyState ${audio.readyState}, networkState ${audio.networkState}`;
-            }
-        }
-        if (ctxEl) {
-            const ctxState = audioContext ? audioContext.state : 'None';
-            const sRate = audioContext ? `${audioContext.sampleRate}Hz` : '--';
-            ctxEl.textContent = `State: ${ctxState} | Clock: ${sRate}`;
-        }
-        if (srcEl && audio) {
-            const srcStr = audio.src || 'none';
-            srcEl.textContent = srcStr.length > 70 ? srcStr.substring(0, 67) + '...' : srcStr;
-            srcEl.title = srcStr;
-        }
-    }
-
-    function logAudioPlaybackEvent(level, msg, meta = {}) {
-        const time = new Date().toLocaleTimeString();
-        const entry = `[${time}] [${level.toUpperCase()}] ${msg}`;
-        window.audioPlaybackDebugLogs.push(entry);
-        if (window.audioPlaybackDebugLogs.length > 50) window.audioPlaybackDebugLogs.shift();
-        const logBox = document.getElementById('settingsAudioDebugLog');
-        if (logBox) {
-            logBox.textContent = window.audioPlaybackDebugLogs.join('\n');
-            logBox.scrollTop = logBox.scrollHeight;
-        }
-        appendDebugTelemetry(`[${level.toUpperCase()}] ${msg}`, level);
-        updateAudioDiagnosticsUi(meta);
-    }
-
-    function updateAudioDiagnosticsUi(meta = {}) {
-        const streamVal = document.getElementById('debugStreamStatus');
-        const formatVal = document.getElementById('debugFormatVal');
-        const pipeVal = document.getElementById('debugPipelineState');
-        const skipVal = document.getElementById('debugSkipStatus');
-        const curTrack = allTracks[currentTrackIndex];
-
-        if (streamVal) {
-            if (audio && audio.error) {
-                streamVal.textContent = `Error (Code ${audio.error.code})`;
-                streamVal.style.color = '#ef4444';
-            } else if (audio && !audio.paused) {
-                streamVal.textContent = 'Streaming Active (206/200)';
-                streamVal.style.color = '#10b981';
-            } else {
-                streamVal.textContent = 'Standby / Paused';
-                streamVal.style.color = 'inherit';
-            }
-        }
-        if (formatVal && curTrack) {
-            const fmt = (curTrack.format || 'AUDIO').toUpperCase();
-            const rate = curTrack.sampleRate ? `${Math.round(curTrack.sampleRate / 1000)} kHz` : '44.1 kHz';
-            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : (curTrack.sampleRate >= 88200 ? '24-Bit' : '16-Bit');
-            const br = curTrack.bitrate ? `${curTrack.bitrate} kbps` : '';
-            formatVal.textContent = `${rate} • ${depth} • ${fmt} ${br ? '• ' + br : ''}`;
-        }
-        if (pipeVal && audio) {
-            const rStates = [
-                'Idle (No Data)',
-                'Metadata Loaded',
-                'Decoding Frame',
-                'Buffering Stream',
-                'Ready (Buffered)'
-            ];
-            const r = rStates[audio.readyState] || 'Ready';
-            const ctxState = audioContext ? (audioContext.state === 'running' ? 'Active' : 'Standby') : 'Inactive';
-            pipeVal.textContent = `${r} • DSP: ${ctxState}`;
-        }
-        if (skipVal) {
-            skipVal.textContent = consecutiveSkipCount > 0 ? `${consecutiveSkipCount} skip(s) logged` : 'No abnormal skips (0)';
-            skipVal.style.color = consecutiveSkipCount > 0 ? '#f59e0b' : 'inherit';
-        }
-        refreshDebugHudTelemetry();
-    }
-
-    function showThemeLoadingOverlay(themeName) {
-        const overlay = document.getElementById('themeLoadingOverlay');
-        const title = document.getElementById('themeLoadingTitle');
-        const sub = document.getElementById('themeLoadingSubtitle');
-        if (!overlay) return;
-        if (title) title.textContent = 'APPLYING THEME...';
-        if (sub) sub.textContent = `Configuring palette: ${themeName.toUpperCase()}`;
-        overlay.style.display = 'flex';
-        overlay.style.opacity = '1';
-        setTimeout(() => {
-            overlay.style.opacity = '0';
-            overlay.style.transition = 'opacity 0.25s ease';
-            setTimeout(() => {
-                overlay.style.display = 'none';
-                overlay.style.opacity = '1';
-                overlay.style.transition = '';
-            }, 250);
-        }, 320);
-    }
-
-    // Play Audio (guarded against concurrent async race conditions and AbortError)
-    async function playAudio(userInitiated = false) {
-        if (isSoftwareDecoding) {
-            userExplicitlyPaused = false;
-            syncPlayPauseUI(true);
-            resumeSoftwarePlayback();
-            return;
-        }
-
-        const currentTrack = allTracks[currentTrackIndex];
-        const currentSrc = currentTrack ? (currentTrack.src || '') : '';
-        const cleanSrc = currentSrc.startsWith('../') ? currentSrc.substring(3) : currentSrc;
-        const isKnownSoftware = currentTrack && (alwaysSoftwareDecodeUrls.has(cleanSrc) || (currentTrack.src && alwaysSoftwareDecodeUrls.has(currentTrack.src)));
-
-        if (isKnownSoftware && !isSoftwareDecoding) {
-            userExplicitlyPaused = false;
-            syncPlayPauseUI(true);
-            playWithSoftwareDecoder(currentTrack, 0);
-            return;
-        }
-
-        if (!audio.src || audio.src === window.location.href) {
-            // No track loaded — snap UI back to paused state and do nothing
-            syncPlayPauseUI(false);
-            return;
-        }
-        if (isPlayPending) {
-            console.log('playAudio already pending, skipping concurrent call.');
-            return;
-        }
-
-        const reqId = ++currentPlayRequestId;
-
-        // User explicitly unpaused
-        userExplicitlyPaused = false;
-
-        // Lock immediately — before any await — so rapid clicks can't bypass the guard
-        isPlayPending = true;
-        if (playPendingTimeout) clearTimeout(playPendingTimeout);
-        playPendingTimeout = setTimeout(() => {
-            if (isPlayPending && reqId === currentPlayRequestId) {
-                console.warn('isPlayPending safety timeout triggered, unlocking.');
-                isPlayPending = false;
-            }
-        }, 4000);
-
-        // Optimistically update UI so the user immediately sees the pause icon
-        syncPlayPauseUI(true);
-
-        try {
-            const track = allTracks[currentTrackIndex];
-            const targetRate = (track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100;
-            if (!audioContext || audioContext.state === 'closed') {
-                await ensureAudioEngineForSampleRate(targetRate);
-            } else if (!audioSourceNode) {
-                getOrCreateAudioSourceNode();
-                updateAudioRouting();
-            }
-            if (reqId !== currentPlayRequestId) return;
-            if (audioContext && audioContext.state !== 'running') {
-                try {
-                    await Promise.race([
-                        audioContext.resume(),
-                        new Promise(resolve => setTimeout(resolve, 300))
-                    ]);
-                } catch (_) {}
-            }
-            if (reqId !== currentPlayRequestId) return;
-            if (audio.muted) {
-                audio.muted = false;
-            }
-            if (audio.volume === 0 && currentVolumeValue > 0) {
-                audio.volume = isHardwareGain ? 1.0 : Math.min(1.0, currentVolumeValue);
-            }
-
-            // If audio has an error state (e.g. from a past network timeout or worker stall), reload it
-            // Only perform reload if it was NOT just loaded as a fresh track in loadTrack()
-            if (audio.error && !audio._isFreshTrackLoad) {
-                console.warn('Audio element has error state; recovering before play:', audio.error);
-                const isDecodeErr = (audio.error.code === 3);
-                const resumeTime = isDecodeErr ? 0 : (audio.currentTime || 0);
-                const currentSrc = audio.src;
-                audio.src = currentSrc;
-                audio.load();
-                if (resumeTime > 0) {
-                    try { audio.currentTime = resumeTime; } catch (_) {}
-                }
-            }
-            audio._isFreshTrackLoad = false;
-
-            await audio.play();
-            if (reqId !== currentPlayRequestId) return;
-            // Reflect actual audio state — user may have paused during the async gap
-            syncPlayPauseUI(!audio.paused);
-        } catch (err) {
-            if (reqId !== currentPlayRequestId) return;
-            // Ignore AbortError if interrupted by a rapid pause click or track skip
-            if (err.name !== 'AbortError') {
-                console.warn('Audio playback error:', err);
-            }
-            if (audio.paused) {
-                syncPlayPauseUI(false);
-            }
-        } finally {
-            if (reqId === currentPlayRequestId) {
-                if (playPendingTimeout) {
-                    clearTimeout(playPendingTimeout);
-                    playPendingTimeout = null;
-                }
-                isPlayPending = false;
-            }
-        }
-    }
-
-    // Pause Audio
-    function pauseAudio() {
-        userExplicitlyPaused = true;
-        if (isSoftwareDecoding) {
-            pauseSoftwarePlayback();
-            syncPlayPauseUI(false);
-            return;
-        }
-        try {
-            audio.pause();
-        } catch (err) {
-            console.warn('Audio pause error:', err);
-        }
-        syncPlayPauseUI(false);
-    }
-
-    // Toggle Play/Pause (uses native audio.paused as ground truth)
-    function togglePlayPause() {
-        if (isSoftwareDecoding) {
-            if (!isSoftwarePaused) {
-                userExplicitlyPaused = true;
-                pauseAudio();
-            } else {
-                userExplicitlyPaused = false;
-                playAudio(true);
-            }
-            return;
-        }
-        // Nothing loaded yet — if library has tracks, start playback on current/first track
-        if (!audio.src || audio.src === window.location.href) {
-            if (allTracks && allTracks.length > 0) {
-                const targetIdx = (currentTrackIndex >= 0 && allTracks[currentTrackIndex]) ? currentTrackIndex : 0;
-                loadTrack(targetIdx, true);
-                return;
-            }
-            syncPlayPauseUI(false);
-            return;
-        }
-        // Always allow pause even if a play is still pending (e.g. buffering)
-        if (!audio.paused) {
-            userExplicitlyPaused = true;
-            pauseAudio();
-        } else if (!isPlayPending) {
-            userExplicitlyPaused = false;
-            playAudio(true);
-        }
-    }
-
-    // =========================================================================
-    // True Gapless Playback Engine (Dual-Buffer Pre-caching & 0ms Handoff)
-    // =========================================================================
-    function peekNextTrackIndex() {
-        if (playQueue && playQueue.length > 0) {
-            const queued = playQueue[0];
-            const qIdx = allTracks.findIndex(t => (queued.id && t.id === queued.id) || (queued.tid && t.tid === queued.tid) || t.filename === queued.filename);
-            if (qIdx !== -1) return qIdx;
-        }
-
-        const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
-        if (pool.length === 0) return -1;
-
-        let currentIdxInPool = pool.findIndex(t => {
-            const cur = allTracks[currentTrackIndex];
-            if (!cur) return false;
-            if (cur.id && t.id) return t.id === cur.id;
-            if (cur.tid && t.tid) return t.tid === cur.tid;
-            return t.filename === cur.filename;
-        });
-
-        if (currentIdxInPool === -1) return -1;
-        if (isShuffle && pool.length > 1) return -1;
-
-        let nextIdx = currentIdxInPool + 1;
-        if (nextIdx >= pool.length) {
-            if (repeatMode === 'off') return -1;
-            nextIdx = 0;
-        }
-
-        const target = pool[nextIdx];
-        return allTracks.findIndex(t => target && ((t.id && t.id === target.id) || (t.tid && t.tid === target.tid) || t.filename === target.filename));
-    }
-
-    function checkAndPreloadNextTrack(currentTime, duration) {
-        if (window.AndroidBridge || /Android/i.test(navigator.userAgent) || window.innerWidth <= 768) {
-            return;
-        }
-        if (!duration || isNaN(duration) || duration < 8) return;
-        if (duration - currentTime <= 5.0) {
-            const nextMasterIdx = peekNextTrackIndex();
-            if (nextMasterIdx !== -1 && nextMasterIdx !== preloadedNextTrackIndex && allTracks[nextMasterIdx]) {
-                preloadedNextTrackIndex = nextMasterIdx;
-                const nextTrack = allTracks[nextMasterIdx];
-                let nextSrc = nextTrack.src || '';
-                if (nextSrc.startsWith('../')) nextSrc = nextSrc.substring(3);
-
-                if (!secondaryAudio) {
-                    secondaryAudio = document.createElement('audio');
-                    secondaryAudio.preload = 'auto';
-                    secondaryAudio.crossOrigin = 'anonymous';
-                }
-                secondaryAudio.src = nextSrc;
-                try {
-                    secondaryAudio.load();
-                } catch (_) {}
-            }
-        }
-    }
-
-    function executeGaplessHandoff(nextIndex) {
-        // In Android WebView / mobile APK, bypass secondary audio swapping to ensure the canonical DOM-attached audio element is always used
-        if (window.AndroidBridge || /Android/i.test(navigator.userAgent) || window.innerWidth <= 768) {
-            return false;
-        }
-        if (!secondaryAudio || preloadedNextTrackIndex !== nextIndex || secondaryAudio.readyState < 2) {
-            return false;
-        }
-        try {
-            const oldAudio = audio;
-            secondaryAudio.volume = oldAudio.volume;
-            secondaryAudio.muted = oldAudio.muted;
-            try {
-                secondaryAudio.playbackRate = currentPlaybackSpeed || oldAudio.playbackRate || 1.0;
-                secondaryAudio.preservesPitch = isPitchLockTempo;
-                secondaryAudio.mozPreservesPitch = isPitchLockTempo;
-                secondaryAudio.webkitPreservesPitch = isPitchLockTempo;
-            } catch (_) {}
-
-            // Swap active audio reference BEFORE pausing/clearing oldAudio so oldAudio events are ignored
-            audio = secondaryAudio;
-            secondaryAudio = oldAudio;
-            currentTrackIndex = nextIndex;
-            preloadedNextTrackIndex = -1;
-            trackPlaybackRetryCount = 0;
-
-            oldAudio.pause();
-            oldAudio.removeAttribute('src');
-
-            if (audioSourceNode) {
-                try { audioSourceNode.disconnect(); } catch (_) {}
-                audioSourceNode = null;
-            }
-
-            attachAudioListeners(audio);
-            getOrCreateAudioSourceNode();
-            updateAudioRouting();
-
-            // ReplayGain leveling for the new track
-            const nextTrack = allTracks[currentTrackIndex];
-            if (nextTrack && replayGainNode && audioContext) {
-                let targetGain = 1.0;
-                if (isReplayGain && typeof nextTrack.replayGain === 'number' && !isNaN(nextTrack.replayGain)) {
-                    targetGain = Math.pow(10, nextTrack.replayGain / 20);
-                    if (typeof nextTrack.replayPeak === 'number' && nextTrack.replayPeak > 0 && (targetGain * nextTrack.replayPeak) > 0.965) {
-                        targetGain = 0.965 / nextTrack.replayPeak; // -0.31 dBFS true-peak safety ceiling
-                    }
-                }
-                try {
-                    replayGainNode.gain.setTargetAtTime(targetGain, audioContext.currentTime, 0.04);
-                } catch (_) {}
-            }
-
-            userExplicitlyPaused = false;
-            audio.play().then(() => {
-                syncPlayPauseUI(true);
-                if (typeof resumeVisualizerLoop === 'function') resumeVisualizerLoop();
-            }).catch(console.warn);
-
-            if (nextTrack) {
-                if (trackName) trackName.textContent = nextTrack.title ? nextTrack.title : (nextTrack.filename || 'Unknown');
-                if (artistName) artistName.textContent = nextTrack.artist ? nextTrack.artist : 'Unknown';
-                if (albumName) albumName.textContent = nextTrack.album ? `Album: ${nextTrack.album}${nextTrack.year ? ' (' + nextTrack.year + ')' : ''}` : 'Album: Unknown';
-                updateTrackBadgeUi(nextTrack);
-                const coverSrc = nextTrack.cover || 'resources/images/default.svg';
-                if (deckArtworkBackdrop) deckArtworkBackdrop.src = coverSrc;
-                if (deckArtworkAmbient) deckArtworkAmbient.src = coverSrc;
-                if (vinylArt) vinylArt.src = coverSrc;
-                if (coverArtPreview) coverArtPreview.src = coverSrc;
-                updateAmbientLighting(coverSrc);
-                if (statTitle) statTitle.textContent = nextTrack.title || 'Unknown';
-                if (statArtist) statArtist.textContent = nextTrack.artist || 'Unknown';
-                if (statAlbum) statAlbum.textContent = nextTrack.album || 'Unknown';
-                if (statGenre) statGenre.textContent = nextTrack.genre || 'N/A';
-                if (statYear) statYear.textContent = nextTrack.year ? nextTrack.year.toString() : 'N/A';
-                if (statTrack) statTrack.textContent = nextTrack.track ? nextTrack.track.toString() : 'N/A';
-                if (statBitrate) statBitrate.textContent = nextTrack.bitrate ? `${nextTrack.bitrate} kbps` : 'N/A';
-                if (statSampleRate) statSampleRate.textContent = nextTrack.sampleRate ? `${nextTrack.sampleRate} Hz` : 'N/A';
-                if (statFormat) statFormat.textContent = nextTrack.format ? nextTrack.format.toUpperCase() : 'N/A';
-                if (statSize) statSize.textContent = nextTrack.size || 'N/A';
-                if (statPath) {
-                    statPath.textContent = nextTrack.filename || 'N/A';
-                    statPath.title = nextTrack.fullPath || nextTrack.filename || 'N/A';
-                }
-                updateDacStatusUi();
-                updateSignalPathUi(nextTrack);
-                updateLyricsDisplay(nextTrack);
-                updateMiniPlayerInfo(nextTrack);
-                renderVirtualTrackWindow(true);
-            }
-            return true;
-        } catch (e) {
-            console.warn('Gapless handoff fallback:', e);
-            return false;
-        }
-    }
-
-    // Next Track (Sample-Accurate Gapless Aware)
-    function nextTrack() {
-        if (playQueue && playQueue.length > 0) {
-            const nextQueuedTrack = playQueue.shift();
-            updateQueueUi();
-            const masterIdx = allTracks.findIndex(t =>
-                (nextQueuedTrack.id && t.id === nextQueuedTrack.id) ||
-                (nextQueuedTrack.tid && t.tid === nextQueuedTrack.tid) ||
-                t.filename === nextQueuedTrack.filename
-            );
-            if (masterIdx !== -1) {
-                if (!executeGaplessHandoff(masterIdx)) {
-                    loadTrack(masterIdx, true);
-                }
-                return;
-            }
-        }
-
-        const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
-        if (pool.length === 0) return;
-
-        let currentIdxInPool = pool.findIndex(t => {
-            const cur = allTracks[currentTrackIndex];
-            if (!cur) return false;
-            if (cur.id && t.id) return t.id === cur.id;
-            if (cur.tid && t.tid) return t.tid === cur.tid;
-            return t.filename === cur.filename;
-        });
-
-        if (isShuffle && pool.length > 1) {
-            let nextIdx = Math.floor(Math.random() * pool.length);
-            let attempts = 0;
-            while (nextIdx === currentIdxInPool && attempts < 10) {
-                nextIdx = Math.floor(Math.random() * pool.length);
-                attempts++;
-            }
-            const masterIdx = allTracks.findIndex(t => pool[nextIdx] && ((t.id && t.id === pool[nextIdx].id) || (t.tid && t.tid === pool[nextIdx].tid) || t.filename === pool[nextIdx].filename));
-            if (masterIdx !== -1) {
-                if (!executeGaplessHandoff(masterIdx)) {
-                    loadTrack(masterIdx, true);
-                }
-            }
-        } else {
-            let nextIdx = currentIdxInPool + 1;
-            if (nextIdx >= pool.length) {
-                if (repeatMode === 'off') {
-                    pauseAudio();
-                    audio.currentTime = 0;
-                    progressBar.style.width = '0%';
-                    currentTimeEl.textContent = '0:00';
-                    return;
-                }
-                nextIdx = 0;
-            }
-            const masterIdx = allTracks.findIndex(t => pool[nextIdx] && ((t.id && t.id === pool[nextIdx].id) || (t.tid && t.tid === pool[nextIdx].tid) || t.filename === pool[nextIdx].filename));
-            if (masterIdx !== -1) {
-                if (!executeGaplessHandoff(masterIdx)) {
-                    loadTrack(masterIdx, true);
-                }
-            }
-        }
-    }
-
-    // Previous Track
-    function prevTrack() {
-        if (audio.currentTime > 3) {
-            audio.currentTime = 0;
-            return;
-        }
-
-        const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
-        if (pool.length === 0) return;
-
-        let currentIdxInPool = pool.findIndex(t => {
-            const cur = allTracks[currentTrackIndex];
-            if (!cur) return false;
-            if (cur.id && t.id) return t.id === cur.id;
-            if (cur.tid && t.tid) return t.tid === cur.tid;
-            return t.filename === cur.filename;
-        });
-        let prevIdx = currentIdxInPool - 1;
-        if (prevIdx < 0) {
-            prevIdx = pool.length - 1;
-        }
-        const masterIdx = allTracks.findIndex(t => pool[prevIdx] && ((t.id && t.id === pool[prevIdx].id) || (t.tid && t.tid === pool[prevIdx].tid) || t.filename === pool[prevIdx].filename));
-        if (masterIdx !== -1) loadTrack(masterIdx, true);
-    }
-
-    // =========================================================================
     // Track Actions & Options Context Menu Engine (Mobile Bottom Sheet & Menu)
     // =========================================================================
     let selectedTrackForMenu = null;
@@ -4785,166 +3331,6 @@
         modalNewPlaylistName.value = '';
     }
 
-    function applyTheme(themeName, showToastNotification = false) {
-        if (themeName === 'atlas' || themeName === 'spotify' || themeName === 'apple') {
-            themeName = 'nms';
-        } else if (themeName === 'brutalist-minimalism-light' || themeName === 'brutalist-light') {
-            themeName = 'minimalist-light';
-        } else if (themeName === 'brutalist-minimalism-dark' || themeName === 'brutalist-dark') {
-            themeName = 'minimalist-dark';
-        }
-        const validThemes = [
-            'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
-            'abyssal-void', 'dissonance', 'sentinel',
-            'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian',
-            'brutalist-light', 'brutalist-dark'
-        ];
-        if (!validThemes.includes(themeName)) {
-            themeName = 'default';
-        }
-        activeTheme = themeName;
-        if (showToastNotification) {
-            showThemeLoadingOverlay(themeName);
-        }
-        document.documentElement.setAttribute('data-theme', themeName);
-        document.body.removeAttribute('data-theme');
-        try {
-            safeStorage.setItem('cachymusic_active_theme', themeName);
-            localStorage.setItem('cachymusic_active_theme', themeName);
-        } catch (_) {}
-        window.applyTheme = applyTheme;
-        window.activeTheme = themeName;
-
-        try {
-            if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
-                const currentUrl = new URL(window.location.href);
-                if (currentUrl.searchParams.has('theme') && currentUrl.searchParams.get('theme') !== themeName) {
-                    currentUrl.searchParams.set('theme', themeName);
-                    window.history.replaceState(null, '', currentUrl.pathname + currentUrl.search + currentUrl.hash);
-                }
-            }
-        } catch (_) {}
-
-        // Update active class on Theme Modal cards
-        themeSelectCards.forEach(card => {
-            const isTarget = card.dataset.theme === themeName;
-            card.classList.toggle('active', isTarget);
-        });
-
-        // Update active class on Settings Panel quick buttons
-        themeQuickBtns.forEach(btn => {
-            const isTarget = btn.dataset.theme === themeName;
-            btn.classList.toggle('active', isTarget);
-        });
-
-        // Update Top Navigation Bar label
-        if (topThemeLabel) {
-            const labels = {
-                default: 'DEFAULT',
-                nms: 'THE ATLAS',
-                'solar-eclipse': 'PLANETARY WARP',
-                'euclid-horizon': 'SPACE STATION',
-                'alien-paradise': 'ALIEN PARADISE',
-                'abyssal-void': 'EMERIL DRIVE',
-                dissonance: 'DISSONANCE',
-                sentinel: 'SENTINEL',
-                'minimalist-light': 'MINIMALIST (LIGHT)',
-                'minimalist-dark': 'MINIMALIST (DARK)',
-                'minimalist-warm': 'MINIMALIST (WARM)',
-                'minimalist-obsidian': 'MINIMALIST (OLED)',
-                'brutalist-light': 'MINIMALIST (LIGHT)',
-                'brutalist-dark': 'MINIMALIST (DARK)'
-            };
-            topThemeLabel.textContent = labels[themeName] || 'THEMES';
-        }
-
-        // Update Settings Panel Theme Status
-        const settingsThemeLabel = document.getElementById('settingsThemeCurrentLabel');
-        if (settingsThemeLabel) {
-            const friendly = {
-                default: 'Default Studio Hi-Fi • Precision Noir',
-                nms: 'The Atlas • Crimson Core HUD',
-                'solar-eclipse': 'Planetary Warp • Corona Orbit',
-                'euclid-horizon': 'Space Station • Euclid Dock',
-                'alien-paradise': 'Alien Paradise • 70s Retro Flora',
-                'abyssal-void': 'Emeril Drive • Emerald Pulse',
-                dissonance: 'Dissonance • Corrupted Atlantideum',
-                sentinel: 'Sentinel • Defense Combat Interface',
-                'minimalist-light': 'Minimalist (Light) • Stark Paper Clarity',
-                'minimalist-dark': 'Minimalist (Dark) • Monolithic Slate Void',
-                'minimalist-warm': 'Minimalist (Warm Paper) • Nordic Alabaster & Amber',
-                'minimalist-obsidian': 'Minimalist (Obsidian OLED) • Pitch Pure Zero-Watt',
-                'brutalist-light': 'Minimalist (Light) • Stark Paper Clarity',
-                'brutalist-dark': 'Minimalist (Dark) • Monolithic Slate Void'
-            };
-            settingsThemeLabel.textContent = friendly[themeName] || themeName.toUpperCase();
-        }
-
-        const settingsTabCurrentThemeBadge = document.getElementById('settingsTabCurrentThemeBadge');
-        if (settingsTabCurrentThemeBadge) {
-            const labels = {
-                default: 'DEFAULT STUDIO HI-FI',
-                nms: 'THE ATLAS',
-                'solar-eclipse': 'PLANETARY WARP',
-                'euclid-horizon': 'SPACE STATION',
-                'alien-paradise': 'ALIEN PARADISE',
-                'abyssal-void': 'EMERIL DRIVE',
-                dissonance: 'DISSONANCE',
-                sentinel: 'SENTINEL',
-                'minimalist-light': 'MINIMALIST (LIGHT)',
-                'minimalist-dark': 'MINIMALIST (DARK)',
-                'minimalist-warm': 'MINIMALIST (WARM PAPER)',
-                'minimalist-obsidian': 'MINIMALIST (OBSIDIAN OLED)',
-                'brutalist-light': 'MINIMALIST (LIGHT)',
-                'brutalist-dark': 'MINIMALIST (DARK)'
-            };
-            settingsTabCurrentThemeBadge.textContent = labels[themeName] || themeName.toUpperCase();
-        }
-
-        // Sync turntable center visualizer and fidelity according to activeVisualizerMode
-        const isThematicActive = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple');
-        if (turntableCenterVis) {
-            turntableCenterVis.style.display = 'flex';
-        }
-        if (vinylLabel) {
-            vinylLabel.style.opacity = '0';
-        }
-        if (vinylTurntable) {
-            vinylTurntable.classList.toggle('thematicFidelity', isThematicActive);
-            vinylTurntable.classList.toggle('spinning', isPlaying);
-        }
-        if (typeof updateSignalPathUi === 'function') {
-            updateSignalPathUi();
-        }
-        if (typeof updateDacStatusUi === 'function') {
-            updateDacStatusUi();
-        }
-        if (typeof drawPeqCurve === 'function') {
-            drawPeqCurve();
-        }
-        if (typeof resumeVisualizerLoop === 'function') {
-            resumeVisualizerLoop();
-        }
-    }
-    window.applyTheme = applyTheme;
-
-    function openThemeModal() {
-        if (!themeModal) return;
-        themeModal.style.display = 'flex';
-        pushModalState('themeModal');
-        setTimeout(() => {
-            const activeCard = themeModal.querySelector('.themeSelectCard.active');
-            if (activeCard) {
-                activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
-        }, 60);
-    }
-
-    function closeThemeModal() {
-        if (themeModal) themeModal.style.display = 'none';
-        popModalState('themeModal');
-    }
-
     async function addTrackToPlaylist(plid, tid, track = null) {
         try {
             const res = await fetch('php/api/playlists.php', {
@@ -4993,11 +3379,55 @@
         }
     }
 
-    // =========================================================================
-    // Real-Time Audio DSP Equalizer & Clean Amplification Engine
-    // (Amp Boost, Bass Boost, Vocal Boost, Treble Boost + Soft-Clipper & Limiter)
-    // =========================================================================
+    // Attach library functions to window
+    if (typeof window !== "undefined") {
+        try { window.openLibraryIdb = openLibraryIdb; } catch (_) {}
+        try { window.saveLibraryToIndexedDB = saveLibraryToIndexedDB; } catch (_) {}
+        try { window.loadLibraryFromIndexedDB = loadLibraryFromIndexedDB; } catch (_) {}
+        try { window.parseAudioFileMetadata = parseAudioFileMetadata; } catch (_) {}
+        try { window.scanDirectory = scanDirectory; } catch (_) {}
+        try { window.setScanStatus = setScanStatus; } catch (_) {}
+        try { window.loadPlaylists = loadPlaylists; } catch (_) {}
+        try { window.getLibraryWorker = getLibraryWorker; } catch (_) {}
+        try { window.applySearchAndSort = applySearchAndSort; } catch (_) {}
+        try { window.updateRestoreBtnUi = updateRestoreBtnUi; } catch (_) {}
+        try { window.removeTrackFromMainList = removeTrackFromMainList; } catch (_) {}
+        try { window.initTrackListDelegation = initTrackListDelegation; } catch (_) {}
+        try { window.renderVirtualTrackWindow = renderVirtualTrackWindow; } catch (_) {}
+        try { window.initVirtualScrollListener = initVirtualScrollListener; } catch (_) {}
+        try { window.scrollToTrackIndex = scrollToTrackIndex; } catch (_) {}
+        try { window.renderTrackList = renderTrackList; } catch (_) {}
+        try { window.formatPlaylistEstDuration = formatPlaylistEstDuration; } catch (_) {}
+        try { window.renderPlaylistsView = renderPlaylistsView; } catch (_) {}
+        try { window.playPlaylistDirectly = playPlaylistDirectly; } catch (_) {}
+        try { window.queuePlaylistTracks = queuePlaylistTracks; } catch (_) {}
+        try { window.openPlaylist = openPlaylist; } catch (_) {}
+        try { window.backToPlaylistsView = backToPlaylistsView; } catch (_) {}
+        try { window.backToAllTracks = backToAllTracks; } catch (_) {}
+        try { window.pushModalState = pushModalState; } catch (_) {}
+        try { window.popModalState = popModalState; } catch (_) {}
+        try { window.openSlskAccountModal = openSlskAccountModal; } catch (_) {}
+        try { window.closeSlskAccountModal = closeSlskAccountModal; } catch (_) {}
+        try { window.openBatchAddModal = openBatchAddModal; } catch (_) {}
+        try { window.closeBatchAddModal = closeBatchAddModal; } catch (_) {}
+        try { window.addToQueue = addToQueue; } catch (_) {}
+        try { window.removeFromQueue = removeFromQueue; } catch (_) {}
+        try { window.moveQueueItem = moveQueueItem; } catch (_) {}
+        try { window.clearQueue = clearQueue; } catch (_) {}
+        try { window.updateQueueUi = updateQueueUi; } catch (_) {}
+        try { window.renderQueueView = renderQueueView; } catch (_) {}
+        try { window.openTrackActionMenu = openTrackActionMenu; } catch (_) {}
+        try { window.closeTrackActionMenu = closeTrackActionMenu; } catch (_) {}
+        try { window.openAddToPlaylistModal = openAddToPlaylistModal; } catch (_) {}
+        try { window.closePlaylistModal = closePlaylistModal; } catch (_) {}
+        try { window.addTrackToPlaylist = addTrackToPlaylist; } catch (_) {}
+        try { window.removeTrackFromCurrentPlaylist = removeTrackFromCurrentPlaylist; } catch (_) {}
+    }
 
+
+
+    // --- Sub-Module: audio-engine.js ---
+// CachyMusic - Audiophile 32-Bit Floating Point DSP Engine
     function createSoftClipCurve(samples = 2048) {
         const curve = new Float32Array(samples);
         // Audiophile Analog Soft-Clip Curve:
@@ -6516,7 +4946,9 @@
             initCancelSleepBtn.style.display = 'none';
         }
 
-        updateDebugHudState();
+        if (typeof updateDebugHudState === 'function') {
+            updateDebugHudState();
+        }
 
         // 7. Settings Category Sub-Navigation Filter Bar (Balanced 2-Column Sub-Groupings)
         const catBtns = document.querySelectorAll('#settingsCategoryNav .settingsCatBtn');
@@ -6623,821 +5055,6 @@
     // 60-band perceptual log binning, dual-stage smoothing, 3 reworked modes
     // =========================================================================
 
-    function setupVisualizerMode() {
-        setVisualizerMode(activeVisualizerMode);
-
-        visPillBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                setVisualizerMode(btn.dataset.mode);
-            });
-        });
-
-        visModeBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                setVisualizerMode(btn.dataset.mode);
-            });
-        });
-    }
-
-    function setVisualizerMode(mode) {
-        if (mode === 'badapple' || mode === 'thematic') {
-            activeVisualizerMode = 'thematic';
-        } else {
-            activeVisualizerMode = mode;
-        }
-        safeStorage.setItem('cachymusic_vis_mode', activeVisualizerMode);
-
-        visPillBtns.forEach(b => {
-            const m = b.dataset.mode;
-            const matches = (m === activeVisualizerMode) || (activeVisualizerMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
-            b.classList.toggle('active', matches);
-        });
-        visModeBtns.forEach(b => {
-            const m = b.dataset.mode;
-            const matches = (m === activeVisualizerMode) || (activeVisualizerMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
-            b.classList.toggle('active', matches);
-        });
-
-        // Reset peak drops for dash mode & pulse state
-        peakValues.fill(0);
-        peakVelocity.fill(0);
-        peakHold.fill(0);
-        smoothDashLevels.fill(0);
-        smoothHeartPulse = 1.0;
-
-        const isThematic = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple');
-        if (turntableCenterVis) {
-            turntableCenterVis.style.display = 'flex';
-        }
-        if (vinylLabel) {
-            vinylLabel.style.opacity = '0';
-        }
-        if (vinylTurntable) {
-            vinylTurntable.classList.toggle('thematicFidelity', isThematic);
-            vinylTurntable.classList.toggle('spinning', isPlaying);
-        }
-        if (bgDisc) {
-            bgDisc.classList.toggle('fast', isPlaying && isThematic);
-        }
-        if (typeof resumeVisualizerLoop === 'function') {
-            resumeVisualizerLoop();
-        }
-    }
-    window.setVisualizerMode = setVisualizerMode;
-
-    let lastCanvasW = 0;
-    let lastCanvasH = 0;
-    let lastCanvasDpr = 0;
-
-    let lastCenterW = 0;
-    let lastCenterH = 0;
-    let lastCenterDpr = 0;
-
-    let cachedDockW = 0;
-    let cachedDockH = 0;
-    let cachedCenterW = 0;
-    let cachedCenterH = 0;
-
-    function refreshCanvasDimensions() {
-        if (visualizerDock) {
-            const w = Math.round(visualizerDock.clientWidth || visualizerDock.getBoundingClientRect().width);
-            const h = Math.round(visualizerDock.clientHeight || visualizerDock.getBoundingClientRect().height);
-            if (w > 0 && h > 0) {
-                cachedDockW = w;
-                cachedDockH = h;
-                syncCanvasResolution(w, h);
-            }
-        }
-        if (turntableCenterCanvas) {
-            const cw = Math.round(turntableCenterCanvas.clientWidth || turntableCenterCanvas.getBoundingClientRect().width);
-            const ch = Math.round(turntableCenterCanvas.clientHeight || turntableCenterCanvas.getBoundingClientRect().height);
-            if (cw > 0 && ch > 0) {
-                cachedCenterW = cw;
-                cachedCenterH = ch;
-                if (typeof resumeVisualizerLoop === 'function') resumeVisualizerLoop();
-            }
-        }
-    }
-
-    if (window.ResizeObserver) {
-        const resizeObs = new ResizeObserver((entries) => {
-            for (const entry of entries) {
-                if (entry.target === visualizerDock) {
-                    cachedDockW = Math.round(entry.contentRect.width);
-                    cachedDockH = Math.round(entry.contentRect.height);
-                    if (cachedDockW > 0 && cachedDockH > 0) {
-                        syncCanvasResolution(cachedDockW, cachedDockH);
-                    }
-                } else if (entry.target === turntableCenterCanvas) {
-                    cachedCenterW = Math.round(entry.contentRect.width);
-                    cachedCenterH = Math.round(entry.contentRect.height);
-                    if (cachedCenterW > 0 && cachedCenterH > 0 && typeof resumeVisualizerLoop === 'function') {
-                        resumeVisualizerLoop();
-                    }
-                }
-            }
-        });
-        if (visualizerDock) resizeObs.observe(visualizerDock);
-        if (turntableCenterCanvas) resizeObs.observe(turntableCenterCanvas);
-    }
-    window.addEventListener('resize', refreshCanvasDimensions, { passive: true });
-    window.addEventListener('orientationchange', refreshCanvasDimensions, { passive: true });
-
-    const cachedCenterDims = { width: 0, height: 0, dpr: 1 };
-    function syncTurntableCenterCanvas() {
-        if (!turntableCenterCanvas || !turntableCenterVis) return null;
-        let w = cachedCenterW;
-        let h = cachedCenterH;
-        if (w === 0 || h === 0) {
-            w = Math.round(turntableCenterCanvas.clientWidth || turntableCenterCanvas.getBoundingClientRect().width);
-            h = Math.round(turntableCenterCanvas.clientHeight || turntableCenterCanvas.getBoundingClientRect().height);
-            cachedCenterW = w;
-            cachedCenterH = h;
-        }
-        if (w === 0 || h === 0) return null;
-        const maxDpr = window.innerWidth <= 768 ? 1.25 : 1.5;
-        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
-
-        if (w !== lastCenterW || h !== lastCenterH || dpr !== lastCenterDpr) {
-            turntableCenterCanvas.width = Math.round(w * dpr);
-            turntableCenterCanvas.height = Math.round(h * dpr);
-            lastCenterW = w;
-            lastCenterH = h;
-            lastCenterDpr = dpr;
-        }
-        cachedCenterDims.width = w;
-        cachedCenterDims.height = h;
-        cachedCenterDims.dpr = dpr;
-        return cachedCenterDims;
-    }
-
-    function syncCanvasResolution(wOrRect, optH) {
-        const maxDpr = window.innerWidth <= 768 ? 1.25 : 1.5;
-        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
-        const w = Math.round(typeof wOrRect === 'object' && wOrRect !== null ? wOrRect.width : wOrRect);
-        const h = Math.round(typeof wOrRect === 'object' && wOrRect !== null ? wOrRect.height : optH);
-        const pixelW = Math.round(w * dpr);
-        const pixelH = Math.round(h * dpr);
-
-        if (visualizerCanvas.width !== pixelW || visualizerCanvas.height !== pixelH || dpr !== lastCanvasDpr) {
-            visualizerCanvas.width = pixelW;
-            visualizerCanvas.height = pixelH;
-            lastCanvasW = w;
-            lastCanvasH = h;
-            lastCanvasDpr = dpr;
-        }
-        return dpr;
-    }
-
-    function setupCanvas() {
-        refreshCanvasDimensions();
-    }
-
-    // Expanding soundwave ripple rings for beat hits
-    const shockwaveRings = [];
-    function emitShockwave(x, y, maxRadius, initialAlpha = 0.75) {
-        if (shockwaveRings.length >= 8) shockwaveRings.shift();
-        shockwaveRings.push({
-            x,
-            y,
-            r: 6,
-            maxR: maxRadius,
-            alpha: initialAlpha,
-            speed: (maxRadius - 6) * 2.6
-        });
-    }
-
-    function updateAndDrawShockwaves(ctx, dt) {
-        if (shockwaveRings.length === 0) return;
-        ctx.save();
-        for (let i = shockwaveRings.length - 1; i >= 0; i--) {
-            const ring = shockwaveRings[i];
-            ring.r += ring.speed * dt;
-            const progress = ring.r / ring.maxR;
-            if (progress >= 1.0) {
-                shockwaveRings.splice(i, 1);
-                continue;
-            }
-            const currentAlpha = ring.alpha * (1.0 - progress);
-            ctx.strokeStyle = `rgba(255, 255, 255, ${currentAlpha})`;
-            ctx.lineWidth = 1.6 * (1.0 - progress * 0.5);
-            ctx.beginPath();
-            ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        ctx.restore();
-    }
-
-    // Dynamic Crest Sparkles for Solid Wave (reacts to snares & treble transients)
-    const crestSparkles = [];
-    function emitSparkle(x, y, intensity = 1.0) {
-        if (crestSparkles.length >= 24) crestSparkles.shift();
-        crestSparkles.push({
-            x,
-            y,
-            life: 1.0,
-            decay: 2.2 + Math.random() * 1.5,
-            size: 2.0 + Math.random() * 2.8,
-            intensity
-        });
-    }
-
-    function updateAndDrawSparkles(ctx, dt) {
-        const currentTheme = getActiveTheme();
-        if (currentTheme !== 'default') {
-            crestSparkles.length = 0;
-            return;
-        }
-        for (let i = crestSparkles.length - 1; i >= 0; i--) {
-            const sp = crestSparkles[i];
-            sp.life -= sp.decay * dt;
-            if (sp.life <= 0) {
-                crestSparkles.splice(i, 1);
-                continue;
-            }
-            ctx.save();
-            ctx.translate(sp.x, sp.y);
-            const a = sp.life * sp.intensity;
-            ctx.fillStyle = `rgba(255, 255, 255, ${a})`;
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.95)';
-            ctx.shadowBlur = 6;
-            const s = sp.size * (0.5 + sp.life * 0.5);
-            ctx.beginPath();
-            ctx.moveTo(0, -s);
-            ctx.lineTo(s * 0.4, 0);
-            ctx.lineTo(0, s);
-            ctx.lineTo(-s * 0.4, 0);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-        }
-    }
-
-    // Smooth Catmull-Rom Spline Path Generator (passes exactly through all peaks and valleys with C1 continuity)
-    function drawSplinePath(ctx, points) {
-        if (!points || points.length === 0) return;
-        if (points.length === 1) {
-            ctx.lineTo(points[0].x, points[0].y);
-            return;
-        }
-        if (points.length === 2) {
-            ctx.lineTo(points[1].x, points[1].y);
-            return;
-        }
-        for (let i = 0; i < points.length - 1; i++) {
-            const p0 = points[Math.max(0, i - 1)];
-            const p1 = points[i];
-            const p2 = points[i + 1];
-            const p3 = points[Math.min(points.length - 1, i + 2)];
-
-            const cp1x = p1.x + (p2.x - p0.x) / 6;
-            const cp1y = p1.y + (p2.y - p0.y) / 6;
-            const cp2x = p2.x - (p3.x - p1.x) / 6;
-            const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-        }
-    }
-
-    // =========================================================================
-    // Universal Web Audio Software Decoder Engine (Zero-Skip Hybrid Pipeline)
-    // =========================================================================
-    function updatePlaybackProgress(cur, dur) {
-        if (isDraggingScrubber) return;
-        const currentTrack = allTracks[currentTrackIndex];
-        if (!isFinite(dur) || isNaN(dur) || dur <= 0) {
-            if (currentTrack && currentTrack.duration && isFinite(currentTrack.duration)) {
-                dur = Number(currentTrack.duration);
-            }
-        }
-        if (currentTimeEl) currentTimeEl.textContent = formatTime(cur);
-        if (miniCurrentTime) miniCurrentTime.textContent = formatTime(cur);
-
-        if (dur && isFinite(dur) && dur > 0) {
-            const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
-            if (progressBar) progressBar.style.width = `${pct}%`;
-            if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
-        }
-
-        if (cur > 1.0 && consecutiveSkipCount > 0) {
-            consecutiveSkipCount = 0;
-        }
-
-        if (isLyricsView) {
-            updateActiveLyric(cur);
-        }
-    }
-
-    function startSoftwareProgressLoop() {
-        cancelSoftwareProgressLoop();
-        function tick() {
-            if (!isSoftwareDecoding || isSoftwarePaused || !activeDecodedBuffer) return;
-            const cur = softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
-            const dur = activeDecodedBuffer.duration;
-            updatePlaybackProgress(cur, dur);
-            if (cur >= dur) {
-                onSoftwarePlaybackEnded();
-                return;
-            }
-            softwarePlaybackRaf = requestAnimationFrame(tick);
-        }
-        softwarePlaybackRaf = requestAnimationFrame(tick);
-    }
-
-    function cancelSoftwareProgressLoop() {
-        if (softwarePlaybackRaf) {
-            cancelAnimationFrame(softwarePlaybackRaf);
-            softwarePlaybackRaf = null;
-        }
-    }
-
-    function startSoftwareBufferPlayback() {
-        if (!audioContext || !activeDecodedBuffer) return;
-        if (softwareSourceNode) {
-            try {
-                softwareSourceNode.onended = null;
-                softwareSourceNode.stop();
-                softwareSourceNode.disconnect();
-            } catch (_) {}
-            softwareSourceNode = null;
-        }
-
-        softwareSourceNode = audioContext.createBufferSource();
-        softwareSourceNode.buffer = activeDecodedBuffer;
-
-        if (!softwareSourceGainNode) {
-            softwareSourceGainNode = audioContext.createGain();
-        }
-        softwareSourceNode.connect(softwareSourceGainNode);
-        updateAudioRouting();
-
-        softwarePlaybackStartTime = audioContext.currentTime;
-        softwareSourceNode.start(0, softwarePlaybackOffset);
-        isSoftwarePaused = false;
-        syncPlayPauseUI(true);
-        startSoftwareProgressLoop();
-
-        softwareSourceNode.onended = () => {
-            if (!isSoftwareDecoding || isSoftwarePaused) return;
-            const cur = softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
-            if (cur >= (activeDecodedBuffer.duration - 0.5)) {
-                onSoftwarePlaybackEnded();
-            }
-        };
-    }
-
-    function pauseSoftwarePlayback() {
-        if (!isSoftwareDecoding || isSoftwarePaused) return;
-        cancelSoftwareProgressLoop();
-        if (audioContext && softwarePlaybackStartTime > 0) {
-            softwarePlaybackOffset += (audioContext.currentTime - softwarePlaybackStartTime);
-        }
-        if (softwareSourceNode) {
-            try {
-                softwareSourceNode.onended = null;
-                softwareSourceNode.stop();
-                softwareSourceNode.disconnect();
-            } catch (_) {}
-            softwareSourceNode = null;
-        }
-        isSoftwarePaused = true;
-        syncPlayPauseUI(false);
-    }
-
-    function resumeSoftwarePlayback() {
-        if (!isSoftwareDecoding || !activeDecodedBuffer) return;
-        if (audioContext && audioContext.state !== 'running') {
-            try { audioContext.resume(); } catch (_) {}
-        }
-        startSoftwareBufferPlayback();
-    }
-
-    function seekSoftwarePlayback(targetSec) {
-        if (!isSoftwareDecoding || !activeDecodedBuffer) return;
-        const dur = activeDecodedBuffer.duration;
-        softwarePlaybackOffset = Math.max(0, Math.min(dur, targetSec));
-        if (!isSoftwarePaused) {
-            startSoftwareBufferPlayback();
-        } else {
-            updatePlaybackProgress(softwarePlaybackOffset, dur);
-        }
-    }
-
-    function stopSoftwarePlayback() {
-        cancelSoftwareProgressLoop();
-        if (softwareSourceNode) {
-            try {
-                softwareSourceNode.onended = null;
-                softwareSourceNode.stop();
-                softwareSourceNode.disconnect();
-            } catch (_) {}
-            softwareSourceNode = null;
-        }
-        isSoftwareDecoding = false;
-        isSoftwarePaused = false;
-        softwarePlaybackStartTime = 0;
-        softwarePlaybackOffset = 0;
-    }
-
-    function onSoftwarePlaybackEnded() {
-        stopSoftwarePlayback();
-        try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
-        if (repeatMode === 'one') {
-            loadTrack(currentTrackIndex, true, 0);
-        } else {
-            nextTrack();
-        }
-    }
-
-    async function playWithSoftwareDecoder(track, startTime = 0) {
-        if (!track) return;
-        isSoftwareDecoding = true;
-        isSoftwarePaused = false;
-        userExplicitlyPaused = false;
-        syncPlayPauseUI(true);
-
-        try {
-            if (audio) {
-                try {
-                    audio.pause();
-                    audio.removeAttribute('src');
-                    audio.load();
-                } catch (_) {}
-            }
-
-            const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
-            await ensureAudioEngineForSampleRate(targetRate);
-            if (audioContext && audioContext.state !== 'running') {
-                try { await audioContext.resume(); } catch (_) {}
-            }
-
-            let src = track.src || '';
-            if (src.startsWith('../')) src = src.substring(3);
-
-            logAudioPlaybackEvent('info', `Fetching stream bitstream for 32-bit software decode: "${track.title || track.filename}"`);
-            if (typeof showCachyToast === 'function') {
-                showCachyToast('Software Audio Engine', `Decoding 24-bit/audiophile stream: "${track.title || track.filename}"`, 'info');
-            }
-
-            const res = await fetch(src);
-            if (!res.ok) throw new Error(`HTTP ${res.status} fetch failure`);
-            const arrayBuf = await res.arrayBuffer();
-
-            logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
-            const decodedBuffer = await new Promise((resolve, reject) => {
-                const p = audioContext.decodeAudioData(
-                    arrayBuf,
-                    buf => resolve(buf),
-                    err => reject(err || new Error('decodeAudioData callback returned error'))
-                );
-                if (p && typeof p.then === 'function') {
-                    p.then(resolve, reject);
-                }
-            });
-            activeDecodedBuffer = decodedBuffer;
-
-            track.duration = decodedBuffer.duration;
-            if (totalDurationEl) totalDurationEl.textContent = formatTime(decodedBuffer.duration);
-            if (miniTotalDuration) miniTotalDuration.textContent = formatTime(decodedBuffer.duration);
-
-            softwarePlaybackOffset = Math.max(0, Math.min(decodedBuffer.duration, startTime));
-            startSoftwareBufferPlayback();
-            consecutiveSkipCount = 0;
-            logAudioPlaybackEvent('info', `Web Audio Software Engine playing "${track.title || track.filename}" at ${decodedBuffer.sampleRate}Hz, ${decodedBuffer.numberOfChannels}ch, ${decodedBuffer.duration.toFixed(1)}s.`);
-        } catch (err) {
-            console.error('[AudioEngine] Software decoder fallback failed:', err);
-            logAudioPlaybackEvent('error', `Web Audio software decode failure: ${err.message}`);
-            isSoftwareDecoding = false;
-            if (typeof showCachyToast === 'function') {
-                showCachyToast('Playback Error', `File corrupted or unreadable. Skipping track...`, 'error');
-            }
-            setTimeout(() => nextTrack(), 1000);
-        }
-    }
-
-    function attachAudioListeners(targetAudio) {
-        if (!targetAudio || targetAudio._hasCachyListeners) return;
-        targetAudio._hasCachyListeners = true;
-        let isAudioBuffering = false;
-
-        targetAudio.addEventListener('play', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            // Background Tab Protection:
-            // If user explicitly paused CachyMusic and the tab is hidden in the background,
-            // immediately halt any rogue/accidental unpause triggered by external media keys,
-            // OS MPRIS signals, or YouTube media session transitions.
-            if (userExplicitlyPaused && document.hidden) {
-                targetAudio.pause();
-                syncPlayPauseUI(false);
-                return;
-            }
-            isAudioBuffering = false;
-            syncPlayPauseUI(true);
-        });
-        targetAudio.addEventListener('playing', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            if (userExplicitlyPaused && document.hidden) {
-                targetAudio.pause();
-                syncPlayPauseUI(false);
-                return;
-            }
-            isAudioBuffering = false;
-            syncPlayPauseUI(true);
-        });
-        targetAudio.addEventListener('pause', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            // If pause was fired by the browser decoder while buffering and user did not request pause,
-            // preserve user's playback state and avoid erratic UI flapping
-            if (isAudioBuffering && !userExplicitlyPaused) {
-                return;
-            }
-            syncPlayPauseUI(false);
-            try {
-                const cur = targetAudio.currentTime;
-                const dur = targetAudio.duration;
-                if (cur > 0 && (!dur || isNaN(dur) || cur < (dur - 1))) {
-                    safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
-                }
-            } catch (_) {}
-        });
-        targetAudio.addEventListener('emptied', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            syncPlayPauseUI(false);
-        });
-        targetAudio.addEventListener('waiting', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            // Native audio decoder is buffering stream chunk
-            if (!userExplicitlyPaused) {
-                isAudioBuffering = true;
-            }
-        });
-        targetAudio.addEventListener('stalled', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            console.warn('Audio stream buffer stalled, awaiting more chunk data');
-            if (!userExplicitlyPaused) {
-                isAudioBuffering = true;
-            }
-        });
-        targetAudio.addEventListener('error', () => {
-            // Discard errors from disposed audio elements, intentional src clears, or while software decoding is active
-            if (targetAudio._isDisposed || targetAudio !== audio || isSoftwareDecoding) return;
-            if (!targetAudio.src || targetAudio.src === window.location.href || !targetAudio.getAttribute('src')) {
-                return;
-            }
-            const err = targetAudio.error;
-            if (!err) return;
-            console.error('Audio element error:', err);
-            isAudioBuffering = false;
-            syncPlayPauseUI(false);
-            isPlayPending = false;
-
-            if (playPendingTimeout) {
-                clearTimeout(playPendingTimeout);
-                playPendingTimeout = null;
-            }
-
-            const currentTrack = allTracks[currentTrackIndex];
-            const trackTitle = currentTrack ? (currentTrack.title || currentTrack.filename || 'Current track') : 'Audio track';
-            const errorCode = err ? err.code : 0;
-
-            // Fatal error codes:
-            // 3 = MEDIA_ERR_DECODE (corrupted audio frame or decoding bitstream failure)
-            // 4 = MEDIA_ERR_SRC_NOT_SUPPORTED (unsupported codec, 404, or unreadable source)
-            const isFatalDecodeError = (errorCode === 3 || errorCode === 4);
-
-            // If native browser decoder fails (code 3 or 4) on a local stream, attempt 1 automatic FFmpeg transcode fallback
-            const currentAttrSrc = targetAudio.getAttribute('src') || targetAudio.src || '';
-            if (isFatalDecodeError && trackPlaybackRetryCount === 0 && currentAttrSrc.includes('php/api/stream.php') && !currentAttrSrc.includes('transcode=1')) {
-                trackPlaybackRetryCount++;
-                const transcodeSrc = currentAttrSrc + (currentAttrSrc.includes('?') ? '&' : '?') + 'transcode=1';
-                console.info(`[AudioEngine] Native decode error (${errorCode}) on "${trackTitle}"; attempting FFmpeg transcode fallback...`);
-                userExplicitlyPaused = false;
-                targetAudio.src = transcodeSrc;
-                try { targetAudio.load(); } catch (_) {}
-                playAudio();
-                return;
-            }
-
-            // Universal Web Audio Software Decoder Fallback (for 24-bit FLAC, ALAC, AIFF & unsupported Android/browser codecs)
-            if (isFatalDecodeError && currentTrack && !isSoftwareDecoding) {
-                alwaysSoftwareDecodeUrls.add(currentAttrSrc);
-                alwaysSoftwareDecodeUrls.add(targetAudio.src);
-                try {
-                    targetAudio.pause();
-                    targetAudio.removeAttribute('src');
-                    targetAudio.load();
-                } catch (_) {}
-                console.info(`[AudioEngine] HTML5 <audio> decode failure (${errorCode}) on "${trackTitle}". Switching to Web Audio Software Decoder...`);
-                logAudioPlaybackEvent('info', `Native decoder unsuited for "${trackTitle}" (code ${errorCode}). Playing via 32-bit Web Audio Software Engine.`);
-                playWithSoftwareDecoder(currentTrack, targetAudio.currentTime || 0);
-                return;
-            }
-
-            if (isFatalDecodeError || trackPlaybackRetryCount >= 1) {
-                userExplicitlyPaused = true;
-                consecutiveSkipCount++;
-                const errorDesc = errorCode === 3
-                    ? 'Corrupted audio stream or decoder failure'
-                    : (errorCode === 4 ? 'Format or file source not supported' : 'Playback stream timed out');
-
-                logAudioPlaybackEvent('error', `Track "${trackTitle}" decode failure (code ${errorCode}): ${errorDesc}`, {
-                    src: targetAudio.src,
-                    track: currentTrack
-                });
-                console.warn(`[AudioEngine] Permanent playback error on "${trackTitle}": ${errorDesc}. Halting retry loop.`);
-
-                if (consecutiveSkipCount >= 3) {
-                    pauseAudio();
-                    logAudioPlaybackEvent('warn', 'Consecutive skip limit reached (3 tracks failed). Halting auto-skip.');
-                    if (typeof showCachyToast === 'function') {
-                        showCachyToast('Playback Halted', 'Multiple tracks failed to decode. Check Audio Diagnostics in Settings.', 'error');
-                    }
-                    return;
-                }
-
-                if (typeof showCachyToast === 'function') {
-                    showCachyToast('Playback Error', `"${trackTitle}": ${errorDesc}. Skipping track...`, 'warning');
-                }
-
-                // Reset dirty media element so subsequent tracks start with a completely fresh decoder pipeline
-                resetMediaElementForNewAudioContext();
-
-                // If in playlist or more tracks available, gracefully skip to next track without rapid flapping
-                setTimeout(() => {
-                    const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
-                    let currentIdxInPool = pool.findIndex(t => {
-                        const cur = allTracks[currentTrackIndex];
-                        if (!cur) return false;
-                        if (cur.id && t.id) return t.id === cur.id;
-                        if (cur.tid && t.tid) return t.tid === cur.tid;
-                        return t.filename === cur.filename;
-                    });
-                    if (currentIdxInPool === pool.length - 1 && repeatMode === 'off') {
-                        // End of playlist and repeat is off: cleanly stop
-                        pauseAudio();
-                        targetAudio.currentTime = 0;
-                        if (progressBar) progressBar.style.width = '0%';
-                        if (currentTimeEl) currentTimeEl.textContent = '0:00';
-                        try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
-                    } else {
-                        nextTrack();
-                    }
-                }, 1200);
-                return;
-            }
-
-            // For transient network hiccups (code 2), attempt at most 1 automatic retry
-            if (errorCode === 2 && targetAudio.src && !userExplicitlyPaused && trackPlaybackRetryCount === 0) {
-                trackPlaybackRetryCount++;
-                const savedTime = targetAudio.currentTime || 0;
-                const currentSrc = targetAudio.src;
-                console.log(`[AudioEngine] Transient network error; attempting single recovery for "${trackTitle}" at ${savedTime}s...`);
-
-                setTimeout(() => {
-                    if (!userExplicitlyPaused) {
-                        targetAudio.src = currentSrc;
-                        targetAudio.load();
-                        if (savedTime > 0) {
-                            try { targetAudio.currentTime = savedTime; } catch (_) {}
-                        }
-                        targetAudio.play().catch(playErr => {
-                            console.warn('[AudioEngine] Recovery retry failed:', playErr);
-                            syncPlayPauseUI(false);
-                            userExplicitlyPaused = true;
-                            if (typeof showCachyToast === 'function') {
-                                showCachyToast('Network Error', `Could not recover stream for "${trackTitle}".`, 'error');
-                            }
-                        });
-                    }
-                }, 1500);
-            }
-        });
-
-        let lastPersistedTime = 0;
-        targetAudio.addEventListener('timeupdate', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            if (isSoftwareDecoding) return;
-            if (isDraggingScrubber) return;
-            const cur = targetAudio.currentTime;
-            let dur = targetAudio.duration;
-            const currentTrack = allTracks[currentTrackIndex];
-            if (!isFinite(dur) || isNaN(dur) || dur <= 0) {
-                if (currentTrack && currentTrack.duration && isFinite(currentTrack.duration)) {
-                    dur = Number(currentTrack.duration);
-                }
-            }
-            updatePlaybackProgress(cur, dur);
-
-            // Periodically persist playback timeframe (throttled to 1.0s deltas)
-            // so closing or refreshing the program remembers the unfinished timeframe
-            if (cur > 0 && Math.abs(cur - lastPersistedTime) >= 1.0) {
-                lastPersistedTime = cur;
-                if (!dur || isNaN(dur) || cur < (dur - 1)) {
-                    try {
-                        safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
-                    } catch (_) {}
-                }
-            }
-
-            // Dual-Buffer Gapless Playback Engine:
-            // When current track hits 5 seconds before completion, asynchronously pre-load
-            // and decode the header and initial bitstream of the next track into the secondary buffer
-            checkAndPreloadNextTrack(cur, dur);
-        });
-
-        targetAudio.addEventListener('ended', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            if (typeof targetAudio._trackGeneration === 'number' && targetAudio._trackGeneration !== currentTrackGeneration) {
-                console.log('[AudioEngine] Stale ended event discarded for superseded track generation');
-                return;
-            }
-            try {
-                safeStorage.removeItem('cachymusic_last_track_time');
-            } catch (_) {}
-
-            const curTime = targetAudio.currentTime || 0;
-            const currentTrack = allTracks[currentTrackIndex];
-            const trackDur = targetAudio.duration || (currentTrack ? (currentTrack.duration || 0) : 0);
-            const trackTitle = currentTrack ? (currentTrack.title || currentTrack.filename || 'Current track') : 'Audio track';
-
-            // Premature Ended Guard:
-            // If the track ends within 3.0 seconds (or with >5s remaining on an established track),
-            // this is an unexpected stream disconnect/hiccup or buffer underflow, NOT a finished song.
-            if ((trackDur > 5 && curTime < 3.0) || curTime === 0) {
-                console.warn(`[AudioEngine] Premature stream end detected at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}".`);
-                logAudioPlaybackEvent('warn', `Premature stream termination at ${curTime.toFixed(2)}s on "${trackTitle}"`);
-                appendDebugTelemetry(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
-                if (trackPlaybackRetryCount < 2) {
-                    trackPlaybackRetryCount++;
-                    setTimeout(() => {
-                        if (!userExplicitlyPaused) {
-                            try { targetAudio.load(); } catch (_) {}
-                            playAudio();
-                        }
-                    }, 400);
-                    return;
-                } else {
-                    pauseAudio();
-                    showToast(`Playback paused on "${trackTitle}". Stream buffer interrupted.`);
-                    return;
-                }
-            } else {
-                appendDebugTelemetry(`[EVENT] Track finished naturally at ${curTime.toFixed(1)}s`);
-            }
-
-            if (sleepTimerMode === 'end') {
-                pauseAudio();
-                cancelSleepTimer(false);
-                showToast('🌙 Sleep timer: End of track reached. Playback paused.');
-                return;
-            }
-
-            if (repeatMode === 'one') {
-                targetAudio.currentTime = 0;
-                playAudio();
-            } else {
-                nextTrack();
-            }
-        });
-
-        targetAudio.addEventListener('loadedmetadata', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            if (targetAudio.duration && !isNaN(targetAudio.duration)) {
-                totalDurationEl.textContent = formatTime(targetAudio.duration);
-                if (miniTotalDuration) miniTotalDuration.textContent = formatTime(targetAudio.duration);
-                if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && isFinite(targetAudio.duration) && targetAudio.duration > 0) {
-                    try {
-                        navigator.mediaSession.setPositionState({
-                            duration: Math.max(0, targetAudio.duration),
-                            playbackRate: targetAudio.playbackRate || 1.0,
-                            position: Math.max(0, Math.min(targetAudio.duration, targetAudio.currentTime || 0))
-                        });
-                    } catch (_) {}
-                }
-            }
-            try {
-                if (currentPlaybackSpeed !== 1.0) {
-                    targetAudio.playbackRate = currentPlaybackSpeed;
-                }
-                targetAudio.preservesPitch = isPitchLockTempo;
-                targetAudio.mozPreservesPitch = isPitchLockTempo;
-                targetAudio.webkitPreservesPitch = isPitchLockTempo;
-            } catch (_) {}
-        });
-
-        targetAudio.addEventListener('seeked', () => {
-            if (targetAudio._isDisposed || targetAudio !== audio) return;
-            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && targetAudio.duration && isFinite(targetAudio.duration) && targetAudio.duration > 0) {
-                try {
-                    navigator.mediaSession.setPositionState({
-                        duration: Math.max(0, targetAudio.duration),
-                        playbackRate: targetAudio.playbackRate || 1.0,
-                        position: Math.max(0, Math.min(targetAudio.duration, targetAudio.currentTime || 0))
-                    });
-                } catch (_) {}
-            }
-        });
-    }
 
     function initDspNodes() {
         if (!audioContext) return;
@@ -7818,1577 +5435,2445 @@
         }, { passive: true });
     });
 
-    function startVisualizerLoop() {
-        const rawFreqArray = new Uint8Array(1024);
-        const bandRawVals = new Float32Array(NUM_BANDS);
-        const filteredBands = new Float32Array(NUM_BANDS);
-        let runningHeadroom = 0.85;
-        let beatPulse = 0;
-        let snarePulse = 0;
-        let treblePulse = 0;
-        let smoothMid = 0;
-        let lastBass = 0;
-        let lastMid = 0;
-        let lastTreble = 0;
-        let idleFramesAfterPause = 0;
-        let turntableCenterStylesSet = false;
-        let drMeterFrameCounter = 0;
-        let lastPeakText = '';
-        let lastDrText = '';
-        let lastHeadroomText = '';
 
-        let cachedSampleRate = 0;
-        let cachedBinCount = 0;
-        let precomputedBands = null;
+    // Attach top-level Audio Engine functions to window for cross-module accessibility
+    if (typeof window !== "undefined") {
+        try { window.checkHardwareGainStatus = checkHardwareGainStatus; } catch (_) {}
+        try { window.computeLimiterProfile = computeLimiterProfile; } catch (_) {}
+        try { window.createCrossfeedNetwork = createCrossfeedNetwork; } catch (_) {}
+        try { window.createLinearCurve = createLinearCurve; } catch (_) {}
+        try { window.createSoftClipCurve = createSoftClipCurve; } catch (_) {}
+        try { window.dispatchHardwareVolume = dispatchHardwareVolume; } catch (_) {}
+        try { window.drawPeqCurve = drawPeqCurve; } catch (_) {}
+        try { window.ensureAudioEngineForSampleRate = ensureAudioEngineForSampleRate; } catch (_) {}
+        try { window.getEffectiveAmplification = getEffectiveAmplification; } catch (_) {}
+        try { window.getOrCreateAudioSourceNode = getOrCreateAudioSourceNode; } catch (_) {}
+        try { window.getPreAmpGainValue = getPreAmpGainValue; } catch (_) {}
+        try { window.hwVolumeDebounceTimer = hwVolumeDebounceTimer; } catch (_) {}
+        try { window.importAutoEqProfile = importAutoEqProfile; } catch (_) {}
+        try { window.initAudioContext = initAudioContext; } catch (_) {}
+        try { window.initDspNodes = initDspNodes; } catch (_) {}
+        try { window.initPeqWorkstation = initPeqWorkstation; } catch (_) {}
+        try { window.loadDspWorklet = loadDspWorklet; } catch (_) {}
+        try { window.markHwGainUnavailable = markHwGainUnavailable; } catch (_) {}
+        try { window.resetMediaElementForNewAudioContext = resetMediaElementForNewAudioContext; } catch (_) {}
+        try { window.setDspBoost = setDspBoost; } catch (_) {}
+        try { window.setPeqBandGain = setPeqBandGain; } catch (_) {}
+        try { window.setPeqBandQ = setPeqBandQ; } catch (_) {}
+        try { window.setPeqPreset = setPeqPreset; } catch (_) {}
+        try { window.setVolume = setVolume; } catch (_) {}
+        try { window.setupDspControls = setupDspControls; } catch (_) {}
+        try { window.setupNeutronSettingsControls = setupNeutronSettingsControls; } catch (_) {}
+        try { window.toggleDspBoost = toggleDspBoost; } catch (_) {}
+        try { window.toggleReplayGain = toggleReplayGain; } catch (_) {}
+        try { window.updateAmpGain = updateAmpGain; } catch (_) {}
+        try { window.updateAudioRouting = updateAudioRouting; } catch (_) {}
+        try { window.updateDspButtonsUi = updateDspButtonsUi; } catch (_) {}
+        try { window.updateLimiterState = updateLimiterState; } catch (_) {}
+        try { window.updatePreAmpGain = updatePreAmpGain; } catch (_) {}
+        try { window.updateWorkletParams = updateWorkletParams; } catch (_) {}
+    }
 
-        function getPrecomputedBands(sampleRate, binCount) {
-            if (precomputedBands && cachedSampleRate === sampleRate && cachedBinCount === binCount) {
-                return precomputedBands;
+
+
+    // --- Sub-Module: player-core.js ---
+// CachyMusic - Core Audio Player, Software Decoder & Gapless Transport
+    function initMprisBridge() {
+        let lastReportedStatus = '';
+        let lastReportedTitle = '';
+        let lastReportedPos = -1;
+
+        function reportState(force = false) {
+            const track = allTracks[currentTrackIndex];
+            const isPlaying = !audio.paused && !audio.ended;
+            const status = isPlaying ? 'Playing' : (audio.currentTime > 0 ? 'Paused' : 'Stopped');
+            const pos = Math.floor(audio.currentTime || 0);
+            const title = track ? (track.title || track.filename || '') : '';
+
+            if (!force && status === lastReportedStatus && title === lastReportedTitle && Math.abs(pos - lastReportedPos) < 2) {
+                return;
             }
-            cachedSampleRate = sampleRate;
-            cachedBinCount = binCount;
-            const hzPerBin = sampleRate / (binCount * 2);
-            const minFreq = 20; // Human audiophile sub-bass threshold
-            // Full 24 kHz high-fidelity frequency range (utilizing complete 48 kHz+ Nyquist headroom):
-            const nyquist = sampleRate / 2;
-            const maxFreq = Math.min(24000, Math.max(22050, nyquist));
-            const logRatio = Math.log(maxFreq / minFreq);
-            precomputedBands = new Array(NUM_BANDS);
-            for (let b = 0; b < NUM_BANDS; b++) {
-                const f0 = minFreq * Math.exp((b / NUM_BANDS) * logRatio);
-                const f1 = minFreq * Math.exp(((b + 1) / NUM_BANDS) * logRatio);
-                const startBin = Math.max(1, Math.floor(f0 / hzPerBin));
-                const endBin = Math.max(startBin + 1, Math.min(binCount, Math.ceil(f1 / hzPerBin)));
-                const count = endBin - startBin;
-                const normB = b / (NUM_BANDS - 1);
-                // Equal-loudness Fletcher-Munson contour tilt compensation across 20Hz - 24kHz:
-                // Upper treble (16-24kHz) has lower acoustic energy in natural recordings,
-                // so an organic contour tilt highlights high-resolution air, sparkles, and cymbal harmonics!
-                const tilt = 0.94 + Math.pow(normB, 1.1) * 0.65;
-                precomputedBands[b] = { startBin, endBin, count, tilt };
-            }
-            return precomputedBands;
+
+            lastReportedStatus = status;
+            lastReportedTitle = title;
+            lastReportedPos = pos;
+
+            const payload = {
+                status,
+                position: audio.currentTime || 0,
+                duration: audio.duration || (track ? track.duration : 0) || 0,
+                title: track ? (track.title || track.filename || 'Unknown') : 'CachyMusic',
+                artist: track ? (track.artist || 'Unknown Artist') : 'CachyOS',
+                album: track ? (track.album || '') : '',
+                artUrl: track && track.cover ? (track.cover.startsWith('http') ? track.cover : window.location.origin + '/' + track.cover) : '',
+                volume: audio.volume,
+                shuffle: isShuffle,
+                repeat: repeatMode
+            };
+
+            fetch('php/api/mpris_state.php?action=update_state', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).catch(() => {});
         }
 
-        resumeVisualizerLoop = function() {
-            if (!isVisualizerLoopRunning) {
-                isVisualizerLoopRunning = true;
-                idleFramesAfterPause = 0;
-                lastRenderTime = performance.now();
-                animFrameId = requestAnimationFrame(renderFrame);
+        let isPollingCommands = false;
+        let consecutiveIdlePolls = 0;
+        async function pollCommands() {
+            if (isPollingCommands) {
+                setTimeout(pollCommands, 500);
+                return;
+            }
+            isPollingCommands = true;
+            let hadCommand = false;
+            try {
+                if (document.hidden) {
+                    consecutiveIdlePolls = 10;
+                    return;
+                }
+                const res = await fetch('php/api/mpris_state.php?action=get_command');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.command) {
+                        hadCommand = true;
+                        consecutiveIdlePolls = 0;
+                        const cmd = data.command;
+                        if (cmd === 'PlayPause') {
+                            if (audio.paused) playAudio(true);
+                            else pauseAudio();
+                        } else if (cmd === 'Play') {
+                            playAudio(true);
+                        } else if (cmd === 'Pause') {
+                            pauseAudio();
+                        } else if (cmd === 'Stop') {
+                            pauseAudio();
+                            audio.currentTime = 0;
+                        } else if (cmd === 'Next') {
+                            nextTrack();
+                        } else if (cmd === 'Previous') {
+                            prevTrack();
+                        } else if (cmd === 'Seek' && typeof data.offset === 'number') {
+                            audio.currentTime = Math.max(0, Math.min(audio.duration || 0, audio.currentTime + data.offset));
+                        } else if (cmd === 'SeekTo' && typeof data.position === 'number') {
+                            audio.currentTime = Math.max(0, Math.min(audio.duration || 0, data.position));
+                        } else if (cmd === 'SetVolume' && typeof data.volume === 'number') {
+                            setVolume(Math.max(0, Math.min(1.5, data.volume)), true);
+                        } else if (cmd === 'ToggleShuffle') {
+                            isShuffle = !isShuffle;
+                            if (shuffleBtn) {
+                                shuffleBtn.classList.toggle('active', isShuffle);
+                                shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
+                            }
+                        } else if (cmd === 'SetShuffle' && typeof data.shuffle === 'boolean') {
+                            isShuffle = data.shuffle;
+                            if (shuffleBtn) {
+                                shuffleBtn.classList.toggle('active', isShuffle);
+                                shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
+                            }
+                        } else if (cmd === 'SetLoopStatus' && typeof data.loopStatus === 'string') {
+                            const ls = data.loopStatus.toLowerCase();
+                            if (ls === 'track') repeatMode = 'one';
+                            else if (ls === 'playlist') repeatMode = 'all';
+                            else repeatMode = 'off';
+                            if (typeof updateRepeatUI === 'function') updateRepeatUI();
+                        }
+                        reportState(true);
+                    } else {
+                        consecutiveIdlePolls++;
+                    }
+                }
+            } catch (_) {
+                consecutiveIdlePolls += 2;
+            } finally {
+                isPollingCommands = false;
+                let nextDelay = 350;
+                if (document.hidden) {
+                    nextDelay = 2500;
+                } else if (consecutiveIdlePolls > 10) {
+                    nextDelay = 1200;
+                } else if (consecutiveIdlePolls > 3) {
+                    nextDelay = 700;
+                }
+                setTimeout(pollCommands, nextDelay);
+            }
+        }
+
+        audio.addEventListener('play', () => reportState(true));
+        audio.addEventListener('playing', () => reportState(true));
+        audio.addEventListener('pause', () => reportState(true));
+        audio.addEventListener('ended', () => reportState(true));
+        audio.addEventListener('timeupdate', () => reportState(false));
+
+        setTimeout(pollCommands, 500);
+    }
+
+
+    let currentPlayRequestId = 0;
+    let currentTrackGeneration = 0;
+    let activeLoadedMetadataHandler = null;
+
+    // Load Track by Index in allTracks
+    async function loadTrack(index, autoPlay = true, initialTime = 0) {
+        if (!allTracks[index]) return;
+        currentTrackIndex = index;
+        trackPlaybackRetryCount = 0;
+        stopSoftwarePlayback();
+        activeDecodedBuffer = null;
+        isSoftwareDecoding = false;
+        // Supersede any in-flight playAudio() call from an earlier track selection
+        currentPlayRequestId++;
+        isPlayPending = false;
+        if (playPendingTimeout) {
+            clearTimeout(playPendingTimeout);
+            playPendingTimeout = null;
+        }
+
+        if (isStandalonePlayback) {
+            isStandalonePlayback = false;
+            updateStandaloneBannerUi(false);
+        }
+        const track = allTracks[currentTrackIndex];
+
+        // Cache currently loaded track state in localStorage
+        if (track) {
+            try {
+                if (track.tid) safeStorage.setItem('cachymusic_last_track_tid', track.tid.toString());
+                if (track.fullPath) safeStorage.setItem('cachymusic_last_track_path', track.fullPath);
+                if (track.filename) safeStorage.setItem('cachymusic_last_track_filename', track.filename);
+                if (track.id) safeStorage.setItem('cachymusic_last_track_id', track.id.toString());
+                if (track.title) safeStorage.setItem('cachymusic_last_track_title', track.title);
+            } catch (_) {}
+        }
+
+        let trackSrc = track.src || '';
+        if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
+
+        const isKnownSoftware = alwaysSoftwareDecodeUrls.has(trackSrc) || (track.src && alwaysSoftwareDecodeUrls.has(track.src));
+
+        // Ensure studio-fidelity AudioContext clock rate matches track (44.1k, 48k, 88.2k, 96k, 176.4k, 192k)
+        const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
+        await ensureAudioEngineForSampleRate(targetRate);
+
+        if (currentTrackIndex !== index) return; // Guard against rapid skipping during context change
+
+        // Apply EBU R128 / ReplayGain Loudness Leveling with -0.3 dBFS True-Peak protection (safeguards MP3/M4A ISPs)
+        if (replayGainNode && audioContext) {
+            let targetGain = 1.0;
+            if (isReplayGain && typeof track.replayGain === 'number' && !isNaN(track.replayGain)) {
+                targetGain = Math.pow(10, track.replayGain / 20);
+                if (typeof track.replayPeak === 'number' && track.replayPeak > 0 && (targetGain * track.replayPeak) > 0.965) {
+                    targetGain = 0.965 / track.replayPeak; // -0.31 dBFS true-peak guard band
+                }
+            }
+            try {
+                replayGainNode.gain.setTargetAtTime(targetGain, audioContext.currentTime, 0.04);
+            } catch (_) {}
+        }
+
+        const isCrossOrigin = trackSrc.startsWith('http://') || trackSrc.startsWith('https://');
+        let needsCors = false;
+        if (isCrossOrigin) {
+            try {
+                needsCors = new URL(trackSrc, window.location.href).origin !== window.location.origin;
+            } catch (_) {}
+        }
+        if (needsCors) {
+            audio.crossOrigin = 'anonymous';
+        } else {
+            audio.removeAttribute('crossorigin');
+        }
+
+        currentTrackGeneration++;
+        audio._trackGeneration = currentTrackGeneration;
+        if (!isKnownSoftware) {
+            audio.src = trackSrc;
+            audio._isFreshTrackLoad = true;
+            try { audio.load(); } catch (_) {}
+        } else {
+            try {
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+            } catch (_) {}
+        }
+
+        // Enforce timeframe: selected tracks must ALWAYS start at the beginning (0:00),
+        // unless initialTime was explicitly provided (to restore last unfinished track on boot).
+        const targetTime = (typeof initialTime === 'number' && !isNaN(initialTime) && initialTime > 0) ? initialTime : 0;
+
+        if (targetTime > 0 && audio.readyState >= 1) {
+            try { audio.currentTime = targetTime; } catch (_) {}
+        }
+
+        if (targetTime === 0) {
+            try {
+                safeStorage.removeItem('cachymusic_last_track_time');
+            } catch (_) {}
+        }
+
+        const applyTargetTime = () => {
+            if (targetTime > 0 && audio.duration && !isNaN(audio.duration) && targetTime >= (audio.duration - 1)) {
+                // If saved time exceeded or reached duration, treat as ended and restart at 0:00
+                audio.currentTime = 0;
+                currentTimeEl.textContent = '0:00';
+                if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
+                progressBar.style.width = '0%';
+                if (miniProgressBar) miniProgressBar.style.width = '0%';
+                try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
+                return;
+            }
+
+            try {
+                audio.currentTime = targetTime;
+            } catch (_) {}
+
+            if (targetTime === 0) {
+                currentTimeEl.textContent = '0:00';
+                if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
+                progressBar.style.width = '0%';
+                if (miniProgressBar) miniProgressBar.style.width = '0%';
+            } else {
+                currentTimeEl.textContent = formatTime(targetTime);
+                if (miniCurrentTime) miniCurrentTime.textContent = formatTime(targetTime);
+                const dur = audio.duration || track.duration || 0;
+                if (dur > 0) {
+                    const pct = Math.min(100, Math.max(0, (targetTime / dur) * 100));
+                    progressBar.style.width = `${pct}%`;
+                    if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
+                }
             }
         };
 
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && typeof resumeVisualizerLoop === 'function') {
-                resumeVisualizerLoop();
+        if (activeLoadedMetadataHandler) {
+            try { audio.removeEventListener('loadedmetadata', activeLoadedMetadataHandler); } catch (_) {}
+        }
+        activeLoadedMetadataHandler = applyTargetTime;
+        if (!isKnownSoftware) {
+            audio.addEventListener('loadedmetadata', applyTargetTime, { once: true });
+        }
+
+        // Center Deck Text - Real Tags or Fallback to Filename / Unknown
+        updateEmptyPlayerState();
+        trackName.textContent = track.title ? track.title : (track.filename || 'Unknown');
+        artistName.textContent = track.artist ? track.artist : 'Unknown';
+        albumName.textContent = track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Album: Unknown';
+
+        // Dynamic Audio Specifications Badge
+        updateTrackBadgeUi(track);
+
+        // Cover Artwork & Badge
+        const coverSrc = track.cover || 'resources/images/default.svg';
+        const hasCustomCover = Boolean(track.cover && !track.cover.includes('default.svg'));
+        if (deckArtworkBackdrop) {
+            deckArtworkBackdrop.onerror = () => { deckArtworkBackdrop.onerror = null; deckArtworkBackdrop.src = 'resources/images/default.svg'; };
+            deckArtworkBackdrop.src = coverSrc;
+            deckArtworkBackdrop.style.opacity = hasCustomCover ? '0.28' : '0.04';
+        }
+        if (deckArtworkAmbient) {
+            deckArtworkAmbient.onerror = () => { deckArtworkAmbient.onerror = null; deckArtworkAmbient.src = 'resources/images/default.svg'; };
+            deckArtworkAmbient.src = coverSrc;
+            deckArtworkAmbient.style.opacity = hasCustomCover ? '0.35' : '0';
+        }
+        if (vinylArt) {
+            vinylArt.onerror = () => { vinylArt.onerror = null; vinylArt.src = 'resources/images/default.svg'; };
+            vinylArt.src = coverSrc;
+        }
+        if (coverArtPreview) {
+            coverArtPreview.onerror = () => { coverArtPreview.onerror = null; coverArtPreview.src = 'resources/images/default.svg'; };
+            coverArtPreview.src = coverSrc;
+        }
+        updateAmbientLighting(coverSrc);
+        appendDebugTelemetry(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
+
+        if (coverBadge) {
+            if (track.cover) {
+                coverBadge.textContent = 'COVER ART';
+                coverBadge.style.color = 'inherit';
+            } else {
+                coverBadge.textContent = 'MUSIC ICON';
+                coverBadge.style.color = '#888888';
+            }
+        }
+
+        // Right Panel Metadata Inspector - Exact Embedded Tags or Unknown / N/A
+        statTitle.textContent = track.title ? track.title : 'Unknown';
+        statArtist.textContent = track.artist ? track.artist : 'Unknown';
+        statAlbum.textContent = track.album ? track.album : 'Unknown';
+        statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(track.genre) : track.genre) || 'N/A';
+        statYear.textContent = track.year ? track.year.toString() : 'N/A';
+        if (statTrack) statTrack.textContent = track.track ? track.track.toString() : 'N/A';
+        statBitrate.textContent = track.bitrate ? `${track.bitrate} kbps` : 'N/A';
+        if (statSampleRate) statSampleRate.textContent = track.sampleRate ? `${track.sampleRate} Hz` : 'N/A';
+        if (statBitDepth) {
+            const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
+            statBitDepth.textContent = bd ? `${bd}-Bit` : 'N/A';
+            statBitDepth.style.color = 'inherit';
+        }
+        updateDacStatusUi();
+        if (statChannels) {
+            statChannels.textContent = track.channels === 2 ? 'Stereo' : (track.channels === 1 ? 'Mono' : (track.channels ? `${track.channels} ch` : 'N/A'));
+        }
+        statFormat.textContent = track.format ? track.format.toUpperCase() : 'N/A';
+        statSize.textContent = track.size ? track.size : 'N/A';
+        statPath.textContent = track.filename ? track.filename : 'N/A';
+        statPath.title = track.fullPath || track.filename || 'N/A';
+
+        // Highlight active track in the list and handle virtualized window scrolling
+        renderVirtualTrackWindow(true);
+        const displayedIdx = displayedTracks.findIndex(t => (
+            (track.id && t.id) ? t.id === track.id :
+            ((track.tid && t.tid) ? t.tid === track.tid : t.filename === track.filename)
+        ));
+        if (displayedIdx !== -1) {
+            const activeEl = trackList.querySelector(`.trackItem[data-index="${displayedIdx}"]`);
+            if (activeEl) {
+                activeEl.classList.add('active');
+                activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } else {
+                scrollToTrackIndex(displayedIdx, true);
+            }
+        }
+
+        if (targetTime > 0) {
+            currentTimeEl.textContent = formatTime(targetTime);
+            if (miniCurrentTime) miniCurrentTime.textContent = formatTime(targetTime);
+            const totalSec = track.duration || 0;
+            if (totalSec > 0) {
+                const pct = Math.min(100, Math.max(0, (targetTime / totalSec) * 100));
+                progressBar.style.width = `${pct}%`;
+                if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
+            }
+        } else {
+            progressBar.style.width = '0%';
+            if (miniProgressBar) miniProgressBar.style.width = '0%';
+            currentTimeEl.textContent = '0:00';
+            if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
+        }
+        totalDurationEl.textContent = formatTime(track.duration);
+        if (miniTotalDuration) miniTotalDuration.textContent = formatTime(track.duration);
+        updateMiniPlayerInfo(track);
+        updateLyricsDisplay(track);
+        if (targetTime > 0 && isLyricsView) {
+            updateActiveLyric(targetTime);
+        }
+
+        // Native MediaSession Metadata sync (informs OS & browser of currently loaded track)
+        if ('mediaSession' in navigator && window.MediaMetadata) {
+            try {
+                const resolvedCover = track.cover
+                    ? new URL(track.cover, window.location.href).href
+                    : new URL('resources/images/default.svg', window.location.href).href;
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.title || track.filename || 'Unknown Title',
+                    artist: track.artist || 'Unknown Artist',
+                    album: track.album || 'CachyMusic Workstation',
+                    artwork: [
+                        { src: resolvedCover, sizes: '512x512', type: track.cover ? 'image/png' : 'image/svg+xml' }
+                    ]
+                });
+            } catch (_) {}
+        }
+
+        if (isKnownSoftware) {
+            if (autoPlay) {
+                playWithSoftwareDecoder(track, initialTime);
+            } else {
+                isSoftwarePaused = true;
+                syncPlayPauseUI(false);
+            }
+            return;
+        }
+
+        if (autoPlay) {
+            playAudio();
+        } else {
+            pauseAudio();
+        }
+    }
+
+    // =========================================================================
+    // Standalone / External File Playback Engine (VLC-Style Isolated Playback)
+    // =========================================================================
+    function updateStandaloneBannerUi(visible, track = null) {
+        const banner = (typeof standaloneBanner !== 'undefined' && standaloneBanner) ? standaloneBanner : document.getElementById('standaloneBanner');
+        const titleEl = (typeof standaloneBannerTitle !== 'undefined' && standaloneBannerTitle) ? standaloneBannerTitle : document.getElementById('standaloneBannerTitle');
+        if (!banner) return;
+        if (visible && track) {
+            banner.style.display = 'flex';
+            if (titleEl) {
+                titleEl.textContent = track.title ? `${track.title}${track.artist ? ' - ' + track.artist : ''}` : (track.filename || 'Standalone Audio');
+                titleEl.title = track.filename || track.title || '';
+            }
+        } else {
+            banner.style.display = 'none';
+        }
+    }
+    window.updateStandaloneBannerUi = updateStandaloneBannerUi;
+
+    function exitStandalonePlayback(returnToLibrary = true) {
+        isStandalonePlayback = false;
+        updateStandaloneBannerUi(false);
+        if (returnToLibrary && allTracks && allTracks.length > 0) {
+            const targetIdx = (currentTrackIndex >= 0 && currentTrackIndex < allTracks.length) ? currentTrackIndex : 0;
+            loadTrack(targetIdx, isPlaying);
+        } else {
+            pauseAudio();
+            updateEmptyPlayerState();
+        }
+    }
+    window.exitStandalonePlayback = exitStandalonePlayback;
+
+    async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
+        let track = null;
+        if (typeof indexOrTrack === 'number') {
+            standaloneTrackIndex = Math.max(0, Math.min((standaloneTrackList.length || 1) - 1, indexOrTrack));
+            track = standaloneTrackList[standaloneTrackIndex];
+        } else if (indexOrTrack && typeof indexOrTrack === 'object') {
+            track = indexOrTrack;
+            standaloneTrackList = [track];
+            standaloneTrackIndex = 0;
+        }
+        if (!track) return;
+
+        isStandalonePlayback = true;
+        updateStandaloneBannerUi(true, track);
+
+        if (isSoftwareDecoding && softwareSourceNode) {
+            try { softwareSourceNode.stop(); } catch (_) {}
+            isSoftwareDecoding = false;
+        }
+        if (softwarePlaybackRaf) {
+            cancelAnimationFrame(softwarePlaybackRaf);
+            softwarePlaybackRaf = null;
+        }
+
+        let trackSrc = track.src || '';
+        if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
+
+        const isKnownSoftware = alwaysSoftwareDecodeUrls.has(trackSrc) || (track.src && alwaysSoftwareDecodeUrls.has(track.src));
+
+        const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
+        await ensureAudioEngineForSampleRate(targetRate);
+
+        if (replayGainNode && audioContext) {
+            let targetGain = 1.0;
+            if (isReplayGain && typeof track.replayGain === 'number' && !isNaN(track.replayGain)) {
+                targetGain = Math.pow(10, track.replayGain / 20);
+                if (typeof track.replayPeak === 'number' && track.replayPeak > 0 && (targetGain * track.replayPeak) > 0.965) {
+                    targetGain = 0.965 / track.replayPeak;
+                }
+            }
+            try {
+                replayGainNode.gain.setTargetAtTime(targetGain, audioContext.currentTime, 0.04);
+            } catch (_) {}
+        }
+
+        currentTrackGeneration++;
+        audio._trackGeneration = currentTrackGeneration;
+        if (!isKnownSoftware) {
+            audio.src = trackSrc;
+            audio._isFreshTrackLoad = true;
+            try { audio.load(); } catch (_) {}
+        } else {
+            try {
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+            } catch (_) {}
+        }
+
+        audio.currentTime = 0;
+        if (currentTimeEl) currentTimeEl.textContent = '0:00';
+        if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
+        if (progressBar) progressBar.style.width = '0%';
+        if (miniProgressBar) miniProgressBar.style.width = '0%';
+
+        updateEmptyPlayerState();
+        if (trackName) trackName.textContent = track.title ? track.title : (track.filename || 'Standalone Audio');
+        if (artistName) artistName.textContent = track.artist ? track.artist : 'External File';
+        if (albumName) albumName.textContent = track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Standalone File';
+
+        updateTrackBadgeUi(track);
+        const audioSrcBadge = document.getElementById('audioSourceBadge');
+        if (audioSrcBadge) audioSrcBadge.textContent = 'STANDALONE';
+
+        const coverSrc = track.cover || 'resources/images/default.svg';
+        const hasCustomCover = Boolean(track.cover && !track.cover.includes('default.svg'));
+        if (deckArtworkBackdrop) {
+            deckArtworkBackdrop.onerror = () => { deckArtworkBackdrop.onerror = null; deckArtworkBackdrop.src = 'resources/images/default.svg'; };
+            deckArtworkBackdrop.src = coverSrc;
+            deckArtworkBackdrop.style.opacity = hasCustomCover ? '0.28' : '0.04';
+        }
+        if (deckArtworkAmbient) {
+            deckArtworkAmbient.onerror = () => { deckArtworkAmbient.onerror = null; deckArtworkAmbient.src = 'resources/images/default.svg'; };
+            deckArtworkAmbient.src = coverSrc;
+            deckArtworkAmbient.style.opacity = hasCustomCover ? '0.35' : '0';
+        }
+        if (vinylArt) {
+            vinylArt.onerror = () => { vinylArt.onerror = null; vinylArt.src = 'resources/images/default.svg'; };
+            vinylArt.src = coverSrc;
+        }
+        if (coverArtPreview) {
+            coverArtPreview.onerror = () => { coverArtPreview.onerror = null; coverArtPreview.src = 'resources/images/default.svg'; };
+            coverArtPreview.src = coverSrc;
+        }
+        updateAmbientLighting(coverSrc);
+        appendDebugTelemetry(`[STANDALONE LOAD] "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
+
+        if (statTitle) statTitle.textContent = track.title ? track.title : (track.filename || 'Standalone Audio');
+        if (statArtist) statArtist.textContent = track.artist ? track.artist : 'External File';
+        if (statAlbum) statAlbum.textContent = track.album ? track.album : 'Standalone File';
+        if (statGenre) statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(track.genre) : track.genre) || 'N/A';
+        if (statYear) statYear.textContent = track.year ? track.year.toString() : 'N/A';
+        if (statTrack) statTrack.textContent = track.track ? track.track.toString() : 'N/A';
+        if (statBitrate) statBitrate.textContent = track.bitrate ? `${track.bitrate} kbps` : 'N/A';
+        if (statSampleRate) statSampleRate.textContent = track.sampleRate ? `${track.sampleRate} Hz` : 'N/A';
+        if (statBitDepth) {
+            const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
+            statBitDepth.textContent = bd ? `${bd}-Bit` : 'N/A';
+            statBitDepth.style.color = 'inherit';
+        }
+        updateDacStatusUi();
+        if (statChannels) {
+            statChannels.textContent = track.channels === 2 ? 'Stereo' : (track.channels === 1 ? 'Mono' : (track.channels ? `${track.channels} ch` : 'N/A'));
+        }
+        if (statFormat) statFormat.textContent = track.format ? track.format.toUpperCase() : 'N/A';
+        if (statSize) statSize.textContent = track.size ? track.size : 'N/A';
+        if (statPath) {
+            statPath.textContent = track.filename ? track.filename : 'Standalone File';
+            statPath.title = track.fullPath || track.filename || 'Standalone File';
+        }
+
+        const activeEls = document.querySelectorAll('.trackItem.active');
+        activeEls.forEach(el => el.classList.remove('active'));
+
+        if (totalDurationEl) totalDurationEl.textContent = formatTime(track.duration);
+        if (miniTotalDuration) miniTotalDuration.textContent = formatTime(track.duration);
+        updateMiniPlayerInfo(track);
+        updateSignalPathUi(track);
+        if (typeof updateLyricsDisplay === 'function') {
+            updateLyricsDisplay(track);
+        }
+
+        if ('mediaSession' in navigator && window.MediaMetadata) {
+            try {
+                const resolvedCover = track.cover
+                    ? new URL(track.cover, window.location.href).href
+                    : new URL('resources/images/default.svg', window.location.href).href;
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.title || track.filename || 'Standalone Audio',
+                    artist: track.artist || 'External File',
+                    album: track.album || 'CachyMusic Workstation',
+                    artwork: [
+                        { src: resolvedCover, sizes: '512x512', type: track.cover ? 'image/png' : 'image/svg+xml' }
+                    ]
+                });
+            } catch (_) {}
+        }
+
+        if (isKnownSoftware) {
+            if (autoPlay) {
+                playWithSoftwareDecoder(track, 0);
+            } else {
+                isSoftwarePaused = true;
+                syncPlayPauseUI(false);
+            }
+            return;
+        }
+
+        if (autoPlay) {
+            playAudio();
+        } else {
+            pauseAudio();
+        }
+    }
+    window.loadStandaloneTrack = loadStandaloneTrack;
+
+    // =========================================================================
+    // Lyrics Displayer & Turntable Toggle Logic
+    // =========================================================================
+
+
+    // Centralized Play/Pause UI Synchronizer
+    let lastSyncedPlayingState = null;
+    function syncPlayPauseUI(playing, force = false) {
+        playing = !!playing;
+        if (!force && lastSyncedPlayingState === playing) return;
+        lastSyncedPlayingState = playing;
+        isPlaying = playing;
+
+        // Sync native MediaSession playbackState (stops OS & Chromium from falsely unpausing)
+        if ('mediaSession' in navigator) {
+            try {
+                navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+                if ('setPositionState' in navigator.mediaSession) {
+                    const dur = isSoftwareDecoding ? (activeDecodedBuffer ? activeDecodedBuffer.duration : 0) : audio.duration;
+                    const pos = isSoftwareDecoding ? (softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0)) : (audio.currentTime || 0);
+                    if (dur && !isNaN(dur) && isFinite(dur) && dur > 0) {
+                        navigator.mediaSession.setPositionState({
+                            duration: Math.max(0, dur),
+                            playbackRate: 1.0,
+                            position: Math.max(0, Math.min(dur, pos || 0))
+                        });
+                    }
+                }
+            } catch (_) {}
+        }
+
+        // Center Player Deck Controls — icon toggled via CSS .playing class (instant, no image load)
+        if (playPauseBtn) {
+            playPauseBtn.setAttribute('title', playing ? 'Pause (Space)' : 'Play (Space)');
+            playPauseBtn.classList.toggle('playing', playing);
+        }
+
+        // Vinyl Turntable, Tonearm, Background Disc Animation
+        const isThematicActive = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple');
+        if (vinylTurntable) {
+            vinylTurntable.classList.toggle('thematicFidelity', isThematicActive);
+            vinylTurntable.classList.toggle('spinning', playing);
+        }
+        if (toneArm) toneArm.classList.toggle('active', playing);
+        if (bgDisc) bgDisc.classList.toggle('fast', playing && isThematicActive);
+
+        // Persistent Mini-Player Sync
+        updateMiniPlayerPlayState(playing);
+
+        // Synchronize Global Playback State Class on Body for Reactive CSS Hardware Animations
+        document.body.classList.toggle('is-playing', playing);
+
+        // Synchronize Header Studio Status Indicator
+        const studioStatusEl = document.getElementById('studioUserStatus');
+        if (studioStatusEl) {
+            const textEl = studioStatusEl.querySelector('.statusText');
+            if (textEl) {
+                textEl.textContent = playing ? 'PLAYING' : 'READY';
+            }
+        }
+
+        if (playing && typeof resumeVisualizerLoop === 'function') {
+            resumeVisualizerLoop();
+        }
+    }
+
+    // Render Repeat Button UI (with bold centered "1" for Repeat Current Track)
+    function updateRepeatUI() {
+        if (!repeatBtn) return;
+        safeStorage.setItem('cachymusic_repeat_mode', repeatMode);
+
+        if (repeatMode === 'one') {
+            repeatBtn.classList.add('active', 'repeat-one');
+            repeatBtn.setAttribute('title', 'Repeat Current Track (1) Active — Click to Turn Off');
+            repeatBtn.style.opacity = '1';
+            repeatBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                    <text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="900" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" fill="currentColor">1</text>
+                </svg>
+            `;
+        } else if (repeatMode === 'all') {
+            repeatBtn.classList.add('active');
+            repeatBtn.classList.remove('repeat-one');
+            repeatBtn.setAttribute('title', 'Repeat All Tracks Active — Click for Repeat One');
+            repeatBtn.style.opacity = '1';
+            repeatBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                </svg>
+            `;
+        } else { // 'off'
+            repeatBtn.classList.remove('active', 'repeat-one');
+            repeatBtn.setAttribute('title', 'Repeat Off — Click for Repeat All');
+            repeatBtn.style.opacity = '0.45';
+            repeatBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                </svg>
+            `;
+        }
+    }
+
+    let isPlayPending = false;
+    let playPendingTimeout = null;
+    // Explicit pause lock: when user pauses or starts app, locks out background unpausing
+    let userExplicitlyPaused = true;
+    let trackPlaybackRetryCount = 0;
+    let consecutiveSkipCount = 0;
+    window.audioPlaybackDebugLogs = [];
+
+    let debugModeActive = false;
+    try {
+        debugModeActive = safeStorage.getItem('cachymusic_debug_mode') === 'true';
+    } catch (_) {}
+
+
+    // Play Audio (guarded against concurrent async race conditions and AbortError)
+    async function playAudio(userInitiated = false) {
+        if (isSoftwareDecoding) {
+            userExplicitlyPaused = false;
+            syncPlayPauseUI(true);
+            resumeSoftwarePlayback();
+            return;
+        }
+
+        const currentTrack = (isStandalonePlayback && standaloneTrackList.length > 0)
+            ? standaloneTrackList[standaloneTrackIndex]
+            : allTracks[currentTrackIndex];
+        const currentSrc = currentTrack ? (currentTrack.src || '') : '';
+        const cleanSrc = currentSrc.startsWith('../') ? currentSrc.substring(3) : currentSrc;
+        const isKnownSoftware = currentTrack && (alwaysSoftwareDecodeUrls.has(cleanSrc) || (currentTrack.src && alwaysSoftwareDecodeUrls.has(currentTrack.src)));
+
+        if (isKnownSoftware && !isSoftwareDecoding) {
+            userExplicitlyPaused = false;
+            syncPlayPauseUI(true);
+            playWithSoftwareDecoder(currentTrack, 0);
+            return;
+        }
+
+        if (!audio.src || audio.src === window.location.href) {
+            // No track loaded — snap UI back to paused state and do nothing
+            syncPlayPauseUI(false);
+            return;
+        }
+        if (isPlayPending) {
+            console.log('playAudio already pending, skipping concurrent call.');
+            return;
+        }
+
+        const reqId = ++currentPlayRequestId;
+
+        // User explicitly unpaused
+        userExplicitlyPaused = false;
+
+        // Lock immediately — before any await — so rapid clicks can't bypass the guard
+        isPlayPending = true;
+        if (playPendingTimeout) clearTimeout(playPendingTimeout);
+        playPendingTimeout = setTimeout(() => {
+            if (isPlayPending && reqId === currentPlayRequestId) {
+                console.warn('isPlayPending safety timeout triggered, unlocking.');
+                isPlayPending = false;
+            }
+        }, 4000);
+
+        // Optimistically update UI so the user immediately sees the pause icon
+        syncPlayPauseUI(true);
+
+        try {
+            const track = allTracks[currentTrackIndex];
+            const targetRate = (track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100;
+            if (!audioContext || audioContext.state === 'closed') {
+                await ensureAudioEngineForSampleRate(targetRate);
+            } else if (!audioSourceNode) {
+                getOrCreateAudioSourceNode();
+                updateAudioRouting();
+            }
+            if (reqId !== currentPlayRequestId) return;
+            if (audioContext && audioContext.state !== 'running') {
+                try {
+                    await Promise.race([
+                        audioContext.resume(),
+                        new Promise(resolve => setTimeout(resolve, 300))
+                    ]);
+                } catch (_) {}
+            }
+            if (reqId !== currentPlayRequestId) return;
+            if (audio.muted) {
+                audio.muted = false;
+            }
+            if (audio.volume === 0 && currentVolumeValue > 0) {
+                audio.volume = isHardwareGain ? 1.0 : Math.min(1.0, currentVolumeValue);
+            }
+
+            // If audio has an error state (e.g. from a past network timeout or worker stall), reload it
+            // Only perform reload if it was NOT just loaded as a fresh track in loadTrack()
+            if (audio.error && !audio._isFreshTrackLoad) {
+                console.warn('Audio element has error state; recovering before play:', audio.error);
+                const isDecodeErr = (audio.error.code === 3);
+                const resumeTime = isDecodeErr ? 0 : (audio.currentTime || 0);
+                const currentSrc = audio.src;
+                audio.src = currentSrc;
+                audio.load();
+                if (resumeTime > 0) {
+                    try { audio.currentTime = resumeTime; } catch (_) {}
+                }
+            }
+            audio._isFreshTrackLoad = false;
+
+            await audio.play();
+            if (reqId !== currentPlayRequestId) return;
+            // Reflect actual audio state — user may have paused during the async gap
+            syncPlayPauseUI(!audio.paused);
+        } catch (err) {
+            if (reqId !== currentPlayRequestId) return;
+            // Ignore AbortError if interrupted by a rapid pause click or track skip
+            if (err.name !== 'AbortError') {
+                console.warn('Audio playback error:', err);
+            }
+            if (audio.paused) {
+                syncPlayPauseUI(false);
+            }
+        } finally {
+            if (reqId === currentPlayRequestId) {
+                if (playPendingTimeout) {
+                    clearTimeout(playPendingTimeout);
+                    playPendingTimeout = null;
+                }
+                isPlayPending = false;
+            }
+        }
+    }
+
+    // Pause Audio
+    function pauseAudio() {
+        userExplicitlyPaused = true;
+        if (isSoftwareDecoding) {
+            pauseSoftwarePlayback();
+            syncPlayPauseUI(false);
+            return;
+        }
+        try {
+            audio.pause();
+        } catch (err) {
+            console.warn('Audio pause error:', err);
+        }
+        syncPlayPauseUI(false);
+    }
+
+    // Toggle Play/Pause (uses native audio.paused as ground truth)
+    function togglePlayPause() {
+        if (isSoftwareDecoding) {
+            if (!isSoftwarePaused) {
+                userExplicitlyPaused = true;
+                pauseAudio();
+            } else {
+                userExplicitlyPaused = false;
+                playAudio(true);
+            }
+            return;
+        }
+        // Nothing loaded yet — if library has tracks, start playback on current/first track
+        if (!audio.src || audio.src === window.location.href) {
+            if (allTracks && allTracks.length > 0) {
+                const targetIdx = (currentTrackIndex >= 0 && allTracks[currentTrackIndex]) ? currentTrackIndex : 0;
+                loadTrack(targetIdx, true);
+                return;
+            }
+            syncPlayPauseUI(false);
+            return;
+        }
+        // Always allow pause even if a play is still pending (e.g. buffering)
+        if (!audio.paused) {
+            userExplicitlyPaused = true;
+            pauseAudio();
+        } else if (!isPlayPending) {
+            userExplicitlyPaused = false;
+            playAudio(true);
+        }
+    }
+
+    // =========================================================================
+    // True Gapless Playback Engine (Dual-Buffer Pre-caching & 0ms Handoff)
+    // =========================================================================
+    function peekNextTrackIndex() {
+        if (playQueue && playQueue.length > 0) {
+            const queued = playQueue[0];
+            const qIdx = allTracks.findIndex(t => (queued.id && t.id === queued.id) || (queued.tid && t.tid === queued.tid) || t.filename === queued.filename);
+            if (qIdx !== -1) return qIdx;
+        }
+
+        const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
+        if (pool.length === 0) return -1;
+
+        let currentIdxInPool = pool.findIndex(t => {
+            const cur = allTracks[currentTrackIndex];
+            if (!cur) return false;
+            if (cur.id && t.id) return t.id === cur.id;
+            if (cur.tid && t.tid) return t.tid === cur.tid;
+            return t.filename === cur.filename;
+        });
+
+        if (currentIdxInPool === -1) return -1;
+        if (isShuffle && pool.length > 1) return -1;
+
+        let nextIdx = currentIdxInPool + 1;
+        if (nextIdx >= pool.length) {
+            if (repeatMode === 'off') return -1;
+            nextIdx = 0;
+        }
+
+        const target = pool[nextIdx];
+        return allTracks.findIndex(t => target && ((t.id && t.id === target.id) || (t.tid && t.tid === target.tid) || t.filename === target.filename));
+    }
+
+    function checkAndPreloadNextTrack(currentTime, duration) {
+        if (window.AndroidBridge || /Android/i.test(navigator.userAgent) || window.innerWidth <= 768) {
+            return;
+        }
+        if (!duration || isNaN(duration) || duration < 8) return;
+        if (duration - currentTime <= 5.0) {
+            const nextMasterIdx = peekNextTrackIndex();
+            if (nextMasterIdx !== -1 && nextMasterIdx !== preloadedNextTrackIndex && allTracks[nextMasterIdx]) {
+                preloadedNextTrackIndex = nextMasterIdx;
+                const nextTrack = allTracks[nextMasterIdx];
+                let nextSrc = nextTrack.src || '';
+                if (nextSrc.startsWith('../')) nextSrc = nextSrc.substring(3);
+
+                if (!secondaryAudio) {
+                    secondaryAudio = document.createElement('audio');
+                    secondaryAudio.preload = 'auto';
+                    secondaryAudio.crossOrigin = 'anonymous';
+                }
+                secondaryAudio.src = nextSrc;
+                try {
+                    secondaryAudio.load();
+                } catch (_) {}
+            }
+        }
+    }
+
+    function executeGaplessHandoff(nextIndex) {
+        // In Android WebView / mobile APK, bypass secondary audio swapping to ensure the canonical DOM-attached audio element is always used
+        if (window.AndroidBridge || /Android/i.test(navigator.userAgent) || window.innerWidth <= 768) {
+            return false;
+        }
+        if (!secondaryAudio || preloadedNextTrackIndex !== nextIndex || secondaryAudio.readyState < 2) {
+            return false;
+        }
+        try {
+            const oldAudio = audio;
+            secondaryAudio.volume = oldAudio.volume;
+            secondaryAudio.muted = oldAudio.muted;
+            try {
+                secondaryAudio.playbackRate = currentPlaybackSpeed || oldAudio.playbackRate || 1.0;
+                secondaryAudio.preservesPitch = isPitchLockTempo;
+                secondaryAudio.mozPreservesPitch = isPitchLockTempo;
+                secondaryAudio.webkitPreservesPitch = isPitchLockTempo;
+            } catch (_) {}
+
+            // Swap active audio reference BEFORE pausing/clearing oldAudio so oldAudio events are ignored
+            audio = secondaryAudio;
+            secondaryAudio = oldAudio;
+            currentTrackIndex = nextIndex;
+            preloadedNextTrackIndex = -1;
+            trackPlaybackRetryCount = 0;
+
+            oldAudio.pause();
+            oldAudio.removeAttribute('src');
+
+            if (audioSourceNode) {
+                try { audioSourceNode.disconnect(); } catch (_) {}
+                audioSourceNode = null;
+            }
+
+            attachAudioListeners(audio);
+            getOrCreateAudioSourceNode();
+            updateAudioRouting();
+
+            // ReplayGain leveling for the new track
+            const nextTrack = allTracks[currentTrackIndex];
+            if (nextTrack && replayGainNode && audioContext) {
+                let targetGain = 1.0;
+                if (isReplayGain && typeof nextTrack.replayGain === 'number' && !isNaN(nextTrack.replayGain)) {
+                    targetGain = Math.pow(10, nextTrack.replayGain / 20);
+                    if (typeof nextTrack.replayPeak === 'number' && nextTrack.replayPeak > 0 && (targetGain * nextTrack.replayPeak) > 0.965) {
+                        targetGain = 0.965 / nextTrack.replayPeak; // -0.31 dBFS true-peak safety ceiling
+                    }
+                }
+                try {
+                    replayGainNode.gain.setTargetAtTime(targetGain, audioContext.currentTime, 0.04);
+                } catch (_) {}
+            }
+
+            userExplicitlyPaused = false;
+            audio.play().then(() => {
+                syncPlayPauseUI(true);
+                if (typeof resumeVisualizerLoop === 'function') resumeVisualizerLoop();
+            }).catch(console.warn);
+
+            if (nextTrack) {
+                if (trackName) trackName.textContent = nextTrack.title ? nextTrack.title : (nextTrack.filename || 'Unknown');
+                if (artistName) artistName.textContent = nextTrack.artist ? nextTrack.artist : 'Unknown';
+                if (albumName) albumName.textContent = nextTrack.album ? `Album: ${nextTrack.album}${nextTrack.year ? ' (' + nextTrack.year + ')' : ''}` : 'Album: Unknown';
+                updateTrackBadgeUi(nextTrack);
+                const coverSrc = nextTrack.cover || 'resources/images/default.svg';
+                if (deckArtworkBackdrop) deckArtworkBackdrop.src = coverSrc;
+                if (deckArtworkAmbient) deckArtworkAmbient.src = coverSrc;
+                if (vinylArt) vinylArt.src = coverSrc;
+                if (coverArtPreview) coverArtPreview.src = coverSrc;
+                updateAmbientLighting(coverSrc);
+                if (statTitle) statTitle.textContent = nextTrack.title || 'Unknown';
+                if (statArtist) statArtist.textContent = nextTrack.artist || 'Unknown';
+                if (statAlbum) statAlbum.textContent = nextTrack.album || 'Unknown';
+                if (statGenre) statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(nextTrack.genre) : nextTrack.genre) || 'N/A';
+                if (statYear) statYear.textContent = nextTrack.year ? nextTrack.year.toString() : 'N/A';
+                if (statTrack) statTrack.textContent = nextTrack.track ? nextTrack.track.toString() : 'N/A';
+                if (statBitrate) statBitrate.textContent = nextTrack.bitrate ? `${nextTrack.bitrate} kbps` : 'N/A';
+                if (statSampleRate) statSampleRate.textContent = nextTrack.sampleRate ? `${nextTrack.sampleRate} Hz` : 'N/A';
+                if (statFormat) statFormat.textContent = nextTrack.format ? nextTrack.format.toUpperCase() : 'N/A';
+                if (statSize) statSize.textContent = nextTrack.size || 'N/A';
+                if (statPath) {
+                    statPath.textContent = nextTrack.filename || 'N/A';
+                    statPath.title = nextTrack.fullPath || nextTrack.filename || 'N/A';
+                }
+                updateDacStatusUi();
+                updateSignalPathUi(nextTrack);
+                updateLyricsDisplay(nextTrack);
+                updateMiniPlayerInfo(nextTrack);
+                renderVirtualTrackWindow(true);
+            }
+            return true;
+        } catch (e) {
+            console.warn('Gapless handoff fallback:', e);
+            return false;
+        }
+    }
+
+    // Next Track (Sample-Accurate Gapless Aware)
+    function nextTrack() {
+        if (isStandalonePlayback && standaloneTrackList && standaloneTrackList.length > 0) {
+            if (repeatMode === 'one') {
+                audio.currentTime = 0;
+                playAudio();
+                return;
+            }
+            if (standaloneTrackList.length > 1) {
+                if (standaloneTrackIndex + 1 < standaloneTrackList.length || repeatMode === 'all') {
+                    standaloneTrackIndex = (standaloneTrackIndex + 1) % standaloneTrackList.length;
+                    loadStandaloneTrack(standaloneTrackIndex, true);
+                } else {
+                    pauseAudio();
+                    audio.currentTime = 0;
+                }
+            } else {
+                if (repeatMode === 'all') {
+                    audio.currentTime = 0;
+                    playAudio();
+                } else {
+                    pauseAudio();
+                    audio.currentTime = 0;
+                }
+            }
+            return;
+        }
+
+        if (playQueue && playQueue.length > 0) {
+            const nextQueuedTrack = playQueue.shift();
+            updateQueueUi();
+            const masterIdx = allTracks.findIndex(t =>
+                (nextQueuedTrack.id && t.id === nextQueuedTrack.id) ||
+                (nextQueuedTrack.tid && t.tid === nextQueuedTrack.tid) ||
+                t.filename === nextQueuedTrack.filename
+            );
+            if (masterIdx !== -1) {
+                if (!executeGaplessHandoff(masterIdx)) {
+                    loadTrack(masterIdx, true);
+                }
+                return;
+            }
+        }
+
+        const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
+        if (pool.length === 0) return;
+
+        let currentIdxInPool = pool.findIndex(t => {
+            const cur = allTracks[currentTrackIndex];
+            if (!cur) return false;
+            if (cur.id && t.id) return t.id === cur.id;
+            if (cur.tid && t.tid) return t.tid === cur.tid;
+            return t.filename === cur.filename;
+        });
+
+        if (isShuffle && pool.length > 1) {
+            let nextIdx = Math.floor(Math.random() * pool.length);
+            let attempts = 0;
+            while (nextIdx === currentIdxInPool && attempts < 10) {
+                nextIdx = Math.floor(Math.random() * pool.length);
+                attempts++;
+            }
+            const masterIdx = allTracks.findIndex(t => pool[nextIdx] && ((t.id && t.id === pool[nextIdx].id) || (t.tid && t.tid === pool[nextIdx].tid) || t.filename === pool[nextIdx].filename));
+            if (masterIdx !== -1) {
+                if (!executeGaplessHandoff(masterIdx)) {
+                    loadTrack(masterIdx, true);
+                }
+            }
+        } else {
+            let nextIdx = currentIdxInPool + 1;
+            if (nextIdx >= pool.length) {
+                if (repeatMode === 'off') {
+                    pauseAudio();
+                    audio.currentTime = 0;
+                    progressBar.style.width = '0%';
+                    currentTimeEl.textContent = '0:00';
+                    return;
+                }
+                nextIdx = 0;
+            }
+            const masterIdx = allTracks.findIndex(t => pool[nextIdx] && ((t.id && t.id === pool[nextIdx].id) || (t.tid && t.tid === pool[nextIdx].tid) || t.filename === pool[nextIdx].filename));
+            if (masterIdx !== -1) {
+                if (!executeGaplessHandoff(masterIdx)) {
+                    loadTrack(masterIdx, true);
+                }
+            }
+        }
+    }
+
+    // Previous Track
+    function prevTrack() {
+        if (isStandalonePlayback && standaloneTrackList && standaloneTrackList.length > 0) {
+            if (audio.currentTime > 3) {
+                audio.currentTime = 0;
+            } else if (standaloneTrackList.length > 1) {
+                standaloneTrackIndex = (standaloneTrackIndex - 1 + standaloneTrackList.length) % standaloneTrackList.length;
+                loadStandaloneTrack(standaloneTrackIndex, true);
+            } else {
+                audio.currentTime = 0;
+            }
+            return;
+        }
+
+        if (audio.currentTime > 3) {
+            audio.currentTime = 0;
+            return;
+        }
+
+        const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
+        if (pool.length === 0) return;
+
+        let currentIdxInPool = pool.findIndex(t => {
+            const cur = allTracks[currentTrackIndex];
+            if (!cur) return false;
+            if (cur.id && t.id) return t.id === cur.id;
+            if (cur.tid && t.tid) return t.tid === cur.tid;
+            return t.filename === cur.filename;
+        });
+        let prevIdx = currentIdxInPool - 1;
+        if (prevIdx < 0) {
+            prevIdx = pool.length - 1;
+        }
+        const masterIdx = allTracks.findIndex(t => pool[prevIdx] && ((t.id && t.id === pool[prevIdx].id) || (t.tid && t.tid === pool[prevIdx].tid) || t.filename === pool[prevIdx].filename));
+        if (masterIdx !== -1) loadTrack(masterIdx, true);
+    }
+
+    // =========================================================================
+
+    // Universal Web Audio Software Decoder Engine (Zero-Skip Hybrid Pipeline)
+    // =========================================================================
+    function updatePlaybackProgress(cur, dur) {
+        if (isDraggingScrubber) return;
+        const currentTrack = (isStandalonePlayback && standaloneTrackList.length > 0)
+            ? standaloneTrackList[standaloneTrackIndex]
+            : allTracks[currentTrackIndex];
+        if (!isFinite(dur) || isNaN(dur) || dur <= 0) {
+            if (currentTrack && currentTrack.duration && isFinite(currentTrack.duration)) {
+                dur = Number(currentTrack.duration);
+            }
+        }
+        if (currentTimeEl) currentTimeEl.textContent = formatTime(cur);
+        if (miniCurrentTime) miniCurrentTime.textContent = formatTime(cur);
+
+        if (dur && isFinite(dur) && dur > 0) {
+            const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
+            if (progressBar) progressBar.style.width = `${pct}%`;
+            if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
+        }
+
+        if (cur > 1.0 && consecutiveSkipCount > 0) {
+            consecutiveSkipCount = 0;
+        }
+
+        if (isLyricsView) {
+            updateActiveLyric(cur);
+        }
+    }
+
+    function startSoftwareProgressLoop() {
+        cancelSoftwareProgressLoop();
+        function tick() {
+            if (!isSoftwareDecoding || isSoftwarePaused || !activeDecodedBuffer) return;
+            const cur = softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
+            const dur = activeDecodedBuffer.duration;
+            updatePlaybackProgress(cur, dur);
+            if (cur >= dur) {
+                onSoftwarePlaybackEnded();
+                return;
+            }
+            softwarePlaybackRaf = requestAnimationFrame(tick);
+        }
+        softwarePlaybackRaf = requestAnimationFrame(tick);
+    }
+
+    function cancelSoftwareProgressLoop() {
+        if (softwarePlaybackRaf) {
+            cancelAnimationFrame(softwarePlaybackRaf);
+            softwarePlaybackRaf = null;
+        }
+    }
+
+    function startSoftwareBufferPlayback() {
+        if (!audioContext || !activeDecodedBuffer) return;
+        if (softwareSourceNode) {
+            try {
+                softwareSourceNode.onended = null;
+                softwareSourceNode.stop();
+                softwareSourceNode.disconnect();
+            } catch (_) {}
+            softwareSourceNode = null;
+        }
+
+        softwareSourceNode = audioContext.createBufferSource();
+        softwareSourceNode.buffer = activeDecodedBuffer;
+
+        if (!softwareSourceGainNode) {
+            softwareSourceGainNode = audioContext.createGain();
+        }
+        softwareSourceNode.connect(softwareSourceGainNode);
+        updateAudioRouting();
+
+        softwarePlaybackStartTime = audioContext.currentTime;
+        softwareSourceNode.start(0, softwarePlaybackOffset);
+        isSoftwarePaused = false;
+        syncPlayPauseUI(true);
+        startSoftwareProgressLoop();
+
+        softwareSourceNode.onended = () => {
+            if (!isSoftwareDecoding || isSoftwarePaused) return;
+            const cur = softwarePlaybackOffset + (audioContext ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
+            if (cur >= (activeDecodedBuffer.duration - 0.5)) {
+                onSoftwarePlaybackEnded();
+            }
+        };
+    }
+
+    function pauseSoftwarePlayback() {
+        if (!isSoftwareDecoding || isSoftwarePaused) return;
+        cancelSoftwareProgressLoop();
+        if (audioContext && softwarePlaybackStartTime > 0) {
+            softwarePlaybackOffset += (audioContext.currentTime - softwarePlaybackStartTime);
+        }
+        if (softwareSourceNode) {
+            try {
+                softwareSourceNode.onended = null;
+                softwareSourceNode.stop();
+                softwareSourceNode.disconnect();
+            } catch (_) {}
+            softwareSourceNode = null;
+        }
+        isSoftwarePaused = true;
+        syncPlayPauseUI(false);
+    }
+
+    function resumeSoftwarePlayback() {
+        if (!isSoftwareDecoding || !activeDecodedBuffer) return;
+        if (audioContext && audioContext.state !== 'running') {
+            try { audioContext.resume(); } catch (_) {}
+        }
+        startSoftwareBufferPlayback();
+    }
+
+    function seekSoftwarePlayback(targetSec) {
+        if (!isSoftwareDecoding || !activeDecodedBuffer) return;
+        const dur = activeDecodedBuffer.duration;
+        softwarePlaybackOffset = Math.max(0, Math.min(dur, targetSec));
+        if (!isSoftwarePaused) {
+            startSoftwareBufferPlayback();
+        } else {
+            updatePlaybackProgress(softwarePlaybackOffset, dur);
+        }
+    }
+
+    function stopSoftwarePlayback() {
+        cancelSoftwareProgressLoop();
+        if (softwareSourceNode) {
+            try {
+                softwareSourceNode.onended = null;
+                softwareSourceNode.stop();
+                softwareSourceNode.disconnect();
+            } catch (_) {}
+            softwareSourceNode = null;
+        }
+        isSoftwareDecoding = false;
+        isSoftwarePaused = false;
+        softwarePlaybackStartTime = 0;
+        softwarePlaybackOffset = 0;
+    }
+
+    function onSoftwarePlaybackEnded() {
+        stopSoftwarePlayback();
+        try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
+        if (repeatMode === 'one') {
+            loadTrack(currentTrackIndex, true, 0);
+        } else {
+            nextTrack();
+        }
+    }
+
+    async function playWithSoftwareDecoder(track, startTime = 0) {
+        if (!track) return;
+        isSoftwareDecoding = true;
+        isSoftwarePaused = false;
+        userExplicitlyPaused = false;
+        syncPlayPauseUI(true);
+
+        try {
+            if (audio) {
+                try {
+                    audio.pause();
+                    audio.removeAttribute('src');
+                    audio.load();
+                } catch (_) {}
+            }
+
+            const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
+            await ensureAudioEngineForSampleRate(targetRate);
+            if (audioContext && audioContext.state !== 'running') {
+                try { await audioContext.resume(); } catch (_) {}
+            }
+
+            let src = track.src || '';
+            if (src.startsWith('../')) src = src.substring(3);
+
+            logAudioPlaybackEvent('info', `Fetching stream bitstream for 32-bit software decode: "${track.title || track.filename}"`);
+            if (typeof showCachyToast === 'function') {
+                showCachyToast('Software Audio Engine', `Decoding 24-bit/audiophile stream: "${track.title || track.filename}"`, 'info');
+            }
+
+            const res = await fetch(src);
+            if (!res.ok) throw new Error(`HTTP ${res.status} fetch failure`);
+            const arrayBuf = await res.arrayBuffer();
+
+            logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
+            const decodedBuffer = await new Promise((resolve, reject) => {
+                const p = audioContext.decodeAudioData(
+                    arrayBuf,
+                    buf => resolve(buf),
+                    err => reject(err || new Error('decodeAudioData callback returned error'))
+                );
+                if (p && typeof p.then === 'function') {
+                    p.then(resolve, reject);
+                }
+            });
+            activeDecodedBuffer = decodedBuffer;
+
+            track.duration = decodedBuffer.duration;
+            if (totalDurationEl) totalDurationEl.textContent = formatTime(decodedBuffer.duration);
+            if (miniTotalDuration) miniTotalDuration.textContent = formatTime(decodedBuffer.duration);
+
+            softwarePlaybackOffset = Math.max(0, Math.min(decodedBuffer.duration, startTime));
+            startSoftwareBufferPlayback();
+            consecutiveSkipCount = 0;
+            logAudioPlaybackEvent('info', `Web Audio Software Engine playing "${track.title || track.filename}" at ${decodedBuffer.sampleRate}Hz, ${decodedBuffer.numberOfChannels}ch, ${decodedBuffer.duration.toFixed(1)}s.`);
+        } catch (err) {
+            console.error('[AudioEngine] Software decoder fallback failed:', err);
+            logAudioPlaybackEvent('error', `Web Audio software decode failure: ${err.message}`);
+            isSoftwareDecoding = false;
+            if (typeof showCachyToast === 'function') {
+                showCachyToast('Playback Error', `File corrupted or unreadable. Skipping track...`, 'error');
+            }
+            setTimeout(() => nextTrack(), 1000);
+        }
+    }
+
+    function attachAudioListeners(targetAudio) {
+        if (!targetAudio || targetAudio._hasCachyListeners) return;
+        targetAudio._hasCachyListeners = true;
+        let isAudioBuffering = false;
+
+        targetAudio.addEventListener('play', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            // Background Tab Protection:
+            // If user explicitly paused CachyMusic and the tab is hidden in the background,
+            // immediately halt any rogue/accidental unpause triggered by external media keys,
+            // OS MPRIS signals, or YouTube media session transitions.
+            if (userExplicitlyPaused && document.hidden) {
+                targetAudio.pause();
+                syncPlayPauseUI(false);
+                return;
+            }
+            isAudioBuffering = false;
+            syncPlayPauseUI(true);
+        });
+        targetAudio.addEventListener('playing', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            if (userExplicitlyPaused && document.hidden) {
+                targetAudio.pause();
+                syncPlayPauseUI(false);
+                return;
+            }
+            isAudioBuffering = false;
+            syncPlayPauseUI(true);
+        });
+        targetAudio.addEventListener('pause', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            // If pause was fired by the browser decoder while buffering and user did not request pause,
+            // preserve user's playback state and avoid erratic UI flapping
+            if (isAudioBuffering && !userExplicitlyPaused) {
+                return;
+            }
+            syncPlayPauseUI(false);
+            try {
+                const cur = targetAudio.currentTime;
+                const dur = targetAudio.duration;
+                if (cur > 0 && (!dur || isNaN(dur) || cur < (dur - 1))) {
+                    safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
+                }
+            } catch (_) {}
+        });
+        targetAudio.addEventListener('emptied', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            syncPlayPauseUI(false);
+        });
+        targetAudio.addEventListener('waiting', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            // Native audio decoder is buffering stream chunk
+            if (!userExplicitlyPaused) {
+                isAudioBuffering = true;
+            }
+        });
+        targetAudio.addEventListener('stalled', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            console.warn('Audio stream buffer stalled, awaiting more chunk data');
+            if (!userExplicitlyPaused) {
+                isAudioBuffering = true;
+            }
+        });
+        targetAudio.addEventListener('error', () => {
+            // Discard errors from disposed audio elements, intentional src clears, or while software decoding is active
+            if (targetAudio._isDisposed || targetAudio !== audio || isSoftwareDecoding) return;
+            if (!targetAudio.src || targetAudio.src === window.location.href || !targetAudio.getAttribute('src')) {
+                return;
+            }
+            const err = targetAudio.error;
+            if (!err) return;
+            console.error('Audio element error:', err);
+            isAudioBuffering = false;
+            syncPlayPauseUI(false);
+            isPlayPending = false;
+
+            if (playPendingTimeout) {
+                clearTimeout(playPendingTimeout);
+                playPendingTimeout = null;
+            }
+
+            const currentTrack = (isStandalonePlayback && standaloneTrackList.length > 0)
+            ? standaloneTrackList[standaloneTrackIndex]
+            : allTracks[currentTrackIndex];
+            const trackTitle = currentTrack ? (currentTrack.title || currentTrack.filename || 'Current track') : 'Audio track';
+            const errorCode = err ? err.code : 0;
+
+            // Fatal error codes:
+            // 3 = MEDIA_ERR_DECODE (corrupted audio frame or decoding bitstream failure)
+            // 4 = MEDIA_ERR_SRC_NOT_SUPPORTED (unsupported codec, 404, or unreadable source)
+            const isFatalDecodeError = (errorCode === 3 || errorCode === 4);
+
+            // If native browser decoder fails (code 3 or 4) on a local stream, attempt 1 automatic FFmpeg transcode fallback
+            const currentAttrSrc = targetAudio.getAttribute('src') || targetAudio.src || '';
+            if (isFatalDecodeError && trackPlaybackRetryCount === 0 && currentAttrSrc.includes('php/api/stream.php') && !currentAttrSrc.includes('transcode=1')) {
+                trackPlaybackRetryCount++;
+                const transcodeSrc = currentAttrSrc + (currentAttrSrc.includes('?') ? '&' : '?') + 'transcode=1';
+                console.info(`[AudioEngine] Native decode error (${errorCode}) on "${trackTitle}"; attempting FFmpeg transcode fallback...`);
+                userExplicitlyPaused = false;
+                targetAudio.src = transcodeSrc;
+                try { targetAudio.load(); } catch (_) {}
+                playAudio();
+                return;
+            }
+
+            // Universal Web Audio Software Decoder Fallback (for 24-bit FLAC, ALAC, AIFF & unsupported Android/browser codecs)
+            if (isFatalDecodeError && currentTrack && !isSoftwareDecoding) {
+                alwaysSoftwareDecodeUrls.add(currentAttrSrc);
+                alwaysSoftwareDecodeUrls.add(targetAudio.src);
+                try {
+                    targetAudio.pause();
+                    targetAudio.removeAttribute('src');
+                    targetAudio.load();
+                } catch (_) {}
+                console.info(`[AudioEngine] HTML5 <audio> decode failure (${errorCode}) on "${trackTitle}". Switching to Web Audio Software Decoder...`);
+                logAudioPlaybackEvent('info', `Native decoder unsuited for "${trackTitle}" (code ${errorCode}). Playing via 32-bit Web Audio Software Engine.`);
+                playWithSoftwareDecoder(currentTrack, targetAudio.currentTime || 0);
+                return;
+            }
+
+            if (isFatalDecodeError || trackPlaybackRetryCount >= 1) {
+                userExplicitlyPaused = true;
+                consecutiveSkipCount++;
+                const errorDesc = errorCode === 3
+                    ? 'Corrupted audio stream or decoder failure'
+                    : (errorCode === 4 ? 'Format or file source not supported' : 'Playback stream timed out');
+
+                logAudioPlaybackEvent('error', `Track "${trackTitle}" decode failure (code ${errorCode}): ${errorDesc}`, {
+                    src: targetAudio.src,
+                    track: currentTrack
+                });
+                console.warn(`[AudioEngine] Permanent playback error on "${trackTitle}": ${errorDesc}. Halting retry loop.`);
+
+                if (consecutiveSkipCount >= 3) {
+                    pauseAudio();
+                    logAudioPlaybackEvent('warn', 'Consecutive skip limit reached (3 tracks failed). Halting auto-skip.');
+                    if (typeof showCachyToast === 'function') {
+                        showCachyToast('Playback Halted', 'Multiple tracks failed to decode. Check Audio Diagnostics in Settings.', 'error');
+                    }
+                    return;
+                }
+
+                if (typeof showCachyToast === 'function') {
+                    showCachyToast('Playback Error', `"${trackTitle}": ${errorDesc}. Skipping track...`, 'warning');
+                }
+
+                // Reset dirty media element so subsequent tracks start with a completely fresh decoder pipeline
+                resetMediaElementForNewAudioContext();
+
+                // If in playlist or more tracks available, gracefully skip to next track without rapid flapping
+                setTimeout(() => {
+                    const pool = displayedTracks.length > 0 ? displayedTracks : allTracks;
+                    let currentIdxInPool = pool.findIndex(t => {
+                        const cur = allTracks[currentTrackIndex];
+                        if (!cur) return false;
+                        if (cur.id && t.id) return t.id === cur.id;
+                        if (cur.tid && t.tid) return t.tid === cur.tid;
+                        return t.filename === cur.filename;
+                    });
+                    if (currentIdxInPool === pool.length - 1 && repeatMode === 'off') {
+                        // End of playlist and repeat is off: cleanly stop
+                        pauseAudio();
+                        targetAudio.currentTime = 0;
+                        if (progressBar) progressBar.style.width = '0%';
+                        if (currentTimeEl) currentTimeEl.textContent = '0:00';
+                        try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
+                    } else {
+                        nextTrack();
+                    }
+                }, 1200);
+                return;
+            }
+
+            // For transient network hiccups (code 2), attempt at most 1 automatic retry
+            if (errorCode === 2 && targetAudio.src && !userExplicitlyPaused && trackPlaybackRetryCount === 0) {
+                trackPlaybackRetryCount++;
+                const savedTime = targetAudio.currentTime || 0;
+                const currentSrc = targetAudio.src;
+                console.log(`[AudioEngine] Transient network error; attempting single recovery for "${trackTitle}" at ${savedTime}s...`);
+
+                setTimeout(() => {
+                    if (!userExplicitlyPaused) {
+                        targetAudio.src = currentSrc;
+                        targetAudio.load();
+                        if (savedTime > 0) {
+                            try { targetAudio.currentTime = savedTime; } catch (_) {}
+                        }
+                        targetAudio.play().catch(playErr => {
+                            console.warn('[AudioEngine] Recovery retry failed:', playErr);
+                            syncPlayPauseUI(false);
+                            userExplicitlyPaused = true;
+                            if (typeof showCachyToast === 'function') {
+                                showCachyToast('Network Error', `Could not recover stream for "${trackTitle}".`, 'error');
+                            }
+                        });
+                    }
+                }, 1500);
             }
         });
 
-        function renderFrame(now) {
-            if (currentWorkspace !== 'player') {
-                isVisualizerLoopRunning = false;
-                return;
+        let lastPersistedTime = 0;
+        targetAudio.addEventListener('timeupdate', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            if (isSoftwareDecoding) return;
+            if (isDraggingScrubber) return;
+            const cur = targetAudio.currentTime;
+            let dur = targetAudio.duration;
+            const currentTrack = (isStandalonePlayback && standaloneTrackList.length > 0)
+            ? standaloneTrackList[standaloneTrackIndex]
+            : allTracks[currentTrackIndex];
+            if (!isFinite(dur) || isNaN(dur) || dur <= 0) {
+                if (currentTrack && currentTrack.duration && isFinite(currentTrack.duration)) {
+                    dur = Number(currentTrack.duration);
+                }
+            }
+            updatePlaybackProgress(cur, dur);
+
+            // Periodically persist playback timeframe (throttled to 1.0s deltas)
+            // so closing or refreshing the program remembers the unfinished timeframe
+            if (cur > 0 && Math.abs(cur - lastPersistedTime) >= 1.0) {
+                lastPersistedTime = cur;
+                if (!dur || isNaN(dur) || cur < (dur - 1)) {
+                    try {
+                        safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
+                    } catch (_) {}
+                }
             }
 
-            if (document.hidden) {
-                isVisualizerLoopRunning = false;
+            // Dual-Buffer Gapless Playback Engine:
+            // When current track hits 5 seconds before completion, asynchronously pre-load
+            // and decode the header and initial bitstream of the next track into the secondary buffer
+            checkAndPreloadNextTrack(cur, dur);
+        });
+
+        targetAudio.addEventListener('ended', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            if (typeof targetAudio._trackGeneration === 'number' && targetAudio._trackGeneration !== currentTrackGeneration) {
+                console.log('[AudioEngine] Stale ended event discarded for superseded track generation');
                 return;
             }
+            try {
+                safeStorage.removeItem('cachymusic_last_track_time');
+            } catch (_) {}
 
-            if (!isPlaying) {
-                idleFramesAfterPause++;
-                const isAlreadySilent = (smoothBass < 0.002 && smoothMid < 0.002 && smoothTreble < 0.002 && beatPulse < 0.002);
-                if ((isAlreadySilent && idleFramesAfterPause > 2) || idleFramesAfterPause > 45) {
-                    isVisualizerLoopRunning = false;
+            const curTime = targetAudio.currentTime || 0;
+            const currentTrack = (isStandalonePlayback && standaloneTrackList.length > 0)
+            ? standaloneTrackList[standaloneTrackIndex]
+            : allTracks[currentTrackIndex];
+            const trackDur = targetAudio.duration || (currentTrack ? (currentTrack.duration || 0) : 0);
+            const trackTitle = currentTrack ? (currentTrack.title || currentTrack.filename || 'Current track') : 'Audio track';
+
+            // Premature Ended Guard:
+            // If the track ends within 3.0 seconds (or with >5s remaining on an established track),
+            // this is an unexpected stream disconnect/hiccup or buffer underflow, NOT a finished song.
+            if ((trackDur > 5 && curTime < 3.0) || curTime === 0) {
+                console.warn(`[AudioEngine] Premature stream end detected at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}".`);
+                logAudioPlaybackEvent('warn', `Premature stream termination at ${curTime.toFixed(2)}s on "${trackTitle}"`);
+                appendDebugTelemetry(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
+                if (trackPlaybackRetryCount < 2) {
+                    trackPlaybackRetryCount++;
+                    setTimeout(() => {
+                        if (!userExplicitlyPaused) {
+                            try { targetAudio.load(); } catch (_) {}
+                            playAudio();
+                        }
+                    }, 400);
+                    return;
+                } else {
+                    pauseAudio();
+                    showToast(`Playback paused on "${trackTitle}". Stream buffer interrupted.`);
                     return;
                 }
             } else {
-                idleFramesAfterPause = 0;
+                appendDebugTelemetry(`[EVENT] Track finished naturally at ${curTime.toFixed(1)}s`);
             }
 
-            const elapsed = now - lastRenderTime;
-            if (elapsed < 7) {
-                animFrameId = requestAnimationFrame(renderFrame);
+            if (sleepTimerMode === 'end') {
+                pauseAudio();
+                cancelSleepTimer(false);
+                showToast('🌙 Sleep timer: End of track reached. Playback paused.');
                 return;
             }
-            const dt = Math.min(elapsed / 1000, 0.1);
-            lastRenderTime = now;
 
-            const isMobileViewport = window.innerWidth <= 768;
-            if (isMobileViewport) {
-                const isDeckActive = Boolean(playerDeckEl && playerDeckEl.classList.contains('mobileActive') && !isLyricsView);
-                const isInfoActive = Boolean(settingsPanelEl && settingsPanelEl.classList.contains('mobileActive'));
-                const isSignalOpen = Boolean(signalPathModal && signalPathModal.style.display === 'flex');
-                if (!isDeckActive && !isInfoActive && !isSignalOpen) {
-                    isVisualizerLoopRunning = false;
-                    return;
+            if (repeatMode === 'one') {
+                targetAudio.currentTime = 0;
+                playAudio();
+            } else {
+                nextTrack();
+            }
+        });
+
+        targetAudio.addEventListener('loadedmetadata', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            if (targetAudio.duration && !isNaN(targetAudio.duration)) {
+                totalDurationEl.textContent = formatTime(targetAudio.duration);
+                if (miniTotalDuration) miniTotalDuration.textContent = formatTime(targetAudio.duration);
+                if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && isFinite(targetAudio.duration) && targetAudio.duration > 0) {
+                    try {
+                        navigator.mediaSession.setPositionState({
+                            duration: Math.max(0, targetAudio.duration),
+                            playbackRate: targetAudio.playbackRate || 1.0,
+                            position: Math.max(0, Math.min(targetAudio.duration, targetAudio.currentTime || 0))
+                        });
+                    } catch (_) {}
                 }
             }
+            try {
+                if (currentPlaybackSpeed !== 1.0) {
+                    targetAudio.playbackRate = currentPlaybackSpeed;
+                }
+                targetAudio.preservesPitch = isPitchLockTempo;
+                targetAudio.mozPreservesPitch = isPitchLockTempo;
+                targetAudio.webkitPreservesPitch = isPitchLockTempo;
+            } catch (_) {}
+        });
 
-            let width = isMobileViewport ? 0 : cachedDockW;
-            let height = isMobileViewport ? 0 : cachedDockH;
-            if (!isMobileViewport && (width === 0 || height === 0) && visualizerDock) {
-                width = Math.round(visualizerDock.clientWidth || visualizerDock.getBoundingClientRect().width);
-                height = Math.round(visualizerDock.clientHeight || visualizerDock.getBoundingClientRect().height);
-                cachedDockW = width;
-                cachedDockH = height;
-            }
-
-            const hasDockCanvas = (width > 0 && height > 0 && ctx);
-            if (hasDockCanvas) {
-                const dpr = syncCanvasResolution(width, height);
-                ctx.save();
-                ctx.scale(dpr, dpr);
-                ctx.clearRect(0, 0, width, height);
-            }
-
-            // 1. Acquire Frequency & Time-domain data
-            let hasRealData = false;
-            if (analyser && isPlaying) {
+        targetAudio.addEventListener('seeked', () => {
+            if (targetAudio._isDisposed || targetAudio !== audio) return;
+            if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && targetAudio.duration && isFinite(targetAudio.duration) && targetAudio.duration > 0) {
                 try {
-                    analyser.getByteFrequencyData(rawFreqArray);
-                    for (let i = 0; i < 40; i++) {
-                        if (rawFreqArray[i] > 0) { hasRealData = true; break; }
-                    }
-                } catch(_) {}
+                    navigator.mediaSession.setPositionState({
+                        duration: Math.max(0, targetAudio.duration),
+                        playbackRate: targetAudio.playbackRate || 1.0,
+                        position: Math.max(0, Math.min(targetAudio.duration, targetAudio.currentTime || 0))
+                    });
+                } catch (_) {}
             }
-
-            // 2. Compute 60 Perceptual Logarithmic Frequency Bands with Adaptive Dynamic Headroom
-            if (hasRealData) {
-                const sampleRate = (audioContext && audioContext.sampleRate) || 48000;
-                const binCount = analyser.frequencyBinCount || 1024;
-                const bandsConfig = getPrecomputedBands(sampleRate, binCount);
-
-                // Pass 1: Extract raw band acoustic energy with balanced mean + peak blend
-                let frameMaxRaw = 0;
-                for (let b = 0; b < NUM_BANDS; b++) {
-                    const cfg = bandsConfig[b];
-                    let sum = 0;
-                    let peak = 0;
-                    for (let k = cfg.startBin; k < cfg.endBin; k++) {
-                        const v = rawFreqArray[k] || 0;
-                        sum += v;
-                        if (v > peak) peak = v;
-                    }
-                    const meanNorm = (sum / cfg.count) / 255;
-                    const peakNorm = peak / 255;
-                    // 55% mean provides solid musical body; 45% peak captures harmonic transient definition
-                    const rawNorm = meanNorm * 0.55 + peakNorm * 0.45;
-
-                    // Balanced perceptual tilt compensation
-                    let rawScaled = rawNorm * cfg.tilt;
-
-                    if (rawScaled < 0.03) {
-                        rawScaled = Math.max(0, rawScaled * 0.35);
-                    }
-                    bandRawVals[b] = rawScaled;
-                    if (rawScaled > frameMaxRaw) frameMaxRaw = rawScaled;
-                }
-
-                // Pass 1.5: Dynamic Range (DR) & Peak Headroom Live Metering (Throttled & Visibility-Guarded)
-                drMeterFrameCounter++;
-                if (drMeterFrameCounter >= 60) {
-                    drMeterFrameCounter = 0;
-
-                    const isSettingsVisible = window.innerWidth > 768 || (settingsPanelEl && settingsPanelEl.classList.contains('mobileActive'));
-                    const isSignalModalVisible = signalPathModal && signalPathModal.style.display === 'flex';
-
-                    if (isSettingsVisible || isSignalModalVisible) {
-                        const peakAmp = Math.max(0.001, Math.min(1.0, frameMaxRaw));
-                        const peakDb = 20 * Math.log10(peakAmp);
-
-                        if (isSettingsVisible) {
-                            let sumSq = 0;
-                            for (let b = 0; b < NUM_BANDS; b++) {
-                                const v = bandRawVals[b] || 0;
-                                sumSq += v * v;
-                            }
-                            const rms = Math.sqrt(sumSq / NUM_BANDS);
-                            const rmsDb = rms > 0.0001 ? 20 * Math.log10(rms) : -60;
-                            const drScore = Math.max(4, Math.min(20, Math.round(Math.abs(peakDb - rmsDb) * 1.25)));
-
-                            if (statPeakLevel) {
-                                const txt = `${peakDb.toFixed(1)} dBFS`;
-                                if (txt !== lastPeakText) {
-                                    statPeakLevel.textContent = txt;
-                                    lastPeakText = txt;
-                                }
-                            }
-                            if (statDynamicRange) {
-                                let grade = 'Hi-Fi';
-                                if (drScore >= 14) grade = 'Audiophile';
-                                else if (drScore >= 11) grade = 'Pristine';
-                                else if (drScore >= 8) grade = 'Standard';
-                                else grade = 'Compressed';
-                                const txt = `DR${drScore} (${grade})`;
-                                if (txt !== lastDrText) {
-                                    statDynamicRange.textContent = txt;
-                                    lastDrText = txt;
-                                }
-                            }
-                        }
-
-                        if (isSignalModalVisible && auditMetricHeadroom) {
-                            const headroomDb = Math.max(0, -peakDb);
-                            let maxBoost = (!isPeqBypassed && Array.isArray(peqGains)) ? Math.max(0, ...peqGains) : 0;
-                            if (isBassBoost) maxBoost = Math.max(maxBoost, 3.8);
-                            if (isTrebleBoost) maxBoost = Math.max(maxBoost, 3.0);
-                            if (isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
-                            const guardStr = maxBoost > 0 ? `-${(maxBoost * 0.7).toFixed(1)} dB Pre-Amp` : 'Live Peak';
-                            const txt = `+${headroomDb.toFixed(1)} dB (${guardStr})`;
-                            if (txt !== lastHeadroomText) {
-                                auditMetricHeadroom.textContent = txt;
-                                lastHeadroomText = txt;
-                            }
-                        }
-                    }
-                }
-
-                // Dynamic Automatic Headroom Tracking (AGC for Visualizer)
-                // Adapts to track mastering and loudness so the visualizer is never easily filled,
-                // regardless of how loud the song is or how high the volume is set!
-                if (frameMaxRaw > runningHeadroom) {
-                    runningHeadroom += (frameMaxRaw - runningHeadroom) * Math.min(1.0, 3.8 * dt);
-                } else {
-                    runningHeadroom += (frameMaxRaw - runningHeadroom) * (1.0 - Math.exp(-0.30 * dt));
-                }
-                runningHeadroom = Math.max(0.48, Math.min(1.35, runningHeadroom));
-
-                // Pass 2: Contrast Shaping & Asymptotic Headroom Clamping
-                for (let b = 0; b < NUM_BANDS; b++) {
-                    const normalized = Math.min(1.0, Math.max(0, bandRawVals[b] / runningHeadroom));
-                    // Dynamic contrast expansion:
-                    // Lowers resting background wave to ~25%-38% height, leaving abundant breathing room.
-                    // Punchy transients and spikes shoot up to ~72%-80% with crisp mountain crests.
-                    const contrast = Math.pow(normalized, 1.58);
-
-                    // Soft saturation curve: guarantees smooth organic crests without ceiling clipping
-                    let target;
-                    if (contrast > 0.78) {
-                        target = 0.78 + Math.tanh((contrast - 0.78) * 1.5) * 0.16;
-                    } else {
-                        target = contrast;
-                    }
-                    target = Math.min(0.92, Math.max(0, target));
-
-                    // Adaptive ballistic attack and liquid exponential decay:
-                    const diff = target - smoothBands[b];
-                    if (diff > 0) {
-                        const attackRate = 36 + Math.min(26, diff * 50);
-                        const attackCoeff = 1.0 - Math.exp(-attackRate * dt);
-                        smoothBands[b] += diff * attackCoeff;
-                    } else {
-                        const decayRate = 12.0; // Responsive decay prevents sluggish "wall of sound"
-                        const decayCoeff = 1.0 - Math.exp(-decayRate * dt);
-                        smoothBands[b] += diff * decayCoeff;
-                    }
-                }
-            } else {
-                // Procedural ambient simulation (smooth breathing waves when idle or fallback)
-                simPhase += isPlaying ? dt * 3.2 : dt * 0.7;
-                for (let b = 0; b < NUM_BANDS; b++) {
-                    let target = 0;
-                    if (isPlaying) {
-                        const normB = b / (NUM_BANDS - 1);
-                        const wave1 = Math.sin(simPhase * 1.8 + b * 0.14) * 0.28;
-                        const wave2 = Math.cos(simPhase * 2.6 + b * 0.22) * 0.18;
-                        const bassImpulse = (b < 12) ? Math.max(0, Math.sin(simPhase * 3.0)) * 0.42 * (1.0 - b / 12) : 0;
-                        const midImpulse = (b >= 16 && b <= 34) ? Math.max(0, Math.sin(simPhase * 2.2 + 1.2)) * 0.32 : 0;
-                        const highImpulse = (b > 38) ? Math.max(0, Math.sin(simPhase * 4.0 + 2.0)) * 0.24 * normB : 0;
-                        target = Math.min(0.92, Math.max(0.04, 0.14 + wave1 + wave2 + bassImpulse + midImpulse + highImpulse));
-                    } else {
-                        target = 0;
-                    }
-
-                    const diff = target - smoothBands[b];
-                    if (diff > 0) {
-                        const simAttack = 1.0 - Math.exp(-28 * dt);
-                        smoothBands[b] += diff * simAttack;
-                    } else {
-                        const simDecay = 1.0 - Math.exp(-8.5 * dt);
-                        smoothBands[b] += diff * simDecay;
-                    }
-                }
-            }
-
-            // Peak-preserving spatial smoothing filter across neighboring bands:
-            // Retains peak height of true spikes while smoothing slopes and valleys into fluid curves
-            for (let b = 0; b < NUM_BANDS; b++) {
-                const prev = smoothBands[Math.max(0, b - 1)];
-                const curr = smoothBands[b];
-                const next = smoothBands[Math.min(NUM_BANDS - 1, b + 1)];
-                if (curr > prev && curr > next) {
-                    filteredBands[b] = prev * 0.09 + curr * 0.82 + next * 0.09;
-                } else {
-                    filteredBands[b] = prev * 0.18 + curr * 0.64 + next * 0.18;
-                }
-            }
-
-            // Energy domains with continuous time-delta smoothing
-            const currentBass = (smoothBands[0] + smoothBands[1] + smoothBands[2] + smoothBands[3] + smoothBands[4] + smoothBands[5]) / 6;
-            smoothBass += (currentBass - smoothBass) * (1.0 - Math.exp(-18 * dt));
-
-            const currentMid = (smoothBands[12] + smoothBands[16] + smoothBands[20] + smoothBands[24] + smoothBands[28]) / 5;
-            smoothMid += (currentMid - smoothMid) * (1.0 - Math.exp(-14 * dt));
-
-            const currentTreble = (smoothBands[42] + smoothBands[46] + smoothBands[50] + smoothBands[54] + smoothBands[58]) / 5;
-            smoothTreble += (currentTreble - smoothTreble) * (1.0 - Math.exp(-14 * dt));
-
-            // Triple transient detectors:
-            // 1. Bass Transient (Drum Kicks & 808 Drops)
-            const bassDelta = currentBass - lastBass;
-            lastBass = currentBass;
-            if (bassDelta > 0.038 && currentBass > 0.16) {
-                beatPulse = Math.min(1.0, beatPulse + bassDelta * 5.2);
-            } else {
-                beatPulse = Math.max(0, beatPulse - dt * 3.6);
-            }
-
-            // 2. Snare / Mid Transient (Snares, Claps, Vocal/Guitar Stabs)
-            const midDelta = currentMid - lastMid;
-            lastMid = currentMid;
-            if (midDelta > 0.038 && currentMid > 0.15) {
-                snarePulse = Math.min(1.0, snarePulse + midDelta * 5.0);
-            } else {
-                snarePulse = Math.max(0, snarePulse - dt * 4.2);
-            }
-
-            // 3. Treble Transient (Hi-hats, Cymbals, Percussion, Vocal sibilance)
-            const trebleDelta = currentTreble - lastTreble;
-            lastTreble = currentTreble;
-            if (trebleDelta > 0.035 && currentTreble > 0.12) {
-                treblePulse = Math.min(1.0, treblePulse + trebleDelta * 4.8);
-            } else {
-                treblePulse = Math.max(0, treblePulse - dt * 4.8);
-            }
-
-            // 4. Render Visualizer Mode with high musical expressiveness (when bottom dock is visible)
-            if (hasDockCanvas) {
-                switch (activeVisualizerMode) {
-                    case 'dash':
-                        drawVerticalDash(ctx, width, height, smoothBands, isPlaying, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
-                        break;
-                    case 'thematic':
-                    case 'badapple':
-                        drawThematicWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
-                        break;
-                    case 'wave':
-                    default:
-                        drawSolidWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
-                        break;
-                }
-                ctx.restore();
-            }
-
-            // 5. Turntable Center Visualizer (Theme-specific Entity or Touhou Heart)
-            // Visualizer fidelity smoothly transitions so activating Thematic Core blossoms into full-feature design!
-            const currentTheme = getActiveTheme();
-            const targetFidelity = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple') ? 1.0 : 0.0;
-            smoothTurntableFidelity += (targetFidelity - smoothTurntableFidelity) * (1.0 - Math.exp(-6.0 * dt));
-            if (Math.abs(targetFidelity - smoothTurntableFidelity) < 0.001) {
-                smoothTurntableFidelity = targetFidelity;
-            }
-            const fidelity = smoothTurntableFidelity;
-
-            const isTurntableVisible = !isLyricsView &&
-                (window.innerWidth > 768 || (playerDeckEl && playerDeckEl.classList.contains('mobileActive')));
-
-            if (isTurntableVisible && turntableCenterCanvas && turntableCenterCtx) {
-                if (!turntableCenterStylesSet) {
-                    if (turntableCenterVis && turntableCenterVis.style.display !== 'flex') {
-                        turntableCenterVis.style.display = 'flex';
-                    }
-                    if (vinylLabel && vinylLabel.style.opacity !== '0') {
-                        vinylLabel.style.opacity = '0';
-                    }
-                    turntableCenterStylesSet = true;
-                }
-                const centerDims = syncTurntableCenterCanvas();
-                if (centerDims) {
-                    turntableCenterCtx.save();
-                    turntableCenterCtx.scale(centerDims.dpr, centerDims.dpr);
-                    turntableCenterCtx.clearRect(0, 0, centerDims.width, centerDims.height);
-
-                    // Physical circular clipping boundary to prevent edge blur/shockwaves from clipping squarely
-                    turntableCenterCtx.save();
-                    turntableCenterCtx.beginPath();
-                    turntableCenterCtx.arc(centerDims.width / 2, centerDims.height / 2, Math.min(centerDims.width, centerDims.height) * 0.495, 0, Math.PI * 2);
-                    turntableCenterCtx.clip();
-
-                    switch (currentTheme) {
-                        case 'nms':
-                            drawTurntableCenterAtlasCore(turntableCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        case 'solar-eclipse':
-                            drawTurntableCenterSolarEclipse(turntableCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        case 'euclid-horizon':
-                            drawTurntableCenterEuclidPortal(turntableCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        case 'alien-paradise':
-                            drawTurntableCenterAlienParadise(turntableCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        case 'abyssal-void':
-                            drawTurntableCenterAbyssalVoid(turntableCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        case 'dissonance':
-                            drawTurntableCenterDissonance(turntableCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity, filteredBands);
-                            break;
-                        case 'sentinel':
-                            drawTurntableCenterSentinel(turntableCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity, filteredBands);
-                            break;
-                        case 'minimalist-light':
-                        case 'brutalist-light':
-                            drawTurntableCenterBrutalist(turntableCenterCtx, centerDims.width, centerDims.height, 'light', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        case 'minimalist-dark':
-                        case 'brutalist-dark':
-                            drawTurntableCenterBrutalist(turntableCenterCtx, centerDims.width, centerDims.height, 'dark', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        case 'minimalist-warm':
-                            drawTurntableCenterBrutalist(turntableCenterCtx, centerDims.width, centerDims.height, 'warm', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        case 'minimalist-obsidian':
-                            drawTurntableCenterBrutalist(turntableCenterCtx, centerDims.width, centerDims.height, 'obsidian', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                        default:
-                            drawTurntableCenterHeart(turntableCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            break;
-                    }
-                    turntableCenterCtx.restore();
-                    turntableCenterCtx.restore();
-                }
-            }
-
-            if (isVisualizerLoopRunning) {
-                animFrameId = requestAnimationFrame(renderFrame);
-            }
-        }
-
-        isVisualizerLoopRunning = true;
-        animFrameId = requestAnimationFrame(renderFrame);
+        });
     }
 
-    // -------------------------------------------------------------------------
-    // Visualizer 1: Reworked Solid Wave ("All wavy and stuff" - Liquid Mercury)
-    // Multi-layer translucent fluid Catmull-Rom spline wave with glowing crest & spray motes
-    // -------------------------------------------------------------------------
-    const solidWaveUndertowPoints = Array.from({ length: NUM_BANDS }, () => ({ x: 0, y: 0 }));
-    const solidWaveMidPoints = Array.from({ length: NUM_BANDS }, () => ({ x: 0, y: 0 }));
-    const solidWaveForePoints = Array.from({ length: NUM_BANDS }, () => ({ x: 0, y: 0 }));
-    const thematicLeftPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
-    const thematicRightPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
-    const thematicLeftMistPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
-    const thematicRightMistPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
 
-    function drawSolidWave(ctx, width, height, bands, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble) {
-        const pointsCount = bands.length;
-        const step = width / (pointsCount - 1);
+    // --- Migrated Core Track Status & Session Methods ---
+    function resolveTrackFormat(track) {
+        if (!track) return '';
+        let fmt = (track.format || '').toUpperCase().trim();
+        if (!fmt || fmt === 'AUDIO') {
+            const fname = track.filename || track.fullPath || '';
+            const dotIdx = fname.lastIndexOf('.');
+            if (dotIdx !== -1 && dotIdx < fname.length - 1) {
+                fmt = fname.substring(dotIdx + 1).toUpperCase().trim();
+            }
+        }
+        return fmt || 'PCM';
+    }
 
-        // Shockwave trigger on heavy drum kicks
-        if (playing && beatPulse > 0.52 && Math.random() < 0.25) {
-            emitShockwave(width * 0.18, height - 16, Math.min(width * 0.45, 110), 0.75);
+    function updateSignalPathUi(track = allTracks[currentTrackIndex]) {
+        // Always keep player deck button label strictly as "SPA"
+        if (signalPathLabel) {
+            signalPathLabel.textContent = 'SPA';
         }
 
-        // Headroom: leaves 24% atmospheric breathing space at top so the wave is never easily filled
-        const topHeadroom = Math.max(12, height * 0.24);
-        const maxForegroundHeight = height - topHeadroom - 4;
+        const curTheme = getActiveTheme();
+        const isLightSurface = (curTheme === 'default' || curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm');
+        const hasTrack = Boolean(track && allTracks.length > 0);
+        const format = hasTrack ? resolveTrackFormat(track) : 'NONE';
+        const isLossless = hasTrack && ['FLAC', 'WAV', 'ALAC', 'AIFF', 'APE', 'WV', 'DSD', 'DSF', 'PCM'].includes(format);
 
-        const currentTheme = getActiveTheme();
+        // Determine active DSP & EQ stages honestly
+        const hasPeq = !isPeqBypassed && Array.isArray(peqGains) && peqGains.some(g => Math.abs(g) > 0.05);
+        const maxBoostDb = (!isPeqBypassed && Array.isArray(peqGains)) ? Math.max(0, ...peqGains) : 0;
+        const activeStages = [];
+        if (isSubsonic) activeStages.push('20Hz Subsonic');
+        if (hasPeq) activeStages.push('10-Band PEQ');
+        if (isBassBoost) activeStages.push('Bass');
+        if (isVocalBoost) activeStages.push('Vocal');
+        if (isTrebleBoost) activeStages.push('Treble');
+        if (isAmpBoost || currentVolumeValue > 1.0) activeStages.push('Pre-Amp');
+        if (isCrossfeed) activeStages.push('HRTF Crossfeed');
+        if (isSurroundWidener) activeStages.push('Surround M/S');
+        if (isAmbiophonics) activeStages.push('Ambiophonics');
+        if (isPhaseInvert) activeStages.push('180° Phase');
+        if (isMonoMix) activeStages.push('Mono Sum');
+        if (isAgpEnabled) activeStages.push('AGP Guard');
+        if (isLimiter) activeStages.push('Peak Limiter');
+        if (isUltrasonic) activeStages.push(`Ultrasonic (${Math.round(ultrasonicCutoff / 1000)}kHz)`);
+        if (isReplayGain) activeStages.push('ReplayGain');
 
-        // Layer 1: Ambient Deep Translucent Undertow (Sub-bass & Kick weight)
-        const undertowHeadroom = Math.max(18, height * 0.44);
-        const maxUndertowHeight = height - undertowHeadroom;
-        const undertowPoints = solidWaveUndertowPoints;
-        for (let i = 0; i < pointsCount; i++) {
-            const x = i * step;
-            const bassWeight = Math.max(0, 1.0 - (i / (pointsCount * 0.65)));
-            const b = bands[Math.floor(i * 0.35)] * bassWeight;
-            const h = Math.min(maxUndertowHeight, b * maxUndertowHeight * (0.80 + smoothBass * 0.25) + (playing ? 2 : 1));
-            const pt = undertowPoints[i];
-            pt.x = x;
-            pt.y = Math.max(undertowHeadroom, height - h);
-        }
-        ctx.beginPath();
-        ctx.moveTo(undertowPoints[0].x, height);
-        ctx.lineTo(undertowPoints[0].x, undertowPoints[0].y);
-        drawSplinePath(ctx, undertowPoints);
-        ctx.lineTo(undertowPoints[undertowPoints.length - 1].x, height);
-        ctx.closePath();
+        const dspActive = hasActiveDsp();
+        const workletPrecisionStr = isPrecision64 ? '64-Bit Double-Float Worklet' : '32-Bit Fast-Float Biquad';
+        const shortEngineLabel = isPrecision64 ? '64-BIT WORKLET' : '32-BIT FLOAT';
 
-        let undertowFill = 'rgba(255, 255, 255, ' + (0.05 + smoothBass * 0.08) + ')';
-        let midFill = 'rgba(255, 255, 255, ' + (0.08 + smoothMid * 0.10 + snarePulse * 0.06) + ')';
-        if (currentTheme === 'nms') {
-            undertowFill = 'rgba(124, 77, 255, ' + (0.14 + smoothBass * 0.18) + ')';
-            midFill = 'rgba(0, 229, 255, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
-        } else if (currentTheme === 'solar-eclipse') {
-            undertowFill = 'rgba(255, 0, 128, ' + (0.14 + smoothBass * 0.18) + ')';
-            midFill = 'rgba(0, 240, 255, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
-        } else if (currentTheme === 'euclid-horizon') {
-            undertowFill = 'rgba(225, 29, 72, ' + (0.14 + smoothBass * 0.18) + ')';
-            midFill = 'rgba(251, 191, 36, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
-        } else if (currentTheme === 'alien-paradise') {
-            undertowFill = 'rgba(244, 63, 94, ' + (0.14 + smoothBass * 0.18) + ')';
-            midFill = 'rgba(0, 206, 209, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
-        } else if (currentTheme === 'abyssal-void') {
-            undertowFill = 'rgba(5, 150, 105, ' + (0.14 + smoothBass * 0.18) + ')';
-            midFill = 'rgba(0, 255, 170, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
-        } else if (currentTheme === 'dissonance') {
-            undertowFill = 'rgba(126, 34, 206, ' + (0.14 + smoothBass * 0.18) + ')';
-            midFill = 'rgba(217, 70, 239, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
-        } else if (currentTheme === 'sentinel') {
-            undertowFill = 'rgba(14, 20, 36, ' + (0.16 + smoothBass * 0.18) + ')';
-            midFill = 'rgba(0, 229, 255, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
-        } else if (currentTheme === 'brutalist-light' || currentTheme === 'minimalist-light') {
-            undertowFill = 'rgba(0, 0, 0, ' + (0.04 + smoothBass * 0.05) + ')';
-            midFill = 'rgba(0, 0, 0, ' + (0.08 + smoothMid * 0.08 + snarePulse * 0.05) + ')';
-        } else if (currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-dark') {
-            undertowFill = 'rgba(255, 255, 255, ' + (0.04 + smoothBass * 0.05) + ')';
-            midFill = 'rgba(255, 255, 255, ' + (0.08 + smoothMid * 0.08 + snarePulse * 0.05) + ')';
-        } else if (currentTheme === 'minimalist-warm') {
-            undertowFill = 'rgba(217, 119, 6, ' + (0.06 + smoothBass * 0.08) + ')';
-            midFill = 'rgba(28, 25, 23, ' + (0.08 + smoothMid * 0.08 + snarePulse * 0.05) + ')';
-        } else if (currentTheme === 'minimalist-obsidian') {
-            undertowFill = 'rgba(56, 189, 248, ' + (0.06 + smoothBass * 0.08) + ')';
-            midFill = 'rgba(255, 255, 255, ' + (0.08 + smoothMid * 0.08 + snarePulse * 0.05) + ')';
-        }
-        ctx.fillStyle = undertowFill;
-        ctx.fill();
-
-        // Layer 2: Mid-range Harmonic Wave (reacts to vocals, chords, synths)
-        const midHeadroom = Math.max(16, height * 0.34);
-        const maxMidHeight = height - midHeadroom;
-        const midPoints = solidWaveMidPoints;
-        for (let i = 0; i < pointsCount; i++) {
-            const x = i * step;
-            const b = bands[i];
-            const h = Math.min(maxMidHeight, b * maxMidHeight * (0.78 + smoothMid * 0.20 + snarePulse * 0.10) + (playing ? 2.5 : 1.2));
-            const pt = midPoints[i];
-            pt.x = x;
-            pt.y = Math.max(midHeadroom, height - h);
-        }
-        ctx.beginPath();
-        ctx.moveTo(midPoints[0].x, height);
-        ctx.lineTo(midPoints[0].x, midPoints[0].y);
-        drawSplinePath(ctx, midPoints);
-        ctx.lineTo(midPoints[midPoints.length - 1].x, height);
-        ctx.closePath();
-        ctx.fillStyle = midFill;
-        ctx.fill();
-
-        // Layer 3: Solid Foreground Liquid Wave (Direct High-Fidelity Musical Spectrum)
-        const forePoints = solidWaveForePoints;
-        let minY = height;
-        for (let i = 0; i < pointsCount; i++) {
-            const x = i * step;
-            const b = bands[i];
-            const dynamicLift = 0.88 + beatPulse * 0.14 + snarePulse * 0.08;
-            const amp = Math.min(maxForegroundHeight, b * maxForegroundHeight * dynamicLift + (playing ? 3.5 : 1.5));
-            const y = Math.max(topHeadroom, height - amp);
-            if (y < minY) minY = y;
-            const pt = forePoints[i];
-            pt.x = x;
-            pt.y = y;
-        }
-
-        ctx.beginPath();
-        ctx.moveTo(forePoints[0].x, height);
-        ctx.lineTo(forePoints[0].x, forePoints[0].y);
-        drawSplinePath(ctx, forePoints);
-        ctx.lineTo(forePoints[forePoints.length - 1].x, height);
-        ctx.closePath();
-
-        const liquidGrad = ctx.createLinearGradient(0, minY, 0, height);
-        let waveShadowColor = 'rgba(255, 255, 255, ' + (0.85 + beatPulse * 0.15) + ')';
-        switch (currentTheme) {
-            case 'nms':
-                liquidGrad.addColorStop(0, '#ffffff');
-                liquidGrad.addColorStop(0.12, '#ffab00');
-                liquidGrad.addColorStop(0.35, '#ff1744');
-                liquidGrad.addColorStop(0.70, 'rgba(213, 0, 0, 0.45)');
-                liquidGrad.addColorStop(1, 'rgba(124, 77, 255, 0.05)');
-                waveShadowColor = '#ff1744';
-                break;
-            case 'solar-eclipse':
-                liquidGrad.addColorStop(0, '#ffffff');
-                liquidGrad.addColorStop(0.15, '#00f0ff');
-                liquidGrad.addColorStop(0.40, '#ff007f');
-                liquidGrad.addColorStop(0.75, 'rgba(179, 0, 89, 0.40)');
-                liquidGrad.addColorStop(1, 'rgba(0, 240, 255, 0.05)');
-                waveShadowColor = '#00f0ff';
-                break;
-            case 'euclid-horizon':
-                liquidGrad.addColorStop(0, '#ffffff');
-                liquidGrad.addColorStop(0.15, '#fbbf24');
-                liquidGrad.addColorStop(0.40, '#14b8a6');
-                liquidGrad.addColorStop(0.75, 'rgba(225, 29, 72, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(20, 184, 166, 0.05)');
-                waveShadowColor = '#fbbf24';
-                break;
-            case 'alien-paradise':
-                liquidGrad.addColorStop(0, '#ffffff');
-                liquidGrad.addColorStop(0.15, '#ff2a70');
-                liquidGrad.addColorStop(0.40, '#00ced1');
-                liquidGrad.addColorStop(0.75, 'rgba(250, 204, 21, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(0, 206, 209, 0.05)');
-                waveShadowColor = '#ff2a70';
-                break;
-            case 'abyssal-void':
-                liquidGrad.addColorStop(0, '#ffffff');
-                liquidGrad.addColorStop(0.15, '#00ffaa');
-                liquidGrad.addColorStop(0.40, '#10b981');
-                liquidGrad.addColorStop(0.75, 'rgba(5, 150, 105, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(16, 185, 129, 0.05)');
-                waveShadowColor = '#00ffaa';
-                break;
-            case 'dissonance':
-                liquidGrad.addColorStop(0, '#ffffff');
-                liquidGrad.addColorStop(0.15, '#d946ef');
-                liquidGrad.addColorStop(0.40, '#a855f7');
-                liquidGrad.addColorStop(0.75, 'rgba(126, 34, 206, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(88, 28, 135, 0.05)');
-                waveShadowColor = '#d946ef';
-                break;
-            case 'sentinel':
-                liquidGrad.addColorStop(0, '#ffffff');
-                liquidGrad.addColorStop(0.15, '#00e5ff');
-                liquidGrad.addColorStop(0.40, '#ff3d00');
-                liquidGrad.addColorStop(0.75, 'rgba(0, 229, 255, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(11, 14, 23, 0.05)');
-                waveShadowColor = '#00e5ff';
-                break;
-            case 'minimalist-light':
-            case 'brutalist-light':
-                liquidGrad.addColorStop(0, '#000000');
-                liquidGrad.addColorStop(0.35, '#27272a');
-                liquidGrad.addColorStop(0.70, 'rgba(0, 0, 0, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
-                waveShadowColor = 'rgba(0, 0, 0, 0.3)';
-                break;
-            case 'minimalist-dark':
-            case 'brutalist-dark':
-                liquidGrad.addColorStop(0, '#ffffff');
-                liquidGrad.addColorStop(0.35, '#e4e4e7');
-                liquidGrad.addColorStop(0.70, 'rgba(255, 255, 255, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
-                waveShadowColor = 'rgba(255, 255, 255, 0.3)';
-                break;
-            case 'minimalist-warm':
-                liquidGrad.addColorStop(0, '#d97706');
-                liquidGrad.addColorStop(0.35, '#b45309');
-                liquidGrad.addColorStop(0.70, 'rgba(217, 119, 6, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(250, 248, 245, 0.04)');
-                waveShadowColor = 'rgba(217, 119, 6, 0.35)';
-                break;
-            case 'minimalist-obsidian':
-                liquidGrad.addColorStop(0, '#38bdf8');
-                liquidGrad.addColorStop(0.35, '#0284c7');
-                liquidGrad.addColorStop(0.70, 'rgba(56, 189, 248, 0.35)');
-                liquidGrad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
-                waveShadowColor = 'rgba(56, 189, 248, 0.4)';
-                break;
-            default:
-                liquidGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-                liquidGrad.addColorStop(0.18, 'rgba(255, 255, 255, 0.65)');
-                liquidGrad.addColorStop(0.50, 'rgba(255, 255, 255, 0.22)');
-                liquidGrad.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
-                break;
-        }
-        ctx.fillStyle = liquidGrad;
-        ctx.fill();
-
-        // Luminous Crest Ridge with Glow (+25% bloom on beat/snare pulses)
-        const crestStrokeColor = (currentTheme === 'minimalist-light' || currentTheme === 'brutalist-light')
-            ? '#09090b'
-            : (currentTheme === 'minimalist-warm' ? '#9a3412' : (currentTheme === 'minimalist-obsidian' ? '#38bdf8' : '#ffffff'));
-        ctx.save();
-        if (isFirefox) {
-            // Ethereal Multi-Pass Vector Glow for Firefox/Gecko:
-            // High-fidelity blooming crest rendered in pure hardware rasterization with 0% CPU blur overhead
-            ctx.beginPath();
-            ctx.moveTo(forePoints[0].x, forePoints[0].y);
-            drawSplinePath(ctx, forePoints);
-            ctx.lineWidth = (2.0 + beatPulse * 1.2 + snarePulse * 0.6) * 2.2;
-            ctx.strokeStyle = waveShadowColor;
-            ctx.globalAlpha = 0.42;
-            ctx.stroke();
-
-            ctx.lineWidth = 2.0 + beatPulse * 1.2 + snarePulse * 0.6;
-            ctx.strokeStyle = crestStrokeColor;
-            ctx.globalAlpha = 1.0;
-            ctx.stroke();
+        // 1. Update Top Summary Badge, Description & Indicator Dot
+        if (!hasTrack) {
+            if (auditQualityBadge) {
+                auditQualityBadge.textContent = `IDLE (${shortEngineLabel} READY)`;
+                auditQualityBadge.className = 'signalQualityBadge highPrecision';
+            }
+            if (auditQualityDesc) {
+                auditQualityDesc.textContent = `No audio track loaded. Browser Web Audio decodes streams to 32-bit IEEE 754 float; DSP worklet is configured for ${isPrecision64 ? '64-bit double-precision' : '32-bit single-precision'} math.`;
+            }
+            const dotCol = isLightSurface ? '#475569' : '#94a3b8';
+            if (deckSignalDot) deckSignalDot.style.color = dotCol;
+            if (auditQualityDot) auditQualityDot.style.color = dotCol;
+        } else if (isLossless && !hasPeq && !isBassBoost && !isVocalBoost && !isTrebleBoost && !isCrossfeed && !isSurroundWidener && !isAmbiophonics && !isPhaseInvert && !isMonoMix) {
+            if (auditQualityBadge) {
+                auditQualityBadge.textContent = `LOSSLESS ${format} → ${shortEngineLabel}`;
+                auditQualityBadge.className = 'signalQualityBadge bitPerfect';
+            }
+            if (auditQualityDesc) {
+                auditQualityDesc.textContent = `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${isUltrasonic || ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
+            }
+            const dotCol = isLightSurface ? '#065f46' : '#10b981';
+            if (deckSignalDot) deckSignalDot.style.color = dotCol;
+            if (auditQualityDot) auditQualityDot.style.color = dotCol;
+        } else if (isLossless) {
+            if (auditQualityBadge) {
+                auditQualityBadge.textContent = `LOSSLESS ${format} → ${isPrecision64 ? '64-BIT' : '32-BIT'} DSP`;
+                auditQualityBadge.className = 'signalQualityBadge dspEnhanced';
+            }
+            if (auditQualityDesc) {
+                auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
+            }
+            const dotCol = isLightSurface ? '#9a3412' : '#fbbf24';
+            if (deckSignalDot) deckSignalDot.style.color = dotCol;
+            if (auditQualityDot) auditQualityDot.style.color = dotCol;
         } else {
-            ctx.shadowColor = waveShadowColor;
-            ctx.shadowBlur = Math.min(12, 4 + beatPulse * 8 + snarePulse * 4);
-            ctx.lineWidth = 2.0 + beatPulse * 1.2 + snarePulse * 0.6;
-            ctx.strokeStyle = crestStrokeColor;
-            ctx.beginPath();
-            ctx.moveTo(forePoints[0].x, forePoints[0].y);
-            drawSplinePath(ctx, forePoints);
-            ctx.stroke();
-        }
-        ctx.restore();
-
-        // THEME-SPECIFIC DISTINCT WAVEFORM OVERLAYS
-        if (currentTheme === 'nms') {
-            // Atlas Segmented Vector Laser Nodes along peaks
-            ctx.save();
-            ctx.fillStyle = '#00e5ff';
-            ctx.shadowColor = '#00e5ff';
-            ctx.shadowBlur = 8;
-            for (let i = 2; i < pointsCount - 2; i += 3) {
-                if (bands[i] > 0.35) {
-                    const nx = forePoints[i].x;
-                    const ny = forePoints[i].y;
-                    ctx.beginPath();
-                    ctx.arc(nx, ny, 2.4 + beatPulse * 1.5, 0, Math.PI * 2);
-                    ctx.fill();
-                    // Technical laser crosshair
-                    ctx.strokeStyle = 'rgba(255, 23, 68, 0.6)';
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(nx - 5, ny); ctx.lineTo(nx + 5, ny);
-                    ctx.moveTo(nx, ny - 5); ctx.lineTo(nx, ny + 5);
-                    ctx.stroke();
-                }
+            if (auditQualityBadge) {
+                auditQualityBadge.textContent = `${format} LOSSY → ${dspActive ? (isPrecision64 ? '64-BIT DSP' : '32-BIT DSP') : '32-BIT DECODE'}`;
+                auditQualityBadge.className = 'signalQualityBadge highPrecision';
             }
-            ctx.restore();
-        } else if (currentTheme === 'solar-eclipse') {
-            // Solar Prominence Plasma Loops leaping above the wave on kicks
-            if (playing && beatPulse > 0.35) {
-                ctx.save();
-                for (let i = 4; i < pointsCount - 4; i += 7) {
-                    if (bands[i] > 0.40) {
-                        const px = forePoints[i].x;
-                        const py = forePoints[i].y;
-                        const loopH = (15 + beatPulse * 30) * (bands[i] || 0.5);
-                        ctx.beginPath();
-                        ctx.moveTo(px - 8, py);
-                        ctx.quadraticCurveTo(px, py - loopH, px + 8, py);
-                        ctx.strokeStyle = 'rgba(255, 0, 128, 0.85)';
-                        ctx.shadowColor = '#00f0ff';
-                        ctx.shadowBlur = 10;
-                        ctx.lineWidth = 1.8;
-                        ctx.stroke();
-                    }
-                }
-                ctx.restore();
+            if (auditQualityDesc) {
+                auditQualityDesc.textContent = `Compressed ${format} stream decoded by browser into 32-bit IEEE 754 floating-point PCM${activeStages.length > 0 ? `, processed via ${workletPrecisionStr} (${activeStages.join(', ')})` : ' with flat EQ response'}.`;
             }
-        } else if (currentTheme === 'abyssal-void') {
-            // Hydrophone Sonar Oscilloscope CRT Graticule Lines
-            ctx.save();
-            ctx.strokeStyle = 'rgba(0, 255, 170, 0.15)';
-            ctx.lineWidth = 0.8;
-            const numGrids = 4;
-            for (let g = 1; g <= numGrids; g++) {
-                const gy = height - (g * (height / (numGrids + 1)));
-                ctx.beginPath();
-                ctx.moveTo(0, gy);
-                ctx.lineTo(width, gy);
-                ctx.setLineDash([3, 5]);
-                ctx.stroke();
-            }
-            ctx.restore();
-        } else if (currentTheme === 'dissonance') {
-            // Corrupted Sentinel Spectrum CRT Telemetry Lines
-            ctx.save();
-            ctx.strokeStyle = 'rgba(168, 85, 247, 0.16)';
-            ctx.lineWidth = 0.8;
-            const numGrids = 4;
-            for (let g = 1; g <= numGrids; g++) {
-                const gy = height - (g * (height / (numGrids + 1)));
-                ctx.beginPath();
-                ctx.moveTo(0, gy);
-                ctx.lineTo(width, gy);
-                ctx.setLineDash([3, 6]);
-                ctx.stroke();
-            }
-            ctx.restore();
-        } else if (currentTheme === 'sentinel') {
-            // Sentinel Security Patrol CRT Telemetry Grid & Scanning nodes
-            ctx.save();
-            ctx.strokeStyle = 'rgba(0, 229, 255, 0.14)';
-            ctx.lineWidth = 0.8;
-            const numGrids = 4;
-            for (let g = 1; g <= numGrids; g++) {
-                const gy = height - (g * (height / (numGrids + 1)));
-                ctx.beginPath();
-                ctx.moveTo(0, gy);
-                ctx.lineTo(width, gy);
-                ctx.setLineDash([4, 6]);
-                ctx.stroke();
-            }
-            ctx.restore();
+            const dotCol = isLightSurface ? '#075985' : '#38bdf8';
+            if (deckSignalDot) deckSignalDot.style.color = dotCol;
+            if (auditQualityDot) auditQualityDot.style.color = dotCol;
         }
 
-        // Crest Sparkles emission on snare snaps, vocal spikes & prominent crests (Default theme only)
-        if (currentTheme === 'default' && playing && (snarePulse > 0.20 || beatPulse > 0.35)) {
-            for (let i = 3; i < pointsCount - 3; i += 3) {
-                if (bands[i] > 0.45 && bands[i] >= bands[i - 1] && bands[i] >= bands[i + 1]) {
-                    if (Math.random() < 0.32) {
-                        emitSparkle(forePoints[i].x, forePoints[i].y, snarePulse + 0.35);
-                    }
-                }
+        // 2. Update Detailed 4-Stage Signal Chain Breakdown in Modal
+        const stageSourceEl = document.getElementById('auditStageSource');
+        const stageDecodeEl = document.getElementById('auditStageDecode');
+        const stageDspEl = document.getElementById('auditStageDsp');
+        const stageOutputEl = document.getElementById('auditStageOutput');
+
+        const currentRate = audioContext ? audioContext.sampleRate : ((track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100);
+        const rateStr = currentRate >= 1000 ? `${(currentRate / 1000).toFixed(1)} kHz` : `${currentRate} Hz`;
+
+        if (stageSourceEl) {
+            if (!hasTrack) {
+                stageSourceEl.textContent = 'Idle (No track loaded)';
+            } else {
+                const bd = track.bitDepth || (isLossless ? ((currentRate >= 88200) ? 24 : 16) : null);
+                const br = track.bitrate ? `${track.bitrate} kbps` : '';
+                const ch = track.channels === 1 ? 'Mono' : 'Stereo';
+                stageSourceEl.textContent = [
+                    `${format} (${isLossless ? 'Lossless' : 'Lossy'})`,
+                    bd ? `${bd}-Bit` : '',
+                    rateStr,
+                    br,
+                    ch
+                ].filter(Boolean).join(' • ');
             }
         }
 
-        // Draw Expanding Shockwaves & Crest Sparkles
-        updateAndDrawShockwaves(ctx, dt);
-        if (currentTheme === 'default') {
-            updateAndDrawSparkles(ctx, dt);
+        if (stageDecodeEl) {
+            stageDecodeEl.textContent = `32-Bit IEEE 754 Float PCM @ ${rateStr}`;
         }
 
-        // Floating spray particles triggered on bass surges and beat hits (Default theme only)
-        if (playing && currentTheme === 'default') {
-            updateAndDrawParticles(ctx, width, height, dt, smoothBass * 1.6 + beatPulse * 2.2 + snarePulse * 1.2);
+        if (stageDspEl) {
+            const stagesText = activeStages.length > 0 ? activeStages.join(' + ') : 'Flat Bypass';
+            stageDspEl.textContent = `${workletPrecisionStr} (${stagesText})`;
+        }
+
+        const ditherLabel = ditherMode === 'shaped'
+            ? 'Psychoacoustic Shaped (>18 kHz)'
+            : (ditherMode === 'tpdf' ? 'TPDF Flat Dither' : 'Unshaped Truncation (Off)');
+        const volPct = Math.round(currentVolumeValue * 100);
+        const gainModeStr = isHardwareGain ? `Hardware DAC Bridge (${volPct}%)` : `Digital Gain (${volPct}%)`;
+
+        if (stageOutputEl) {
+            stageOutputEl.textContent = `${ditherLabel} • ${gainModeStr}`;
+        }
+
+        // 3. Update Metrics Cards (Headroom, Latency, Precision) & Settings Telemetry
+        let maxTotalBoost = maxBoostDb;
+        if (isBassBoost) maxTotalBoost = Math.max(maxTotalBoost, 3.8);
+        if (isTrebleBoost) maxTotalBoost = Math.max(maxTotalBoost, 3.0);
+        if (isVocalBoost) maxTotalBoost = Math.max(maxTotalBoost, 2.8);
+        const preampAttenDb = maxTotalBoost > 0 ? -(maxTotalBoost * 0.70) : 0;
+        const volDb = currentVolumeValue > 0 ? (20 * Math.log10(currentVolumeValue)) : -60;
+        const netHeadroomDb = Math.max(0, -(preampAttenDb + Math.min(0, volDb)));
+        if (auditMetricHeadroom) {
+            if (maxTotalBoost > 0) {
+                auditMetricHeadroom.textContent = `${preampAttenDb.toFixed(1)} dB Pre-Amp (${netHeadroomDb.toFixed(1)} dB Guard)`;
+            } else {
+                auditMetricHeadroom.textContent = `+${Math.max(0.6, netHeadroomDb).toFixed(1)} dB (${currentVolumeValue > 1.0 ? 'Amplified' : 'Unity Guard'})`;
+            }
+        }
+
+        let latencyMs = bufferLatencyTarget === 'interactive' ? 15.0 : 100.0;
+        if (audioContext) {
+            const ctxLat = ((audioContext.baseLatency || 0) + (audioContext.outputLatency || 0)) * 1000;
+            if (ctxLat > 0) latencyMs = ctxLat;
+        }
+        const latencyModeStr = bufferLatencyTarget === 'interactive' ? 'Low-Latency' : 'Stable Buffer';
+        if (auditMetricLatency) {
+            auditMetricLatency.textContent = `~${latencyMs.toFixed(1)} ms (${latencyModeStr})`;
+        }
+
+        const auditMetricPrecision = document.getElementById('auditMetricPrecision');
+        const auditMetricPrecisionDesc = document.getElementById('auditMetricPrecisionDesc');
+        if (auditMetricPrecision) {
+            auditMetricPrecision.textContent = isPrecision64
+                ? '32-Bit Decode / 64-Bit DSP'
+                : '32-Bit IEEE 754 Float';
+        }
+        if (auditMetricPrecisionDesc) {
+            auditMetricPrecisionDesc.textContent = isPrecision64
+                ? 'Browser decodes audio to 32-bit float; AudioWorklet computes biquad filters and dithering in 64-bit double float.'
+                : 'Browser decodes and processes all audio stages in standard 32-bit single-precision IEEE 754 floating point.';
+        }
+
+        // Sync Settings Tab Telemetry Grid
+        const settingsDspEngineVal = document.getElementById('settingsDspEngineVal');
+        const settingsDspHeadroomVal = document.getElementById('settingsDspHeadroomVal');
+        const settingsDspLatencyVal = document.getElementById('settingsDspLatencyVal');
+        const settingsDspEqVal = document.getElementById('settingsDspEqVal');
+
+        if (settingsDspEngineVal) {
+            settingsDspEngineVal.textContent = isPrecision64 ? '64-Bit Worklet / 32-Bit Decode' : '32-Bit IEEE 754 Float';
+        }
+        if (settingsDspHeadroomVal) {
+            settingsDspHeadroomVal.textContent = maxBoostDb > 0 ? `${preampAttenDb.toFixed(1)} dB AGP Active` : '0.0 dBFS True-Peak';
+        }
+        if (settingsDspLatencyVal) {
+            settingsDspLatencyVal.textContent = `~${latencyMs.toFixed(0)} ms (${latencyModeStr})`;
+        }
+        if (settingsDspEqVal) {
+            settingsDspEqVal.textContent = activeStages.length > 0 ? activeStages.slice(0, 2).join(' + ') : 'Linear Bypass';
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Visualizer 2: Segmented Hi-Fi Equalizer (Unique & Distinct for EACH Theme)
-    // Dynamic theme-specific column geometry, segment shapes, peak caps & HUD grids
-    // -------------------------------------------------------------------------
-    function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble) {
-        const currentTheme = getActiveTheme();
-        const totalSegments = 16;
-        const legendHeight = 12;
-        const paddingX = 14;
-        const availableW = width - (paddingX * 2);
 
-        // Frame-rate independent attack & decay physics for column dynamics
-        const colAttack = 1.0 - Math.exp(-34 * dt);
-        const colDecay = 1.0 - Math.exp(-9.8 * dt);
+    function findTrackIndexBySavedState(pool) {
+        if (!pool || pool.length === 0) return -1;
+        const savedTid = safeStorage.getItem('cachymusic_last_track_tid');
+        const savedPath = safeStorage.getItem('cachymusic_last_track_path');
+        const savedFilename = safeStorage.getItem('cachymusic_last_track_filename');
+        const savedId = safeStorage.getItem('cachymusic_last_track_id');
+        const savedTitle = safeStorage.getItem('cachymusic_last_track_title');
 
-        // Theme-specific column count & geometry
-        let colCount = 56;
-        if (currentTheme === 'solar-eclipse') colCount = 48;
-        else if (currentTheme === 'alien-paradise') colCount = 50;
-        else if (currentTheme === 'euclid-horizon') colCount = 52;
-        else if (currentTheme === 'nms') colCount = 52;
-        else if (currentTheme === 'abyssal-void') colCount = 54;
-        else if (currentTheme === 'dissonance') colCount = 52;
-        else if (currentTheme === 'sentinel') colCount = 52;
-        else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') colCount = 48;
-
-        const colWidth = availableW / colCount;
-        const barWidth = Math.max(3.5, colWidth - 3.5);
-        const headerSpace = 16;
-        const footerSpace = legendHeight + 4;
-        const usableH = Math.max(22, height - headerSpace - footerSpace);
-        const segmentGap = Math.max(1.0, Math.min(2.0, (usableH / totalSegments) * 0.35));
-        const segmentHeight = Math.max(1.8, (usableH - (totalSegments - 1) * segmentGap) / totalSegments);
-
-        // 1. THEME-SPECIFIC BACKGROUND HUD & OSCILLOSCOPE GRIDS
-        if (currentTheme === 'nms') {
-            // Atlas Telemetry Scan HUD grid & coordinates
-            ctx.save();
-            ctx.strokeStyle = 'rgba(0, 229, 255, 0.12)';
-            ctx.lineWidth = 0.8;
-            for (let g = 1; g <= 4; g++) {
-                const gy = height - legendHeight - 4 - g * ((height - 24) / 5);
-                ctx.beginPath();
-                ctx.moveTo(paddingX, gy);
-                ctx.lineTo(width - paddingX, gy);
-                ctx.setLineDash([4, 6]);
-                ctx.stroke();
-            }
-            // Beat scanline sweep
-            if (playing && beatPulse > 0.3) {
-                const scanX = paddingX + ((performance.now() * 0.25) % availableW);
-                const scanGrad = ctx.createLinearGradient(scanX - 25, 0, scanX + 25, 0);
-                scanGrad.addColorStop(0, 'rgba(255, 23, 68, 0)');
-                scanGrad.addColorStop(0.5, 'rgba(0, 229, 255, 0.35)');
-                scanGrad.addColorStop(1, 'rgba(255, 23, 68, 0)');
-                ctx.fillStyle = scanGrad;
-                ctx.fillRect(scanX - 25, 0, 50, height);
-            }
-            // HUD Top Banner
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = 'rgba(0, 229, 255, 0.65)';
-            ctx.fillText('// ATLAS SPECTRAL SCAN // 16.16.16 // 24kHz HIGH-RES BANDWIDTH', paddingX + 2, 11);
-            ctx.restore();
-        } else if (currentTheme === 'abyssal-void') {
-            // Deep Trench Hydrophone CRT Oscilloscope Graticule
-            ctx.save();
-            ctx.strokeStyle = 'rgba(0, 255, 170, 0.12)';
-            ctx.lineWidth = 0.8;
-            const dbLabels = ['+3dB', '0dB', '-6dB', '-18dB', '-36dB'];
-            for (let g = 0; g < dbLabels.length; g++) {
-                const gy = height - legendHeight - 4 - (g + 1) * ((height - 26) / (dbLabels.length + 1));
-                ctx.beginPath();
-                ctx.moveTo(paddingX, gy);
-                ctx.lineTo(width - paddingX, gy);
-                ctx.setLineDash([2, 5]);
-                ctx.stroke();
-                ctx.font = '7px NMSFuturaProBook, monospace';
-                ctx.fillStyle = 'rgba(0, 255, 170, 0.45)';
-                ctx.fillText(dbLabels[g], paddingX + 2, gy - 2);
-            }
-            // Oscilloscope sonar sweep indicator
-            const sweepX = paddingX + ((performance.now() * 0.18) % availableW);
-            ctx.strokeStyle = 'rgba(0, 255, 170, ' + (0.25 + beatPulse * 0.35) + ')';
-            ctx.lineWidth = 1.2;
-            ctx.setLineDash([]);
-            ctx.beginPath();
-            ctx.moveTo(sweepX, 0);
-            ctx.lineTo(sweepX, height - legendHeight - 2);
-            ctx.stroke();
-            ctx.restore();
-        } else if (currentTheme === 'euclid-horizon') {
-            // Synthwave Horizon Perspective Baseline Grid
-            ctx.save();
-            ctx.strokeStyle = 'rgba(251, 191, 36, 0.15)';
-            ctx.lineWidth = 0.8;
-            for (let g = 1; g <= 3; g++) {
-                const gy = height - legendHeight - 2 - g * 12;
-                ctx.beginPath();
-                ctx.moveTo(paddingX, gy);
-                ctx.lineTo(width - paddingX, gy);
-                ctx.stroke();
-            }
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = 'rgba(251, 191, 36, 0.65)';
-            ctx.fillText('EUCLID HORIZON // 1984 VECTOR SYNTH // 24kHz', paddingX + 2, 11);
-            ctx.restore();
-        } else if (currentTheme === 'solar-eclipse') {
-            // Celestial Solar Prominence Header
-            ctx.save();
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = 'rgba(0, 240, 255, 0.65)';
-            ctx.fillText('SOLAR CORONA // 5800K // 24kHz HELIOS FLUX', paddingX + 2, 11);
-            ctx.restore();
-        } else if (currentTheme === 'alien-paradise') {
-            ctx.save();
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = 'rgba(244, 63, 94, 0.65)';
-            ctx.fillText('XENOFLORA // BIO-LUMINESCENT 24kHz SPORE SPECTRUM', paddingX + 2, 11);
-            ctx.restore();
-        } else if (currentTheme === 'dissonance') {
-            // Corrupted Sentinel Spectrum Scanner HUD
-            ctx.save();
-            ctx.strokeStyle = 'rgba(168, 85, 247, 0.14)';
-            ctx.lineWidth = 0.8;
-            for (let g = 1; g <= 4; g++) {
-                const gy = height - footerSpace - g * (usableH / 5);
-                ctx.beginPath();
-                ctx.moveTo(paddingX, gy);
-                ctx.lineTo(width - paddingX, gy);
-                ctx.setLineDash([3, 6]);
-                ctx.stroke();
-            }
-            if (playing && beatPulse > 0.3) {
-                const scanX = paddingX + ((performance.now() * 0.22) % availableW);
-                const scanGrad = ctx.createLinearGradient(scanX - 25, 0, scanX + 25, 0);
-                scanGrad.addColorStop(0, 'rgba(168, 85, 247, 0)');
-                scanGrad.addColorStop(0.5, 'rgba(217, 70, 239, 0.35)');
-                scanGrad.addColorStop(1, 'rgba(168, 85, 247, 0)');
-                ctx.fillStyle = scanGrad;
-                ctx.fillRect(scanX - 25, headerSpace, 50, usableH);
-            }
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = 'rgba(217, 70, 239, 0.75)';
-            ctx.fillText('// DISSONANCE DETECTED // ATLANTIDEUM // 24kHz RESONATOR SCAN', paddingX + 2, 11);
-            ctx.restore();
-        } else if (currentTheme === 'sentinel') {
-            // Sentinel Security Patrol HUD Sweep & Wanted Level Banner
-            ctx.save();
-            ctx.strokeStyle = 'rgba(0, 229, 255, 0.14)';
-            ctx.lineWidth = 0.8;
-            for (let g = 1; g <= 4; g++) {
-                const gy = height - legendHeight - 4 - g * ((height - 24) / 5);
-                ctx.beginPath();
-                ctx.moveTo(paddingX, gy);
-                ctx.lineTo(width - paddingX, gy);
-                ctx.setLineDash([4, 6]);
-                ctx.stroke();
-            }
-            if (playing && beatPulse > 0.3) {
-                const scanX = paddingX + ((performance.now() * 0.24) % availableW);
-                const scanGrad = ctx.createLinearGradient(scanX - 25, 0, scanX + 25, 0);
-                scanGrad.addColorStop(0, 'rgba(0, 229, 255, 0)');
-                scanGrad.addColorStop(0.5, 'rgba(255, 61, 0, 0.35)');
-                scanGrad.addColorStop(1, 'rgba(0, 229, 255, 0)');
-                ctx.fillStyle = scanGrad;
-                ctx.fillRect(scanX - 25, 0, 50, height);
-            }
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = 'rgba(0, 229, 255, 0.85)';
-            ctx.fillText('// SENTINEL PATROL GRID // 24kHz SPECTRAL MONITOR // SECURITY SCAN //', paddingX + 2, 11);
-            ctx.restore();
-        } else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') {
-            const isLt = (currentTheme === 'brutalist-light' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-warm');
-            ctx.save();
-            let gridCol = isLt ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)';
-            if (currentTheme === 'minimalist-warm') gridCol = 'rgba(217, 119, 6, 0.12)';
-            else if (currentTheme === 'minimalist-obsidian') gridCol = 'rgba(56, 189, 248, 0.12)';
-            ctx.strokeStyle = gridCol;
-            ctx.lineWidth = 0.8;
-            for (let g = 1; g <= 4; g++) {
-                const gy = height - legendHeight - 4 - g * ((height - 24) / 5);
-                ctx.beginPath();
-                ctx.moveTo(paddingX, gy);
-                ctx.lineTo(width - paddingX, gy);
-                ctx.stroke();
-            }
-            ctx.font = '700 8px monospace';
-            let headerText = isLt ? '// MINIMALIST ARCHITECTURAL EQUALIZER // CH-1/2 // LINEAR' : '// MINIMALIST MONOLITHIC EQUALIZER // CH-1/2 // LINEAR';
-            let textCol = isLt ? '#000000' : '#ffffff';
-            if (currentTheme === 'minimalist-warm') {
-                headerText = '// MINIMALIST WARM PAPER EQUALIZER // CH-1/2 // LINEAR';
-                textCol = '#1c1917';
-            } else if (currentTheme === 'minimalist-obsidian') {
-                headerText = '// MINIMALIST OBSIDIAN OLED EQUALIZER // CH-1/2 // ZERO-WATT';
-                textCol = '#38bdf8';
-            }
-            ctx.fillStyle = textCol;
-            ctx.fillText(headerText, paddingX + 2, 11);
-            ctx.restore();
+        if (!savedTid && !savedPath && !savedFilename && !savedId && !savedTitle) {
+            return -1;
         }
 
-        // Color definitions for each theme
-        let peakColor = '#ffffff';
-        let peakGlow = 'rgba(255, 255, 255, 0.95)';
-        let midColor = 'rgba(255, 255, 255, 0.92)';
-        let midGlow = 'rgba(255, 255, 255, 0.45)';
-        let lowColor = 'rgba(255, 255, 255, 0.78)';
-        let lowGlow = 'transparent';
-        let unlitColor = 'rgba(255, 255, 255, 0.07)';
-        let diamondColor = '#ffffff';
+        // 1. Exact TID or ID match
+        let idx = pool.findIndex(t => {
+            if (savedTid && t.tid && t.tid.toString() === savedTid.toString()) return true;
+            if (savedId && t.id && t.id.toString() === savedId.toString()) return true;
+            return false;
+        });
+        if (idx !== -1) return idx;
 
-        if (currentTheme === 'nms') {
-            peakColor = '#ff1744'; peakGlow = 'rgba(255, 23, 68, 0.95)';
-            midColor = '#ffab00'; midGlow = 'rgba(255, 171, 0, 0.65)';
-            lowColor = 'rgba(0, 229, 255, 0.85)'; lowGlow = 'rgba(0, 229, 255, 0.4)';
-            unlitColor = 'rgba(0, 229, 255, 0.06)'; diamondColor = '#ff1744';
-        } else if (currentTheme === 'solar-eclipse') {
-            peakColor = '#ff007f'; peakGlow = 'rgba(255, 0, 127, 0.95)';
-            midColor = '#3b82f6'; midGlow = 'rgba(59, 130, 246, 0.65)';
-            lowColor = 'rgba(0, 240, 255, 0.85)'; lowGlow = 'rgba(0, 240, 255, 0.4)';
-            unlitColor = 'rgba(0, 240, 255, 0.06)'; diamondColor = '#00f0ff';
-        } else if (currentTheme === 'euclid-horizon') {
-            peakColor = '#e11d48'; peakGlow = 'rgba(225, 29, 72, 0.95)';
-            midColor = '#fbbf24'; midGlow = 'rgba(251, 191, 36, 0.65)';
-            lowColor = 'rgba(20, 184, 166, 0.85)'; lowGlow = 'rgba(20, 184, 166, 0.4)';
-            unlitColor = 'rgba(20, 184, 166, 0.06)'; diamondColor = '#fbbf24';
-        } else if (currentTheme === 'alien-paradise') {
-            peakColor = '#ff2a70'; peakGlow = 'rgba(255, 42, 112, 0.95)';
-            midColor = '#facc15'; midGlow = 'rgba(250, 204, 21, 0.65)';
-            lowColor = 'rgba(0, 206, 209, 0.85)'; lowGlow = 'rgba(0, 206, 209, 0.4)';
-            unlitColor = 'rgba(0, 206, 209, 0.06)'; diamondColor = '#ff2a70';
-        } else if (currentTheme === 'abyssal-void') {
-            peakColor = '#00ffaa'; peakGlow = 'rgba(0, 255, 170, 0.95)';
-            midColor = '#6ee7b7'; midGlow = 'rgba(110, 231, 183, 0.65)';
-            lowColor = 'rgba(16, 185, 129, 0.85)'; lowGlow = 'rgba(16, 185, 129, 0.4)';
-            unlitColor = 'rgba(16, 185, 129, 0.06)'; diamondColor = '#00ffaa';
-        } else if (currentTheme === 'dissonance') {
-            peakColor = '#fae8ff'; peakGlow = 'rgba(217, 70, 239, 0.95)';
-            midColor = '#d946ef'; midGlow = 'rgba(217, 70, 239, 0.75)';
-            lowColor = 'rgba(168, 85, 247, 0.88)'; lowGlow = 'rgba(168, 85, 247, 0.45)';
-            unlitColor = 'rgba(168, 85, 247, 0.12)'; diamondColor = '#d946ef';
-        } else if (currentTheme === 'sentinel') {
-            peakColor = '#ff3d00'; peakGlow = 'rgba(255, 61, 0, 0.95)';
-            midColor = '#00e5ff'; midGlow = 'rgba(0, 229, 255, 0.65)';
-            lowColor = 'rgba(248, 250, 252, 0.85)'; lowGlow = 'rgba(248, 250, 252, 0.4)';
-            unlitColor = 'rgba(0, 229, 255, 0.06)'; diamondColor = '#00e5ff';
-        } else if (currentTheme === 'brutalist-light' || currentTheme === 'minimalist-light') {
-            peakColor = '#000000'; peakGlow = 'rgba(0, 0, 0, 0.35)';
-            midColor = '#27272a'; midGlow = 'rgba(0, 0, 0, 0.15)';
-            lowColor = 'rgba(39, 39, 42, 0.85)'; lowGlow = 'transparent';
-            unlitColor = 'rgba(0, 0, 0, 0.05)'; diamondColor = '#000000';
-        } else if (currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-dark') {
-            peakColor = '#ffffff'; peakGlow = 'rgba(255, 255, 255, 0.75)';
-            midColor = '#e4e4e7'; midGlow = 'rgba(255, 255, 255, 0.25)';
-            lowColor = 'rgba(228, 228, 231, 0.85)'; lowGlow = 'transparent';
-            unlitColor = 'rgba(255, 255, 255, 0.05)'; diamondColor = '#ffffff';
-        } else if (currentTheme === 'minimalist-warm') {
-            peakColor = '#d97706'; peakGlow = 'rgba(217, 119, 6, 0.45)';
-            midColor = '#b45309'; midGlow = 'rgba(180, 83, 9, 0.2)';
-            lowColor = '#1c1917'; lowGlow = 'transparent';
-            unlitColor = 'rgba(28, 25, 23, 0.05)'; diamondColor = '#d97706';
-        } else if (currentTheme === 'minimalist-obsidian') {
-            peakColor = '#38bdf8'; peakGlow = 'rgba(56, 189, 248, 0.85)';
-            midColor = '#ffffff'; midGlow = 'rgba(255, 255, 255, 0.35)';
-            lowColor = '#e2e8f0'; lowGlow = 'transparent';
-            unlitColor = 'rgba(255, 255, 255, 0.05)'; diamondColor = '#38bdf8';
+        // 2. Exact fullPath match
+        if (savedPath) {
+            idx = pool.findIndex(t => t.fullPath && t.fullPath === savedPath);
+            if (idx !== -1) return idx;
         }
 
-        // 2. COLUMN EQUALIZER PHYSICS & SEGMENTS RENDERING
-        for (let i = 0; i < colCount; i++) {
-            const x = paddingX + i * colWidth + (colWidth - barWidth) / 2;
-            const bandVal = bands[Math.floor((i / colCount) * bands.length)] || 0;
-            const shapedVal = Math.pow(bandVal, 1.25);
-            const transientPop = (i < 18 ? beatPulse * 1.4 : (i < 38 ? snarePulse * 1.2 : smoothTreble * 1.1));
+        // 3. Filename match
+        if (savedFilename) {
+            idx = pool.findIndex(t => t.filename && t.filename.toLowerCase() === savedFilename.toLowerCase());
+            if (idx !== -1) return idx;
+        }
 
-            const targetSegments = playing
-                ? Math.max(0.6, Math.min(15.6, shapedVal * 12.8 + transientPop * 2.2))
-                : Math.max(0.8, Math.sin((i * 0.28) + simPhase) * 1.6 + 2.2);
+        // 4. Title match
+        if (savedTitle) {
+            idx = pool.findIndex(t => t.title && t.title.toLowerCase() === savedTitle.toLowerCase());
+            if (idx !== -1) return idx;
+        }
 
-            if (targetSegments > smoothDashLevels[i]) {
-                smoothDashLevels[i] += (targetSegments - smoothDashLevels[i]) * colAttack;
+        return -1;
+    }
+
+    // Restore cached session state: active playlist and last played song (loaded in paused state)
+    async function restoreSessionState() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const reqTrack = urlParams.get('track');
+
+        if (urlParams.get('tab') === 'playlists' || window.location.hash === '#playlists') {
+            if (tabPlaylists) tabPlaylists.click();
+        }
+
+        // Restore active playlist if previously open and still exists
+        const savedPlid = safeStorage.getItem('cachymusic_last_playlist_id');
+        const savedPlName = safeStorage.getItem('cachymusic_last_playlist_name');
+        if (savedPlid) {
+            const matchedPl = playlists.find(p => p.plid == savedPlid);
+            if (matchedPl) {
+                await openPlaylist(matchedPl.plid, matchedPl.name || savedPlName);
             } else {
-                smoothDashLevels[i] += (targetSegments - smoothDashLevels[i]) * colDecay;
-            }
-            const currentLevel = smoothDashLevels[i];
-
-            if (currentLevel >= peakValues[i]) {
-                peakValues[i] = currentLevel;
-                peakVelocity[i] = 0;
-                peakHold[i] = 20;
-            } else {
-                if (peakHold[i] > 0) {
-                    peakHold[i]--;
-                } else {
-                    peakVelocity[i] += 26 * dt;
-                    peakValues[i] = Math.max(0, peakValues[i] - peakVelocity[i] * dt);
-                }
-            }
-
-            const fullSegments = Math.floor(currentLevel);
-            const fraction = currentLevel - fullSegments;
-
-            // Render Segments per Theme
-            for (let s = 0; s < totalSegments; s++) {
-                const y = height - footerSpace - segmentHeight - s * (segmentHeight + segmentGap);
-                const isMidSeg = s >= 8 && s < 12;
-                const isPeakZone = s >= 12;
-                const isLit = s < fullSegments;
-                const isPartial = s === fullSegments && fraction > 0.03;
-
-                const segColor = isPeakZone ? peakColor : (isMidSeg ? midColor : lowColor);
-                ctx.fillStyle = (isLit || isPartial) ? segColor : unlitColor;
-
-                // THEME-SPECIFIC SEGMENT SHAPES!
-                if (currentTheme === 'nms') {
-                    // Slanted Tech Chevron / Tactical Trapezoid
-                    ctx.beginPath();
-                    ctx.moveTo(x + 2, y);
-                    ctx.lineTo(x + barWidth, y);
-                    ctx.lineTo(x + barWidth - 2, y + segmentHeight);
-                    ctx.lineTo(x, y + segmentHeight);
-                    ctx.closePath();
-                    ctx.fill();
-                } else if (currentTheme === 'solar-eclipse') {
-                    // Glowing Circular Plasma Node / Eclipse Bead
-                    const cyNode = y + segmentHeight / 2;
-                    const cxNode = x + barWidth / 2;
-                    const radNode = Math.min(barWidth, segmentHeight) * 0.48;
-                    ctx.beginPath();
-                    ctx.arc(cxNode, cyNode, radNode, 0, Math.PI * 2);
-                    ctx.fill();
-                } else if (currentTheme === 'euclid-horizon') {
-                    // Wireframe Dual-Stroke Laser Synth Bar
-                    ctx.fillRect(x, y, barWidth, segmentHeight);
-                    if (isLit) {
-                        ctx.strokeStyle = isPeakZone ? '#fbbf24' : (isMidSeg ? '#14b8a6' : 'rgba(251, 191, 36, 0.7)');
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(x, y, barWidth, segmentHeight);
-                    }
-                } else if (currentTheme === 'alien-paradise') {
-                    // Smooth Organic Capsule Pod
-                    drawRoundedRect(ctx, x, y, barWidth, segmentHeight, segmentHeight * 0.45);
-                } else if (currentTheme === 'abyssal-void') {
-                    // Digital CRT Phosphor Pip
-                    ctx.fillRect(x, y, barWidth, segmentHeight);
-                    // CRT Scanline notch
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-                    ctx.fillRect(x, y + segmentHeight * 0.5, barWidth, 0.6);
-                } else if (currentTheme === 'dissonance') {
-                    // Angular Corrupted Sentinel Crystal Prism Segment
-                    const inset = Math.min(1.5, Math.max(0.8, barWidth * 0.14));
-                    ctx.beginPath();
-                    ctx.moveTo(x + inset, y);
-                    ctx.lineTo(x + barWidth - inset, y);
-                    ctx.lineTo(x + barWidth, y + segmentHeight / 2);
-                    ctx.lineTo(x + barWidth - inset, y + segmentHeight);
-                    ctx.lineTo(x + inset, y + segmentHeight);
-                    ctx.lineTo(x, y + segmentHeight / 2);
-                    ctx.closePath();
-                    ctx.fill();
-                    if (isLit && isPeakZone) {
-                        ctx.strokeStyle = '#ffffff';
-                        ctx.lineWidth = 0.8;
-                        ctx.stroke();
-                    }
-                } else if (currentTheme === 'sentinel') {
-                    // Ceramic Armor Angled Tactical Plate
-                    const inset = 1.0;
-                    ctx.beginPath();
-                    ctx.moveTo(x + inset, y);
-                    ctx.lineTo(x + barWidth, y);
-                    ctx.lineTo(x + barWidth - inset, y + segmentHeight);
-                    ctx.lineTo(x, y + segmentHeight);
-                    ctx.closePath();
-                    ctx.fill();
-                    if (isLit && isPeakZone) {
-                        ctx.strokeStyle = '#ff3d00';
-                        ctx.lineWidth = 0.8;
-                        ctx.stroke();
-                    }
-                } else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') {
-                    // Pure Minimalist Rectilinear Segment: Sharp 0px corners, high-contrast flat fill
-                    ctx.fillRect(x, y, barWidth, segmentHeight);
-                    if (isLit && isPeakZone) {
-                        let strokeCol = '#ffffff';
-                        if (currentTheme === 'minimalist-light' || currentTheme === 'brutalist-light') strokeCol = '#000000';
-                        else if (currentTheme === 'minimalist-warm') strokeCol = '#d97706';
-                        else if (currentTheme === 'minimalist-obsidian') strokeCol = '#38bdf8';
-                        ctx.strokeStyle = strokeCol;
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(x, y, barWidth, segmentHeight);
-                    }
-                } else {
-                    // Default Studio Phosphor Rounded Bar
-                    drawRoundedRect(ctx, x, y, barWidth, segmentHeight, 1);
-                }
-                ctx.shadowBlur = 0;
-            }
-
-            // 3. THEME-SPECIFIC FLOATING PEAK CAPS!
-            const peakSeg = Math.min(totalSegments - 1, Math.floor(peakValues[i]));
-            if (peakSeg > fullSegments && peakSeg >= 1) {
-                const peakY = height - footerSpace - segmentHeight - peakSeg * (segmentHeight + segmentGap);
-                const pcx = x + barWidth / 2;
-                const pcy = peakY + segmentHeight / 2;
-
-                if (currentTheme === 'nms') {
-                    // Atlas Holographic Diamond with Target Brackets [ ◆ ]
-                    ctx.save();
-                    ctx.translate(pcx, pcy);
-                    ctx.rotate(Math.PI / 4);
-                    ctx.fillStyle = diamondColor;
-                    ctx.shadowColor = diamondColor;
-                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
-                    const dSize = Math.max(2.2, Math.min(segmentHeight, barWidth * 0.45, 5.0));
-                    ctx.fillRect(-dSize / 2, -dSize / 2, dSize, dSize);
-                    ctx.restore();
-                    // Telemetry bracket
-                    ctx.strokeStyle = '#00e5ff';
-                    ctx.lineWidth = 0.8;
-                    ctx.beginPath();
-                    ctx.moveTo(pcx - barWidth * 0.45, pcy - 2);
-                    ctx.lineTo(pcx - barWidth * 0.45, pcy + 2);
-                    ctx.moveTo(pcx + barWidth * 0.45, pcy - 2);
-                    ctx.lineTo(pcx + barWidth * 0.45, pcy + 2);
-                    ctx.stroke();
-                } else if (currentTheme === 'solar-eclipse') {
-                    // Solar Eclipse Corona Orb with Pulsing Halo
-                    ctx.save();
-                    ctx.fillStyle = '#ff007f';
-                    ctx.shadowColor = '#00f0ff';
-                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
-                    const orbR = Math.max(1.8, Math.min(barWidth * 0.38, segmentHeight * 0.85, 4.0));
-                    ctx.beginPath();
-                    ctx.arc(pcx, pcy, orbR, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.strokeStyle = '#00f0ff';
-                    ctx.lineWidth = 1.0;
-                    ctx.stroke();
-                    ctx.restore();
-                } else if (currentTheme === 'euclid-horizon') {
-                    // Horizon Speed Vector Blip
-                    ctx.save();
-                    ctx.fillStyle = '#fbbf24';
-                    ctx.shadowColor = '#fbbf24';
-                    ctx.shadowBlur = 3;
-                    ctx.fillRect(x - 1, peakY, barWidth + 2, Math.min(2.2, segmentHeight));
-                    ctx.fillStyle = '#14b8a6';
-                    ctx.fillRect(pcx - 1, peakY - 3, 2, 2);
-                    ctx.restore();
-                } else if (currentTheme === 'alien-paradise') {
-                    // Floating Bioluminescent Spore Bead
-                    ctx.save();
-                    const bobY = pcy + Math.sin(performance.now() * 0.005 + i) * 1.0;
-                    ctx.fillStyle = '#ff2a70';
-                    ctx.shadowColor = '#00ced1';
-                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
-                    const sporeR = Math.max(1.6, Math.min(barWidth * 0.36, segmentHeight * 0.8, 3.8));
-                    ctx.beginPath();
-                    ctx.arc(pcx, bobY, sporeR, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
-                } else if (currentTheme === 'abyssal-void') {
-                    // Sonar Radar Blip & Ripple Ring
-                    ctx.save();
-                    ctx.fillStyle = '#00ffaa';
-                    ctx.shadowColor = '#00ffaa';
-                    ctx.shadowBlur = 3;
-                    ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
-                    // Radar ping ripple
-                    ctx.strokeStyle = 'rgba(0, 255, 170, ' + (0.4 + beatPulse * 0.4) + ')';
-                    ctx.lineWidth = 0.8;
-                    ctx.beginPath();
-                    ctx.arc(pcx, pcy, Math.min(barWidth * 0.65, 6.0), 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.restore();
-                } else if (currentTheme === 'dissonance') {
-                    // Floating Luminous Atlantideum Shard Diamond Cap
-                    ctx.save();
-                    ctx.fillStyle = '#fae8ff';
-                    ctx.shadowColor = '#d946ef';
-                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
-                    const capH = Math.max(1.8, Math.min(segmentHeight, 3.5));
-                    const capW = Math.max(3.0, Math.min(barWidth * 0.7, 8.0));
-                    ctx.beginPath();
-                    ctx.moveTo(pcx, pcy - capH);
-                    ctx.lineTo(pcx + capW * 0.5, pcy);
-                    ctx.lineTo(pcx, pcy + capH);
-                    ctx.lineTo(pcx - capW * 0.5, pcy);
-                    ctx.closePath();
-                    ctx.fill();
-                    // Inner luminous crystal core
-                    ctx.fillStyle = '#ffffff';
-                    ctx.beginPath();
-                    ctx.arc(pcx, pcy, Math.min(capH, capW) * 0.28, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
-                } else if (currentTheme === 'sentinel') {
-                    // Sentinel Laser Targeter Pip with Crosshair
-                    ctx.save();
-                    ctx.fillStyle = '#ff3d00';
-                    ctx.shadowColor = '#ff3d00';
-                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
-                    ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
-                    // Optical targeting pip
-                    ctx.fillStyle = '#00e5ff';
-                    ctx.beginPath();
-                    ctx.arc(pcx, pcy, Math.min(1.4, segmentHeight * 0.5), 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
-                } else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') {
-                    // Pure Minimalist Peak Cap: Sharp solid horizontal tick mark
-                    ctx.save();
-                    let capCol = '#ffffff';
-                    if (currentTheme === 'minimalist-light' || currentTheme === 'brutalist-light') capCol = '#000000';
-                    else if (currentTheme === 'minimalist-warm') capCol = '#d97706';
-                    else if (currentTheme === 'minimalist-obsidian') capCol = '#38bdf8';
-                    ctx.fillStyle = capCol;
-                    ctx.shadowBlur = 0;
-                    ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
-                    ctx.restore();
-                } else {
-                    // Default Studio Phosphor LED Peak Bar
-                    ctx.fillStyle = '#ffffff';
-                    ctx.shadowColor = 'rgba(255, 255, 255, 0.95)';
-                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
-                    drawRoundedRect(ctx, x, peakY, barWidth, segmentHeight, 1);
-                    ctx.shadowBlur = 0;
-                }
+                try {
+                    safeStorage.removeItem('cachymusic_last_playlist_id');
+                    safeStorage.removeItem('cachymusic_last_playlist_name');
+                } catch (_) {}
             }
         }
 
-        // 4. THEME-SPECIFIC FLOOR BASELINE & LABELS (Full 20Hz - 24kHz High-Fidelity Bandwidth)
-        if (currentTheme === 'nms') {
-            // Atlas Telemetry Baseline
-            ctx.fillStyle = '#ff1744';
-            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.5);
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = 'rgba(0, 229, 255, 0.8)';
-            const techMarks = [
-                { col: 2, text: '[30Hz]' }, { col: 14, text: '[250Hz]' },
-                { col: 27, text: '[1kHz]' }, { col: 38, text: '[4kHz]' },
-                { col: 46, text: '[16kHz]' }, { col: 51, text: '[24kHz]' }
-            ];
-            for (const tm of techMarks) {
-                const isEdge = (tm.col >= colCount - 1);
-                const isStart = (tm.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + tm.col * colWidth + colWidth / 2));
-                ctx.fillText(tm.text, lx, height - 2);
-            }
-        } else if (currentTheme === 'solar-eclipse') {
-            // Solar Prominence Plasma Floor
-            const solGrad = ctx.createLinearGradient(paddingX, 0, width - paddingX, 0);
-            solGrad.addColorStop(0, '#00f0ff');
-            solGrad.addColorStop(0.5, '#ff007f');
-            solGrad.addColorStop(1, '#00f0ff');
-            ctx.fillStyle = solGrad;
-            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = '#00f0ff';
-            const solarMarks = [
-                { col: 2, text: '• 30Hz' }, { col: 14, text: '• 250Hz' },
-                { col: 25, text: '• 1kHz' }, { col: 35, text: '• 4kHz' },
-                { col: 42, text: '• 16kHz' }, { col: 47, text: '• 24kHz' }
-            ];
-            for (const sm of solarMarks) {
-                const isEdge = (sm.col >= colCount - 1);
-                const isStart = (sm.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + sm.col * colWidth + colWidth / 2));
-                ctx.fillText(sm.text, lx, height - 2);
-            }
-        } else if (currentTheme === 'euclid-horizon') {
-            // Synthwave Horizon Sun Arc & Floor
-            ctx.fillStyle = '#fbbf24';
-            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = '#fbbf24';
-            const synthMarks = [
-                { col: 2, text: '30Hz' }, { col: 14, text: '250Hz' },
-                { col: 27, text: '1kHz' }, { col: 38, text: '4kHz' },
-                { col: 46, text: '16kHz' }, { col: 51, text: '24kHz' }
-            ];
-            for (const sm of synthMarks) {
-                const isEdge = (sm.col >= colCount - 1);
-                const isStart = (sm.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + sm.col * colWidth + colWidth / 2));
-                ctx.fillText(sm.text, lx, height - 2);
-            }
-        } else if (currentTheme === 'alien-paradise') {
-            // Undulating Mycelial Wave Baseline
-            ctx.strokeStyle = '#ff2a70';
-            ctx.lineWidth = 1.6;
-            ctx.beginPath();
-            ctx.moveTo(paddingX, height - legendHeight - 2);
-            for (let xPos = paddingX; xPos <= width - paddingX; xPos += 10) {
-                const waveY = height - legendHeight - 2 + Math.sin(xPos * 0.05 + performance.now() * 0.003) * 1.5;
-                ctx.lineTo(xPos, waveY);
-            }
-            ctx.stroke();
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = '#00ced1';
-            const bioMarks = [
-                { col: 2, text: '✿ 30Hz' }, { col: 14, text: '✿ 250Hz' },
-                { col: 26, text: '✿ 1kHz' }, { col: 37, text: '✿ 4kHz' },
-                { col: 44, text: '✿ 16kHz' }, { col: 49, text: '✿ 24kHz' }
-            ];
-            for (const bm of bioMarks) {
-                const isEdge = (bm.col >= colCount - 1);
-                const isStart = (bm.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + bm.col * colWidth + colWidth / 2));
-                ctx.fillText(bm.text, lx, height - 2);
-            }
-        } else if (currentTheme === 'abyssal-void') {
-            // CRT Hydrophone Sonar Floor
-            ctx.fillStyle = '#00ffaa';
-            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = '#00ffaa';
-            const sonarMarks = [
-                { col: 2, text: '◄ 30Hz' }, { col: 14, text: '◄ 250Hz' },
-                { col: 28, text: '◄ 1kHz' }, { col: 39, text: '◄ 4kHz' },
-                { col: 47, text: '◄ 16kHz' }, { col: 53, text: '◄ 24kHz' }
-            ];
-            for (const sm of sonarMarks) {
-                const isEdge = (sm.col >= colCount - 1);
-                const isStart = (sm.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + sm.col * colWidth + colWidth / 2));
-                ctx.fillText(sm.text, lx, height - 2);
-            }
-        } else if (currentTheme === 'dissonance') {
-            // Corrupted Sentinel Dissonance Floor Baseline
-            ctx.fillStyle = '#d946ef';
-            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = '#d946ef';
-            const dissMarks = [
-                { col: 2, text: '✦ 30Hz' }, { col: 14, text: '✦ 250Hz' },
-                { col: 27, text: '✦ 1kHz' }, { col: 38, text: '✦ 4kHz' },
-                { col: 46, text: '✦ 16kHz' }, { col: 51, text: '✦ 24kHz' }
-            ];
-            for (const dm of dissMarks) {
-                const isEdge = (dm.col >= colCount - 1);
-                const isStart = (dm.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + dm.col * colWidth + colWidth / 2));
-                ctx.fillText(dm.text, lx, height - 2);
-            }
-        } else if (currentTheme === 'sentinel') {
-            // Sentinel Security Enforcement Floor Baseline
-            ctx.fillStyle = '#ff3d00';
-            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = '#00e5ff';
-            const sentinelMarks = [
-                { col: 2, text: '[30Hz]' }, { col: 14, text: '[250Hz]' },
-                { col: 27, text: '[1kHz]' }, { col: 38, text: '[4kHz]' },
-                { col: 46, text: '[16kHz]' }, { col: 51, text: '[24kHz]' }
-            ];
-            for (const sm of sentinelMarks) {
-                const isEdge = (sm.col >= colCount - 1);
-                const isStart = (sm.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + sm.col * colWidth + colWidth / 2));
-                ctx.fillText(sm.text, lx, height - 2);
-            }
-        } else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') {
-            const isLt = (currentTheme === 'brutalist-light' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-warm');
-            let floorCol = isLt ? '#000000' : '#ffffff';
-            if (currentTheme === 'minimalist-warm') floorCol = '#d97706';
-            else if (currentTheme === 'minimalist-obsidian') floorCol = '#38bdf8';
-            ctx.fillStyle = floorCol;
-            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.5);
-            ctx.font = '700 8px monospace';
-            ctx.fillStyle = floorCol;
-            const techMarks = [
-                { col: 2, text: '30Hz' }, { col: 14, text: '250Hz' },
-                { col: 25, text: '1kHz' }, { col: 35, text: '4kHz' },
-                { col: 42, text: '16kHz' }, { col: 47, text: '24kHz' }
-            ];
-            for (const tm of techMarks) {
-                const isEdge = (tm.col >= colCount - 1);
-                const isStart = (tm.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + tm.col * colWidth + colWidth / 2));
-                ctx.fillText(tm.text, lx, height - 2);
-            }
+        if (allTracks.length === 0) return;
+
+        // Determine target track to load (paused on boot)
+        let targetIdx = 0;
+        if (reqTrack !== null && !isNaN(parseInt(reqTrack, 10)) && allTracks[parseInt(reqTrack, 10)]) {
+            targetIdx = parseInt(reqTrack, 10);
         } else {
-            // Default Studio Floor
-            ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.24 + beatPulse * 0.40) + ')';
-            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1);
-            const freqLegends = [
-                { col: 2, text: '30' }, { col: 8, text: '60' },
-                { col: 17, text: '250' }, { col: 29, text: '1k' },
-                { col: 40, text: '4k' }, { col: 49, text: '16k' },
-                { col: 55, text: '24k' }
-            ];
-            ctx.save();
-            ctx.font = '8px NMSFuturaProBook, monospace';
-            ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.28 + (beatPulse + snarePulse) * 0.20) + ')';
-            for (const fl of freqLegends) {
-                const isEdge = (fl.col >= colCount - 1);
-                const isStart = (fl.col <= 2);
-                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
-                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + fl.col * colWidth + colWidth / 2));
-                ctx.fillText(fl.text, lx, height - 2);
+            // First search within displayedTracks (if a playlist is active)
+            const pool = (currentPlaylistId !== null && displayedTracks.length > 0) ? displayedTracks : allTracks;
+            let foundPoolIdx = findTrackIndexBySavedState(pool);
+            if (foundPoolIdx !== -1) {
+                const tr = pool[foundPoolIdx];
+                const masterIdx = allTracks.findIndex(t => (tr.tid && t.tid == tr.tid) || (tr.fullPath && t.fullPath === tr.fullPath) || (t.id == tr.id));
+                targetIdx = masterIdx !== -1 ? masterIdx : 0;
+            } else {
+                // If not found in current playlist, check global allTracks
+                let foundGlobalIdx = findTrackIndexBySavedState(allTracks);
+                if (foundGlobalIdx !== -1) {
+                    targetIdx = foundGlobalIdx;
+                } else if (currentPlaylistId !== null && displayedTracks.length > 0) {
+                    const firstPlTrack = displayedTracks[0];
+                    const masterIdx = allTracks.findIndex(t => (firstPlTrack.tid && t.tid == firstPlTrack.tid) || (firstPlTrack.fullPath && t.fullPath === firstPlTrack.fullPath) || (t.id == firstPlTrack.id));
+                    targetIdx = masterIdx !== -1 ? masterIdx : 0;
+                } else {
+                    targetIdx = 0;
+                }
             }
-            ctx.restore();
+        }
+
+        // Retrieve remembered playback timeframe from previous session if track has not ended
+        let savedTime = 0;
+        try {
+            const rawTime = safeStorage.getItem('cachymusic_last_track_time');
+            if (rawTime !== null && !isNaN(parseFloat(rawTime))) {
+                const parsed = parseFloat(rawTime);
+                const targetTrack = allTracks[targetIdx];
+                const trackDur = (targetTrack && targetTrack.duration) ? Number(targetTrack.duration) : 0;
+                // Only resume if the song had not finished playing (< dur - 1)
+                if (parsed > 0 && (!trackDur || parsed < (trackDur - 1))) {
+                    savedTime = parsed;
+                }
+            }
+        } catch (_) {}
+
+        if (allTracks[targetIdx]) {
+            await loadTrack(targetIdx, false, savedTime);
+            if (isLyricsView) {
+                updateLyricsDisplay(allTracks[targetIdx]);
+            }
         }
     }
 
-    function drawRoundedRect(ctx, x, y, w, h, r) {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.closePath();
-        ctx.fill();
+
+    function getValidSampleRate(rate) {
+        const r = Number(rate);
+        const validRates = [44100, 48000, 88200, 96000, 176400, 192000];
+        if (validRates.includes(r)) return r;
+        return 44100;
     }
 
-    // -------------------------------------------------------------------------
-    // Visualizer Component: Turntable Center ATLAS Core (No Man's Sky)
-    // 3D Rotating Crimson Octahedron (The Atlas Entity) with orbital telemetry rings,
-    // coordinate runes (// 16 // 16 // 16 // 16 //), and acoustic laser shockwaves.
-    // -------------------------------------------------------------------------
-    // Visualizer Component: Turntable Center ATLAS Core (No Man's Sky)
-    // Dynamic Beat-Driven Luminance:
-    // Starts dim and dormant (mysterious obsidian-garnet entity with faint ember),
-    // then dynamically ignites and blazes into radiant incandescent crimson & white
-    // in direct proportion to real-time beat strength and acoustic transients.
-    // -------------------------------------------------------------------------
+    // Update DAC Stream & Hardware Sample Rate Status Indicator
+    function updateDacStatusUi() {
+        const currentTrack = (isStandalonePlayback && standaloneTrackList.length > 0)
+            ? standaloneTrackList[standaloneTrackIndex]
+            : allTracks[currentTrackIndex];
+        updateSignalPathUi(currentTrack);
+        if (!statDacStream) return;
+        const currentRate = audioContext ? audioContext.sampleRate : ((currentTrack && currentTrack.sampleRate) ? getValidSampleRate(currentTrack.sampleRate) : 44100);
+        const rateStr = currentRate >= 1000 ? `${(currentRate / 1000).toFixed(1)} kHz` : `${currentRate} Hz`;
+        const bd = (currentTrack && currentTrack.bitDepth) || ((currentRate >= 88200) ? 24 : 16);
+        const bitStr = `${bd}-BIT`;
+        const nyquistKhz = (currentRate / 2000).toFixed(1).replace(/\.0$/, '');
+
+        const curTheme = getActiveTheme();
+        const isLightSurface = (curTheme === 'default' || curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm');
+
+        if (!hasActiveDsp()) {
+            statDacStream.textContent = `BIT-PERFECT DIRECT (${bitStr} • ${rateStr} • ${nyquistKhz}kHz BANDWIDTH)`;
+            statDacStream.style.color = isLightSurface ? '#047857' : '#00ff88';
+            statDacStream.title = `Direct hardware stream matching ${bitStr} • ${rateStr} (${nyquistKhz} kHz Nyquist bandwidth) with zero downsampling and zero DSP coloration.`;
+        } else {
+            const activeDsp = [];
+            if (isAmpBoost) activeDsp.push('AMP');
+            if (isBassBoost) activeDsp.push('BASS');
+            if (isVocalBoost) activeDsp.push('VOCAL');
+            if (isTrebleBoost) activeDsp.push('TREBLE');
+            if (isLimiter) activeDsp.push('LIMITER');
+            const dspStr = activeDsp.length > 0 ? activeDsp.join('+') : 'ACTIVE';
+            statDacStream.textContent = `STUDIO DSP (${dspStr} • ${bitStr} • ${rateStr} • ${nyquistKhz}kHz)`;
+            statDacStream.style.color = isLightSurface ? '#9a3412' : '#ffaa00';
+            statDacStream.title = `Processing through ${isPrecision64 ? '64-bit' : '32-bit'} floating-point Web Audio DSP stage at ${rateStr} (${nyquistKhz} kHz bandwidth).`;
+        }
+    }
+
+    // Dynamic Audio Specifications Badge (Strict audio attributes, no fluff)
+    function updateTrackBadgeUi(track) {
+        if (!trackBadge || !track) return;
+        const badgeParts = [];
+        const fmt = resolveTrackFormat(track);
+        if (fmt) {
+            badgeParts.push(fmt);
+        }
+        const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
+        if (bd) {
+            badgeParts.push(`${bd}-Bit`);
+        }
+        if (track.sampleRate) {
+            badgeParts.push(track.sampleRate >= 1000 ? `${(track.sampleRate / 1000).toFixed(1)} kHz` : `${track.sampleRate} Hz`);
+        }
+        if (track.bitrate) {
+            badgeParts.push(`${track.bitrate} kbps`);
+        }
+        if (track.channels === 2) {
+            badgeParts.push('Stereo');
+        } else if (track.channels === 1) {
+            badgeParts.push('Mono');
+        } else if (track.channels) {
+            badgeParts.push(`${track.channels} ch`);
+        }
+        trackBadge.textContent = badgeParts.length > 0 ? badgeParts.join(' • ') : 'AUDIO';
+    }
+
+
+
+    function updateVolumeIcon(vol) {
+        let pathHtml = '';
+        if (vol === 0 || (audio && audio.muted)) {
+            pathHtml = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
+        } else if (vol < 0.5) {
+            pathHtml = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>';
+        } else {
+            pathHtml = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
+        }
+
+        if (volumeIcon) volumeIcon.innerHTML = pathHtml;
+        const miniVolIcon = document.getElementById('miniVolumeIcon');
+        if (miniVolIcon) miniVolIcon.innerHTML = pathHtml;
+    }
+
+    let lastPositionStateUpdate = 0;
+    function updateMediaSessionPositionState(force = false) {
+        if (!('mediaSession' in navigator) || !('setPositionState' in navigator.mediaSession)) return;
+        const now = performance.now();
+        if (!force && (now - lastPositionStateUpdate < 800)) return;
+        lastPositionStateUpdate = now;
+        try {
+            const dur = isSoftwareDecoding ? (activeDecodedBuffer ? activeDecodedBuffer.duration : 0) : (audio ? audio.duration : 0);
+            const pos = isSoftwareDecoding ? (softwarePlaybackOffset + (audioContext && !isSoftwarePaused ? (audioContext.currentTime - softwarePlaybackStartTime) : 0)) : (audio ? (audio.currentTime || 0) : 0);
+            if (dur && !isNaN(dur) && isFinite(dur) && dur > 0) {
+                navigator.mediaSession.setPositionState({
+                    duration: Math.max(0, dur),
+                    playbackRate: currentPlaybackSpeed || 1.0,
+                    position: Math.max(0, Math.min(dur, pos || 0))
+                });
+            }
+        } catch (_) {}
+    }
+
+    function setupMediaSessionActionHandlers() {
+        if (!('mediaSession' in navigator)) return;
+        try {
+            navigator.mediaSession.setActionHandler('play', () => { resumeAudio(); });
+            navigator.mediaSession.setActionHandler('pause', () => { pauseAudio(); });
+            navigator.mediaSession.setActionHandler('stop', () => { pauseAudio(); });
+            navigator.mediaSession.setActionHandler('previoustrack', () => { playPrevTrack(); });
+            navigator.mediaSession.setActionHandler('nexttrack', () => { playNextTrack(); });
+            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                const skip = (details && details.seekOffset) || 10;
+                const cur = isSoftwareDecoding ? softwarePlaybackOffset : (audio ? audio.currentTime : 0);
+                seekAudio(Math.max(0, cur - skip));
+            });
+            navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                const skip = (details && details.seekOffset) || 10;
+                const cur = isSoftwareDecoding ? softwarePlaybackOffset : (audio ? audio.currentTime : 0);
+                seekAudio(cur + skip);
+            });
+            navigator.mediaSession.setActionHandler('seekto', (details) => {
+                if (details && details.seekTime !== undefined && !isNaN(details.seekTime)) {
+                    seekAudio(details.seekTime);
+                }
+            });
+        } catch (e) {
+            console.warn('[MediaSession] Error setting action handlers:', e);
+        }
+    }
+
+    // Attach top-level Player Core functions and state to window for cross-module accessibility
+    if (typeof window !== "undefined") {
+        try { window.activeLoadedMetadataHandler = activeLoadedMetadataHandler; } catch (_) {}
+        try { window.attachAudioListeners = attachAudioListeners; } catch (_) {}
+        try { window.cancelSoftwareProgressLoop = cancelSoftwareProgressLoop; } catch (_) {}
+        try { window.checkAndPreloadNextTrack = checkAndPreloadNextTrack; } catch (_) {}
+        try { window.consecutiveSkipCount = consecutiveSkipCount; } catch (_) {}
+        try { window.currentPlayRequestId = currentPlayRequestId; } catch (_) {}
+        try { window.currentTrackGeneration = currentTrackGeneration; } catch (_) {}
+        try { window.debugModeActive = debugModeActive; } catch (_) {}
+        try { window.executeGaplessHandoff = executeGaplessHandoff; } catch (_) {}
+        try { window.findTrackIndexBySavedState = findTrackIndexBySavedState; } catch (_) {}
+        try { window.getValidSampleRate = getValidSampleRate; } catch (_) {}
+        try { window.initMprisBridge = initMprisBridge; } catch (_) {}
+        try { window.isPlayPending = isPlayPending; } catch (_) {}
+        try { window.lastPositionStateUpdate = lastPositionStateUpdate; } catch (_) {}
+        try { window.lastSyncedPlayingState = lastSyncedPlayingState; } catch (_) {}
+        try { window.loadTrack = loadTrack; } catch (_) {}
+        try { window.nextTrack = nextTrack; } catch (_) {}
+        try { window.onSoftwarePlaybackEnded = onSoftwarePlaybackEnded; } catch (_) {}
+        try { window.pauseAudio = pauseAudio; } catch (_) {}
+        try { window.pauseSoftwarePlayback = pauseSoftwarePlayback; } catch (_) {}
+        try { window.peekNextTrackIndex = peekNextTrackIndex; } catch (_) {}
+        try { window.playAudio = playAudio; } catch (_) {}
+        try { window.playPendingTimeout = playPendingTimeout; } catch (_) {}
+        try { window.playWithSoftwareDecoder = playWithSoftwareDecoder; } catch (_) {}
+        try { window.prevTrack = prevTrack; } catch (_) {}
+        try { window.resolveTrackFormat = resolveTrackFormat; } catch (_) {}
+        try { window.restoreSessionState = restoreSessionState; } catch (_) {}
+        try { window.resumeSoftwarePlayback = resumeSoftwarePlayback; } catch (_) {}
+        try { window.seekSoftwarePlayback = seekSoftwarePlayback; } catch (_) {}
+        try { window.setupMediaSessionActionHandlers = setupMediaSessionActionHandlers; } catch (_) {}
+        try { window.startSoftwareBufferPlayback = startSoftwareBufferPlayback; } catch (_) {}
+        try { window.startSoftwareProgressLoop = startSoftwareProgressLoop; } catch (_) {}
+        try { window.stopSoftwarePlayback = stopSoftwarePlayback; } catch (_) {}
+        try { window.syncPlayPauseUI = syncPlayPauseUI; } catch (_) {}
+        try { window.togglePlayPause = togglePlayPause; } catch (_) {}
+        try { window.trackPlaybackRetryCount = trackPlaybackRetryCount; } catch (_) {}
+        try { window.updateDacStatusUi = updateDacStatusUi; } catch (_) {}
+        try { window.updateMediaSessionPositionState = updateMediaSessionPositionState; } catch (_) {}
+        try { window.updatePlaybackProgress = updatePlaybackProgress; } catch (_) {}
+        try { window.updateRepeatUI = updateRepeatUI; } catch (_) {}
+        try { window.updateSignalPathUi = updateSignalPathUi; } catch (_) {}
+        try { window.updateTrackBadgeUi = updateTrackBadgeUi; } catch (_) {}
+        try { window.updateVolumeIcon = updateVolumeIcon; } catch (_) {}
+        try { window.userExplicitlyPaused = userExplicitlyPaused; } catch (_) {}
+    }
+
+
+
+    // --- Sub-Module: lyrics.js ---
+// CachyMusic - Synchronized LRC Lyrics Engine
+    // Parse Lyrics (supporting standard text and timestamped LRC format [mm:ss.xx])
+    function parseLyrics(raw) {
+        if (!raw || typeof raw !== 'string' || !raw.trim()) return null;
+        const lines = raw.split(/\r?\n/);
+        const parsed = [];
+        const lrcRegex = /\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]/g;
+        let hasTimestamps = false;
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            const timeMatches = [...trimmed.matchAll(lrcRegex)];
+            if (timeMatches.length > 0) {
+                hasTimestamps = true;
+                const textOnly = trimmed.replace(lrcRegex, '').trim();
+                for (const match of timeMatches) {
+                    const min = parseInt(match[1], 10);
+                    const sec = parseInt(match[2], 10);
+                    const ms = match[3] ? parseInt(match[3].padEnd(3, '0').slice(0, 3), 10) : 0;
+                    const time = min * 60 + sec + (ms / 1000);
+                    parsed.push({ time, text: textOnly || '♪' });
+                }
+            } else if (!trimmed.match(/^\[[a-zA-Z]+:.*\]$/)) {
+                // Regular line (ignore ID tags like [ar:Artist])
+                parsed.push({ time: -1, text: trimmed });
+            }
+        }
+
+        if (hasTimestamps) {
+            parsed.sort((a, b) => a.time - b.time);
+        }
+
+        return { isSynced: hasTimestamps, lines: parsed, raw };
+    }
+
+    // Update Lyrics Displayer Content
+    function updateLyricsDisplay(track) {
+        if (!lyricsTrackName || !lyricsArtistName || !lyricsContent) return;
+
+        activeLyricIndex = -1;
+        const title = track ? (track.title || track.filename || 'Select A Track') : '—';
+        const artist = track ? (track.artist || 'Unknown Artist') : '—';
+        lyricsTrackName.textContent = title;
+        lyricsArtistName.textContent = artist;
+
+        const lyricsRaw = track ? track.lyrics : null;
+        parsedLyrics = parseLyrics(lyricsRaw);
+
+        if (!parsedLyrics || parsedLyrics.lines.length === 0) {
+            lyricsContent.innerHTML = `
+                <div class="lyricsPlaceholder">
+                    <div class="lyricsPlaceholderIcon">♪</div>
+                    <p>No lyrics available for this track.</p>
+                    <span>Lyrics can be embedded via the<br>USLT/LYRICS tag in your audio files or in a .lrc file.</span>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+        parsedLyrics.lines.forEach((item, idx) => {
+            const timeAttr = item.time >= 0 ? ` data-time="${item.time.toFixed(2)}"` : '';
+            const isClickable = item.time >= 0 ? ' clickable' : '';
+            const clickTitle = isClickable ? ' title="Click to jump playback to this line"' : '';
+            html += `<div class="lyricLine lyricsLine${isClickable}" data-index="${idx}"${timeAttr}${clickTitle}>${escapeHtml(item.text)}</div>`;
+        });
+        lyricsContent.innerHTML = html;
+
+        // Interactive seeking when clicking synced lyric lines
+        if (parsedLyrics.isSynced) {
+            lyricsContent.querySelectorAll('.lyricLine.clickable').forEach(el => {
+                el.addEventListener('click', () => {
+                    const t = parseFloat(el.dataset.time);
+                    if (!isNaN(t)) {
+                        audio.currentTime = t;
+                        try {
+                            const dur = audio.duration;
+                            if (t > 0 && (!dur || isNaN(dur) || t < (dur - 1))) {
+                                safeStorage.setItem('cachymusic_last_track_time', t.toFixed(2));
+                            }
+                        } catch (_) {}
+                        playAudio();
+                    }
+                });
+            });
+            updateActiveLyric(audio.currentTime);
+        }
+    }
+
+    // Highlight and Scroll Active Lyric Line for Synced LRC
+    function updateActiveLyric(currentTime) {
+        if (!isLyricsView || !parsedLyrics || !parsedLyrics.isSynced || !lyricsContent) return;
+        const lines = parsedLyrics.lines;
+        let newIdx = -1;
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].time <= currentTime + 0.15) {
+                newIdx = i;
+            } else {
+                break;
+            }
+        }
+
+        if (newIdx !== activeLyricIndex) {
+            activeLyricIndex = newIdx;
+            const allEls = lyricsContent.querySelectorAll('.lyricLine');
+            allEls.forEach((el, i) => {
+                if (i === activeLyricIndex) {
+                    el.classList.add('active');
+                    if (lyricsScrollArea) {
+                        const elTop = el.offsetTop - lyricsScrollArea.offsetTop;
+                        const targetScroll = elTop - (lyricsScrollArea.clientHeight / 2) + (el.clientHeight / 2);
+                        lyricsScrollArea.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+                    }
+                } else {
+                    el.classList.remove('active');
+                }
+            });
+        }
+    }
+
+    // Toggle Lyrics Displayer (takes over turntable upon toggle, returns to turntable upon disable)
+    function toggleLyricsView(forcedState) {
+        if (!lyricsToggleBtn || !lyricsCon || !turntableCon) return;
+
+        isLyricsView = (forcedState !== undefined) ? !!forcedState : !isLyricsView;
+
+        if (isLyricsView) {
+            lyricsToggleBtn.classList.add('active');
+            lyricsToggleBtn.setAttribute('title', 'Return to Turntable View (L)');
+            const textSpan = lyricsToggleBtn.querySelector('span');
+            if (textSpan) textSpan.textContent = 'TURNTABLE';
+            turntableCon.style.setProperty('display', 'none', 'important');
+            turntableCon.classList.add('lyricsActiveHidden');
+            lyricsCon.classList.remove('lyricsActiveHidden');
+            lyricsCon.style.setProperty('display', 'flex', 'important');
+            updateLyricsDisplay(allTracks[currentTrackIndex]);
+        } else {
+            lyricsToggleBtn.classList.remove('active');
+            lyricsToggleBtn.setAttribute('title', 'Toggle Lyrics View (L)');
+            const textSpan = lyricsToggleBtn.querySelector('span');
+            if (textSpan) textSpan.textContent = 'LYRICS';
+            turntableCon.classList.remove('lyricsActiveHidden');
+            turntableCon.style.removeProperty('display');
+            lyricsCon.classList.add('lyricsActiveHidden');
+            lyricsCon.style.setProperty('display', 'none', 'important');
+        }
+    }
+
+    // Attach lyrics functions to window
+    if (typeof window !== "undefined") {
+        try { window.parseLyrics = parseLyrics; } catch (_) {}
+        try { window.updateLyricsDisplay = updateLyricsDisplay; } catch (_) {}
+        try { window.updateActiveLyric = updateActiveLyric; } catch (_) {}
+        try { window.toggleLyricsView = toggleLyricsView; } catch (_) {}
+    }
+
+
+
+
+    // --- Sub-Module: visualizer-themes-1.js ---
+// CachyMusic - Turntable Center Visualizers (Atlas, Solar Eclipse, Euclid, Alien Paradise)
+    let atlasLuminance = 0.05;
     let atlasRotationAngle = 0;
     let atlasPrecessionAngle = 0;
-    let atlasLuminance = 0.05;
 
     function drawTurntableCenterAtlasCore(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0) {
         if (!ctx || width === 0 || height === 0) return;
@@ -10671,6 +9156,25 @@
     // Visualizer Component: Turntable Center ABYSSAL VOID (Image 4 Reference)
     // Radiant emerald crescent, colossal gas giant silhouette, twin sub-light trails
     // -------------------------------------------------------------------------
+
+    // Attach visualizer theme drawing routines to window
+    if (typeof window !== "undefined") {
+        try { window.atlasLuminance = atlasLuminance; } catch (_) {}
+        try { window.atlasRotationAngle = atlasRotationAngle; } catch (_) {}
+        try { window.atlasPrecessionAngle = atlasPrecessionAngle; } catch (_) {}
+        try { window.drawTurntableCenterAlienParadise = drawTurntableCenterAlienParadise; } catch (_) {}
+        try { window.drawTurntableCenterAtlasCore = drawTurntableCenterAtlasCore; } catch (_) {}
+        try { window.drawTurntableCenterEuclidPortal = drawTurntableCenterEuclidPortal; } catch (_) {}
+        try { window.drawTurntableCenterSolarEclipse = drawTurntableCenterSolarEclipse; } catch (_) {}
+        try { window.eclipseRotation = eclipseRotation; } catch (_) {}
+        try { window.euclidRotation = euclidRotation; } catch (_) {}
+        try { window.paradiseTime = paradiseTime; } catch (_) {}
+    }
+
+
+
+    // --- Sub-Module: visualizer-themes-2.js ---
+// CachyMusic - Turntable Center Visualizers (Abyssal Void, Dissonance, Sentinel, Heart, Brutalist, Touhou)
     let abyssalTime = 0;
     function drawTurntableCenterAbyssalVoid(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0) {
         if (!ctx || width === 0 || height === 0) return;
@@ -13917,6 +12421,10 @@
         updateAndDrawShockwaves(ctx, dt);
 
         // Symmetrical Sinuous Thematic Audio Wings (Left & Right Wings)
+        const thematicLeftPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
+        const thematicRightPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
+        const thematicLeftMistPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
+        const thematicRightMistPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
         const wingPoints = 36;
         const clearance = Math.min(width * 0.16, Math.max(54, height * 0.58));
         const wingWidth = (width / 2) - clearance;
@@ -14239,6 +12747,2870 @@
         }
         ctx.restore();
     }
+
+
+    // Attach visualizer theme drawing routines to window
+    if (typeof window !== "undefined") {
+        try { window.abyssalTime = abyssalTime; } catch (_) {}
+        try { window.dissonanceTime = dissonanceTime; } catch (_) {}
+        try { window.drawBadAppleTouhou = drawBadAppleTouhou; } catch (_) {}
+        try { window.drawThematicAlienBioManta = drawThematicAlienBioManta; } catch (_) {}
+        try { window.drawThematicAtlasPlatform = drawThematicAtlasPlatform; } catch (_) {}
+        try { window.drawThematicBrutalistCore = drawThematicBrutalistCore; } catch (_) {}
+        try { window.drawThematicCenterpiece = drawThematicCenterpiece; } catch (_) {}
+        try { window.drawThematicDefaultCore = drawThematicDefaultCore; } catch (_) {}
+        try { window.drawThematicEmerilWarpTunnel = drawThematicEmerilWarpTunnel; } catch (_) {}
+        try { window.drawThematicHarmonicMonolith = drawThematicHarmonicMonolith; } catch (_) {}
+        try { window.drawThematicMinimalistObsidianCore = drawThematicMinimalistObsidianCore; } catch (_) {}
+        try { window.drawThematicMinimalistWarmCore = drawThematicMinimalistWarmCore; } catch (_) {}
+        try { window.drawThematicSentinelDrone = drawThematicSentinelDrone; } catch (_) {}
+        try { window.drawThematicSolarCruiser = drawThematicSolarCruiser; } catch (_) {}
+        try { window.drawThematicSpaceStation = drawThematicSpaceStation; } catch (_) {}
+        try { window.drawThematicWave = drawThematicWave; } catch (_) {}
+        try { window.drawTurntableCenterAbyssalVoid = drawTurntableCenterAbyssalVoid; } catch (_) {}
+        try { window.drawTurntableCenterBrutalist = drawTurntableCenterBrutalist; } catch (_) {}
+        try { window.drawTurntableCenterDissonance = drawTurntableCenterDissonance; } catch (_) {}
+        try { window.drawTurntableCenterHeart = drawTurntableCenterHeart; } catch (_) {}
+        try { window.drawTurntableCenterSentinel = drawTurntableCenterSentinel; } catch (_) {}
+        try { window.sentinelTime = sentinelTime; } catch (_) {}
+        try { window.updateAndDrawParticles = updateAndDrawParticles; } catch (_) {}
+    }
+
+
+
+    // --- Sub-Module: visualizer.js ---
+// CachyMusic - High-Fidelity Canvas Visualizer Engine (Liquid Wave & Segmented Bars)
+
+
+    let themes1Promise = null;
+    let themes2Promise = null;
+
+    function loadVisualizerThemes1() {
+        if (!themes1Promise) {
+            themes1Promise = import('./visualizer-themes-1.js').then(mod => {
+                if (typeof window !== 'undefined') {
+                    Object.assign(window, mod);
+                }
+                return mod;
+            }).catch(err => {
+                console.warn('Failed to load visualizer-themes-1.js', err);
+            });
+        }
+        return themes1Promise;
+    }
+
+    function loadVisualizerThemes2() {
+        if (!themes2Promise) {
+            themes2Promise = import('./visualizer-themes-2.js').then(mod => {
+                if (typeof window !== 'undefined') {
+                    Object.assign(window, mod);
+                }
+                return mod;
+            }).catch(err => {
+                console.warn('Failed to load visualizer-themes-2.js', err);
+            });
+        }
+        return themes2Promise;
+    }
+
+    function setupVisualizerMode() {
+        setVisualizerMode(activeVisualizerMode);
+
+        visPillBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                setVisualizerMode(btn.dataset.mode);
+            });
+        });
+
+        visModeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                setVisualizerMode(btn.dataset.mode);
+            });
+        });
+    }
+
+    function setVisualizerMode(mode) {
+        if (mode === 'badapple' || mode === 'thematic') {
+            activeVisualizerMode = 'thematic';
+            loadVisualizerThemes1();
+            loadVisualizerThemes2();
+        } else {
+            activeVisualizerMode = mode;
+        }
+        safeStorage.setItem('cachymusic_vis_mode', activeVisualizerMode);
+
+        visPillBtns.forEach(b => {
+            const m = b.dataset.mode;
+            const matches = (m === activeVisualizerMode) || (activeVisualizerMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
+            b.classList.toggle('active', matches);
+        });
+        visModeBtns.forEach(b => {
+            const m = b.dataset.mode;
+            const matches = (m === activeVisualizerMode) || (activeVisualizerMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
+            b.classList.toggle('active', matches);
+        });
+
+        // Reset peak drops for dash mode & pulse state
+        peakValues.fill(0);
+        peakVelocity.fill(0);
+        peakHold.fill(0);
+        smoothDashLevels.fill(0);
+        smoothHeartPulse = 1.0;
+
+        const isThematic = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple');
+        if (turntableCenterVis) {
+            turntableCenterVis.style.display = 'flex';
+        }
+        if (vinylLabel) {
+            vinylLabel.style.opacity = '0';
+        }
+        if (vinylTurntable) {
+            vinylTurntable.classList.toggle('thematicFidelity', isThematic);
+            vinylTurntable.classList.toggle('spinning', isPlaying);
+        }
+        if (bgDisc) {
+            bgDisc.classList.toggle('fast', isPlaying && isThematic);
+        }
+        if (typeof resumeVisualizerLoop === 'function') {
+            resumeVisualizerLoop();
+        }
+    }
+    window.setVisualizerMode = setVisualizerMode;
+
+    let lastCanvasW = 0;
+    let lastCanvasH = 0;
+    let lastCanvasDpr = 0;
+
+    let lastCenterW = 0;
+    let lastCenterH = 0;
+    let lastCenterDpr = 0;
+
+    let cachedDockW = 0;
+    let cachedDockH = 0;
+    let cachedCenterW = 0;
+    let cachedCenterH = 0;
+
+    function refreshCanvasDimensions() {
+        if (visualizerDock) {
+            const w = Math.round(visualizerDock.clientWidth || visualizerDock.getBoundingClientRect().width);
+            const h = Math.round(visualizerDock.clientHeight || visualizerDock.getBoundingClientRect().height);
+            if (w > 0 && h > 0) {
+                cachedDockW = w;
+                cachedDockH = h;
+                syncCanvasResolution(w, h);
+            }
+        }
+        if (turntableCenterCanvas) {
+            const cw = Math.round(turntableCenterCanvas.clientWidth || turntableCenterCanvas.getBoundingClientRect().width);
+            const ch = Math.round(turntableCenterCanvas.clientHeight || turntableCenterCanvas.getBoundingClientRect().height);
+            if (cw > 0 && ch > 0) {
+                cachedCenterW = cw;
+                cachedCenterH = ch;
+                if (typeof resumeVisualizerLoop === 'function') resumeVisualizerLoop();
+            }
+        }
+    }
+
+    if (window.ResizeObserver) {
+        const resizeObs = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.target === visualizerDock) {
+                    cachedDockW = Math.round(entry.contentRect.width);
+                    cachedDockH = Math.round(entry.contentRect.height);
+                    if (cachedDockW > 0 && cachedDockH > 0) {
+                        syncCanvasResolution(cachedDockW, cachedDockH);
+                    }
+                } else if (entry.target === turntableCenterCanvas) {
+                    cachedCenterW = Math.round(entry.contentRect.width);
+                    cachedCenterH = Math.round(entry.contentRect.height);
+                    if (cachedCenterW > 0 && cachedCenterH > 0 && typeof resumeVisualizerLoop === 'function') {
+                        resumeVisualizerLoop();
+                    }
+                }
+            }
+        });
+        if (visualizerDock) resizeObs.observe(visualizerDock);
+        if (turntableCenterCanvas) resizeObs.observe(turntableCenterCanvas);
+    }
+    window.addEventListener('resize', refreshCanvasDimensions, { passive: true });
+    window.addEventListener('orientationchange', refreshCanvasDimensions, { passive: true });
+
+    const cachedCenterDims = { width: 0, height: 0, dpr: 1 };
+    function syncTurntableCenterCanvas() {
+        if (!turntableCenterCanvas || !turntableCenterVis) return null;
+        let w = cachedCenterW;
+        let h = cachedCenterH;
+        if (w === 0 || h === 0) {
+            w = Math.round(turntableCenterCanvas.clientWidth || turntableCenterCanvas.getBoundingClientRect().width);
+            h = Math.round(turntableCenterCanvas.clientHeight || turntableCenterCanvas.getBoundingClientRect().height);
+            cachedCenterW = w;
+            cachedCenterH = h;
+        }
+        if (w === 0 || h === 0) return null;
+        const maxDpr = window.innerWidth <= 768 ? 1.5 : 2.0;
+        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+
+        if (w !== lastCenterW || h !== lastCenterH || dpr !== lastCenterDpr) {
+            turntableCenterCanvas.width = Math.round(w * dpr);
+            turntableCenterCanvas.height = Math.round(h * dpr);
+            lastCenterW = w;
+            lastCenterH = h;
+            lastCenterDpr = dpr;
+        }
+        cachedCenterDims.width = w;
+        cachedCenterDims.height = h;
+        cachedCenterDims.dpr = dpr;
+        return cachedCenterDims;
+    }
+
+    function syncCanvasResolution(wOrRect, optH) {
+        const maxDpr = window.innerWidth <= 768 ? 1.5 : 2.0;
+        const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+        const w = Math.round(typeof wOrRect === 'object' && wOrRect !== null ? wOrRect.width : wOrRect);
+        const h = Math.round(typeof wOrRect === 'object' && wOrRect !== null ? wOrRect.height : optH);
+        const pixelW = Math.round(w * dpr);
+        const pixelH = Math.round(h * dpr);
+
+        if (visualizerCanvas.width !== pixelW || visualizerCanvas.height !== pixelH || dpr !== lastCanvasDpr) {
+            visualizerCanvas.width = pixelW;
+            visualizerCanvas.height = pixelH;
+            lastCanvasW = w;
+            lastCanvasH = h;
+            lastCanvasDpr = dpr;
+        }
+        return dpr;
+    }
+
+    function setupCanvas() {
+        refreshCanvasDimensions();
+    }
+
+    // Expanding soundwave ripple rings for beat hits
+    const shockwaveRings = [];
+    function emitShockwave(x, y, maxRadius, initialAlpha = 0.75) {
+        if (shockwaveRings.length >= 8) shockwaveRings.shift();
+        shockwaveRings.push({
+            x,
+            y,
+            r: 6,
+            maxR: maxRadius,
+            alpha: initialAlpha,
+            speed: (maxRadius - 6) * 2.6
+        });
+    }
+
+    function updateAndDrawShockwaves(ctx, dt) {
+        if (shockwaveRings.length === 0) return;
+        ctx.save();
+        for (let i = shockwaveRings.length - 1; i >= 0; i--) {
+            const ring = shockwaveRings[i];
+            ring.r += ring.speed * dt;
+            const progress = ring.r / ring.maxR;
+            if (progress >= 1.0) {
+                shockwaveRings.splice(i, 1);
+                continue;
+            }
+            const currentAlpha = ring.alpha * (1.0 - progress);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${currentAlpha})`;
+            ctx.lineWidth = 1.6 * (1.0 - progress * 0.5);
+            ctx.beginPath();
+            ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    // Dynamic Crest Sparkles for Solid Wave (reacts to snares & treble transients)
+    const crestSparkles = [];
+    function emitSparkle(x, y, intensity = 1.0) {
+        if (crestSparkles.length >= 24) crestSparkles.shift();
+        crestSparkles.push({
+            x,
+            y,
+            life: 1.0,
+            decay: 2.2 + Math.random() * 1.5,
+            size: 2.0 + Math.random() * 2.8,
+            intensity
+        });
+    }
+
+    function updateAndDrawSparkles(ctx, dt) {
+        const currentTheme = getActiveTheme();
+        if (currentTheme !== 'default') {
+            crestSparkles.length = 0;
+            return;
+        }
+        for (let i = crestSparkles.length - 1; i >= 0; i--) {
+            const sp = crestSparkles[i];
+            sp.life -= sp.decay * dt;
+            if (sp.life <= 0) {
+                crestSparkles.splice(i, 1);
+                continue;
+            }
+            ctx.save();
+            ctx.translate(sp.x, sp.y);
+            const a = sp.life * sp.intensity;
+            ctx.fillStyle = `rgba(255, 255, 255, ${a})`;
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.95)';
+            ctx.shadowBlur = 6;
+            const s = sp.size * (0.5 + sp.life * 0.5);
+            ctx.beginPath();
+            ctx.moveTo(0, -s);
+            ctx.lineTo(s * 0.4, 0);
+            ctx.lineTo(0, s);
+            ctx.lineTo(-s * 0.4, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // Smooth Catmull-Rom Spline Path Generator (passes exactly through all peaks and valleys with C1 continuity)
+    function drawSplinePath(ctx, points) {
+        if (!points || points.length === 0) return;
+        if (points.length === 1) {
+            ctx.lineTo(points[0].x, points[0].y);
+            return;
+        }
+        if (points.length === 2) {
+            ctx.lineTo(points[1].x, points[1].y);
+            return;
+        }
+        for (let i = 0; i < points.length - 1; i++) {
+            const p0 = points[Math.max(0, i - 1)];
+            const p1 = points[i];
+            const p2 = points[i + 1];
+            const p3 = points[Math.min(points.length - 1, i + 2)];
+
+            const cp1x = p1.x + (p2.x - p0.x) / 6;
+            const cp1y = p1.y + (p2.y - p0.y) / 6;
+            const cp2x = p2.x - (p3.x - p1.x) / 6;
+            const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+        }
+    }
+
+    // =========================================================================
+
+    function startVisualizerLoop() {
+        const rawFreqArray = new Uint8Array(1024);
+        const bandRawVals = new Float32Array(NUM_BANDS);
+        const filteredBands = new Float32Array(NUM_BANDS);
+        let runningHeadroom = 0.85;
+        let beatPulse = 0;
+        let snarePulse = 0;
+        let treblePulse = 0;
+        let smoothMid = 0;
+        let lastBass = 0;
+        let lastMid = 0;
+        let lastTreble = 0;
+        let idleFramesAfterPause = 0;
+        let turntableCenterStylesSet = false;
+        let drMeterFrameCounter = 0;
+        let lastPeakText = '';
+        let lastDrText = '';
+        let lastHeadroomText = '';
+
+        let cachedSampleRate = 0;
+        let cachedBinCount = 0;
+        let precomputedBands = null;
+
+        function getPrecomputedBands(sampleRate, binCount) {
+            if (precomputedBands && cachedSampleRate === sampleRate && cachedBinCount === binCount) {
+                return precomputedBands;
+            }
+            cachedSampleRate = sampleRate;
+            cachedBinCount = binCount;
+            const hzPerBin = sampleRate / (binCount * 2);
+            const minFreq = 20; // Human audiophile sub-bass threshold
+            // Full 24 kHz high-fidelity frequency range (utilizing complete 48 kHz+ Nyquist headroom):
+            const nyquist = sampleRate / 2;
+            const maxFreq = Math.min(24000, Math.max(22050, nyquist));
+            const logRatio = Math.log(maxFreq / minFreq);
+            precomputedBands = new Array(NUM_BANDS);
+            for (let b = 0; b < NUM_BANDS; b++) {
+                const f0 = minFreq * Math.exp((b / NUM_BANDS) * logRatio);
+                const f1 = minFreq * Math.exp(((b + 1) / NUM_BANDS) * logRatio);
+                const startBin = Math.max(1, Math.floor(f0 / hzPerBin));
+                const endBin = Math.max(startBin + 1, Math.min(binCount, Math.ceil(f1 / hzPerBin)));
+                const count = endBin - startBin;
+                const normB = b / (NUM_BANDS - 1);
+                // Equal-loudness Fletcher-Munson contour tilt compensation across 20Hz - 24kHz:
+                // Upper treble (16-24kHz) has lower acoustic energy in natural recordings,
+                // so an organic contour tilt highlights high-resolution air, sparkles, and cymbal harmonics!
+                const tilt = 0.94 + Math.pow(normB, 1.1) * 0.65;
+                precomputedBands[b] = { startBin, endBin, count, tilt };
+            }
+            return precomputedBands;
+        }
+
+        resumeVisualizerLoop = function() {
+            if (!isVisualizerLoopRunning) {
+                isVisualizerLoopRunning = true;
+                idleFramesAfterPause = 0;
+                lastRenderTime = performance.now();
+                animFrameId = requestAnimationFrame(renderFrame);
+            }
+        };
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && typeof resumeVisualizerLoop === 'function') {
+                resumeVisualizerLoop();
+            }
+        });
+
+        function renderFrame(now) {
+            if (currentWorkspace !== 'player') {
+                isVisualizerLoopRunning = false;
+                return;
+            }
+
+            if (document.hidden) {
+                isVisualizerLoopRunning = false;
+                return;
+            }
+
+            if (!isPlaying) {
+                idleFramesAfterPause++;
+                const targetFidelity = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple') ? 1.0 : 0.0;
+                const isFidelityTransitioning = Math.abs(targetFidelity - smoothTurntableFidelity) > 0.002;
+                const isAlreadySilent = (smoothBass < 0.002 && smoothMid < 0.002 && smoothTreble < 0.002 && beatPulse < 0.002);
+                if (!isFidelityTransitioning && ((isAlreadySilent && idleFramesAfterPause > 2) || idleFramesAfterPause > 45)) {
+                    isVisualizerLoopRunning = false;
+                    return;
+                }
+            } else {
+                idleFramesAfterPause = 0;
+            }
+
+            const elapsed = now - lastRenderTime;
+            if (elapsed < 7) {
+                animFrameId = requestAnimationFrame(renderFrame);
+                return;
+            }
+            const dt = Math.min(elapsed / 1000, 0.1);
+            lastRenderTime = now;
+
+            const isMobileViewport = window.innerWidth <= 768;
+            if (isMobileViewport) {
+                const isDeckActive = Boolean(playerDeckEl && playerDeckEl.classList.contains('mobileActive') && !isLyricsView);
+                const isInfoActive = Boolean(settingsPanelEl && settingsPanelEl.classList.contains('mobileActive'));
+                const isSignalOpen = Boolean(signalPathModal && signalPathModal.style.display === 'flex');
+                if (!isDeckActive && !isInfoActive && !isSignalOpen) {
+                    isVisualizerLoopRunning = false;
+                    return;
+                }
+            }
+
+            let width = isMobileViewport ? 0 : cachedDockW;
+            let height = isMobileViewport ? 0 : cachedDockH;
+            if (!isMobileViewport && (width === 0 || height === 0) && visualizerDock) {
+                width = Math.round(visualizerDock.clientWidth || visualizerDock.getBoundingClientRect().width);
+                height = Math.round(visualizerDock.clientHeight || visualizerDock.getBoundingClientRect().height);
+                cachedDockW = width;
+                cachedDockH = height;
+            }
+
+            const hasDockCanvas = (width > 0 && height > 0 && ctx);
+            if (hasDockCanvas) {
+                const dpr = syncCanvasResolution(width, height);
+                ctx.save();
+                ctx.scale(dpr, dpr);
+                ctx.clearRect(0, 0, width, height);
+            }
+
+            // 1. Acquire Frequency & Time-domain data
+            let hasRealData = false;
+            if (analyser && isPlaying) {
+                try {
+                    analyser.getByteFrequencyData(rawFreqArray);
+                    for (let i = 0; i < 40; i++) {
+                        if (rawFreqArray[i] > 0) { hasRealData = true; break; }
+                    }
+                } catch(_) {}
+            }
+
+            // 2. Compute 60 Perceptual Logarithmic Frequency Bands with Adaptive Dynamic Headroom
+            if (hasRealData) {
+                const sampleRate = (audioContext && audioContext.sampleRate) || 48000;
+                const binCount = analyser.frequencyBinCount || 1024;
+                const bandsConfig = getPrecomputedBands(sampleRate, binCount);
+
+                // Pass 1: Extract raw band acoustic energy with balanced mean + peak blend
+                let frameMaxRaw = 0;
+                for (let b = 0; b < NUM_BANDS; b++) {
+                    const cfg = bandsConfig[b];
+                    let sum = 0;
+                    let peak = 0;
+                    for (let k = cfg.startBin; k < cfg.endBin; k++) {
+                        const v = rawFreqArray[k] || 0;
+                        sum += v;
+                        if (v > peak) peak = v;
+                    }
+                    const meanNorm = (sum / cfg.count) / 255;
+                    const peakNorm = peak / 255;
+                    // 55% mean provides solid musical body; 45% peak captures harmonic transient definition
+                    const rawNorm = meanNorm * 0.55 + peakNorm * 0.45;
+
+                    // Balanced perceptual tilt compensation
+                    let rawScaled = rawNorm * cfg.tilt;
+
+                    if (rawScaled < 0.03) {
+                        rawScaled = Math.max(0, rawScaled * 0.35);
+                    }
+                    bandRawVals[b] = rawScaled;
+                    if (rawScaled > frameMaxRaw) frameMaxRaw = rawScaled;
+                }
+
+                // Pass 1.5: Dynamic Range (DR) & Peak Headroom Live Metering (Throttled & Visibility-Guarded)
+                drMeterFrameCounter++;
+                if (drMeterFrameCounter >= 60) {
+                    drMeterFrameCounter = 0;
+
+                    const isSettingsVisible = window.innerWidth > 768 || (settingsPanelEl && settingsPanelEl.classList.contains('mobileActive'));
+                    const isSignalModalVisible = signalPathModal && signalPathModal.style.display === 'flex';
+
+                    if (isSettingsVisible || isSignalModalVisible) {
+                        const peakAmp = Math.max(0.001, Math.min(1.0, frameMaxRaw));
+                        const peakDb = 20 * Math.log10(peakAmp);
+
+                        if (isSettingsVisible) {
+                            let sumSq = 0;
+                            for (let b = 0; b < NUM_BANDS; b++) {
+                                const v = bandRawVals[b] || 0;
+                                sumSq += v * v;
+                            }
+                            const rms = Math.sqrt(sumSq / NUM_BANDS);
+                            const rmsDb = rms > 0.0001 ? 20 * Math.log10(rms) : -60;
+                            const drScore = Math.max(4, Math.min(20, Math.round(Math.abs(peakDb - rmsDb) * 1.25)));
+
+                            if (statPeakLevel) {
+                                const txt = `${peakDb.toFixed(1)} dBFS`;
+                                if (txt !== lastPeakText) {
+                                    statPeakLevel.textContent = txt;
+                                    lastPeakText = txt;
+                                }
+                            }
+                            if (statDynamicRange) {
+                                let grade = 'Hi-Fi';
+                                if (drScore >= 14) grade = 'Audiophile';
+                                else if (drScore >= 11) grade = 'Pristine';
+                                else if (drScore >= 8) grade = 'Standard';
+                                else grade = 'Compressed';
+                                const txt = `DR${drScore} (${grade})`;
+                                if (txt !== lastDrText) {
+                                    statDynamicRange.textContent = txt;
+                                    lastDrText = txt;
+                                }
+                            }
+                        }
+
+                        if (isSignalModalVisible && auditMetricHeadroom) {
+                            const headroomDb = Math.max(0, -peakDb);
+                            let maxBoost = (!isPeqBypassed && Array.isArray(peqGains)) ? Math.max(0, ...peqGains) : 0;
+                            if (isBassBoost) maxBoost = Math.max(maxBoost, 3.8);
+                            if (isTrebleBoost) maxBoost = Math.max(maxBoost, 3.0);
+                            if (isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
+                            const guardStr = maxBoost > 0 ? `-${(maxBoost * 0.7).toFixed(1)} dB Pre-Amp` : 'Live Peak';
+                            const txt = `+${headroomDb.toFixed(1)} dB (${guardStr})`;
+                            if (txt !== lastHeadroomText) {
+                                auditMetricHeadroom.textContent = txt;
+                                lastHeadroomText = txt;
+                            }
+                        }
+                    }
+                }
+
+                // Dynamic Automatic Headroom Tracking (AGC for Visualizer)
+                // Adapts to track mastering and loudness so the visualizer is never easily filled,
+                // regardless of how loud the song is or how high the volume is set!
+                if (frameMaxRaw > runningHeadroom) {
+                    runningHeadroom += (frameMaxRaw - runningHeadroom) * Math.min(1.0, 3.8 * dt);
+                } else {
+                    runningHeadroom += (frameMaxRaw - runningHeadroom) * (1.0 - Math.exp(-0.30 * dt));
+                }
+                runningHeadroom = Math.max(0.48, Math.min(1.35, runningHeadroom));
+
+                // Pass 2: Contrast Shaping & Asymptotic Headroom Clamping
+                for (let b = 0; b < NUM_BANDS; b++) {
+                    const normalized = Math.min(1.0, Math.max(0, bandRawVals[b] / runningHeadroom));
+                    // Dynamic contrast expansion:
+                    // Lowers resting background wave to ~25%-38% height, leaving abundant breathing room.
+                    // Punchy transients and spikes shoot up to ~72%-80% with crisp mountain crests.
+                    const contrast = Math.pow(normalized, 1.58);
+
+                    // Soft saturation curve: guarantees smooth organic crests without ceiling clipping
+                    let target;
+                    if (contrast > 0.78) {
+                        target = 0.78 + Math.tanh((contrast - 0.78) * 1.5) * 0.16;
+                    } else {
+                        target = contrast;
+                    }
+                    target = Math.min(0.92, Math.max(0, target));
+
+                    // Adaptive ballistic attack and liquid exponential decay:
+                    const diff = target - smoothBands[b];
+                    if (diff > 0) {
+                        const attackRate = 36 + Math.min(26, diff * 50);
+                        const attackCoeff = 1.0 - Math.exp(-attackRate * dt);
+                        smoothBands[b] += diff * attackCoeff;
+                    } else {
+                        const decayRate = 12.0; // Responsive decay prevents sluggish "wall of sound"
+                        const decayCoeff = 1.0 - Math.exp(-decayRate * dt);
+                        smoothBands[b] += diff * decayCoeff;
+                    }
+                }
+            } else {
+                // Procedural ambient simulation (smooth breathing waves when idle or fallback)
+                simPhase += isPlaying ? dt * 3.2 : dt * 0.7;
+                for (let b = 0; b < NUM_BANDS; b++) {
+                    let target = 0;
+                    if (isPlaying) {
+                        const normB = b / (NUM_BANDS - 1);
+                        const wave1 = Math.sin(simPhase * 1.8 + b * 0.14) * 0.28;
+                        const wave2 = Math.cos(simPhase * 2.6 + b * 0.22) * 0.18;
+                        const bassImpulse = (b < 12) ? Math.max(0, Math.sin(simPhase * 3.0)) * 0.42 * (1.0 - b / 12) : 0;
+                        const midImpulse = (b >= 16 && b <= 34) ? Math.max(0, Math.sin(simPhase * 2.2 + 1.2)) * 0.32 : 0;
+                        const highImpulse = (b > 38) ? Math.max(0, Math.sin(simPhase * 4.0 + 2.0)) * 0.24 * normB : 0;
+                        target = Math.min(0.92, Math.max(0.04, 0.14 + wave1 + wave2 + bassImpulse + midImpulse + highImpulse));
+                    } else {
+                        target = 0;
+                    }
+
+                    const diff = target - smoothBands[b];
+                    if (diff > 0) {
+                        const simAttack = 1.0 - Math.exp(-28 * dt);
+                        smoothBands[b] += diff * simAttack;
+                    } else {
+                        const simDecay = 1.0 - Math.exp(-8.5 * dt);
+                        smoothBands[b] += diff * simDecay;
+                    }
+                }
+            }
+
+            // Peak-preserving spatial smoothing filter across neighboring bands:
+            // Retains peak height of true spikes while smoothing slopes and valleys into fluid curves
+            for (let b = 0; b < NUM_BANDS; b++) {
+                const prev = smoothBands[Math.max(0, b - 1)];
+                const curr = smoothBands[b];
+                const next = smoothBands[Math.min(NUM_BANDS - 1, b + 1)];
+                if (curr > prev && curr > next) {
+                    filteredBands[b] = prev * 0.09 + curr * 0.82 + next * 0.09;
+                } else {
+                    filteredBands[b] = prev * 0.18 + curr * 0.64 + next * 0.18;
+                }
+            }
+
+            // Energy domains with continuous time-delta smoothing
+            const currentBass = (smoothBands[0] + smoothBands[1] + smoothBands[2] + smoothBands[3] + smoothBands[4] + smoothBands[5]) / 6;
+            smoothBass += (currentBass - smoothBass) * (1.0 - Math.exp(-18 * dt));
+
+            const currentMid = (smoothBands[12] + smoothBands[16] + smoothBands[20] + smoothBands[24] + smoothBands[28]) / 5;
+            smoothMid += (currentMid - smoothMid) * (1.0 - Math.exp(-14 * dt));
+
+            const currentTreble = (smoothBands[42] + smoothBands[46] + smoothBands[50] + smoothBands[54] + smoothBands[58]) / 5;
+            smoothTreble += (currentTreble - smoothTreble) * (1.0 - Math.exp(-14 * dt));
+
+            // Triple transient detectors:
+            // 1. Bass Transient (Drum Kicks & 808 Drops)
+            const bassDelta = currentBass - lastBass;
+            lastBass = currentBass;
+            if (bassDelta > 0.038 && currentBass > 0.16) {
+                beatPulse = Math.min(1.0, beatPulse + bassDelta * 5.2);
+            } else {
+                beatPulse = Math.max(0, beatPulse - dt * 3.6);
+            }
+
+            // 2. Snare / Mid Transient (Snares, Claps, Vocal/Guitar Stabs)
+            const midDelta = currentMid - lastMid;
+            lastMid = currentMid;
+            if (midDelta > 0.038 && currentMid > 0.15) {
+                snarePulse = Math.min(1.0, snarePulse + midDelta * 5.0);
+            } else {
+                snarePulse = Math.max(0, snarePulse - dt * 4.2);
+            }
+
+            // 3. Treble Transient (Hi-hats, Cymbals, Percussion, Vocal sibilance)
+            const trebleDelta = currentTreble - lastTreble;
+            lastTreble = currentTreble;
+            if (trebleDelta > 0.035 && currentTreble > 0.12) {
+                treblePulse = Math.min(1.0, treblePulse + trebleDelta * 4.8);
+            } else {
+                treblePulse = Math.max(0, treblePulse - dt * 4.8);
+            }
+
+            // 4. Render Visualizer Mode with high musical expressiveness (when bottom dock is visible)
+            if (hasDockCanvas) {
+                switch (activeVisualizerMode) {
+                    case 'dash':
+                        drawVerticalDash(ctx, width, height, smoothBands, isPlaying, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
+                        break;
+                    case 'thematic':
+                    case 'badapple': {
+                        const fnThematicWave = (typeof drawThematicWave === 'function' ? drawThematicWave : (typeof window !== 'undefined' && typeof window.drawThematicWave === 'function' ? window.drawThematicWave : null));
+                        if (fnThematicWave) {
+                            fnThematicWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
+                        } else {
+                            loadVisualizerThemes2();
+                        }
+                        break;
+                    }
+                    case 'wave':
+                    default:
+                        drawSolidWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
+                        break;
+                }
+                ctx.restore();
+            }
+
+            // 5. Turntable Center Visualizer (Signature animated hub across all themes and modes)
+            // Visualizer fidelity smoothly transitions so activating Thematic Core blossoms into full-feature design!
+            const currentTheme = getActiveTheme();
+            const targetFidelity = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple') ? 1.0 : 0.0;
+            smoothTurntableFidelity += (targetFidelity - smoothTurntableFidelity) * (1.0 - Math.exp(-6.0 * dt));
+            if (Math.abs(targetFidelity - smoothTurntableFidelity) < 0.001) {
+                smoothTurntableFidelity = targetFidelity;
+            }
+            const fidelity = smoothTurntableFidelity;
+
+            const currentDeckEl = (typeof playerDeckEl !== 'undefined' && playerDeckEl) ? playerDeckEl : document.querySelector('.playerDeck');
+            const isTurntableVisible = !isLyricsView &&
+                (window.innerWidth > 768 || (currentDeckEl && currentDeckEl.classList.contains('mobileActive')));
+
+            const currentCenterVis = (typeof turntableCenterVis !== 'undefined' && turntableCenterVis) ? turntableCenterVis : document.getElementById('turntableCenterVis');
+            const currentCenterCanvas = (typeof turntableCenterCanvas !== 'undefined' && turntableCenterCanvas) ? turntableCenterCanvas : document.getElementById('turntableCenterCanvas');
+            const currentCenterCtx = (typeof turntableCenterCtx !== 'undefined' && turntableCenterCtx) ? turntableCenterCtx : (currentCenterCanvas ? currentCenterCanvas.getContext('2d') : null);
+
+            if (isTurntableVisible && currentCenterCanvas && currentCenterCtx) {
+                if (!turntableCenterStylesSet) {
+                    if (currentCenterVis && currentCenterVis.style.display !== 'flex') {
+                        currentCenterVis.style.display = 'flex';
+                    }
+                    if (vinylLabel && vinylLabel.style.opacity !== '0') {
+                        vinylLabel.style.opacity = '0';
+                    }
+                    turntableCenterStylesSet = true;
+                }
+                const centerDims = syncTurntableCenterCanvas();
+                if (centerDims) {
+                    currentCenterCtx.save();
+                    currentCenterCtx.scale(centerDims.dpr, centerDims.dpr);
+                    currentCenterCtx.clearRect(0, 0, centerDims.width, centerDims.height);
+
+                    // Physical circular clipping boundary to prevent edge blur/shockwaves from clipping squarely
+                    currentCenterCtx.save();
+                    currentCenterCtx.beginPath();
+                    currentCenterCtx.arc(centerDims.width / 2, centerDims.height / 2, Math.min(centerDims.width, centerDims.height) * 0.495, 0, Math.PI * 2);
+                    currentCenterCtx.clip();
+
+                    const getThemeFn = (fnName) => {
+                        if (typeof window !== 'undefined' && typeof window[fnName] === 'function') return window[fnName];
+                        try {
+                            const f = eval(fnName);
+                            if (typeof f === 'function') return f;
+                        } catch (_) {}
+                        return null;
+                    };
+                    const fnAtlas = getThemeFn('drawTurntableCenterAtlasCore');
+                    const fnSolar = getThemeFn('drawTurntableCenterSolarEclipse');
+                    const fnEuclid = getThemeFn('drawTurntableCenterEuclidPortal');
+                    const fnParadise = getThemeFn('drawTurntableCenterAlienParadise');
+                    const fnAbyssal = getThemeFn('drawTurntableCenterAbyssalVoid');
+                    const fnDissonance = getThemeFn('drawTurntableCenterDissonance');
+                    const fnSentinel = getThemeFn('drawTurntableCenterSentinel');
+                    const fnBrutalist = getThemeFn('drawTurntableCenterBrutalist');
+                    const fnHeart = getThemeFn('drawTurntableCenterHeart');
+
+                    switch (currentTheme) {
+                        case 'nms':
+                            if (fnAtlas) {
+                                fnAtlas(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes1();
+                            }
+                            break;
+                        case 'solar-eclipse':
+                            if (fnSolar) {
+                                fnSolar(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes1();
+                            }
+                            break;
+                        case 'euclid-horizon':
+                            if (fnEuclid) {
+                                fnEuclid(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes1();
+                            }
+                            break;
+                        case 'alien-paradise':
+                            if (fnParadise) {
+                                fnParadise(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes1();
+                            }
+                            break;
+                        case 'abyssal-void':
+                            if (fnAbyssal) {
+                                fnAbyssal(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes2();
+                            }
+                            break;
+                        case 'dissonance':
+                            if (fnDissonance) {
+                                fnDissonance(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity, filteredBands);
+                            } else {
+                                loadVisualizerThemes2();
+                            }
+                            break;
+                        case 'sentinel':
+                            if (fnSentinel) {
+                                fnSentinel(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity, filteredBands);
+                            } else {
+                                loadVisualizerThemes2();
+                            }
+                            break;
+                        case 'minimalist-light':
+                        case 'brutalist-light':
+                            if (fnBrutalist) {
+                                fnBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'light', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes2();
+                            }
+                            break;
+                        case 'minimalist-dark':
+                        case 'brutalist-dark':
+                            if (fnBrutalist) {
+                                fnBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'dark', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes2();
+                            }
+                            break;
+                        case 'minimalist-warm':
+                            if (fnBrutalist) {
+                                fnBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'warm', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes2();
+                            }
+                            break;
+                        case 'minimalist-obsidian':
+                            if (fnBrutalist) {
+                                fnBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'obsidian', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes2();
+                            }
+                            break;
+                        default:
+                            if (fnHeart) {
+                                fnHeart(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
+                            } else {
+                                loadVisualizerThemes2();
+                            }
+                            break;
+                    }
+                    currentCenterCtx.restore();
+                    currentCenterCtx.restore();
+                }
+            }
+
+            if (isVisualizerLoopRunning) {
+                animFrameId = requestAnimationFrame(renderFrame);
+            }
+        }
+
+        isVisualizerLoopRunning = true;
+        animFrameId = requestAnimationFrame(renderFrame);
+    }
+
+    // -------------------------------------------------------------------------
+    // Visualizer 1: Reworked Solid Wave ("All wavy and stuff" - Liquid Mercury)
+    // Multi-layer translucent fluid Catmull-Rom spline wave with glowing crest & spray motes
+    // -------------------------------------------------------------------------
+    const solidWaveUndertowPoints = Array.from({ length: NUM_BANDS }, () => ({ x: 0, y: 0 }));
+    const solidWaveMidPoints = Array.from({ length: NUM_BANDS }, () => ({ x: 0, y: 0 }));
+    const solidWaveForePoints = Array.from({ length: NUM_BANDS }, () => ({ x: 0, y: 0 }));
+    const thematicLeftPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
+    const thematicRightPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
+    const thematicLeftMistPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
+    const thematicRightMistPoints = Array.from({ length: 36 }, () => ({ x: 0, y: 0 }));
+
+    function drawSolidWave(ctx, width, height, bands, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble) {
+        const pointsCount = bands.length;
+        const step = width / (pointsCount - 1);
+
+        // Shockwave trigger on heavy drum kicks
+        if (playing && beatPulse > 0.52 && Math.random() < 0.25) {
+            emitShockwave(width * 0.18, height - 16, Math.min(width * 0.45, 110), 0.75);
+        }
+
+        // Headroom: leaves 24% atmospheric breathing space at top so the wave is never easily filled
+        const topHeadroom = Math.max(12, height * 0.24);
+        const maxForegroundHeight = height - topHeadroom - 4;
+
+        const currentTheme = getActiveTheme();
+
+        // Layer 1: Ambient Deep Translucent Undertow (Sub-bass & Kick weight)
+        const undertowHeadroom = Math.max(18, height * 0.44);
+        const maxUndertowHeight = height - undertowHeadroom;
+        const undertowPoints = solidWaveUndertowPoints;
+        for (let i = 0; i < pointsCount; i++) {
+            const x = i * step;
+            const bassWeight = Math.max(0, 1.0 - (i / (pointsCount * 0.65)));
+            const b = bands[Math.floor(i * 0.35)] * bassWeight;
+            const h = Math.min(maxUndertowHeight, b * maxUndertowHeight * (0.80 + smoothBass * 0.25) + (playing ? 2 : 1));
+            const pt = undertowPoints[i];
+            pt.x = x;
+            pt.y = Math.max(undertowHeadroom, height - h);
+        }
+        ctx.beginPath();
+        ctx.moveTo(undertowPoints[0].x, height);
+        ctx.lineTo(undertowPoints[0].x, undertowPoints[0].y);
+        drawSplinePath(ctx, undertowPoints);
+        ctx.lineTo(undertowPoints[undertowPoints.length - 1].x, height);
+        ctx.closePath();
+
+        let undertowFill = 'rgba(255, 255, 255, ' + (0.05 + smoothBass * 0.08) + ')';
+        let midFill = 'rgba(255, 255, 255, ' + (0.08 + smoothMid * 0.10 + snarePulse * 0.06) + ')';
+        if (currentTheme === 'nms') {
+            undertowFill = 'rgba(124, 77, 255, ' + (0.14 + smoothBass * 0.18) + ')';
+            midFill = 'rgba(0, 229, 255, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
+        } else if (currentTheme === 'solar-eclipse') {
+            undertowFill = 'rgba(255, 0, 128, ' + (0.14 + smoothBass * 0.18) + ')';
+            midFill = 'rgba(0, 240, 255, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
+        } else if (currentTheme === 'euclid-horizon') {
+            undertowFill = 'rgba(225, 29, 72, ' + (0.14 + smoothBass * 0.18) + ')';
+            midFill = 'rgba(251, 191, 36, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
+        } else if (currentTheme === 'alien-paradise') {
+            undertowFill = 'rgba(244, 63, 94, ' + (0.14 + smoothBass * 0.18) + ')';
+            midFill = 'rgba(0, 206, 209, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
+        } else if (currentTheme === 'abyssal-void') {
+            undertowFill = 'rgba(5, 150, 105, ' + (0.14 + smoothBass * 0.18) + ')';
+            midFill = 'rgba(0, 255, 170, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
+        } else if (currentTheme === 'dissonance') {
+            undertowFill = 'rgba(126, 34, 206, ' + (0.14 + smoothBass * 0.18) + ')';
+            midFill = 'rgba(217, 70, 239, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
+        } else if (currentTheme === 'sentinel') {
+            undertowFill = 'rgba(14, 20, 36, ' + (0.16 + smoothBass * 0.18) + ')';
+            midFill = 'rgba(0, 229, 255, ' + (0.16 + smoothMid * 0.16 + snarePulse * 0.12) + ')';
+        } else if (currentTheme === 'brutalist-light' || currentTheme === 'minimalist-light') {
+            undertowFill = 'rgba(0, 0, 0, ' + (0.04 + smoothBass * 0.05) + ')';
+            midFill = 'rgba(0, 0, 0, ' + (0.08 + smoothMid * 0.08 + snarePulse * 0.05) + ')';
+        } else if (currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-dark') {
+            undertowFill = 'rgba(255, 255, 255, ' + (0.04 + smoothBass * 0.05) + ')';
+            midFill = 'rgba(255, 255, 255, ' + (0.08 + smoothMid * 0.08 + snarePulse * 0.05) + ')';
+        } else if (currentTheme === 'minimalist-warm') {
+            undertowFill = 'rgba(217, 119, 6, ' + (0.06 + smoothBass * 0.08) + ')';
+            midFill = 'rgba(28, 25, 23, ' + (0.08 + smoothMid * 0.08 + snarePulse * 0.05) + ')';
+        } else if (currentTheme === 'minimalist-obsidian') {
+            undertowFill = 'rgba(56, 189, 248, ' + (0.06 + smoothBass * 0.08) + ')';
+            midFill = 'rgba(255, 255, 255, ' + (0.08 + smoothMid * 0.08 + snarePulse * 0.05) + ')';
+        }
+        ctx.fillStyle = undertowFill;
+        ctx.fill();
+
+        // Layer 2: Mid-range Harmonic Wave (reacts to vocals, chords, synths)
+        const midHeadroom = Math.max(16, height * 0.34);
+        const maxMidHeight = height - midHeadroom;
+        const midPoints = solidWaveMidPoints;
+        for (let i = 0; i < pointsCount; i++) {
+            const x = i * step;
+            const b = bands[i];
+            const h = Math.min(maxMidHeight, b * maxMidHeight * (0.78 + smoothMid * 0.20 + snarePulse * 0.10) + (playing ? 2.5 : 1.2));
+            const pt = midPoints[i];
+            pt.x = x;
+            pt.y = Math.max(midHeadroom, height - h);
+        }
+        ctx.beginPath();
+        ctx.moveTo(midPoints[0].x, height);
+        ctx.lineTo(midPoints[0].x, midPoints[0].y);
+        drawSplinePath(ctx, midPoints);
+        ctx.lineTo(midPoints[midPoints.length - 1].x, height);
+        ctx.closePath();
+        ctx.fillStyle = midFill;
+        ctx.fill();
+
+        // Layer 3: Solid Foreground Liquid Wave (Direct High-Fidelity Musical Spectrum)
+        const forePoints = solidWaveForePoints;
+        let minY = height;
+        for (let i = 0; i < pointsCount; i++) {
+            const x = i * step;
+            const b = bands[i];
+            const dynamicLift = 0.88 + beatPulse * 0.14 + snarePulse * 0.08;
+            const amp = Math.min(maxForegroundHeight, b * maxForegroundHeight * dynamicLift + (playing ? 3.5 : 1.5));
+            const y = Math.max(topHeadroom, height - amp);
+            if (y < minY) minY = y;
+            const pt = forePoints[i];
+            pt.x = x;
+            pt.y = y;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(forePoints[0].x, height);
+        ctx.lineTo(forePoints[0].x, forePoints[0].y);
+        drawSplinePath(ctx, forePoints);
+        ctx.lineTo(forePoints[forePoints.length - 1].x, height);
+        ctx.closePath();
+
+        const liquidGrad = ctx.createLinearGradient(0, minY, 0, height);
+        let waveShadowColor = 'rgba(255, 255, 255, ' + (0.85 + beatPulse * 0.15) + ')';
+        switch (currentTheme) {
+            case 'nms':
+                liquidGrad.addColorStop(0, '#ffffff');
+                liquidGrad.addColorStop(0.12, '#ffab00');
+                liquidGrad.addColorStop(0.35, '#ff1744');
+                liquidGrad.addColorStop(0.70, 'rgba(213, 0, 0, 0.45)');
+                liquidGrad.addColorStop(1, 'rgba(124, 77, 255, 0.05)');
+                waveShadowColor = '#ff1744';
+                break;
+            case 'solar-eclipse':
+                liquidGrad.addColorStop(0, '#ffffff');
+                liquidGrad.addColorStop(0.15, '#00f0ff');
+                liquidGrad.addColorStop(0.40, '#ff007f');
+                liquidGrad.addColorStop(0.75, 'rgba(179, 0, 89, 0.40)');
+                liquidGrad.addColorStop(1, 'rgba(0, 240, 255, 0.05)');
+                waveShadowColor = '#00f0ff';
+                break;
+            case 'euclid-horizon':
+                liquidGrad.addColorStop(0, '#ffffff');
+                liquidGrad.addColorStop(0.15, '#fbbf24');
+                liquidGrad.addColorStop(0.40, '#14b8a6');
+                liquidGrad.addColorStop(0.75, 'rgba(225, 29, 72, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(20, 184, 166, 0.05)');
+                waveShadowColor = '#fbbf24';
+                break;
+            case 'alien-paradise':
+                liquidGrad.addColorStop(0, '#ffffff');
+                liquidGrad.addColorStop(0.15, '#ff2a70');
+                liquidGrad.addColorStop(0.40, '#00ced1');
+                liquidGrad.addColorStop(0.75, 'rgba(250, 204, 21, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(0, 206, 209, 0.05)');
+                waveShadowColor = '#ff2a70';
+                break;
+            case 'abyssal-void':
+                liquidGrad.addColorStop(0, '#ffffff');
+                liquidGrad.addColorStop(0.15, '#00ffaa');
+                liquidGrad.addColorStop(0.40, '#10b981');
+                liquidGrad.addColorStop(0.75, 'rgba(5, 150, 105, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(16, 185, 129, 0.05)');
+                waveShadowColor = '#00ffaa';
+                break;
+            case 'dissonance':
+                liquidGrad.addColorStop(0, '#ffffff');
+                liquidGrad.addColorStop(0.15, '#d946ef');
+                liquidGrad.addColorStop(0.40, '#a855f7');
+                liquidGrad.addColorStop(0.75, 'rgba(126, 34, 206, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(88, 28, 135, 0.05)');
+                waveShadowColor = '#d946ef';
+                break;
+            case 'sentinel':
+                liquidGrad.addColorStop(0, '#ffffff');
+                liquidGrad.addColorStop(0.15, '#00e5ff');
+                liquidGrad.addColorStop(0.40, '#ff3d00');
+                liquidGrad.addColorStop(0.75, 'rgba(0, 229, 255, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(11, 14, 23, 0.05)');
+                waveShadowColor = '#00e5ff';
+                break;
+            case 'minimalist-light':
+            case 'brutalist-light':
+                liquidGrad.addColorStop(0, '#000000');
+                liquidGrad.addColorStop(0.35, '#27272a');
+                liquidGrad.addColorStop(0.70, 'rgba(0, 0, 0, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
+                waveShadowColor = 'rgba(0, 0, 0, 0.3)';
+                break;
+            case 'minimalist-dark':
+            case 'brutalist-dark':
+                liquidGrad.addColorStop(0, '#ffffff');
+                liquidGrad.addColorStop(0.35, '#e4e4e7');
+                liquidGrad.addColorStop(0.70, 'rgba(255, 255, 255, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
+                waveShadowColor = 'rgba(255, 255, 255, 0.3)';
+                break;
+            case 'minimalist-warm':
+                liquidGrad.addColorStop(0, '#d97706');
+                liquidGrad.addColorStop(0.35, '#b45309');
+                liquidGrad.addColorStop(0.70, 'rgba(217, 119, 6, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(250, 248, 245, 0.04)');
+                waveShadowColor = 'rgba(217, 119, 6, 0.35)';
+                break;
+            case 'minimalist-obsidian':
+                liquidGrad.addColorStop(0, '#38bdf8');
+                liquidGrad.addColorStop(0.35, '#0284c7');
+                liquidGrad.addColorStop(0.70, 'rgba(56, 189, 248, 0.35)');
+                liquidGrad.addColorStop(1, 'rgba(0, 0, 0, 0.04)');
+                waveShadowColor = 'rgba(56, 189, 248, 0.4)';
+                break;
+            default:
+                liquidGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+                liquidGrad.addColorStop(0.18, 'rgba(255, 255, 255, 0.65)');
+                liquidGrad.addColorStop(0.50, 'rgba(255, 255, 255, 0.22)');
+                liquidGrad.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
+                break;
+        }
+        ctx.fillStyle = liquidGrad;
+        ctx.fill();
+
+        // Luminous Crest Ridge with Glow (+25% bloom on beat/snare pulses)
+        const crestStrokeColor = (currentTheme === 'minimalist-light' || currentTheme === 'brutalist-light')
+            ? '#09090b'
+            : (currentTheme === 'minimalist-warm' ? '#9a3412' : (currentTheme === 'minimalist-obsidian' ? '#38bdf8' : '#ffffff'));
+        ctx.save();
+        if (isFirefox) {
+            // Ethereal Multi-Pass Vector Glow for Firefox/Gecko:
+            // High-fidelity blooming crest rendered in pure hardware rasterization with 0% CPU blur overhead
+            ctx.beginPath();
+            ctx.moveTo(forePoints[0].x, forePoints[0].y);
+            drawSplinePath(ctx, forePoints);
+            ctx.lineWidth = (2.0 + beatPulse * 1.2 + snarePulse * 0.6) * 2.2;
+            ctx.strokeStyle = waveShadowColor;
+            ctx.globalAlpha = 0.42;
+            ctx.stroke();
+
+            ctx.lineWidth = 2.0 + beatPulse * 1.2 + snarePulse * 0.6;
+            ctx.strokeStyle = crestStrokeColor;
+            ctx.globalAlpha = 1.0;
+            ctx.stroke();
+        } else {
+            ctx.shadowColor = waveShadowColor;
+            ctx.shadowBlur = Math.min(12, 4 + beatPulse * 8 + snarePulse * 4);
+            ctx.lineWidth = 2.0 + beatPulse * 1.2 + snarePulse * 0.6;
+            ctx.strokeStyle = crestStrokeColor;
+            ctx.beginPath();
+            ctx.moveTo(forePoints[0].x, forePoints[0].y);
+            drawSplinePath(ctx, forePoints);
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // THEME-SPECIFIC DISTINCT WAVEFORM OVERLAYS
+        if (currentTheme === 'nms') {
+            // Atlas Segmented Vector Laser Nodes along peaks
+            ctx.save();
+            ctx.fillStyle = '#00e5ff';
+            ctx.shadowColor = '#00e5ff';
+            ctx.shadowBlur = 8;
+            for (let i = 2; i < pointsCount - 2; i += 3) {
+                if (bands[i] > 0.35) {
+                    const nx = forePoints[i].x;
+                    const ny = forePoints[i].y;
+                    ctx.beginPath();
+                    ctx.arc(nx, ny, 2.4 + beatPulse * 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Technical laser crosshair
+                    ctx.strokeStyle = 'rgba(255, 23, 68, 0.6)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(nx - 5, ny); ctx.lineTo(nx + 5, ny);
+                    ctx.moveTo(nx, ny - 5); ctx.lineTo(nx, ny + 5);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        } else if (currentTheme === 'solar-eclipse') {
+            // Solar Prominence Plasma Loops leaping above the wave on kicks
+            if (playing && beatPulse > 0.35) {
+                ctx.save();
+                for (let i = 4; i < pointsCount - 4; i += 7) {
+                    if (bands[i] > 0.40) {
+                        const px = forePoints[i].x;
+                        const py = forePoints[i].y;
+                        const loopH = (15 + beatPulse * 30) * (bands[i] || 0.5);
+                        ctx.beginPath();
+                        ctx.moveTo(px - 8, py);
+                        ctx.quadraticCurveTo(px, py - loopH, px + 8, py);
+                        ctx.strokeStyle = 'rgba(255, 0, 128, 0.85)';
+                        ctx.shadowColor = '#00f0ff';
+                        ctx.shadowBlur = 10;
+                        ctx.lineWidth = 1.8;
+                        ctx.stroke();
+                    }
+                }
+                ctx.restore();
+            }
+        } else if (currentTheme === 'abyssal-void') {
+            // Hydrophone Sonar Oscilloscope CRT Graticule Lines
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 170, 0.15)';
+            ctx.lineWidth = 0.8;
+            const numGrids = 4;
+            for (let g = 1; g <= numGrids; g++) {
+                const gy = height - (g * (height / (numGrids + 1)));
+                ctx.beginPath();
+                ctx.moveTo(0, gy);
+                ctx.lineTo(width, gy);
+                ctx.setLineDash([3, 5]);
+                ctx.stroke();
+            }
+            ctx.restore();
+        } else if (currentTheme === 'dissonance') {
+            // Corrupted Sentinel Spectrum CRT Telemetry Lines
+            ctx.save();
+            ctx.strokeStyle = 'rgba(168, 85, 247, 0.16)';
+            ctx.lineWidth = 0.8;
+            const numGrids = 4;
+            for (let g = 1; g <= numGrids; g++) {
+                const gy = height - (g * (height / (numGrids + 1)));
+                ctx.beginPath();
+                ctx.moveTo(0, gy);
+                ctx.lineTo(width, gy);
+                ctx.setLineDash([3, 6]);
+                ctx.stroke();
+            }
+            ctx.restore();
+        } else if (currentTheme === 'sentinel') {
+            // Sentinel Security Patrol CRT Telemetry Grid & Scanning nodes
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 229, 255, 0.14)';
+            ctx.lineWidth = 0.8;
+            const numGrids = 4;
+            for (let g = 1; g <= numGrids; g++) {
+                const gy = height - (g * (height / (numGrids + 1)));
+                ctx.beginPath();
+                ctx.moveTo(0, gy);
+                ctx.lineTo(width, gy);
+                ctx.setLineDash([4, 6]);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // Crest Sparkles emission on snare snaps, vocal spikes & prominent crests (Default theme only)
+        if (currentTheme === 'default' && playing && (snarePulse > 0.20 || beatPulse > 0.35)) {
+            for (let i = 3; i < pointsCount - 3; i += 3) {
+                if (bands[i] > 0.45 && bands[i] >= bands[i - 1] && bands[i] >= bands[i + 1]) {
+                    if (Math.random() < 0.32) {
+                        emitSparkle(forePoints[i].x, forePoints[i].y, snarePulse + 0.35);
+                    }
+                }
+            }
+        }
+
+        // Draw Expanding Shockwaves & Crest Sparkles
+        updateAndDrawShockwaves(ctx, dt);
+        if (currentTheme === 'default') {
+            updateAndDrawSparkles(ctx, dt);
+        }
+
+        // Floating spray particles triggered on bass surges and beat hits (Default theme only)
+        if (playing && currentTheme === 'default') {
+            updateAndDrawParticles(ctx, width, height, dt, smoothBass * 1.6 + beatPulse * 2.2 + snarePulse * 1.2);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Visualizer 2: Segmented Hi-Fi Equalizer (Unique & Distinct for EACH Theme)
+    // Dynamic theme-specific column geometry, segment shapes, peak caps & HUD grids
+    // -------------------------------------------------------------------------
+    function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble) {
+        const currentTheme = getActiveTheme();
+        const totalSegments = 16;
+        const legendHeight = 12;
+        const paddingX = 14;
+        const availableW = width - (paddingX * 2);
+
+        // Frame-rate independent attack & decay physics for column dynamics
+        const colAttack = 1.0 - Math.exp(-34 * dt);
+        const colDecay = 1.0 - Math.exp(-9.8 * dt);
+
+        // Theme-specific column count & geometry
+        let colCount = 56;
+        if (currentTheme === 'solar-eclipse') colCount = 48;
+        else if (currentTheme === 'alien-paradise') colCount = 50;
+        else if (currentTheme === 'euclid-horizon') colCount = 52;
+        else if (currentTheme === 'nms') colCount = 52;
+        else if (currentTheme === 'abyssal-void') colCount = 54;
+        else if (currentTheme === 'dissonance') colCount = 52;
+        else if (currentTheme === 'sentinel') colCount = 52;
+        else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') colCount = 48;
+
+        const colWidth = availableW / colCount;
+        const barWidth = Math.max(3.5, colWidth - 3.5);
+        const headerSpace = 16;
+        const footerSpace = legendHeight + 4;
+        const usableH = Math.max(22, height - headerSpace - footerSpace);
+        const segmentGap = Math.max(1.0, Math.min(2.0, (usableH / totalSegments) * 0.35));
+        const segmentHeight = Math.max(1.8, (usableH - (totalSegments - 1) * segmentGap) / totalSegments);
+
+        // 1. THEME-SPECIFIC BACKGROUND HUD & OSCILLOSCOPE GRIDS
+        if (currentTheme === 'nms') {
+            // Atlas Telemetry Scan HUD grid & coordinates
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 229, 255, 0.12)';
+            ctx.lineWidth = 0.8;
+            for (let g = 1; g <= 4; g++) {
+                const gy = height - legendHeight - 4 - g * ((height - 24) / 5);
+                ctx.beginPath();
+                ctx.moveTo(paddingX, gy);
+                ctx.lineTo(width - paddingX, gy);
+                ctx.setLineDash([4, 6]);
+                ctx.stroke();
+            }
+            // Beat scanline sweep
+            if (playing && beatPulse > 0.3) {
+                const scanX = paddingX + ((performance.now() * 0.25) % availableW);
+                const scanGrad = ctx.createLinearGradient(scanX - 25, 0, scanX + 25, 0);
+                scanGrad.addColorStop(0, 'rgba(255, 23, 68, 0)');
+                scanGrad.addColorStop(0.5, 'rgba(0, 229, 255, 0.35)');
+                scanGrad.addColorStop(1, 'rgba(255, 23, 68, 0)');
+                ctx.fillStyle = scanGrad;
+                ctx.fillRect(scanX - 25, 0, 50, height);
+            }
+            // HUD Top Banner
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.65)';
+            ctx.fillText('// ATLAS SPECTRAL SCAN // 16.16.16 // 24kHz HIGH-RES BANDWIDTH', paddingX + 2, 11);
+            ctx.restore();
+        } else if (currentTheme === 'abyssal-void') {
+            // Deep Trench Hydrophone CRT Oscilloscope Graticule
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 170, 0.12)';
+            ctx.lineWidth = 0.8;
+            const dbLabels = ['+3dB', '0dB', '-6dB', '-18dB', '-36dB'];
+            for (let g = 0; g < dbLabels.length; g++) {
+                const gy = height - legendHeight - 4 - (g + 1) * ((height - 26) / (dbLabels.length + 1));
+                ctx.beginPath();
+                ctx.moveTo(paddingX, gy);
+                ctx.lineTo(width - paddingX, gy);
+                ctx.setLineDash([2, 5]);
+                ctx.stroke();
+                ctx.font = '7px NMSFuturaProBook, monospace';
+                ctx.fillStyle = 'rgba(0, 255, 170, 0.45)';
+                ctx.fillText(dbLabels[g], paddingX + 2, gy - 2);
+            }
+            // Oscilloscope sonar sweep indicator
+            const sweepX = paddingX + ((performance.now() * 0.18) % availableW);
+            ctx.strokeStyle = 'rgba(0, 255, 170, ' + (0.25 + beatPulse * 0.35) + ')';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(sweepX, 0);
+            ctx.lineTo(sweepX, height - legendHeight - 2);
+            ctx.stroke();
+            ctx.restore();
+        } else if (currentTheme === 'euclid-horizon') {
+            // Synthwave Horizon Perspective Baseline Grid
+            ctx.save();
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.15)';
+            ctx.lineWidth = 0.8;
+            for (let g = 1; g <= 3; g++) {
+                const gy = height - legendHeight - 2 - g * 12;
+                ctx.beginPath();
+                ctx.moveTo(paddingX, gy);
+                ctx.lineTo(width - paddingX, gy);
+                ctx.stroke();
+            }
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.65)';
+            ctx.fillText('EUCLID HORIZON // 1984 VECTOR SYNTH // 24kHz', paddingX + 2, 11);
+            ctx.restore();
+        } else if (currentTheme === 'solar-eclipse') {
+            // Celestial Solar Prominence Header
+            ctx.save();
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = 'rgba(0, 240, 255, 0.65)';
+            ctx.fillText('SOLAR CORONA // 5800K // 24kHz HELIOS FLUX', paddingX + 2, 11);
+            ctx.restore();
+        } else if (currentTheme === 'alien-paradise') {
+            ctx.save();
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = 'rgba(244, 63, 94, 0.65)';
+            ctx.fillText('XENOFLORA // BIO-LUMINESCENT 24kHz SPORE SPECTRUM', paddingX + 2, 11);
+            ctx.restore();
+        } else if (currentTheme === 'dissonance') {
+            // Corrupted Sentinel Spectrum Scanner HUD
+            ctx.save();
+            ctx.strokeStyle = 'rgba(168, 85, 247, 0.14)';
+            ctx.lineWidth = 0.8;
+            for (let g = 1; g <= 4; g++) {
+                const gy = height - footerSpace - g * (usableH / 5);
+                ctx.beginPath();
+                ctx.moveTo(paddingX, gy);
+                ctx.lineTo(width - paddingX, gy);
+                ctx.setLineDash([3, 6]);
+                ctx.stroke();
+            }
+            if (playing && beatPulse > 0.3) {
+                const scanX = paddingX + ((performance.now() * 0.22) % availableW);
+                const scanGrad = ctx.createLinearGradient(scanX - 25, 0, scanX + 25, 0);
+                scanGrad.addColorStop(0, 'rgba(168, 85, 247, 0)');
+                scanGrad.addColorStop(0.5, 'rgba(217, 70, 239, 0.35)');
+                scanGrad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+                ctx.fillStyle = scanGrad;
+                ctx.fillRect(scanX - 25, headerSpace, 50, usableH);
+            }
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = 'rgba(217, 70, 239, 0.75)';
+            ctx.fillText('// DISSONANCE DETECTED // ATLANTIDEUM // 24kHz RESONATOR SCAN', paddingX + 2, 11);
+            ctx.restore();
+        } else if (currentTheme === 'sentinel') {
+            // Sentinel Security Patrol HUD Sweep & Wanted Level Banner
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 229, 255, 0.14)';
+            ctx.lineWidth = 0.8;
+            for (let g = 1; g <= 4; g++) {
+                const gy = height - legendHeight - 4 - g * ((height - 24) / 5);
+                ctx.beginPath();
+                ctx.moveTo(paddingX, gy);
+                ctx.lineTo(width - paddingX, gy);
+                ctx.setLineDash([4, 6]);
+                ctx.stroke();
+            }
+            if (playing && beatPulse > 0.3) {
+                const scanX = paddingX + ((performance.now() * 0.24) % availableW);
+                const scanGrad = ctx.createLinearGradient(scanX - 25, 0, scanX + 25, 0);
+                scanGrad.addColorStop(0, 'rgba(0, 229, 255, 0)');
+                scanGrad.addColorStop(0.5, 'rgba(255, 61, 0, 0.35)');
+                scanGrad.addColorStop(1, 'rgba(0, 229, 255, 0)');
+                ctx.fillStyle = scanGrad;
+                ctx.fillRect(scanX - 25, 0, 50, height);
+            }
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.85)';
+            ctx.fillText('// SENTINEL PATROL GRID // 24kHz SPECTRAL MONITOR // SECURITY SCAN //', paddingX + 2, 11);
+            ctx.restore();
+        } else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') {
+            const isLt = (currentTheme === 'brutalist-light' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-warm');
+            ctx.save();
+            let gridCol = isLt ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)';
+            if (currentTheme === 'minimalist-warm') gridCol = 'rgba(217, 119, 6, 0.12)';
+            else if (currentTheme === 'minimalist-obsidian') gridCol = 'rgba(56, 189, 248, 0.12)';
+            ctx.strokeStyle = gridCol;
+            ctx.lineWidth = 0.8;
+            for (let g = 1; g <= 4; g++) {
+                const gy = height - legendHeight - 4 - g * ((height - 24) / 5);
+                ctx.beginPath();
+                ctx.moveTo(paddingX, gy);
+                ctx.lineTo(width - paddingX, gy);
+                ctx.stroke();
+            }
+            ctx.font = '700 8px monospace';
+            let headerText = isLt ? '// MINIMALIST ARCHITECTURAL EQUALIZER // CH-1/2 // LINEAR' : '// MINIMALIST MONOLITHIC EQUALIZER // CH-1/2 // LINEAR';
+            let textCol = isLt ? '#000000' : '#ffffff';
+            if (currentTheme === 'minimalist-warm') {
+                headerText = '// MINIMALIST WARM PAPER EQUALIZER // CH-1/2 // LINEAR';
+                textCol = '#1c1917';
+            } else if (currentTheme === 'minimalist-obsidian') {
+                headerText = '// MINIMALIST OBSIDIAN OLED EQUALIZER // CH-1/2 // ZERO-WATT';
+                textCol = '#38bdf8';
+            }
+            ctx.fillStyle = textCol;
+            ctx.fillText(headerText, paddingX + 2, 11);
+            ctx.restore();
+        }
+
+        // Color definitions for each theme
+        let peakColor = '#ffffff';
+        let peakGlow = 'rgba(255, 255, 255, 0.95)';
+        let midColor = 'rgba(255, 255, 255, 0.92)';
+        let midGlow = 'rgba(255, 255, 255, 0.45)';
+        let lowColor = 'rgba(255, 255, 255, 0.78)';
+        let lowGlow = 'transparent';
+        let unlitColor = 'rgba(255, 255, 255, 0.07)';
+        let diamondColor = '#ffffff';
+
+        if (currentTheme === 'nms') {
+            peakColor = '#ff1744'; peakGlow = 'rgba(255, 23, 68, 0.95)';
+            midColor = '#ffab00'; midGlow = 'rgba(255, 171, 0, 0.65)';
+            lowColor = 'rgba(0, 229, 255, 0.85)'; lowGlow = 'rgba(0, 229, 255, 0.4)';
+            unlitColor = 'rgba(0, 229, 255, 0.06)'; diamondColor = '#ff1744';
+        } else if (currentTheme === 'solar-eclipse') {
+            peakColor = '#ff007f'; peakGlow = 'rgba(255, 0, 127, 0.95)';
+            midColor = '#3b82f6'; midGlow = 'rgba(59, 130, 246, 0.65)';
+            lowColor = 'rgba(0, 240, 255, 0.85)'; lowGlow = 'rgba(0, 240, 255, 0.4)';
+            unlitColor = 'rgba(0, 240, 255, 0.06)'; diamondColor = '#00f0ff';
+        } else if (currentTheme === 'euclid-horizon') {
+            peakColor = '#e11d48'; peakGlow = 'rgba(225, 29, 72, 0.95)';
+            midColor = '#fbbf24'; midGlow = 'rgba(251, 191, 36, 0.65)';
+            lowColor = 'rgba(20, 184, 166, 0.85)'; lowGlow = 'rgba(20, 184, 166, 0.4)';
+            unlitColor = 'rgba(20, 184, 166, 0.06)'; diamondColor = '#fbbf24';
+        } else if (currentTheme === 'alien-paradise') {
+            peakColor = '#ff2a70'; peakGlow = 'rgba(255, 42, 112, 0.95)';
+            midColor = '#facc15'; midGlow = 'rgba(250, 204, 21, 0.65)';
+            lowColor = 'rgba(0, 206, 209, 0.85)'; lowGlow = 'rgba(0, 206, 209, 0.4)';
+            unlitColor = 'rgba(0, 206, 209, 0.06)'; diamondColor = '#ff2a70';
+        } else if (currentTheme === 'abyssal-void') {
+            peakColor = '#00ffaa'; peakGlow = 'rgba(0, 255, 170, 0.95)';
+            midColor = '#6ee7b7'; midGlow = 'rgba(110, 231, 183, 0.65)';
+            lowColor = 'rgba(16, 185, 129, 0.85)'; lowGlow = 'rgba(16, 185, 129, 0.4)';
+            unlitColor = 'rgba(16, 185, 129, 0.06)'; diamondColor = '#00ffaa';
+        } else if (currentTheme === 'dissonance') {
+            peakColor = '#fae8ff'; peakGlow = 'rgba(217, 70, 239, 0.95)';
+            midColor = '#d946ef'; midGlow = 'rgba(217, 70, 239, 0.75)';
+            lowColor = 'rgba(168, 85, 247, 0.88)'; lowGlow = 'rgba(168, 85, 247, 0.45)';
+            unlitColor = 'rgba(168, 85, 247, 0.12)'; diamondColor = '#d946ef';
+        } else if (currentTheme === 'sentinel') {
+            peakColor = '#ff3d00'; peakGlow = 'rgba(255, 61, 0, 0.95)';
+            midColor = '#00e5ff'; midGlow = 'rgba(0, 229, 255, 0.65)';
+            lowColor = 'rgba(248, 250, 252, 0.85)'; lowGlow = 'rgba(248, 250, 252, 0.4)';
+            unlitColor = 'rgba(0, 229, 255, 0.06)'; diamondColor = '#00e5ff';
+        } else if (currentTheme === 'brutalist-light' || currentTheme === 'minimalist-light') {
+            peakColor = '#000000'; peakGlow = 'rgba(0, 0, 0, 0.35)';
+            midColor = '#27272a'; midGlow = 'rgba(0, 0, 0, 0.15)';
+            lowColor = 'rgba(39, 39, 42, 0.85)'; lowGlow = 'transparent';
+            unlitColor = 'rgba(0, 0, 0, 0.05)'; diamondColor = '#000000';
+        } else if (currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-dark') {
+            peakColor = '#ffffff'; peakGlow = 'rgba(255, 255, 255, 0.75)';
+            midColor = '#e4e4e7'; midGlow = 'rgba(255, 255, 255, 0.25)';
+            lowColor = 'rgba(228, 228, 231, 0.85)'; lowGlow = 'transparent';
+            unlitColor = 'rgba(255, 255, 255, 0.05)'; diamondColor = '#ffffff';
+        } else if (currentTheme === 'minimalist-warm') {
+            peakColor = '#d97706'; peakGlow = 'rgba(217, 119, 6, 0.45)';
+            midColor = '#b45309'; midGlow = 'rgba(180, 83, 9, 0.2)';
+            lowColor = '#1c1917'; lowGlow = 'transparent';
+            unlitColor = 'rgba(28, 25, 23, 0.05)'; diamondColor = '#d97706';
+        } else if (currentTheme === 'minimalist-obsidian') {
+            peakColor = '#38bdf8'; peakGlow = 'rgba(56, 189, 248, 0.85)';
+            midColor = '#ffffff'; midGlow = 'rgba(255, 255, 255, 0.35)';
+            lowColor = '#e2e8f0'; lowGlow = 'transparent';
+            unlitColor = 'rgba(255, 255, 255, 0.05)'; diamondColor = '#38bdf8';
+        }
+
+        // 2. COLUMN EQUALIZER PHYSICS & SEGMENTS RENDERING
+        for (let i = 0; i < colCount; i++) {
+            const x = paddingX + i * colWidth + (colWidth - barWidth) / 2;
+            const bandVal = bands[Math.floor((i / colCount) * bands.length)] || 0;
+            const shapedVal = Math.pow(bandVal, 1.25);
+            const transientPop = (i < 18 ? beatPulse * 1.4 : (i < 38 ? snarePulse * 1.2 : smoothTreble * 1.1));
+
+            const targetSegments = playing
+                ? Math.max(0.6, Math.min(15.6, shapedVal * 12.8 + transientPop * 2.2))
+                : Math.max(0.8, Math.sin((i * 0.28) + simPhase) * 1.6 + 2.2);
+
+            if (targetSegments > smoothDashLevels[i]) {
+                smoothDashLevels[i] += (targetSegments - smoothDashLevels[i]) * colAttack;
+            } else {
+                smoothDashLevels[i] += (targetSegments - smoothDashLevels[i]) * colDecay;
+            }
+            const currentLevel = smoothDashLevels[i];
+
+            if (currentLevel >= peakValues[i]) {
+                peakValues[i] = currentLevel;
+                peakVelocity[i] = 0;
+                peakHold[i] = 20;
+            } else {
+                if (peakHold[i] > 0) {
+                    peakHold[i]--;
+                } else {
+                    peakVelocity[i] += 26 * dt;
+                    peakValues[i] = Math.max(0, peakValues[i] - peakVelocity[i] * dt);
+                }
+            }
+
+            const fullSegments = Math.floor(currentLevel);
+            const fraction = currentLevel - fullSegments;
+
+            // Render Segments per Theme
+            for (let s = 0; s < totalSegments; s++) {
+                const y = height - footerSpace - segmentHeight - s * (segmentHeight + segmentGap);
+                const isMidSeg = s >= 8 && s < 12;
+                const isPeakZone = s >= 12;
+                const isLit = s < fullSegments;
+                const isPartial = s === fullSegments && fraction > 0.03;
+
+                const segColor = isPeakZone ? peakColor : (isMidSeg ? midColor : lowColor);
+                ctx.fillStyle = (isLit || isPartial) ? segColor : unlitColor;
+
+                // THEME-SPECIFIC SEGMENT SHAPES!
+                if (currentTheme === 'nms') {
+                    // Slanted Tech Chevron / Tactical Trapezoid
+                    ctx.beginPath();
+                    ctx.moveTo(x + 2, y);
+                    ctx.lineTo(x + barWidth, y);
+                    ctx.lineTo(x + barWidth - 2, y + segmentHeight);
+                    ctx.lineTo(x, y + segmentHeight);
+                    ctx.closePath();
+                    ctx.fill();
+                } else if (currentTheme === 'solar-eclipse') {
+                    // Glowing Circular Plasma Node / Eclipse Bead
+                    const cyNode = y + segmentHeight / 2;
+                    const cxNode = x + barWidth / 2;
+                    const radNode = Math.min(barWidth, segmentHeight) * 0.48;
+                    ctx.beginPath();
+                    ctx.arc(cxNode, cyNode, radNode, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (currentTheme === 'euclid-horizon') {
+                    // Wireframe Dual-Stroke Laser Synth Bar
+                    ctx.fillRect(x, y, barWidth, segmentHeight);
+                    if (isLit) {
+                        ctx.strokeStyle = isPeakZone ? '#fbbf24' : (isMidSeg ? '#14b8a6' : 'rgba(251, 191, 36, 0.7)');
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x, y, barWidth, segmentHeight);
+                    }
+                } else if (currentTheme === 'alien-paradise') {
+                    // Smooth Organic Capsule Pod
+                    drawRoundedRect(ctx, x, y, barWidth, segmentHeight, segmentHeight * 0.45);
+                } else if (currentTheme === 'abyssal-void') {
+                    // Digital CRT Phosphor Pip
+                    ctx.fillRect(x, y, barWidth, segmentHeight);
+                    // CRT Scanline notch
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+                    ctx.fillRect(x, y + segmentHeight * 0.5, barWidth, 0.6);
+                } else if (currentTheme === 'dissonance') {
+                    // Angular Corrupted Sentinel Crystal Prism Segment
+                    const inset = Math.min(1.5, Math.max(0.8, barWidth * 0.14));
+                    ctx.beginPath();
+                    ctx.moveTo(x + inset, y);
+                    ctx.lineTo(x + barWidth - inset, y);
+                    ctx.lineTo(x + barWidth, y + segmentHeight / 2);
+                    ctx.lineTo(x + barWidth - inset, y + segmentHeight);
+                    ctx.lineTo(x + inset, y + segmentHeight);
+                    ctx.lineTo(x, y + segmentHeight / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    if (isLit && isPeakZone) {
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
+                    }
+                } else if (currentTheme === 'sentinel') {
+                    // Ceramic Armor Angled Tactical Plate
+                    const inset = 1.0;
+                    ctx.beginPath();
+                    ctx.moveTo(x + inset, y);
+                    ctx.lineTo(x + barWidth, y);
+                    ctx.lineTo(x + barWidth - inset, y + segmentHeight);
+                    ctx.lineTo(x, y + segmentHeight);
+                    ctx.closePath();
+                    ctx.fill();
+                    if (isLit && isPeakZone) {
+                        ctx.strokeStyle = '#ff3d00';
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
+                    }
+                } else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') {
+                    // Pure Minimalist Rectilinear Segment: Sharp 0px corners, high-contrast flat fill
+                    ctx.fillRect(x, y, barWidth, segmentHeight);
+                    if (isLit && isPeakZone) {
+                        let strokeCol = '#ffffff';
+                        if (currentTheme === 'minimalist-light' || currentTheme === 'brutalist-light') strokeCol = '#000000';
+                        else if (currentTheme === 'minimalist-warm') strokeCol = '#d97706';
+                        else if (currentTheme === 'minimalist-obsidian') strokeCol = '#38bdf8';
+                        ctx.strokeStyle = strokeCol;
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x, y, barWidth, segmentHeight);
+                    }
+                } else {
+                    // Default Studio Phosphor Rounded Bar
+                    drawRoundedRect(ctx, x, y, barWidth, segmentHeight, 1);
+                }
+                ctx.shadowBlur = 0;
+            }
+
+            // 3. THEME-SPECIFIC FLOATING PEAK CAPS!
+            const peakSeg = Math.min(totalSegments - 1, Math.floor(peakValues[i]));
+            if (peakSeg > fullSegments && peakSeg >= 1) {
+                const peakY = height - footerSpace - segmentHeight - peakSeg * (segmentHeight + segmentGap);
+                const pcx = x + barWidth / 2;
+                const pcy = peakY + segmentHeight / 2;
+
+                if (currentTheme === 'nms') {
+                    // Atlas Holographic Diamond with Target Brackets [ ◆ ]
+                    ctx.save();
+                    ctx.translate(pcx, pcy);
+                    ctx.rotate(Math.PI / 4);
+                    ctx.fillStyle = diamondColor;
+                    ctx.shadowColor = diamondColor;
+                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                    const dSize = Math.max(2.2, Math.min(segmentHeight, barWidth * 0.45, 5.0));
+                    ctx.fillRect(-dSize / 2, -dSize / 2, dSize, dSize);
+                    ctx.restore();
+                    // Telemetry bracket
+                    ctx.strokeStyle = '#00e5ff';
+                    ctx.lineWidth = 0.8;
+                    ctx.beginPath();
+                    ctx.moveTo(pcx - barWidth * 0.45, pcy - 2);
+                    ctx.lineTo(pcx - barWidth * 0.45, pcy + 2);
+                    ctx.moveTo(pcx + barWidth * 0.45, pcy - 2);
+                    ctx.lineTo(pcx + barWidth * 0.45, pcy + 2);
+                    ctx.stroke();
+                } else if (currentTheme === 'solar-eclipse') {
+                    // Solar Eclipse Corona Orb with Pulsing Halo
+                    ctx.save();
+                    ctx.fillStyle = '#ff007f';
+                    ctx.shadowColor = '#00f0ff';
+                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                    const orbR = Math.max(1.8, Math.min(barWidth * 0.38, segmentHeight * 0.85, 4.0));
+                    ctx.beginPath();
+                    ctx.arc(pcx, pcy, orbR, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#00f0ff';
+                    ctx.lineWidth = 1.0;
+                    ctx.stroke();
+                    ctx.restore();
+                } else if (currentTheme === 'euclid-horizon') {
+                    // Horizon Speed Vector Blip
+                    ctx.save();
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.shadowColor = '#fbbf24';
+                    ctx.shadowBlur = 3;
+                    ctx.fillRect(x - 1, peakY, barWidth + 2, Math.min(2.2, segmentHeight));
+                    ctx.fillStyle = '#14b8a6';
+                    ctx.fillRect(pcx - 1, peakY - 3, 2, 2);
+                    ctx.restore();
+                } else if (currentTheme === 'alien-paradise') {
+                    // Floating Bioluminescent Spore Bead
+                    ctx.save();
+                    const bobY = pcy + Math.sin(performance.now() * 0.005 + i) * 1.0;
+                    ctx.fillStyle = '#ff2a70';
+                    ctx.shadowColor = '#00ced1';
+                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                    const sporeR = Math.max(1.6, Math.min(barWidth * 0.36, segmentHeight * 0.8, 3.8));
+                    ctx.beginPath();
+                    ctx.arc(pcx, bobY, sporeR, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                } else if (currentTheme === 'abyssal-void') {
+                    // Sonar Radar Blip & Ripple Ring
+                    ctx.save();
+                    ctx.fillStyle = '#00ffaa';
+                    ctx.shadowColor = '#00ffaa';
+                    ctx.shadowBlur = 3;
+                    ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
+                    // Radar ping ripple
+                    ctx.strokeStyle = 'rgba(0, 255, 170, ' + (0.4 + beatPulse * 0.4) + ')';
+                    ctx.lineWidth = 0.8;
+                    ctx.beginPath();
+                    ctx.arc(pcx, pcy, Math.min(barWidth * 0.65, 6.0), 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                } else if (currentTheme === 'dissonance') {
+                    // Floating Luminous Atlantideum Shard Diamond Cap
+                    ctx.save();
+                    ctx.fillStyle = '#fae8ff';
+                    ctx.shadowColor = '#d946ef';
+                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                    const capH = Math.max(1.8, Math.min(segmentHeight, 3.5));
+                    const capW = Math.max(3.0, Math.min(barWidth * 0.7, 8.0));
+                    ctx.beginPath();
+                    ctx.moveTo(pcx, pcy - capH);
+                    ctx.lineTo(pcx + capW * 0.5, pcy);
+                    ctx.lineTo(pcx, pcy + capH);
+                    ctx.lineTo(pcx - capW * 0.5, pcy);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Inner luminous crystal core
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(pcx, pcy, Math.min(capH, capW) * 0.28, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                } else if (currentTheme === 'sentinel') {
+                    // Sentinel Laser Targeter Pip with Crosshair
+                    ctx.save();
+                    ctx.fillStyle = '#ff3d00';
+                    ctx.shadowColor = '#ff3d00';
+                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                    ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
+                    // Optical targeting pip
+                    ctx.fillStyle = '#00e5ff';
+                    ctx.beginPath();
+                    ctx.arc(pcx, pcy, Math.min(1.4, segmentHeight * 0.5), 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                } else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') {
+                    // Pure Minimalist Peak Cap: Sharp solid horizontal tick mark
+                    ctx.save();
+                    let capCol = '#ffffff';
+                    if (currentTheme === 'minimalist-light' || currentTheme === 'brutalist-light') capCol = '#000000';
+                    else if (currentTheme === 'minimalist-warm') capCol = '#d97706';
+                    else if (currentTheme === 'minimalist-obsidian') capCol = '#38bdf8';
+                    ctx.fillStyle = capCol;
+                    ctx.shadowBlur = 0;
+                    ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
+                    ctx.restore();
+                } else {
+                    // Default Studio Phosphor LED Peak Bar
+                    ctx.fillStyle = '#ffffff';
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.95)';
+                    ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                    drawRoundedRect(ctx, x, peakY, barWidth, segmentHeight, 1);
+                    ctx.shadowBlur = 0;
+                }
+            }
+        }
+
+        // 4. THEME-SPECIFIC FLOOR BASELINE & LABELS (Full 20Hz - 24kHz High-Fidelity Bandwidth)
+        if (currentTheme === 'nms') {
+            // Atlas Telemetry Baseline
+            ctx.fillStyle = '#ff1744';
+            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.5);
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.8)';
+            const techMarks = [
+                { col: 2, text: '[30Hz]' }, { col: 14, text: '[250Hz]' },
+                { col: 27, text: '[1kHz]' }, { col: 38, text: '[4kHz]' },
+                { col: 46, text: '[16kHz]' }, { col: 51, text: '[24kHz]' }
+            ];
+            for (const tm of techMarks) {
+                const isEdge = (tm.col >= colCount - 1);
+                const isStart = (tm.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + tm.col * colWidth + colWidth / 2));
+                ctx.fillText(tm.text, lx, height - 2);
+            }
+        } else if (currentTheme === 'solar-eclipse') {
+            // Solar Prominence Plasma Floor
+            const solGrad = ctx.createLinearGradient(paddingX, 0, width - paddingX, 0);
+            solGrad.addColorStop(0, '#00f0ff');
+            solGrad.addColorStop(0.5, '#ff007f');
+            solGrad.addColorStop(1, '#00f0ff');
+            ctx.fillStyle = solGrad;
+            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = '#00f0ff';
+            const solarMarks = [
+                { col: 2, text: '• 30Hz' }, { col: 14, text: '• 250Hz' },
+                { col: 25, text: '• 1kHz' }, { col: 35, text: '• 4kHz' },
+                { col: 42, text: '• 16kHz' }, { col: 47, text: '• 24kHz' }
+            ];
+            for (const sm of solarMarks) {
+                const isEdge = (sm.col >= colCount - 1);
+                const isStart = (sm.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + sm.col * colWidth + colWidth / 2));
+                ctx.fillText(sm.text, lx, height - 2);
+            }
+        } else if (currentTheme === 'euclid-horizon') {
+            // Synthwave Horizon Sun Arc & Floor
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = '#fbbf24';
+            const synthMarks = [
+                { col: 2, text: '30Hz' }, { col: 14, text: '250Hz' },
+                { col: 27, text: '1kHz' }, { col: 38, text: '4kHz' },
+                { col: 46, text: '16kHz' }, { col: 51, text: '24kHz' }
+            ];
+            for (const sm of synthMarks) {
+                const isEdge = (sm.col >= colCount - 1);
+                const isStart = (sm.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + sm.col * colWidth + colWidth / 2));
+                ctx.fillText(sm.text, lx, height - 2);
+            }
+        } else if (currentTheme === 'alien-paradise') {
+            // Undulating Mycelial Wave Baseline
+            ctx.strokeStyle = '#ff2a70';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(paddingX, height - legendHeight - 2);
+            for (let xPos = paddingX; xPos <= width - paddingX; xPos += 10) {
+                const waveY = height - legendHeight - 2 + Math.sin(xPos * 0.05 + performance.now() * 0.003) * 1.5;
+                ctx.lineTo(xPos, waveY);
+            }
+            ctx.stroke();
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = '#00ced1';
+            const bioMarks = [
+                { col: 2, text: '✿ 30Hz' }, { col: 14, text: '✿ 250Hz' },
+                { col: 26, text: '✿ 1kHz' }, { col: 37, text: '✿ 4kHz' },
+                { col: 44, text: '✿ 16kHz' }, { col: 49, text: '✿ 24kHz' }
+            ];
+            for (const bm of bioMarks) {
+                const isEdge = (bm.col >= colCount - 1);
+                const isStart = (bm.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + bm.col * colWidth + colWidth / 2));
+                ctx.fillText(bm.text, lx, height - 2);
+            }
+        } else if (currentTheme === 'abyssal-void') {
+            // CRT Hydrophone Sonar Floor
+            ctx.fillStyle = '#00ffaa';
+            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = '#00ffaa';
+            const sonarMarks = [
+                { col: 2, text: '◄ 30Hz' }, { col: 14, text: '◄ 250Hz' },
+                { col: 28, text: '◄ 1kHz' }, { col: 39, text: '◄ 4kHz' },
+                { col: 47, text: '◄ 16kHz' }, { col: 53, text: '◄ 24kHz' }
+            ];
+            for (const sm of sonarMarks) {
+                const isEdge = (sm.col >= colCount - 1);
+                const isStart = (sm.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + sm.col * colWidth + colWidth / 2));
+                ctx.fillText(sm.text, lx, height - 2);
+            }
+        } else if (currentTheme === 'dissonance') {
+            // Corrupted Sentinel Dissonance Floor Baseline
+            ctx.fillStyle = '#d946ef';
+            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = '#d946ef';
+            const dissMarks = [
+                { col: 2, text: '✦ 30Hz' }, { col: 14, text: '✦ 250Hz' },
+                { col: 27, text: '✦ 1kHz' }, { col: 38, text: '✦ 4kHz' },
+                { col: 46, text: '✦ 16kHz' }, { col: 51, text: '✦ 24kHz' }
+            ];
+            for (const dm of dissMarks) {
+                const isEdge = (dm.col >= colCount - 1);
+                const isStart = (dm.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + dm.col * colWidth + colWidth / 2));
+                ctx.fillText(dm.text, lx, height - 2);
+            }
+        } else if (currentTheme === 'sentinel') {
+            // Sentinel Security Enforcement Floor Baseline
+            ctx.fillStyle = '#ff3d00';
+            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.8);
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = '#00e5ff';
+            const sentinelMarks = [
+                { col: 2, text: '[30Hz]' }, { col: 14, text: '[250Hz]' },
+                { col: 27, text: '[1kHz]' }, { col: 38, text: '[4kHz]' },
+                { col: 46, text: '[16kHz]' }, { col: 51, text: '[24kHz]' }
+            ];
+            for (const sm of sentinelMarks) {
+                const isEdge = (sm.col >= colCount - 1);
+                const isStart = (sm.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + sm.col * colWidth + colWidth / 2));
+                ctx.fillText(sm.text, lx, height - 2);
+            }
+        } else if (currentTheme === 'brutalist-light' || currentTheme === 'brutalist-dark' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-dark' || currentTheme === 'minimalist-warm' || currentTheme === 'minimalist-obsidian') {
+            const isLt = (currentTheme === 'brutalist-light' || currentTheme === 'minimalist-light' || currentTheme === 'minimalist-warm');
+            let floorCol = isLt ? '#000000' : '#ffffff';
+            if (currentTheme === 'minimalist-warm') floorCol = '#d97706';
+            else if (currentTheme === 'minimalist-obsidian') floorCol = '#38bdf8';
+            ctx.fillStyle = floorCol;
+            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1.5);
+            ctx.font = '700 8px monospace';
+            ctx.fillStyle = floorCol;
+            const techMarks = [
+                { col: 2, text: '30Hz' }, { col: 14, text: '250Hz' },
+                { col: 25, text: '1kHz' }, { col: 35, text: '4kHz' },
+                { col: 42, text: '16kHz' }, { col: 47, text: '24kHz' }
+            ];
+            for (const tm of techMarks) {
+                const isEdge = (tm.col >= colCount - 1);
+                const isStart = (tm.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + tm.col * colWidth + colWidth / 2));
+                ctx.fillText(tm.text, lx, height - 2);
+            }
+        } else {
+            // Default Studio Floor
+            ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.24 + beatPulse * 0.40) + ')';
+            ctx.fillRect(paddingX, height - legendHeight - 2, availableW, 1);
+            const freqLegends = [
+                { col: 2, text: '30' }, { col: 8, text: '60' },
+                { col: 17, text: '250' }, { col: 29, text: '1k' },
+                { col: 40, text: '4k' }, { col: 49, text: '16k' },
+                { col: 55, text: '24k' }
+            ];
+            ctx.save();
+            ctx.font = '8px NMSFuturaProBook, monospace';
+            ctx.fillStyle = 'rgba(255, 255, 255, ' + (0.28 + (beatPulse + snarePulse) * 0.20) + ')';
+            for (const fl of freqLegends) {
+                const isEdge = (fl.col >= colCount - 1);
+                const isStart = (fl.col <= 2);
+                ctx.textAlign = isEdge ? 'right' : (isStart ? 'left' : 'center');
+                const lx = isEdge ? (width - paddingX) : (isStart ? paddingX : (paddingX + fl.col * colWidth + colWidth / 2));
+                ctx.fillText(fl.text, lx, height - 2);
+            }
+            ctx.restore();
+        }
+    }
+
+    function drawRoundedRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    // Attach visualizer functions to window
+    if (typeof window !== "undefined") {
+        try { window.setupVisualizerMode = setupVisualizerMode; } catch (_) {}
+        try { window.setVisualizerMode = setVisualizerMode; } catch (_) {}
+        try { window.refreshCanvasDimensions = refreshCanvasDimensions; } catch (_) {}
+        try { window.syncTurntableCenterCanvas = syncTurntableCenterCanvas; } catch (_) {}
+        try { window.syncCanvasResolution = syncCanvasResolution; } catch (_) {}
+        try { window.setupCanvas = setupCanvas; } catch (_) {}
+        try { window.emitShockwave = emitShockwave; } catch (_) {}
+        try { window.updateAndDrawShockwaves = updateAndDrawShockwaves; } catch (_) {}
+        try { window.emitSparkle = emitSparkle; } catch (_) {}
+        try { window.updateAndDrawSparkles = updateAndDrawSparkles; } catch (_) {}
+        try { window.drawSplinePath = drawSplinePath; } catch (_) {}
+        try { window.startVisualizerLoop = startVisualizerLoop; } catch (_) {}
+        try { window.drawSolidWave = drawSolidWave; } catch (_) {}
+        try { window.drawVerticalDash = drawVerticalDash; } catch (_) {}
+        try { window.drawRoundedRect = drawRoundedRect; } catch (_) {}
+        try { window.loadVisualizerThemes1 = loadVisualizerThemes1; } catch (_) {}
+        try { window.loadVisualizerThemes2 = loadVisualizerThemes2; } catch (_) {}
+    }
+
+
+
+    // --- Sub-Module: themes.js ---
+// CachyMusic - 10-Theme Palette & Ambient Aura Engine
+    let ambientCtx = null;
+    const ambientColorCache = new Map();
+
+    function updateAmbientLighting(coverUrl) {
+        if (!coverUrl) return;
+
+        if (ambientColorCache.has(coverUrl)) {
+            const [c1, c2] = ambientColorCache.get(coverUrl);
+            document.documentElement.style.setProperty('--ambient-aura-1', c1);
+            document.documentElement.style.setProperty('--ambient-aura-2', c2);
+            return;
+        }
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            try {
+                if (!ambientCanvas) {
+                    ambientCanvas = document.createElement('canvas');
+                    ambientCanvas.width = 16;
+                    ambientCanvas.height = 16;
+                    ambientCtx = ambientCanvas.getContext('2d', { willReadFrequently: true });
+                }
+                ambientCtx.drawImage(img, 0, 0, 16, 16);
+                const imgData = ambientCtx.getImageData(0, 0, 16, 16).data;
+
+                let rSum = 0, gSum = 0, bSum = 0, count = 0;
+                let maxSat = -1;
+                let satR = 230, satG = 20, satB = 20;
+
+                for (let i = 0; i < imgData.length; i += 4) {
+                    const r = imgData[i];
+                    const g = imgData[i + 1];
+                    const b = imgData[i + 2];
+                    const a = imgData[i + 3];
+                    if (a < 128) continue;
+
+                    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                    if (lum > 25 && lum < 235) {
+                        rSum += r;
+                        gSum += g;
+                        bSum += b;
+                        count++;
+
+                        const max = Math.max(r, g, b);
+                        const min = Math.min(r, g, b);
+                        const sat = (max - min) / (max || 1);
+                        if (sat > maxSat) {
+                            maxSat = sat;
+                            satR = r;
+                            satG = g;
+                            satB = b;
+                        }
+                    }
+                }
+
+                let secR = satR, secG = satG, secB = satB;
+                if (count > 0) {
+                    secR = Math.round(rSum / count);
+                    secG = Math.round(gSum / count);
+                    secB = Math.round(bSum / count);
+                }
+
+                const c1 = `rgba(${satR}, ${satG}, ${satB}, 0.22)`;
+                const c2 = `rgba(${secR}, ${secG}, ${secB}, 0.05)`;
+
+                ambientColorCache.set(coverUrl, [c1, c2]);
+                document.documentElement.style.setProperty('--ambient-aura-1', c1);
+                document.documentElement.style.setProperty('--ambient-aura-2', c2);
+            } catch (_) {}
+        };
+        img.src = coverUrl;
+    }
+
+
+    function applyTheme(themeName, showToastNotification = false) {
+        if (themeName === 'atlas' || themeName === 'spotify' || themeName === 'apple') {
+            themeName = 'nms';
+        } else if (themeName === 'brutalist-minimalism-light' || themeName === 'brutalist-light') {
+            themeName = 'minimalist-light';
+        } else if (themeName === 'brutalist-minimalism-dark' || themeName === 'brutalist-dark') {
+            themeName = 'minimalist-dark';
+        }
+        const validThemes = [
+            'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
+            'abyssal-void', 'dissonance', 'sentinel',
+            'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian',
+            'brutalist-light', 'brutalist-dark'
+        ];
+        if (!validThemes.includes(themeName)) {
+            themeName = 'default';
+        }
+        activeTheme = themeName;
+        if (showToastNotification) {
+            showThemeLoadingOverlay(themeName);
+        }
+        document.documentElement.setAttribute('data-theme', themeName);
+        document.body.removeAttribute('data-theme');
+        try {
+            safeStorage.setItem('cachymusic_active_theme', themeName);
+            localStorage.setItem('cachymusic_active_theme', themeName);
+        } catch (_) {}
+        window.applyTheme = applyTheme;
+        window.activeTheme = themeName;
+
+        try {
+            if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+                const currentUrl = new URL(window.location.href);
+                if (currentUrl.searchParams.has('theme') && currentUrl.searchParams.get('theme') !== themeName) {
+                    currentUrl.searchParams.set('theme', themeName);
+                    window.history.replaceState(null, '', currentUrl.pathname + currentUrl.search + currentUrl.hash);
+                }
+            }
+        } catch (_) {}
+
+        // Update active class on Theme Modal cards
+        themeSelectCards.forEach(card => {
+            const isTarget = card.dataset.theme === themeName;
+            card.classList.toggle('active', isTarget);
+        });
+
+        // Update active class on Settings Panel quick buttons
+        themeQuickBtns.forEach(btn => {
+            const isTarget = btn.dataset.theme === themeName;
+            btn.classList.toggle('active', isTarget);
+        });
+
+        // Update Top Navigation Bar label
+        if (topThemeLabel) {
+            const labels = {
+                default: 'DEFAULT',
+                nms: 'THE ATLAS',
+                'solar-eclipse': 'PLANETARY WARP',
+                'euclid-horizon': 'SPACE STATION',
+                'alien-paradise': 'ALIEN PARADISE',
+                'abyssal-void': 'EMERIL DRIVE',
+                dissonance: 'DISSONANCE',
+                sentinel: 'SENTINEL',
+                'minimalist-light': 'MINIMALIST (LIGHT)',
+                'minimalist-dark': 'MINIMALIST (DARK)',
+                'minimalist-warm': 'MINIMALIST (WARM)',
+                'minimalist-obsidian': 'MINIMALIST (OLED)',
+                'brutalist-light': 'MINIMALIST (LIGHT)',
+                'brutalist-dark': 'MINIMALIST (DARK)'
+            };
+            topThemeLabel.textContent = labels[themeName] || 'THEMES';
+        }
+
+        // Update Settings Panel Theme Status
+        const settingsThemeLabel = document.getElementById('settingsThemeCurrentLabel');
+        if (settingsThemeLabel) {
+            const friendly = {
+                default: 'Default Studio Hi-Fi • Precision Noir',
+                nms: 'The Atlas • Crimson Core HUD',
+                'solar-eclipse': 'Planetary Warp • Corona Orbit',
+                'euclid-horizon': 'Space Station • Euclid Dock',
+                'alien-paradise': 'Alien Paradise • 70s Retro Flora',
+                'abyssal-void': 'Emeril Drive • Emerald Pulse',
+                dissonance: 'Dissonance • Corrupted Atlantideum',
+                sentinel: 'Sentinel • Defense Combat Interface',
+                'minimalist-light': 'Minimalist (Light) • Stark Paper Clarity',
+                'minimalist-dark': 'Minimalist (Dark) • Monolithic Slate Void',
+                'minimalist-warm': 'Minimalist (Warm Paper) • Nordic Alabaster & Amber',
+                'minimalist-obsidian': 'Minimalist (Obsidian OLED) • Pitch Pure Zero-Watt',
+                'brutalist-light': 'Minimalist (Light) • Stark Paper Clarity',
+                'brutalist-dark': 'Minimalist (Dark) • Monolithic Slate Void'
+            };
+            settingsThemeLabel.textContent = friendly[themeName] || themeName.toUpperCase();
+        }
+
+        const settingsTabCurrentThemeBadge = document.getElementById('settingsTabCurrentThemeBadge');
+        if (settingsTabCurrentThemeBadge) {
+            const labels = {
+                default: 'DEFAULT STUDIO HI-FI',
+                nms: 'THE ATLAS',
+                'solar-eclipse': 'PLANETARY WARP',
+                'euclid-horizon': 'SPACE STATION',
+                'alien-paradise': 'ALIEN PARADISE',
+                'abyssal-void': 'EMERIL DRIVE',
+                dissonance: 'DISSONANCE',
+                sentinel: 'SENTINEL',
+                'minimalist-light': 'MINIMALIST (LIGHT)',
+                'minimalist-dark': 'MINIMALIST (DARK)',
+                'minimalist-warm': 'MINIMALIST (WARM PAPER)',
+                'minimalist-obsidian': 'MINIMALIST (OBSIDIAN OLED)',
+                'brutalist-light': 'MINIMALIST (LIGHT)',
+                'brutalist-dark': 'MINIMALIST (DARK)'
+            };
+            settingsTabCurrentThemeBadge.textContent = labels[themeName] || themeName.toUpperCase();
+        }
+
+        // Sync turntable center visualizer and fidelity according to activeVisualizerMode
+        const isThematicActive = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple');
+        if (turntableCenterVis) {
+            turntableCenterVis.style.display = 'flex';
+        }
+        if (vinylLabel) {
+            vinylLabel.style.opacity = '0';
+        }
+        if (vinylTurntable) {
+            vinylTurntable.classList.toggle('thematicFidelity', isThematicActive);
+            vinylTurntable.classList.toggle('spinning', isPlaying);
+        }
+        if (typeof updateSignalPathUi === 'function') {
+            updateSignalPathUi();
+        }
+        if (typeof updateDacStatusUi === 'function') {
+            updateDacStatusUi();
+        }
+        if (typeof drawPeqCurve === 'function') {
+            drawPeqCurve();
+        }
+        if (typeof loadVisualizerThemes1 === 'function') loadVisualizerThemes1();
+        else if (typeof window !== 'undefined' && typeof window.loadVisualizerThemes1 === 'function') window.loadVisualizerThemes1();
+        if (typeof loadVisualizerThemes2 === 'function') loadVisualizerThemes2();
+        else if (typeof window !== 'undefined' && typeof window.loadVisualizerThemes2 === 'function') window.loadVisualizerThemes2();
+        if (typeof resumeVisualizerLoop === 'function') {
+            resumeVisualizerLoop();
+        } else if (typeof window !== 'undefined' && typeof window.resumeVisualizerLoop === 'function') {
+            window.resumeVisualizerLoop();
+        }
+    }
+    window.applyTheme = applyTheme;
+
+    function openThemeModal() {
+        if (!themeModal) return;
+        themeModal.style.display = 'flex';
+        pushModalState('themeModal');
+        setTimeout(() => {
+            const activeCard = themeModal.querySelector('.themeSelectCard.active');
+            if (activeCard) {
+                activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }, 60);
+    }
+
+    function closeThemeModal() {
+        if (themeModal) themeModal.style.display = 'none';
+        popModalState('themeModal');
+    }
+
+    if (typeof window !== 'undefined') {
+        Object.assign(window, {
+            updateAmbientLighting,
+            applyTheme,
+            openThemeModal,
+            closeThemeModal
+        });
+    }
+
+
+
+
+    // --- Sub-Module: settings.js ---
+// CachyMusic - Audio Settings, Sleep Timer & Telemetry HUD
+    // Audiophile Sleep Timer Engine
+    // Gentle 12-second logarithmic volume fade-out prevents sleep interruption
+    // =========================================================================
+    function setSleepTimer(minutes) {
+        cancelSleepTimer(false);
+        if (minutes === 'end') {
+            sleepTimerMode = 'end';
+            sleepTimerRemainingSec = 0;
+            if (sleepTimerLabel) sleepTimerLabel.textContent = '🌙 End of Track';
+            if (sleepStatusRemaining) sleepStatusRemaining.textContent = 'Pauses at end of current track';
+            if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
+            if (sleepTimerBtn) sleepTimerBtn.classList.add('hasActiveTimer');
+            const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
+            if (settingsTabSleepStatusBadge) {
+                settingsTabSleepStatusBadge.textContent = 'PAUSE AT END OF TRACK';
+                settingsTabSleepStatusBadge.classList.add('active');
+            }
+            const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
+            if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = '';
+            showToast('Sleep timer set: Pauses at end of track');
+            closeSleepTimerModal();
+            return;
+        }
+
+        const mins = parseInt(minutes, 10);
+        if (isNaN(mins) || mins <= 0) return;
+
+        sleepTimerMode = 'countdown';
+        sleepTimerRemainingSec = mins * 60;
+        sleepTimerOriginalVolume = currentVolumeValue;
+
+        updateSleepTimerStatusUi();
+        if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
+        if (sleepTimerBtn) sleepTimerBtn.classList.add('hasActiveTimer');
+        const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
+        if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = '';
+        showToast(`Sleep timer set: ${mins} minute${mins === 1 ? '' : 's'}`);
+        closeSleepTimerModal();
+
+        sleepTimerInterval = setInterval(() => {
+            sleepTimerRemainingSec--;
+            updateSleepTimerStatusUi();
+
+            // Audiophile 12-second logarithmic gentle fade-out
+            if (sleepTimerRemainingSec <= 12 && sleepTimerRemainingSec > 0) {
+                if (sleepTimerOriginalVolume === null) sleepTimerOriginalVolume = currentVolumeValue;
+                const ratio = Math.max(0, sleepTimerRemainingSec / 12);
+                const fadedVol = sleepTimerOriginalVolume * Math.pow(ratio, 1.4);
+                setVolume(fadedVol, false);
+            }
+
+            if (sleepTimerRemainingSec <= 0) {
+                clearInterval(sleepTimerInterval);
+                sleepTimerInterval = null;
+                pauseAudio();
+                if (sleepTimerOriginalVolume !== null) {
+                    setVolume(sleepTimerOriginalVolume, true);
+                    sleepTimerOriginalVolume = null;
+                }
+                cancelSleepTimer(false);
+                showToast('🌙 Sleep timer finished: Playback paused.');
+            }
+        }, 1000);
+    }
+
+    function updateSleepTimerStatusUi() {
+        const m = Math.floor(sleepTimerRemainingSec / 60);
+        const s = sleepTimerRemainingSec % 60;
+        const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
+        if (sleepTimerLabel) sleepTimerLabel.textContent = `🌙 ${timeStr}`;
+        if (sleepStatusRemaining) sleepStatusRemaining.textContent = `${timeStr} remaining`;
+        const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
+        if (settingsTabSleepStatusBadge) {
+            settingsTabSleepStatusBadge.textContent = `${timeStr} REMAINING`;
+            settingsTabSleepStatusBadge.classList.add('active');
+        }
+    }
+
+    function cancelSleepTimer(showFeedback = true) {
+        if (sleepTimerInterval) {
+            clearInterval(sleepTimerInterval);
+            sleepTimerInterval = null;
+        }
+        if (sleepTimerOriginalVolume !== null) {
+            setVolume(sleepTimerOriginalVolume, true);
+            sleepTimerOriginalVolume = null;
+        }
+        sleepTimerMode = null;
+        sleepTimerRemainingSec = 0;
+        if (sleepTimerLabel) sleepTimerLabel.textContent = 'SLEEP TIMER';
+        if (sleepStatusCard) sleepStatusCard.style.display = 'none';
+        if (sleepTimerBtn) sleepTimerBtn.classList.remove('hasActiveTimer');
+        const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
+        if (settingsTabSleepStatusBadge) {
+            settingsTabSleepStatusBadge.textContent = 'INACTIVE';
+            settingsTabSleepStatusBadge.classList.remove('active');
+        }
+        const settingsTabCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
+        if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = 'none';
+        if (showFeedback) showToast('Sleep timer cancelled');
+    }
+
+    function openSleepTimerModal() {
+        if (sleepTimerModal) sleepTimerModal.style.display = 'flex';
+        pushModalState('sleepTimerModal');
+    }
+
+    function closeSleepTimerModal() {
+        if (sleepTimerModal) sleepTimerModal.style.display = 'none';
+        popModalState('sleepTimerModal');
+    }
+
+    // =========================================================================
+
+    // Signal Path & Audit (Honest, Real-Time Pipeline Telemetry)
+    // =========================================================================
+
+    function openSignalPathModal() {
+        updateSignalPathUi();
+        if (signalPathModal) signalPathModal.style.display = 'flex';
+        pushModalState('signalPathModal');
+    }
+
+    function closeSignalPathModal() {
+        if (signalPathModal) signalPathModal.style.display = 'none';
+        popModalState('signalPathModal');
+    }
+
+
+    // Dynamic Ambient Atmosphere Lighting (Samples dominant vibrancy from album art)
+    let ambientCanvas = null;
+
+    function updateDebugHudState() {
+        const hud = document.getElementById('debugHudContainer');
+        const pill = document.getElementById('settingsDebugPill');
+        const enableBtn = document.getElementById('debugModeEnableBtn');
+        const disableBtn = document.getElementById('debugModeDisableBtn');
+
+        if (hud) {
+            hud.style.display = debugModeActive ? 'flex' : 'none';
+        }
+        if (pill) {
+            pill.textContent = debugModeActive ? 'ENABLED (HUD)' : 'DISABLED';
+            pill.className = `settingsEnginePill ${debugModeActive ? 'active' : ''}`;
+        }
+        if (enableBtn) enableBtn.classList.toggle('active', debugModeActive);
+        if (disableBtn) disableBtn.classList.toggle('active', !debugModeActive);
+
+        if (debugModeActive) {
+            refreshDebugHudTelemetry();
+        }
+    }
+
+    function setDebugMode(enabled) {
+        debugModeActive = Boolean(enabled);
+        try {
+            safeStorage.setItem('cachymusic_debug_mode', debugModeActive ? 'true' : 'false');
+        } catch (_) {}
+        updateDebugHudState();
+        if (debugModeActive) {
+            appendDebugTelemetry(`[SYSTEM] Debug Mode enabled. Monitoring Web Audio pipeline & MediaStore IPC.`);
+            if (typeof showCachyToast === 'function') {
+                showCachyToast('Debug Mode Active', 'Real-time Audio Diagnostics HUD visible.', 'info');
+            }
+        }
+    }
+
+    function appendDebugTelemetry(msg, level = 'info') {
+        const time = new Date().toLocaleTimeString();
+        const entryText = `[${time}] ${msg}`;
+        window.audioPlaybackDebugLogs.push(entryText);
+        if (window.audioPlaybackDebugLogs.length > 80) window.audioPlaybackDebugLogs.shift();
+
+        const logList = document.getElementById('debugHudLogList');
+        if (logList) {
+            const row = document.createElement('div');
+            row.className = `debugHudLogEntry ${level}`;
+            row.textContent = entryText;
+            logList.appendChild(row);
+            while (logList.childNodes.length > 50) {
+                logList.removeChild(logList.firstChild);
+            }
+            logList.scrollTop = logList.scrollHeight;
+        }
+
+        const logBox = document.getElementById('settingsAudioDebugLog');
+        if (logBox) {
+            logBox.textContent = window.audioPlaybackDebugLogs.join('\n');
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        refreshDebugHudTelemetry();
+    }
+
+    function refreshDebugHudTelemetry() {
+        if (!debugModeActive) return;
+        const curTrack = allTracks[currentTrackIndex];
+        const trackEl = document.getElementById('debugHudTrack');
+        const codecEl = document.getElementById('debugHudCodec');
+        const html5El = document.getElementById('debugHudHtml5');
+        const ctxEl = document.getElementById('debugHudAudioCtx');
+        const srcEl = document.getElementById('debugHudSrc');
+
+        if (trackEl) {
+            trackEl.textContent = curTrack
+                ? `#${currentTrackIndex + 1}: ${curTrack.title || curTrack.filename} (${formatTime(curTrack.duration)})`
+                : 'None loaded';
+        }
+        if (codecEl && curTrack) {
+            const fmt = (curTrack.format || 'AUDIO').toUpperCase();
+            const rate = curTrack.sampleRate ? `${curTrack.sampleRate}Hz` : '44100Hz';
+            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : (curTrack.sampleRate >= 88200 ? '24-Bit' : '16-Bit');
+            codecEl.textContent = `${fmt} • ${depth} • ${rate}`;
+        }
+        if (html5El) {
+            if (isSoftwareDecoding && activeDecodedBuffer) {
+                const cur = softwarePlaybackOffset + (audioContext && !isSoftwarePaused ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
+                const dur = activeDecodedBuffer.duration;
+                const state = isSoftwarePaused ? 'PAUSED' : 'PLAYING';
+                html5El.textContent = `SOFTWARE ENGINE • ${state} (${cur.toFixed(1)}s / ${dur.toFixed(1)}s) • 32-bit Float PCM`;
+                html5El.title = `Decoded: ${activeDecodedBuffer.sampleRate}Hz, ${activeDecodedBuffer.numberOfChannels}ch, Web Audio Buffer`;
+            } else if (audio) {
+                const rLabels = ['No Data', 'Metadata Loaded', 'Current Frame Ready', 'Buffering', 'Ready to Play'];
+                const rText = rLabels[audio.readyState] || `State ${audio.readyState}`;
+                const t = (audio.currentTime || 0).toFixed(1);
+                const d = (audio.duration && isFinite(audio.duration)) ? audio.duration.toFixed(1) : '--';
+                const state = audio.paused ? 'PAUSED' : 'PLAYING';
+                html5El.textContent = `${state} • ${rText} (${t}s / ${d}s)`;
+                html5El.title = `HTML5 Media Pipeline: readyState ${audio.readyState}, networkState ${audio.networkState}`;
+            }
+        }
+        if (ctxEl) {
+            const ctxState = audioContext ? audioContext.state : 'None';
+            const sRate = audioContext ? `${audioContext.sampleRate}Hz` : '--';
+            ctxEl.textContent = `State: ${ctxState} | Clock: ${sRate}`;
+        }
+        if (srcEl && audio) {
+            const srcStr = audio.src || 'none';
+            srcEl.textContent = srcStr.length > 70 ? srcStr.substring(0, 67) + '...' : srcStr;
+            srcEl.title = srcStr;
+        }
+    }
+
+    function logAudioPlaybackEvent(level, msg, meta = {}) {
+        const time = new Date().toLocaleTimeString();
+        const entry = `[${time}] [${level.toUpperCase()}] ${msg}`;
+        window.audioPlaybackDebugLogs.push(entry);
+        if (window.audioPlaybackDebugLogs.length > 50) window.audioPlaybackDebugLogs.shift();
+        const logBox = document.getElementById('settingsAudioDebugLog');
+        if (logBox) {
+            logBox.textContent = window.audioPlaybackDebugLogs.join('\n');
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+        appendDebugTelemetry(`[${level.toUpperCase()}] ${msg}`, level);
+        updateAudioDiagnosticsUi(meta);
+    }
+
+    function updateAudioDiagnosticsUi(meta = {}) {
+        const streamVal = document.getElementById('debugStreamStatus');
+        const formatVal = document.getElementById('debugFormatVal');
+        const pipeVal = document.getElementById('debugPipelineState');
+        const skipVal = document.getElementById('debugSkipStatus');
+        const curTrack = allTracks[currentTrackIndex];
+
+        if (streamVal) {
+            if (audio && audio.error) {
+                streamVal.textContent = `Error (Code ${audio.error.code})`;
+                streamVal.style.color = '#ef4444';
+            } else if (audio && !audio.paused) {
+                streamVal.textContent = 'Streaming Active (206/200)';
+                streamVal.style.color = '#10b981';
+            } else {
+                streamVal.textContent = 'Standby / Paused';
+                streamVal.style.color = 'inherit';
+            }
+        }
+        if (formatVal && curTrack) {
+            const fmt = (curTrack.format || 'AUDIO').toUpperCase();
+            const rate = curTrack.sampleRate ? `${Math.round(curTrack.sampleRate / 1000)} kHz` : '44.1 kHz';
+            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : (curTrack.sampleRate >= 88200 ? '24-Bit' : '16-Bit');
+            const br = curTrack.bitrate ? `${curTrack.bitrate} kbps` : '';
+            formatVal.textContent = `${rate} • ${depth} • ${fmt} ${br ? '• ' + br : ''}`;
+        }
+        if (pipeVal && audio) {
+            const rStates = [
+                'Idle (No Data)',
+                'Metadata Loaded',
+                'Decoding Frame',
+                'Buffering Stream',
+                'Ready (Buffered)'
+            ];
+            const r = rStates[audio.readyState] || 'Ready';
+            const ctxState = audioContext ? (audioContext.state === 'running' ? 'Active' : 'Standby') : 'Inactive';
+            pipeVal.textContent = `${r} • DSP: ${ctxState}`;
+        }
+        if (skipVal) {
+            skipVal.textContent = consecutiveSkipCount > 0 ? `${consecutiveSkipCount} skip(s) logged` : 'No abnormal skips (0)';
+            skipVal.style.color = consecutiveSkipCount > 0 ? '#f59e0b' : 'inherit';
+        }
+        refreshDebugHudTelemetry();
+    }
+
+    function showThemeLoadingOverlay(themeName) {
+        const overlay = document.getElementById('themeLoadingOverlay');
+        const title = document.getElementById('themeLoadingTitle');
+        const sub = document.getElementById('themeLoadingSubtitle');
+        if (!overlay) return;
+        if (title) title.textContent = 'APPLYING THEME...';
+        if (sub) sub.textContent = `Configuring palette: ${themeName.toUpperCase()}`;
+        overlay.style.display = 'flex';
+        overlay.style.opacity = '1';
+        setTimeout(() => {
+            overlay.style.opacity = '0';
+            overlay.style.transition = 'opacity 0.25s ease';
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                overlay.style.opacity = '1';
+                overlay.style.transition = '';
+            }, 250);
+        }, 320);
+    }
+
+
+    // Attach top-level Settings & Diagnostics functions to window
+    if (typeof window !== "undefined") {
+        try { window.ambientCanvas = ambientCanvas; } catch (_) {}
+        try { window.appendDebugTelemetry = appendDebugTelemetry; } catch (_) {}
+        try { window.cancelSleepTimer = cancelSleepTimer; } catch (_) {}
+        try { window.closeSignalPathModal = closeSignalPathModal; } catch (_) {}
+        try { window.closeSleepTimerModal = closeSleepTimerModal; } catch (_) {}
+        try { window.logAudioPlaybackEvent = logAudioPlaybackEvent; } catch (_) {}
+        try { window.openSignalPathModal = openSignalPathModal; } catch (_) {}
+        try { window.openSleepTimerModal = openSleepTimerModal; } catch (_) {}
+        try { window.refreshDebugHudTelemetry = refreshDebugHudTelemetry; } catch (_) {}
+        try { window.setDebugMode = setDebugMode; } catch (_) {}
+        try { window.setSleepTimer = setSleepTimer; } catch (_) {}
+        try { window.showThemeLoadingOverlay = showThemeLoadingOverlay; } catch (_) {}
+        try { window.updateAudioDiagnosticsUi = updateAudioDiagnosticsUi; } catch (_) {}
+        try { window.updateDebugHudState = updateDebugHudState; } catch (_) {}
+        try { window.updateSleepTimerStatusUi = updateSleepTimerStatusUi; } catch (_) {}
+    }
+
+
+
+    // --- Sub-Module: p2p.js ---
+// CachyMusic - P2P Network, Downloads & PWA Integration
+    // Trigger PWA Installation or Browser Instructions
+    async function triggerPwaInstallPrompt() {
+        if (deferredInstallPrompt) {
+            deferredInstallPrompt.prompt();
+            try {
+                const choiceResult = await deferredInstallPrompt.userChoice;
+                if (choiceResult && choiceResult.outcome === 'accepted') {
+                    const installBtn = document.getElementById('installAppBtn');
+                    if (installBtn) installBtn.style.display = 'none';
+                    const statusPill = document.getElementById('downloadPwaStatusPill');
+                    if (statusPill) {
+                        statusPill.textContent = 'Installed (PWA)';
+                        statusPill.classList.add('active');
+                    }
+                }
+            } catch (_) {}
+            deferredInstallPrompt = null;
+        } else {
+            const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                                 window.navigator.standalone === true;
+            if (isStandalone) {
+                alert('CachyMusic is already installed and running as a standalone desktop/mobile app!');
+                return;
+            }
+
+            const ua = (navigator.userAgent || '').toLowerCase();
+            let advice = 'Install CachyMusic on your device:\n\n';
+            if (/iphone|ipad|ipod/i.test(ua)) {
+                advice += '• iOS Safari: Tap Share (square with upward arrow) ➔ "Add to Home Screen".';
+            } else if (/android/i.test(ua)) {
+                advice += '• Android Chrome: Tap Menu (⋮) ➔ "Install app" or "Add to Home screen".';
+            } else if (/mac/i.test(ua)) {
+                advice += '• macOS Safari: Click File ➔ "Add to Dock".\n• Chrome / Brave: Click the Install icon in the address bar.';
+            } else if (/win/i.test(ua)) {
+                advice += '• Windows: Click the Install icon in Edge/Chrome address bar, or download cachymusic.bat from the Windows tab.';
+            } else {
+                advice += '• Linux Desktop: Run ./install.sh in the project folder for complete system, launcher, and icon integration.\n• Chromium / Brave: Click the Install icon in the address bar.';
+            }
+            alert(advice);
+        }
+    }
+
+    // PWA & Desktop Installation Handler
+    function setupPwaInstallPrompt() {
+        const installBtn = document.getElementById('installAppBtn');
+        if (!installBtn) return;
+
+        // Window Controls Overlay (WCO) for desktop PWA titlebar integration
+        if ('windowControlsOverlay' in navigator) {
+            const handleWcoChange = () => {
+                const isOverlay = navigator.windowControlsOverlay.visible;
+                document.body.classList.toggle('wco-active', isOverlay);
+                if (isOverlay && typeof navigator.windowControlsOverlay.getTitlebarAreaRect === 'function') {
+                    const rect = navigator.windowControlsOverlay.getTitlebarAreaRect();
+                    if (rect && rect.height) {
+                        document.documentElement.style.setProperty('--wco-titlebar-height', `${rect.height}px`);
+                    }
+                }
+            };
+            navigator.windowControlsOverlay.addEventListener('geometrychange', handleWcoChange);
+            handleWcoChange();
+        }
+
+        // Check if already running in standalone display mode
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                             window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+                             window.navigator.standalone === true;
+        if (isStandalone) {
+            installBtn.style.display = 'none';
+            const statusPill = document.getElementById('downloadPwaStatusPill');
+            if (statusPill) {
+                statusPill.textContent = 'Installed (Standalone)';
+                statusPill.classList.add('active');
+            }
+            const pwaInstallHint = document.getElementById('pwaInstallHint');
+            if (pwaInstallHint) {
+                pwaInstallHint.textContent = '✓ CachyMusic is currently running as an installed standalone application.';
+            }
+            return;
+        }
+
+        // Listen for beforeinstallprompt (Chromium, Brave, Chrome, Edge, Android)
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+            installBtn.style.display = 'inline-flex';
+            const statusPill = document.getElementById('downloadPwaStatusPill');
+            if (statusPill) {
+                statusPill.textContent = 'Install Ready';
+                statusPill.classList.add('active');
+            }
+        });
+
+        // Also display install button after initial load if not standalone,
+        // so desktop & mobile users on all browsers have a clear way to install
+        setTimeout(() => {
+            if (!isStandalone) {
+                installBtn.style.display = 'inline-flex';
+            }
+        }, 800);
+
+        installBtn.addEventListener('click', async () => {
+            if (deferredInstallPrompt) {
+                try {
+                    deferredInstallPrompt.prompt();
+                    const choiceResult = await deferredInstallPrompt.userChoice;
+                    if (choiceResult && choiceResult.outcome === 'accepted') {
+                        console.log('[PWA] User accepted install prompt');
+                        deferredInstallPrompt = null;
+                        installBtn.style.display = 'none';
+                    }
+                } catch (err) {
+                    console.warn('[PWA] Install prompt failed:', err);
+                }
+            } else {
+                switchWorkspace(currentWorkspace === 'download' ? 'player' : 'download');
+            }
+        });
+
+        window.addEventListener('appinstalled', () => {
+            installBtn.style.display = 'none';
+            deferredInstallPrompt = null;
+            const statusPill = document.getElementById('downloadPwaStatusPill');
+            if (statusPill) {
+                statusPill.textContent = 'Installed (PWA)';
+                statusPill.classList.add('active');
+            }
+            console.log('[PWA] CachyMusic installed successfully');
+        });
+    }
+
+    // Cross-Platform Download Hub & LAN Setup
+    let lanUrlFetched = false;
+    async function fetchLanStreamingUrl() {
+        if (lanUrlFetched) return;
+        try {
+            const res = await fetch('php/api/lan_info.php');
+            const data = await res.json();
+            if (data && data.success && data.lanUrl) {
+                lanUrlFetched = true;
+                const lanInput = document.getElementById('downloadLanUrlInput');
+                const copyBtn = document.getElementById('copyLanUrlBtn');
+                if (lanInput) lanInput.value = data.lanUrl;
+                if (copyBtn) copyBtn.dataset.copy = data.lanUrl;
+            }
+        } catch (e) {
+            console.warn('[LAN] Failed to fetch LAN streaming info:', e);
+        }
+    }
+
+    function setupDownloadWorkspace() {
+        const downloadTabs = document.querySelectorAll('.downloadTabBtn');
+        const downloadPanels = document.querySelectorAll('.downloadPanel');
+        const returnBtn = document.getElementById('downloadReturnBtn');
+
+        function activatePlatformTab(platform) {
+            downloadTabs.forEach(tab => {
+                const isActive = tab.dataset.platform === platform;
+                tab.classList.toggle('active', isActive);
+                tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+
+            downloadPanels.forEach(panel => {
+                const isMatch = panel.id === `platform-${platform}`;
+                panel.classList.toggle('active', isMatch);
+                panel.style.display = isMatch ? 'block' : 'none';
+            });
+        }
+
+        downloadTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const platform = tab.dataset.platform;
+                if (platform) activatePlatformTab(platform);
+            });
+        });
+
+        if (returnBtn) {
+            returnBtn.addEventListener('click', () => {
+                switchWorkspace('player');
+            });
+        }
+
+        // Copy-to-clipboard buttons with animated feedback
+        document.querySelectorAll('.copyCodeBtn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const textToCopy = btn.dataset.copy || (btn.previousElementSibling && btn.previousElementSibling.value);
+                if (!textToCopy) return;
+
+                let copySuccess = false;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    try {
+                        await navigator.clipboard.writeText(textToCopy);
+                        copySuccess = true;
+                    } catch (_) {}
+                }
+
+                if (!copySuccess) {
+                    try {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = textToCopy;
+                        textarea.style.position = 'fixed';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textarea);
+                        copySuccess = true;
+                    } catch (_) {}
+                }
+
+                if (copySuccess) {
+                    const originalHtml = btn.innerHTML;
+                    btn.innerHTML = '✓ COPIED!';
+                    btn.classList.add('copied');
+                    setTimeout(() => {
+                        btn.innerHTML = originalHtml;
+                        btn.classList.remove('copied');
+                    }, 1800);
+                }
+            });
+        });
+
+        // Wire 1-Click PWA Buttons in Download Hub
+        const pwaActionBtns = document.querySelectorAll('.downloadDirectPwaBtn, #downloadPwaTriggerBtn');
+        pwaActionBtns.forEach(btn => {
+            btn.addEventListener('click', triggerPwaInstallPrompt);
+        });
+
+        // Auto-detect current operating system to highlight YOUR OS badge (or read ?platform=)
+        const urlParams = new URLSearchParams(window.location.search);
+        let defaultPlatform = urlParams.get('platform') || '';
+        let detected = 'linux';
+        const ua = (navigator.userAgent || '').toLowerCase();
+        if (/iphone|ipad|ipod|android/i.test(ua)) {
+            detected = 'mobile';
+        } else if (/win/i.test(ua)) {
+            detected = 'windows';
+        } else if (/mac/i.test(ua)) {
+            detected = 'macos';
+        } else {
+            detected = 'linux';
+        }
+
+        // Show "YOUR OS" badge on the detected platform tab
+        const detectedBadge = document.getElementById(`osBadge-${detected}`);
+        if (detectedBadge) {
+            detectedBadge.style.display = 'inline-block';
+        }
+
+        if (!defaultPlatform) {
+            defaultPlatform = detected;
+        }
+        activatePlatformTab(defaultPlatform);
+    }
+
+
 
     // =========================================================================
     // Soulseek Controller - Nicotine+ REST Engine
@@ -15502,14 +16874,831 @@
         }
     };
 
+
+    let slskEventsInitialized = false;
+    function initSoulseekEventListeners() {
+        if (slskEventsInitialized) return;
+        slskEventsInitialized = true;
+
+        // Soulseek Power Button Listeners (Toolbar & Modal)
+        if (slskPowerBtn) {
+            slskPowerBtn.addEventListener('click', () => {
+                soulseekController.togglePower();
+            });
+        }
+
+        if (slskModalPowerBtn) {
+            slskModalPowerBtn.addEventListener('click', () => {
+                soulseekController.togglePower();
+            });
+        }
+
+        // Soulseek Account Modal Listeners
+        if (slskAccountBtn) {
+            slskAccountBtn.addEventListener('click', async () => {
+                openSlskAccountModal();
+                if (slskAccountAlert) slskAccountAlert.style.display = 'none';
+                try {
+                    const res = await fetch('php/api/soulseek.php?action=account');
+                    const data = await res.json();
+                    if (data.username && slskModalUsername) {
+                        slskModalUsername.value = data.username;
+                    }
+                    if (slskModalPassword) {
+                        slskModalPassword.value = '';
+                        slskModalPassword.placeholder = data.hasPassword ? '•••••••• (Stored securely in database)' : 'Enter password';
+                    }
+                    if (data.downloads_dir && slskModalDownloadDir) {
+                        slskModalDownloadDir.value = data.downloads_dir;
+                    } else if (soulseekController.downloadsDir && slskModalDownloadDir) {
+                        slskModalDownloadDir.value = soulseekController.downloadsDir;
+                    }
+                    if (data.shared_dir && slskModalSharedDir) {
+                        slskModalSharedDir.value = data.shared_dir;
+                    } else if (soulseekController.sharedDir && slskModalSharedDir) {
+                        slskModalSharedDir.value = soulseekController.sharedDir;
+                    }
+                    soulseekController.updatePowerUI(soulseekController.lastStatus || data);
+                } catch (_) {}
+            });
+        }
+
+        if (slskChangeDirBtn) {
+            slskChangeDirBtn.addEventListener('click', () => {
+                if (slskAccountBtn) slskAccountBtn.click();
+            });
+        }
+
+        if (slskChangeSharedDirBtn) {
+            slskChangeSharedDirBtn.addEventListener('click', () => {
+                if (slskAccountBtn) slskAccountBtn.click();
+            });
+        }
+
+        // Direct "SYNC WITH PLAYER DIR" button in Soulseek toolbar
+        if (slskSyncCurrentDirBtn) {
+            slskSyncCurrentDirBtn.addEventListener('click', async () => {
+                let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
+
+                // If not in input, ask scan.php for current library directory
+                if (!currentFolder) {
+                    try {
+                        const scanRes = await fetch('php/api/scan.php');
+                        const scanData = await scanRes.json();
+                        if (scanData.directory) {
+                            currentFolder = scanData.directory;
+                            if (folderPathInput) folderPathInput.value = currentFolder;
+                        }
+                    } catch (_) {}
+                }
+
+                if (!currentFolder) {
+                    alert('No active player music folder found. Please enter or scan a music folder first.');
+                    return;
+                }
+
+                slskSyncCurrentDirBtn.textContent = 'SYNCING...';
+                slskSyncCurrentDirBtn.disabled = true;
+
+                try {
+                    const res = await fetch('php/api/soulseek.php?action=directory', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ directory: currentFolder })
+                    });
+                    const data = await res.json();
+
+                    if (data.ok && data.downloads_dir) {
+                        soulseekController.downloadsDir = data.downloads_dir;
+                        if (slskDownloadsPathText) slskDownloadsPathText.textContent = data.downloads_dir;
+                        if (slskModalDownloadDir) slskModalDownloadDir.value = data.downloads_dir;
+                        slskSyncCurrentDirBtn.textContent = 'SYNCED!';
+                        setTimeout(() => {
+                            slskSyncCurrentDirBtn.textContent = 'SYNC WITH PLAYER DIR';
+                            slskSyncCurrentDirBtn.disabled = false;
+                        }, 1800);
+                    } else {
+                        alert(data.error || data.message || 'Failed to update Soulseek download folder.');
+                        slskSyncCurrentDirBtn.textContent = 'SYNC WITH PLAYER DIR';
+                        slskSyncCurrentDirBtn.disabled = false;
+                    }
+                } catch (e) {
+                    console.warn('Sync dir error:', e);
+                    alert('Network error communicating with Soulseek backend.');
+                    slskSyncCurrentDirBtn.textContent = 'SYNC WITH PLAYER DIR';
+                    slskSyncCurrentDirBtn.disabled = false;
+                }
+            });
+        }
+
+        // "USE PLAYER DIR" button inside the Account Settings Modal (Downloads)
+        if (slskModalSyncPlayerDirBtn) {
+            slskModalSyncPlayerDirBtn.addEventListener('click', async () => {
+                let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
+                if (!currentFolder) {
+                    try {
+                        const scanRes = await fetch('php/api/scan.php');
+                        const scanData = await scanRes.json();
+                        if (scanData.directory) currentFolder = scanData.directory;
+                    } catch (_) {}
+                }
+
+                if (currentFolder && slskModalDownloadDir) {
+                    slskModalDownloadDir.value = currentFolder;
+                } else {
+                    alert('No music folder currently scanned in the player.');
+                }
+            });
+        }
+
+        // "USE PLAYER DIR" button inside the Account Settings Modal (Shareable)
+        if (slskModalSyncSharePlayerDirBtn) {
+            slskModalSyncSharePlayerDirBtn.addEventListener('click', async () => {
+                let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
+                if (!currentFolder) {
+                    try {
+                        const scanRes = await fetch('php/api/scan.php');
+                        const scanData = await scanRes.json();
+                        if (scanData.directory) currentFolder = scanData.directory;
+                    } catch (_) {}
+                }
+
+                if (currentFolder && slskModalSharedDir) {
+                    slskModalSharedDir.value = currentFolder;
+                } else {
+                    alert('No music folder currently scanned in the player.');
+                }
+            });
+        }
+
+        if (slskCloseAccountModalBtn) {
+            slskCloseAccountModalBtn.addEventListener('click', () => {
+                closeSlskAccountModal();
+            });
+        }
+
+        if (slskAccountModal) {
+            slskAccountModal.addEventListener('click', (e) => {
+                if (e.target === slskAccountModal) {
+                    closeSlskAccountModal();
+                }
+            });
+        }
+
+        if (slskSaveAccountBtn) {
+            slskSaveAccountBtn.addEventListener('click', async () => {
+                const username = (slskModalUsername ? slskModalUsername.value : '').trim();
+                const password = (slskModalPassword ? slskModalPassword.value : '').trim();
+                const newDir = (slskModalDownloadDir ? slskModalDownloadDir.value : '').trim();
+                const newSharedDir = (slskModalSharedDir ? slskModalSharedDir.value : '').trim();
+
+                slskSaveAccountBtn.textContent = 'SAVING...';
+                slskSaveAccountBtn.disabled = true;
+
+                try {
+                    // Update downloads directory if changed
+                    if (newDir) {
+                        const dirRes = await fetch('php/api/soulseek.php?action=directory', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ directory: newDir })
+                        });
+                        const dirData = await dirRes.json();
+                        if (dirData.ok && dirData.downloads_dir) {
+                            soulseekController.downloadsDir = dirData.downloads_dir;
+                            if (slskDownloadsPathText) slskDownloadsPathText.textContent = dirData.downloads_dir;
+                        }
+                    }
+
+                    // Update shared directory if changed
+                    if (newSharedDir) {
+                        const sRes = await fetch('php/api/soulseek.php?action=shared_directory', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ directory: newSharedDir })
+                        });
+                        const sData = await sRes.json();
+                        if (sData.ok && sData.shared_dir) {
+                            soulseekController.sharedDir = sData.shared_dir;
+                            if (slskSharedPathText) slskSharedPathText.textContent = sData.shared_dir;
+                        }
+                    }
+
+                    // Save credentials and connect
+                    if (username) {
+                        const res = await fetch('php/api/soulseek.php?action=login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                username,
+                                password,
+                                downloads_dir: newDir,
+                                shared_dir: newSharedDir
+                            })
+                        });
+                        const data = await res.json();
+
+                        if (data.ok) {
+                            if (slskAccountAlert) {
+                                slskAccountAlert.className = 'slskModalAlert success';
+                                slskAccountAlert.textContent = `Connected as ${data.username || username}! Settings saved.`;
+                                slskAccountAlert.style.display = 'block';
+                            }
+                            setTimeout(() => {
+                                closeSlskAccountModal();
+                                soulseekController.checkStatus();
+                            }, 900);
+                        } else {
+                            if (slskAccountAlert) {
+                                slskAccountAlert.className = 'slskModalAlert error';
+                                slskAccountAlert.textContent = data.error || 'Connection failed.';
+                                slskAccountAlert.style.display = 'block';
+                            }
+                        }
+                    } else {
+                        // Directory only saved
+                        if (slskAccountAlert) {
+                            slskAccountAlert.className = 'slskModalAlert success';
+                            slskAccountAlert.textContent = 'Settings saved.';
+                            slskAccountAlert.style.display = 'block';
+                        }
+                        setTimeout(() => {
+                            closeSlskAccountModal();
+                            soulseekController.checkStatus();
+                        }, 900);
+                    }
+                } catch (err) {
+                    if (slskAccountAlert) {
+                        slskAccountAlert.className = 'slskModalAlert error';
+                        slskAccountAlert.textContent = 'Network error saving settings.';
+                        slskAccountAlert.style.display = 'block';
+                    }
+                } finally {
+                    slskSaveAccountBtn.textContent = 'SAVE & CONNECT';
+                    slskSaveAccountBtn.disabled = false;
+                }
+            });
+        }
+
+        if (slskLogoutBtn) {
+            slskLogoutBtn.addEventListener('click', async () => {
+                try {
+                    await fetch('php/api/soulseek.php?action=logout', { method: 'POST' });
+                    if (slskModalUsername) slskModalUsername.value = '';
+                    if (slskModalPassword) {
+                        slskModalPassword.value = '';
+                        slskModalPassword.placeholder = 'Enter password';
+                    }
+                    if (slskAccountAlert) {
+                        slskAccountAlert.className = 'slskModalAlert success';
+                        slskAccountAlert.textContent = 'Credentials cleared from database and disconnected.';
+                        slskAccountAlert.style.display = 'block';
+                    }
+                    soulseekController.checkStatus();
+                } catch (e) {
+                    console.warn('Logout error:', e);
+                }
+            });
+        }
+
+        if (slskSearchInput) {
+            slskSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    soulseekController.search(slskSearchInput.value);
+                }
+            });
+            slskSearchInput.addEventListener('input', () => {
+                if (slskSearchClearBtn) {
+                    slskSearchClearBtn.style.display = slskSearchInput.value ? 'block' : 'none';
+                }
+            });
+        }
+        if (slskSearchClearBtn) {
+            slskSearchClearBtn.addEventListener('click', () => {
+                if (slskSearchInput) slskSearchInput.value = '';
+                slskSearchClearBtn.style.display = 'none';
+            });
+        }
+        if (slskSearchSubmitBtn) {
+            slskSearchSubmitBtn.addEventListener('click', () => {
+                if (slskSearchInput) soulseekController.search(slskSearchInput.value);
+            });
+        }
+        if (slskFilterChips) {
+            slskFilterChips.forEach(chip => {
+                chip.addEventListener('click', () => {
+                    slskFilterChips.forEach(c => c.classList.remove('active'));
+                    chip.classList.add('active');
+                    soulseekController.activeFilter = chip.dataset.filter;
+                    if (slskMobileActiveFilter) {
+                        const filterNames = {
+                            'all': 'ALL',
+                            'flac': 'FLAC',
+                            '320': '320K',
+                            'slots': 'FREE SLOTS'
+                        };
+                        slskMobileActiveFilter.textContent = filterNames[chip.dataset.filter] || chip.dataset.filter.toUpperCase();
+                    }
+                    soulseekController.applyFilterAndRender();
+                });
+            });
+        }
+
+        // Include Text Filter Listeners
+        if (slskIncludeFilterInput) {
+            slskIncludeFilterInput.addEventListener('input', () => {
+                soulseekController.includeFilterQuery = slskIncludeFilterInput.value.trim();
+                soulseekController.inResultFilterQuery = soulseekController.includeFilterQuery;
+                if (slskIncludeFilterClearBtn) {
+                    slskIncludeFilterClearBtn.style.display = slskIncludeFilterInput.value ? 'block' : 'none';
+                }
+                soulseekController.applyFilterAndRender();
+            });
+        }
+
+        if (slskIncludeFilterClearBtn) {
+            slskIncludeFilterClearBtn.addEventListener('click', () => {
+                if (slskIncludeFilterInput) slskIncludeFilterInput.value = '';
+                slskIncludeFilterClearBtn.style.display = 'none';
+                soulseekController.includeFilterQuery = '';
+                soulseekController.inResultFilterQuery = '';
+                soulseekController.applyFilterAndRender();
+            });
+        }
+
+        // Exclude Text Filter Listeners
+        if (slskExcludeFilterInput) {
+            slskExcludeFilterInput.addEventListener('input', () => {
+                soulseekController.excludeFilterQuery = slskExcludeFilterInput.value.trim();
+                if (slskExcludeFilterClearBtn) {
+                    slskExcludeFilterClearBtn.style.display = slskExcludeFilterInput.value ? 'block' : 'none';
+                }
+                soulseekController.applyFilterAndRender();
+            });
+        }
+
+        if (slskExcludeFilterClearBtn) {
+            slskExcludeFilterClearBtn.addEventListener('click', () => {
+                if (slskExcludeFilterInput) slskExcludeFilterInput.value = '';
+                slskExcludeFilterClearBtn.style.display = 'none';
+                soulseekController.excludeFilterQuery = '';
+                soulseekController.applyFilterAndRender();
+            });
+        }
+
+        if (slskClearSubFilterBtn) {
+            slskClearSubFilterBtn.addEventListener('click', () => {
+                soulseekController.activeSubFilter = null;
+                soulseekController.includeFilterQuery = '';
+                soulseekController.excludeFilterQuery = '';
+                soulseekController.inResultFilterQuery = '';
+                if (slskIncludeFilterInput) slskIncludeFilterInput.value = '';
+                if (slskIncludeFilterClearBtn) slskIncludeFilterClearBtn.style.display = 'none';
+                if (slskExcludeFilterInput) slskExcludeFilterInput.value = '';
+                if (slskExcludeFilterClearBtn) slskExcludeFilterClearBtn.style.display = 'none';
+                soulseekController.renderSuggestedChips();
+                soulseekController.applyFilterAndRender();
+            });
+        }
+        // Soulseek Column Header Sorting Listeners
+        const slskSortHeaders = document.querySelectorAll('.slskResultsHeader .col.sortable');
+        slskSortHeaders.forEach(col => {
+            col.addEventListener('click', () => {
+                const sortField = col.dataset.sort;
+                if (sortField) {
+                    soulseekController.setSortColumn(sortField);
+                }
+            });
+        });
+        soulseekController.updateSortHeaderUI();
+        document.querySelectorAll('.sampleTagBtn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const q = btn.dataset.query;
+                if (slskSearchInput) {
+                    slskSearchInput.value = q;
+                    if (slskSearchClearBtn) slskSearchClearBtn.style.display = 'block';
+                }
+                if (window.innerWidth <= 768) {
+                    setMobileSearchPanelCollapsed(true);
+                }
+                soulseekController.search(q);
+            });
+        });
+        if (slskStartDaemonBtn) {
+            slskStartDaemonBtn.addEventListener('click', () => soulseekController.startDaemon());
+        }
+        if (slskRefreshStatusBtn) {
+            slskRefreshStatusBtn.addEventListener('click', () => soulseekController.checkStatus());
+        }
+        if (slskToggleTransfersBtn) {
+            slskToggleTransfersBtn.addEventListener('click', () => {
+                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
+            });
+        }
+        if (slskPanelToggleBar) {
+            slskPanelToggleBar.addEventListener('click', (e) => {
+                if (e.target.closest('#slskMobileTransfersBtn')) return;
+                toggleMobileSearchPanel();
+            });
+        }
+        if (slskMobileTransfersBtn) {
+            slskMobileTransfersBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
+            });
+        }
+        if (slskResultsList) {
+            slskResultsList.addEventListener('click', () => {
+                if (window.innerWidth <= 768 && slskControlsPanel && !slskControlsPanel.classList.contains('is-collapsed')) {
+                    setMobileSearchPanelCollapsed(true);
+                }
+            });
+        }
+        if (slskTransfersHeader) {
+            slskTransfersHeader.addEventListener('click', (e) => {
+                if (e.target.closest('#slskScanDownloadsBtn') || e.target.closest('#slskCloseDrawerBtn')) return;
+                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
+            });
+        }
+        if (slskCloseDrawerBtn) {
+            slskCloseDrawerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                soulseekController.closeTransfersDrawer();
+            });
+        }
+        if (slskScanDownloadsBtn) {
+            slskScanDownloadsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                soulseekController.syncAllDownloadsToLibrary();
+            });
+        }
+
+        // Initialize status check & heartbeat
+        soulseekController.checkStatus();
+        soulseekController.startStatusPolling();
+
+
+    }
+    initSoulseekEventListeners();
+
+    // Attach top-level P2P / Soulseek functions and controller to window
+    if (typeof window !== "undefined") {
+        try { window.fetchLanStreamingUrl = fetchLanStreamingUrl; } catch (_) {}
+        try { window.lanUrlFetched = lanUrlFetched; } catch (_) {}
+        try { window.setupDownloadWorkspace = setupDownloadWorkspace; } catch (_) {}
+        try { window.setupPwaInstallPrompt = setupPwaInstallPrompt; } catch (_) {}
+        try { window.soulseekController = soulseekController; } catch (_) {}
+        try { window.initSoulseekEventListeners = initSoulseekEventListeners; } catch (_) {}
+        try { window.triggerPwaInstallPrompt = triggerPwaInstallPrompt; } catch (_) {}
+    }
+
+
+
+    // --- Sub-Module: app.js ---
+// CachyMusic - Application Orchestrator & Lifecycle Bootstrap
+
+
+
+
+
+
+
+// Dynamic Tier 3 Module Loaders (Visualizer, Lyrics, P2P/Soulseek, Settings)
+let visualizerPromise = null;
+function getVisualizerModule() {
+    if (!visualizerPromise) {
+        visualizerPromise = import('./visualizer.js').then(mod => {
+            if (typeof window !== 'undefined') {
+                Object.assign(window, mod);
+            }
+            if (typeof mod.setupVisualizerMode === 'function') {
+                mod.setupVisualizerMode();
+            }
+            if (typeof mod.setupCanvas === 'function') {
+                mod.setupCanvas();
+            }
+            if (typeof mod.startVisualizerLoop === 'function') {
+                mod.startVisualizerLoop();
+            }
+            return mod;
+        }).catch(err => {
+            console.warn('Failed to load visualizer.js', err);
+            visualizerPromise = null;
+        });
+    }
+    return visualizerPromise;
+}
+
+let lyricsPromise = null;
+function getLyricsModule() {
+    if (!lyricsPromise) {
+        lyricsPromise = import('./lyrics.js').then(mod => {
+            if (typeof window !== 'undefined') {
+                Object.assign(window, mod);
+            }
+            return mod;
+        }).catch(err => {
+            console.warn('Failed to load lyrics.js', err);
+            lyricsPromise = null;
+        });
+    }
+    return lyricsPromise;
+}
+
+let p2pPromise = null;
+function getP2pModule() {
+    if (!p2pPromise) {
+        p2pPromise = import('./p2p.js').then(mod => {
+            if (typeof window !== 'undefined') {
+                Object.assign(window, mod);
+            }
+            if (typeof mod.initSoulseekEventListeners === 'function') {
+                mod.initSoulseekEventListeners();
+            }
+            return mod;
+        }).catch(err => {
+            console.warn('Failed to load p2p.js', err);
+            p2pPromise = null;
+        });
+    }
+    return p2pPromise;
+}
+
+let settingsPromise = null;
+function getSettingsModule() {
+    if (!settingsPromise) {
+        settingsPromise = import('./settings.js').then(mod => {
+            if (typeof window !== 'undefined') {
+                Object.assign(window, mod);
+            }
+            return mod;
+        }).catch(err => {
+            console.warn('Failed to load settings.js', err);
+            settingsPromise = null;
+        });
+    }
+    return settingsPromise;
+}
+
+if (typeof window !== 'undefined') {
+    window.getVisualizerModule = getVisualizerModule;
+    window.getLyricsModule = getLyricsModule;
+    window.getP2pModule = getP2pModule;
+    window.getSettingsModule = getSettingsModule;
+    window.toggleMetadataPanel = toggleMetadataPanel;
+    window.toggleTracklistPanel = toggleTracklistPanel;
+
+    window.setupVisualizerMode = function() {
+        getVisualizerModule().then(m => m && m.setupVisualizerMode && m.setupVisualizerMode());
+    };
+    window.setVisualizerMode = function(mode) {
+        getVisualizerModule().then(m => m && m.setVisualizerMode && m.setVisualizerMode(mode));
+    };
+    window.startVisualizerLoop = function() {
+        getVisualizerModule().then(m => m && m.startVisualizerLoop && m.startVisualizerLoop());
+    };
+    window.setupCanvas = function() {
+        getVisualizerModule().then(m => m && m.setupCanvas && m.setupCanvas());
+    };
+    window.toggleLyricsView = function(forcedState) {
+        getLyricsModule().then(m => m && m.toggleLyricsView && m.toggleLyricsView(forcedState));
+    };
+    window.updateLyricsDisplay = function(track) {
+        if (isLyricsView) {
+            getLyricsModule().then(m => m && m.updateLyricsDisplay && m.updateLyricsDisplay(track));
+        }
+    };
+    window.updateActiveLyric = function(time) {
+        if (isLyricsView) {
+            getLyricsModule().then(m => m && m.updateActiveLyric && m.updateActiveLyric(time));
+        }
+    };
+    window.openSleepTimerModal = function() {
+        getSettingsModule().then(m => m && m.openSleepTimerModal && m.openSleepTimerModal());
+    };
+    window.closeSleepTimerModal = function() {
+        getSettingsModule().then(m => m && m.closeSleepTimerModal && m.closeSleepTimerModal());
+    };
+    window.openSignalPathModal = function() {
+        getSettingsModule().then(m => m && m.openSignalPathModal && m.openSignalPathModal());
+    };
+    window.closeSignalPathModal = function() {
+        getSettingsModule().then(m => m && m.closeSignalPathModal && m.closeSignalPathModal());
+    };
+    window.showThemeLoadingOverlay = function(name, sub) {
+        getSettingsModule().then(m => m && m.showThemeLoadingOverlay && m.showThemeLoadingOverlay(name, sub));
+    };
+    window.updateDebugHudState = function() {
+        getSettingsModule().then(m => m && m.updateDebugHudState && m.updateDebugHudState());
+    };
+    window.setupPwaInstallPrompt = function() {
+        getP2pModule().then(m => m && m.setupPwaInstallPrompt && m.setupPwaInstallPrompt());
+    };
+    window.setupDownloadWorkspace = function() {
+        getP2pModule().then(m => m && m.setupDownloadWorkspace && m.setupDownloadWorkspace());
+    };
+}
+
+    // Toggle Collapsible / Sliding Metadata Inspector Panel
+    function toggleMetadataPanel(forcedState) {
+        if (window.innerWidth <= 768) {
+            // Mobile View: toggle directly between playerDeck and settingsPanel (Metadata Inspector)
+            const isInfoActive = (infoPanelEl && infoPanelEl.classList.contains('mobileActive')) || document.body.classList.contains('mobile-tab-info');
+            if (isInfoActive) {
+                switchWorkspace('player', 'playerDeck');
+            } else {
+                switchWorkspace('player', 'settingsPanel');
+            }
+            return;
+        }
+
+        const isCollapsed = document.body.classList.contains('metadata-collapsed');
+        const willCollapse = (forcedState !== undefined) ? !forcedState : !isCollapsed;
+
+        document.body.classList.toggle('metadata-collapsed', willCollapse);
+        if (metadataToggleBtn) {
+            metadataToggleBtn.classList.toggle('active', !willCollapse);
+            metadataToggleBtn.setAttribute('aria-pressed', String(!willCollapse));
+            metadataToggleBtn.setAttribute('title', willCollapse ? 'Expand Metadata Inspector (I)' : 'Collapse Metadata Inspector (I)');
+        }
+
+        try {
+            safeStorage.setItem('cachymusic_metadata_visible', willCollapse ? 'false' : 'true');
+        } catch (_) {}
+    }
+
+
+    // Toggle Collapsible / Sliding Tracklist Panel (Desktop Zen Stage)
+    function toggleTracklistPanel(forcedState) {
+        if (window.innerWidth <= 768) {
+            const isTracksActive = (trackListPanelEl && trackListPanelEl.classList.contains('mobileActive')) || document.body.classList.contains('mobile-tab-tracks');
+            if (isTracksActive) {
+                switchWorkspace('player', 'playerDeck');
+            } else {
+                switchWorkspace('player', 'trackListPanel');
+            }
+            return;
+        }
+
+        const isCollapsed = document.body.classList.contains('tracklist-collapsed');
+        const willCollapse = (forcedState !== undefined) ? !forcedState : !isCollapsed;
+
+        document.body.classList.toggle('tracklist-collapsed', willCollapse);
+        const tracklistToggleBtn = document.getElementById('tracklistToggleBtn');
+        if (tracklistToggleBtn) {
+            tracklistToggleBtn.classList.toggle('active', !willCollapse);
+            tracklistToggleBtn.setAttribute('aria-pressed', String(!willCollapse));
+            tracklistToggleBtn.setAttribute('title', willCollapse ? 'Expand Tracklist Panel (T)' : 'Collapse Tracklist Panel (T)');
+        }
+
+        try {
+            safeStorage.setItem('cachymusic_tracklist_visible', willCollapse ? 'false' : 'true');
+        } catch (_) {}
+    }
+
+    async function init() {
+        if (isInitialized) return;
+        isInitialized = true;
+
+        setupEventListeners();
+        getVisualizerModule();
+        if (currentWorkspace === 'player') {
+            const urlParams = new URLSearchParams(window.location.search);
+            const initPanel = urlParams.get('panel') || 'playerDeck';
+            if (window.innerWidth <= 768 || urlParams.get('panel')) {
+                switchWorkspace('player', initPanel);
+            }
+        }
+        setupDspControls();
+        initPeqWorkstation();
+        setupNeutronSettingsControls();
+        checkHardwareGainStatus();
+        setVolume(currentVolumeValue, true);
+        await loadPlaylists();
+
+        // Restore saved directory or cached library on startup
+        const savedDir = (safeStorage.getItem('cachymusic_last_directory') || '').trim();
+        const savedMode = (safeStorage.getItem('cachymusic_directory_mode') || '').trim();
+        if (savedDir) {
+            if (folderPathInput) folderPathInput.value = savedDir;
+            const sInput = document.getElementById('settingsTabFolderPathInput');
+            if (sInput) sInput.value = savedDir;
+        }
+
+        // 1. Check Android Native Bridge saved library first (on APK)
+        if (window.AndroidBridge && typeof window.AndroidBridge.getSavedLibraryJson === 'function') {
+            try {
+                const rawJson = window.AndroidBridge.getSavedLibraryJson();
+                if (rawJson) {
+                    const parsed = JSON.parse(rawJson);
+                    if (parsed && Array.isArray(parsed.tracks) && parsed.tracks.length > 0) {
+                        allTracks = parsed.tracks;
+                        const dirName = parsed.directory || savedDir || 'Music Folder';
+                        if (folderPathInput) folderPathInput.value = dirName;
+                        const sInput = document.getElementById('settingsTabFolderPathInput');
+                        if (sInput) sInput.value = dirName;
+                        try { safeStorage.setItem('cachymusic_last_directory', dirName); } catch (_) {}
+                        applySearchAndSort();
+                        setScanStatus(`Restored ${allTracks.length} tracks from "${dirName}".`, false);
+                    }
+                }
+            } catch (err) {
+                console.warn('AndroidBridge saved library restore error:', err);
+            }
+        }
+
+        // 2. If not restored from AndroidBridge and not a pure browser-blob directory, try scanning saved server directory
+        if (allTracks.length === 0 && savedMode !== 'browser_idb') {
+            await scanDirectory(savedDir, false, true);
+        }
+
+        // 3. If still empty, check localStorage cached Android tracks
+        if (allTracks.length === 0) {
+            try {
+                const cachedRaw = safeStorage.getItem('cachymusic_android_tracks');
+                if (cachedRaw) {
+                    const cached = JSON.parse(cachedRaw);
+                    if (Array.isArray(cached) && cached.length > 0) {
+                        allTracks = cached;
+                        applySearchAndSort();
+                        setScanStatus(`Restored ${cached.length} tracks from saved library.`, false);
+                    }
+                }
+            } catch (err) {
+                console.warn('Error restoring cached tracks:', err);
+            }
+        }
+
+        // 4. If still empty, check IndexedDB saved library (browser folder picker / local files)
+        if (allTracks.length === 0) {
+            const idbLib = await loadLibraryFromIndexedDB();
+            if (idbLib && Array.isArray(idbLib.tracks) && idbLib.tracks.length > 0) {
+                allTracks = idbLib.tracks;
+                if (idbLib.directory) {
+                    if (folderPathInput) folderPathInput.value = idbLib.directory;
+                    const sInput = document.getElementById('settingsTabFolderPathInput');
+                    if (sInput) sInput.value = idbLib.directory;
+                    try { safeStorage.setItem('cachymusic_last_directory', idbLib.directory); } catch (_) {}
+                }
+                applySearchAndSort();
+                setScanStatus(`Restored ${allTracks.length} tracks from "${idbLib.directory || 'Saved Folder'}".`, false);
+            }
+        }
+
+        updateEmptyPlayerState();
+        await restoreSessionState();
+
+        // Restore saved metadata panel state (persisted across sessions)
+        try {
+            const savedMetaVisible = safeStorage.getItem('cachymusic_metadata_visible');
+            if (savedMetaVisible === 'false' && window.innerWidth > 768) {
+                toggleMetadataPanel(false);
+            }
+        } catch (_) {}
+
+        initMprisBridge();
+    }
+
+
     // Setup All Event Handlers
     function setupEventListeners() {
+        if (visPillBtns && visPillBtns.length > 0) {
+            visPillBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    getVisualizerModule().then(m => m && m.setVisualizerMode && m.setVisualizerMode(btn.dataset.mode));
+                });
+            });
+        }
+        if (visModeBtns && visModeBtns.length > 0) {
+            visModeBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    getVisualizerModule().then(m => m && m.setVisualizerMode && m.setVisualizerMode(btn.dataset.mode));
+                });
+            });
+        }
+        if (visualizerDock) {
+            visualizerDock.addEventListener('click', () => {
+                getVisualizerModule();
+            });
+        }
+        if (turntableCenterCanvas) {
+            turntableCenterCanvas.addEventListener('click', () => {
+                getVisualizerModule();
+            });
+        }
+
         if (metadataToggleBtn) {
             metadataToggleBtn.addEventListener('click', () => toggleMetadataPanel());
         }
 
         if (lyricsToggleBtn) {
             lyricsToggleBtn.addEventListener('click', () => toggleLyricsView());
+        }
+
+        const tracklistToggleBtn = document.getElementById('tracklistToggleBtn');
+        if (tracklistToggleBtn) {
+            tracklistToggleBtn.addEventListener('click', () => toggleTracklistPanel());
         }
 
         if (playPauseBtn) {
@@ -15523,11 +17712,17 @@
                 prevTrack();
                 prevBtn.blur();
             });
+            ['touchend', 'pointerup'].forEach(evt => {
+                prevBtn.addEventListener(evt, () => prevBtn.blur(), { passive: true });
+            });
         }
         if (nextBtn) {
             nextBtn.addEventListener('click', () => {
                 nextTrack();
                 nextBtn.blur();
+            });
+            ['touchend', 'pointerup'].forEach(evt => {
+                nextBtn.addEventListener(evt, () => nextBtn.blur(), { passive: true });
             });
         }
 
@@ -16826,83 +19021,126 @@
         }
         setupTrackActionMenuModal();
 
-        localFileInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files || []);
-            if (files.length === 0) return;
+        async function handleOpenStandaloneAudioFiles(files) {
+            const rawFiles = Array.from(files || []);
+            const audioFiles = rawFiles.filter(f => {
+                const name = (f.name || '').toLowerCase();
+                return f.type.startsWith('audio/') || /\.(mp3|flac|wav|ogg|m4a|aac|opus|alac|aiff)$/i.test(name);
+            });
+            if (audioFiles.length === 0) return;
 
             showTrackLoadingOverlay(
-                'IMPORTING AUDIO TRACKS...',
-                `Reading ${files.length} audio file(s)...`,
-                10
+                'OPENING AUDIO FILE...',
+                `Reading ${audioFiles.length} audio file(s)...`,
+                15
             );
-            setScanStatus(`Reading ${files.length} audio file(s)...`, false);
-            const importedTracks = [];
+            setScanStatus(`Reading ${audioFiles.length} standalone audio file(s)...`, false);
+            const openedTracks = [];
 
-            for (let i = 0; i < files.length; i++) {
+            for (let i = 0; i < audioFiles.length; i++) {
                 if (isTrackLoadingCancelled) break;
-                const file = files[i];
-                const pct = Math.min(98, Math.round(((i + 1) / files.length) * 100));
-                updateTrackLoadingOverlay(`Reading track metadata (${i + 1} / ${files.length}): ${file.name}`, pct);
-                if (i % 5 === 0 || i === files.length - 1) {
-                    setScanStatus(`Reading track metadata (${i + 1}/${files.length})...`, false);
+                const file = audioFiles[i];
+                const pct = Math.min(98, Math.round(((i + 1) / audioFiles.length) * 100));
+                updateTrackLoadingOverlay(`Reading metadata (${i + 1}/${audioFiles.length}): ${file.name}`, pct);
+                if (i % 5 === 0 || i === audioFiles.length - 1) {
+                    setScanStatus(`Reading audio metadata (${i + 1}/${audioFiles.length})...`, false);
                 }
                 const url = URL.createObjectURL(file);
-                // Check if already in scanned server tracks
-                const existing = allTracks.find(t => t.filename === file.name || t.id === file.name);
-                if (existing && existing.title) {
-                    importedTracks.push({
-                        ...existing,
-                        id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                        src: url,
-                        _fileBlob: file
-                    });
-                    continue;
+
+                let parsed = null;
+                try {
+                    parsed = await parseAudioFileMetadata(file);
+                } catch (_) {
+                    parsed = { title: file.name.replace(/\.[^/.]+$/, ''), artist: 'External Audio', album: 'Standalone File', duration: 0 };
                 }
 
-                // Extract embedded tags directly from file in browser
-                const parsed = await parseAudioFileMetadata(file);
-
-                importedTracks.push({
-                    id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                openedTracks.push({
+                    id: 'standalone_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substr(2, 4),
                     tid: null,
                     filename: file.name,
                     fullPath: file.name,
-                    title: parsed.title,
-                    artist: parsed.artist,
-                    album: parsed.album,
-                    genre: parsed.genre,
-                    year: parsed.year,
-                    track: parsed.track,
-                    duration: parsed.duration || 0,
-                    bitrate: parsed.bitrate,
-                    sampleRate: parsed.sampleRate,
-                    bitDepth: parsed.bitDepth,
-                    channels: parsed.channels,
-                    format: parsed.format,
-                    size: parsed.size,
-                    cover: parsed.cover,
+                    title: (parsed && parsed.title) ? parsed.title : file.name.replace(/\.[^/.]+$/, ''),
+                    artist: (parsed && parsed.artist) ? parsed.artist : 'External Audio',
+                    album: (parsed && parsed.album) ? parsed.album : 'Standalone File',
+                    genre: (parsed && parsed.genre) ? parsed.genre : 'N/A',
+                    year: (parsed && parsed.year) ? parsed.year : '',
+                    track: (parsed && parsed.track) ? parsed.track : null,
+                    duration: (parsed && parsed.duration) ? parsed.duration : 0,
+                    bitrate: (parsed && parsed.bitrate) ? parsed.bitrate : 0,
+                    sampleRate: (parsed && parsed.sampleRate) ? parsed.sampleRate : 44100,
+                    bitDepth: (parsed && parsed.bitDepth) ? parsed.bitDepth : 16,
+                    channels: (parsed && parsed.channels) ? parsed.channels : 2,
+                    format: (parsed && parsed.format) ? parsed.format : (file.name.split('.').pop() || 'audio'),
+                    size: (parsed && parsed.size) ? parsed.size : (file.size ? (file.size / (1024 * 1024)).toFixed(2) + ' MB' : 'N/A'),
+                    cover: (parsed && parsed.cover) ? parsed.cover : null,
                     src: url,
-                    _fileBlob: file
+                    _fileBlob: file,
+                    isStandalone: true
                 });
             }
 
             hideTrackLoadingOverlay();
-            if (!isTrackLoadingCancelled && importedTracks.length > 0) {
-                setScanStatus(`Loaded ${importedTracks.length} local track(s).`, false);
-                const startIdx = allTracks.length;
-                allTracks = [...allTracks, ...importedTracks];
-                const dirName = (folderPathInput && folderPathInput.value.trim()) ? folderPathInput.value.trim() : 'Local Imported Tracks';
-                try {
-                    safeStorage.setItem('cachymusic_last_directory', dirName);
-                    safeStorage.setItem('cachymusic_directory_mode', 'browser_idb');
-                } catch (_) {}
-                saveLibraryToIndexedDB(allTracks, dirName);
-                updateEmptyPlayerState();
-                applySearchAndSort();
-                loadTrack(startIdx, false);
+            if (!isTrackLoadingCancelled && openedTracks.length > 0) {
+                setScanStatus(`Loaded ${openedTracks.length} standalone file(s).`, false);
+                standaloneTrackList = openedTracks;
+                standaloneTrackIndex = 0;
+                isStandalonePlayback = true;
+                await loadStandaloneTrack(0, true);
             }
+        }
+        window.handleOpenStandaloneAudioFiles = handleOpenStandaloneAudioFiles;
+
+        localFileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length === 0) return;
+            await handleOpenStandaloneAudioFiles(files);
             localFileInput.value = '';
         });
+
+        // Drag & Drop external audio files onto the workstation window (VLC-style)
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        });
+
+        window.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const dt = e.dataTransfer;
+            if (!dt || !dt.files || dt.files.length === 0) return;
+            await handleOpenStandaloneAudioFiles(dt.files);
+        });
+
+        // W3C File Handling API (Launch Queue - when user opens audio files with CachyMusic from desktop/OS file manager)
+        if (typeof window !== 'undefined' && 'launchQueue' in window && window.LaunchParams && 'files' in window.LaunchParams.prototype) {
+            try {
+                window.launchQueue.setConsumer(async (launchParams) => {
+                    if (!launchParams.files || launchParams.files.length === 0) return;
+                    const loadedFiles = [];
+                    for (const handle of launchParams.files) {
+                        try {
+                            const file = await handle.getFile();
+                            if (file) loadedFiles.push(file);
+                        } catch (_) {}
+                    }
+                    if (loadedFiles.length > 0) {
+                        await handleOpenStandaloneAudioFiles(loadedFiles);
+                    }
+                });
+            } catch (_) {}
+        }
+
+        if (standaloneResumeLibraryBtn) {
+            standaloneResumeLibraryBtn.addEventListener('click', () => {
+                exitStandalonePlayback(true);
+            });
+        }
+        if (standaloneCloseBtn) {
+            standaloneCloseBtn.addEventListener('click', () => {
+                exitStandalonePlayback(false);
+            });
+        }
 
         speedBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -17068,463 +19306,22 @@
         if (wsSoulseekBtn) bindFastAction(wsSoulseekBtn, () => switchWorkspace('soulseek'));
         if (wsDownloadBtn) bindFastAction(wsDownloadBtn, () => switchWorkspace('download'));
 
-        // Soulseek Power Button Listeners (Toolbar & Modal)
+        // Soulseek / P2P toolbar power triggers (loads P2P module on demand)
         if (slskPowerBtn) {
             slskPowerBtn.addEventListener('click', () => {
-                soulseekController.togglePower();
+                getP2pModule().then(m => m.soulseekController && m.soulseekController.togglePower());
             });
         }
-
         if (slskModalPowerBtn) {
             slskModalPowerBtn.addEventListener('click', () => {
-                soulseekController.togglePower();
+                getP2pModule().then(m => m.soulseekController && m.soulseekController.togglePower());
             });
         }
-
-        // Soulseek Account Modal Listeners
         if (slskAccountBtn) {
-            slskAccountBtn.addEventListener('click', async () => {
-                openSlskAccountModal();
-                if (slskAccountAlert) slskAccountAlert.style.display = 'none';
-                try {
-                    const res = await fetch('php/api/soulseek.php?action=account');
-                    const data = await res.json();
-                    if (data.username && slskModalUsername) {
-                        slskModalUsername.value = data.username;
-                    }
-                    if (slskModalPassword) {
-                        slskModalPassword.value = '';
-                        slskModalPassword.placeholder = data.hasPassword ? '•••••••• (Stored securely in database)' : 'Enter password';
-                    }
-                    if (data.downloads_dir && slskModalDownloadDir) {
-                        slskModalDownloadDir.value = data.downloads_dir;
-                    } else if (soulseekController.downloadsDir && slskModalDownloadDir) {
-                        slskModalDownloadDir.value = soulseekController.downloadsDir;
-                    }
-                    if (data.shared_dir && slskModalSharedDir) {
-                        slskModalSharedDir.value = data.shared_dir;
-                    } else if (soulseekController.sharedDir && slskModalSharedDir) {
-                        slskModalSharedDir.value = soulseekController.sharedDir;
-                    }
-                    soulseekController.updatePowerUI(soulseekController.lastStatus || data);
-                } catch (_) {}
+            slskAccountBtn.addEventListener('click', () => {
+                getP2pModule().then(() => openSlskAccountModal());
             });
         }
-
-        if (slskChangeDirBtn) {
-            slskChangeDirBtn.addEventListener('click', () => {
-                if (slskAccountBtn) slskAccountBtn.click();
-            });
-        }
-
-        if (slskChangeSharedDirBtn) {
-            slskChangeSharedDirBtn.addEventListener('click', () => {
-                if (slskAccountBtn) slskAccountBtn.click();
-            });
-        }
-
-        // Direct "SYNC WITH PLAYER DIR" button in Soulseek toolbar
-        if (slskSyncCurrentDirBtn) {
-            slskSyncCurrentDirBtn.addEventListener('click', async () => {
-                let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
-
-                // If not in input, ask scan.php for current library directory
-                if (!currentFolder) {
-                    try {
-                        const scanRes = await fetch('php/api/scan.php');
-                        const scanData = await scanRes.json();
-                        if (scanData.directory) {
-                            currentFolder = scanData.directory;
-                            if (folderPathInput) folderPathInput.value = currentFolder;
-                        }
-                    } catch (_) {}
-                }
-
-                if (!currentFolder) {
-                    alert('No active player music folder found. Please enter or scan a music folder first.');
-                    return;
-                }
-
-                slskSyncCurrentDirBtn.textContent = 'SYNCING...';
-                slskSyncCurrentDirBtn.disabled = true;
-
-                try {
-                    const res = await fetch('php/api/soulseek.php?action=directory', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ directory: currentFolder })
-                    });
-                    const data = await res.json();
-
-                    if (data.ok && data.downloads_dir) {
-                        soulseekController.downloadsDir = data.downloads_dir;
-                        if (slskDownloadsPathText) slskDownloadsPathText.textContent = data.downloads_dir;
-                        if (slskModalDownloadDir) slskModalDownloadDir.value = data.downloads_dir;
-                        slskSyncCurrentDirBtn.textContent = 'SYNCED!';
-                        setTimeout(() => {
-                            slskSyncCurrentDirBtn.textContent = 'SYNC WITH PLAYER DIR';
-                            slskSyncCurrentDirBtn.disabled = false;
-                        }, 1800);
-                    } else {
-                        alert(data.error || data.message || 'Failed to update Soulseek download folder.');
-                        slskSyncCurrentDirBtn.textContent = 'SYNC WITH PLAYER DIR';
-                        slskSyncCurrentDirBtn.disabled = false;
-                    }
-                } catch (e) {
-                    console.warn('Sync dir error:', e);
-                    alert('Network error communicating with Soulseek backend.');
-                    slskSyncCurrentDirBtn.textContent = 'SYNC WITH PLAYER DIR';
-                    slskSyncCurrentDirBtn.disabled = false;
-                }
-            });
-        }
-
-        // "USE PLAYER DIR" button inside the Account Settings Modal (Downloads)
-        if (slskModalSyncPlayerDirBtn) {
-            slskModalSyncPlayerDirBtn.addEventListener('click', async () => {
-                let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
-                if (!currentFolder) {
-                    try {
-                        const scanRes = await fetch('php/api/scan.php');
-                        const scanData = await scanRes.json();
-                        if (scanData.directory) currentFolder = scanData.directory;
-                    } catch (_) {}
-                }
-
-                if (currentFolder && slskModalDownloadDir) {
-                    slskModalDownloadDir.value = currentFolder;
-                } else {
-                    alert('No music folder currently scanned in the player.');
-                }
-            });
-        }
-
-        // "USE PLAYER DIR" button inside the Account Settings Modal (Shareable)
-        if (slskModalSyncSharePlayerDirBtn) {
-            slskModalSyncSharePlayerDirBtn.addEventListener('click', async () => {
-                let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
-                if (!currentFolder) {
-                    try {
-                        const scanRes = await fetch('php/api/scan.php');
-                        const scanData = await scanRes.json();
-                        if (scanData.directory) currentFolder = scanData.directory;
-                    } catch (_) {}
-                }
-
-                if (currentFolder && slskModalSharedDir) {
-                    slskModalSharedDir.value = currentFolder;
-                } else {
-                    alert('No music folder currently scanned in the player.');
-                }
-            });
-        }
-
-        if (slskCloseAccountModalBtn) {
-            slskCloseAccountModalBtn.addEventListener('click', () => {
-                closeSlskAccountModal();
-            });
-        }
-
-        if (slskAccountModal) {
-            slskAccountModal.addEventListener('click', (e) => {
-                if (e.target === slskAccountModal) {
-                    closeSlskAccountModal();
-                }
-            });
-        }
-
-        if (slskSaveAccountBtn) {
-            slskSaveAccountBtn.addEventListener('click', async () => {
-                const username = (slskModalUsername ? slskModalUsername.value : '').trim();
-                const password = (slskModalPassword ? slskModalPassword.value : '').trim();
-                const newDir = (slskModalDownloadDir ? slskModalDownloadDir.value : '').trim();
-                const newSharedDir = (slskModalSharedDir ? slskModalSharedDir.value : '').trim();
-
-                slskSaveAccountBtn.textContent = 'SAVING...';
-                slskSaveAccountBtn.disabled = true;
-
-                try {
-                    // Update downloads directory if changed
-                    if (newDir) {
-                        const dirRes = await fetch('php/api/soulseek.php?action=directory', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ directory: newDir })
-                        });
-                        const dirData = await dirRes.json();
-                        if (dirData.ok && dirData.downloads_dir) {
-                            soulseekController.downloadsDir = dirData.downloads_dir;
-                            if (slskDownloadsPathText) slskDownloadsPathText.textContent = dirData.downloads_dir;
-                        }
-                    }
-
-                    // Update shared directory if changed
-                    if (newSharedDir) {
-                        const sRes = await fetch('php/api/soulseek.php?action=shared_directory', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ directory: newSharedDir })
-                        });
-                        const sData = await sRes.json();
-                        if (sData.ok && sData.shared_dir) {
-                            soulseekController.sharedDir = sData.shared_dir;
-                            if (slskSharedPathText) slskSharedPathText.textContent = sData.shared_dir;
-                        }
-                    }
-
-                    // Save credentials and connect
-                    if (username) {
-                        const res = await fetch('php/api/soulseek.php?action=login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                username,
-                                password,
-                                downloads_dir: newDir,
-                                shared_dir: newSharedDir
-                            })
-                        });
-                        const data = await res.json();
-
-                        if (data.ok) {
-                            if (slskAccountAlert) {
-                                slskAccountAlert.className = 'slskModalAlert success';
-                                slskAccountAlert.textContent = `Connected as ${data.username || username}! Settings saved.`;
-                                slskAccountAlert.style.display = 'block';
-                            }
-                            setTimeout(() => {
-                                closeSlskAccountModal();
-                                soulseekController.checkStatus();
-                            }, 900);
-                        } else {
-                            if (slskAccountAlert) {
-                                slskAccountAlert.className = 'slskModalAlert error';
-                                slskAccountAlert.textContent = data.error || 'Connection failed.';
-                                slskAccountAlert.style.display = 'block';
-                            }
-                        }
-                    } else {
-                        // Directory only saved
-                        if (slskAccountAlert) {
-                            slskAccountAlert.className = 'slskModalAlert success';
-                            slskAccountAlert.textContent = 'Settings saved.';
-                            slskAccountAlert.style.display = 'block';
-                        }
-                        setTimeout(() => {
-                            closeSlskAccountModal();
-                            soulseekController.checkStatus();
-                        }, 900);
-                    }
-                } catch (err) {
-                    if (slskAccountAlert) {
-                        slskAccountAlert.className = 'slskModalAlert error';
-                        slskAccountAlert.textContent = 'Network error saving settings.';
-                        slskAccountAlert.style.display = 'block';
-                    }
-                } finally {
-                    slskSaveAccountBtn.textContent = 'SAVE & CONNECT';
-                    slskSaveAccountBtn.disabled = false;
-                }
-            });
-        }
-
-        if (slskLogoutBtn) {
-            slskLogoutBtn.addEventListener('click', async () => {
-                try {
-                    await fetch('php/api/soulseek.php?action=logout', { method: 'POST' });
-                    if (slskModalUsername) slskModalUsername.value = '';
-                    if (slskModalPassword) {
-                        slskModalPassword.value = '';
-                        slskModalPassword.placeholder = 'Enter password';
-                    }
-                    if (slskAccountAlert) {
-                        slskAccountAlert.className = 'slskModalAlert success';
-                        slskAccountAlert.textContent = 'Credentials cleared from database and disconnected.';
-                        slskAccountAlert.style.display = 'block';
-                    }
-                    soulseekController.checkStatus();
-                } catch (e) {
-                    console.warn('Logout error:', e);
-                }
-            });
-        }
-
-        if (slskSearchInput) {
-            slskSearchInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    soulseekController.search(slskSearchInput.value);
-                }
-            });
-            slskSearchInput.addEventListener('input', () => {
-                if (slskSearchClearBtn) {
-                    slskSearchClearBtn.style.display = slskSearchInput.value ? 'block' : 'none';
-                }
-            });
-        }
-        if (slskSearchClearBtn) {
-            slskSearchClearBtn.addEventListener('click', () => {
-                if (slskSearchInput) slskSearchInput.value = '';
-                slskSearchClearBtn.style.display = 'none';
-            });
-        }
-        if (slskSearchSubmitBtn) {
-            slskSearchSubmitBtn.addEventListener('click', () => {
-                if (slskSearchInput) soulseekController.search(slskSearchInput.value);
-            });
-        }
-        if (slskFilterChips) {
-            slskFilterChips.forEach(chip => {
-                chip.addEventListener('click', () => {
-                    slskFilterChips.forEach(c => c.classList.remove('active'));
-                    chip.classList.add('active');
-                    soulseekController.activeFilter = chip.dataset.filter;
-                    if (slskMobileActiveFilter) {
-                        const filterNames = {
-                            'all': 'ALL',
-                            'flac': 'FLAC',
-                            '320': '320K',
-                            'slots': 'FREE SLOTS'
-                        };
-                        slskMobileActiveFilter.textContent = filterNames[chip.dataset.filter] || chip.dataset.filter.toUpperCase();
-                    }
-                    soulseekController.applyFilterAndRender();
-                });
-            });
-        }
-
-        // Include Text Filter Listeners
-        if (slskIncludeFilterInput) {
-            slskIncludeFilterInput.addEventListener('input', () => {
-                soulseekController.includeFilterQuery = slskIncludeFilterInput.value.trim();
-                soulseekController.inResultFilterQuery = soulseekController.includeFilterQuery;
-                if (slskIncludeFilterClearBtn) {
-                    slskIncludeFilterClearBtn.style.display = slskIncludeFilterInput.value ? 'block' : 'none';
-                }
-                soulseekController.applyFilterAndRender();
-            });
-        }
-
-        if (slskIncludeFilterClearBtn) {
-            slskIncludeFilterClearBtn.addEventListener('click', () => {
-                if (slskIncludeFilterInput) slskIncludeFilterInput.value = '';
-                slskIncludeFilterClearBtn.style.display = 'none';
-                soulseekController.includeFilterQuery = '';
-                soulseekController.inResultFilterQuery = '';
-                soulseekController.applyFilterAndRender();
-            });
-        }
-
-        // Exclude Text Filter Listeners
-        if (slskExcludeFilterInput) {
-            slskExcludeFilterInput.addEventListener('input', () => {
-                soulseekController.excludeFilterQuery = slskExcludeFilterInput.value.trim();
-                if (slskExcludeFilterClearBtn) {
-                    slskExcludeFilterClearBtn.style.display = slskExcludeFilterInput.value ? 'block' : 'none';
-                }
-                soulseekController.applyFilterAndRender();
-            });
-        }
-
-        if (slskExcludeFilterClearBtn) {
-            slskExcludeFilterClearBtn.addEventListener('click', () => {
-                if (slskExcludeFilterInput) slskExcludeFilterInput.value = '';
-                slskExcludeFilterClearBtn.style.display = 'none';
-                soulseekController.excludeFilterQuery = '';
-                soulseekController.applyFilterAndRender();
-            });
-        }
-
-        if (slskClearSubFilterBtn) {
-            slskClearSubFilterBtn.addEventListener('click', () => {
-                soulseekController.activeSubFilter = null;
-                soulseekController.includeFilterQuery = '';
-                soulseekController.excludeFilterQuery = '';
-                soulseekController.inResultFilterQuery = '';
-                if (slskIncludeFilterInput) slskIncludeFilterInput.value = '';
-                if (slskIncludeFilterClearBtn) slskIncludeFilterClearBtn.style.display = 'none';
-                if (slskExcludeFilterInput) slskExcludeFilterInput.value = '';
-                if (slskExcludeFilterClearBtn) slskExcludeFilterClearBtn.style.display = 'none';
-                soulseekController.renderSuggestedChips();
-                soulseekController.applyFilterAndRender();
-            });
-        }
-        // Soulseek Column Header Sorting Listeners
-        const slskSortHeaders = document.querySelectorAll('.slskResultsHeader .col.sortable');
-        slskSortHeaders.forEach(col => {
-            col.addEventListener('click', () => {
-                const sortField = col.dataset.sort;
-                if (sortField) {
-                    soulseekController.setSortColumn(sortField);
-                }
-            });
-        });
-        soulseekController.updateSortHeaderUI();
-        document.querySelectorAll('.sampleTagBtn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const q = btn.dataset.query;
-                if (slskSearchInput) {
-                    slskSearchInput.value = q;
-                    if (slskSearchClearBtn) slskSearchClearBtn.style.display = 'block';
-                }
-                if (window.innerWidth <= 768) {
-                    setMobileSearchPanelCollapsed(true);
-                }
-                soulseekController.search(q);
-            });
-        });
-        if (slskStartDaemonBtn) {
-            slskStartDaemonBtn.addEventListener('click', () => soulseekController.startDaemon());
-        }
-        if (slskRefreshStatusBtn) {
-            slskRefreshStatusBtn.addEventListener('click', () => soulseekController.checkStatus());
-        }
-        if (slskToggleTransfersBtn) {
-            slskToggleTransfersBtn.addEventListener('click', () => {
-                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
-            });
-        }
-        if (slskPanelToggleBar) {
-            slskPanelToggleBar.addEventListener('click', (e) => {
-                if (e.target.closest('#slskMobileTransfersBtn')) return;
-                toggleMobileSearchPanel();
-            });
-        }
-        if (slskMobileTransfersBtn) {
-            slskMobileTransfersBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
-            });
-        }
-        if (slskResultsList) {
-            slskResultsList.addEventListener('click', () => {
-                if (window.innerWidth <= 768 && slskControlsPanel && !slskControlsPanel.classList.contains('is-collapsed')) {
-                    setMobileSearchPanelCollapsed(true);
-                }
-            });
-        }
-        if (slskTransfersHeader) {
-            slskTransfersHeader.addEventListener('click', (e) => {
-                if (e.target.closest('#slskScanDownloadsBtn') || e.target.closest('#slskCloseDrawerBtn')) return;
-                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
-            });
-        }
-        if (slskCloseDrawerBtn) {
-            slskCloseDrawerBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                soulseekController.closeTransfersDrawer();
-            });
-        }
-        if (slskScanDownloadsBtn) {
-            slskScanDownloadsBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                soulseekController.syncAllDownloadsToLibrary();
-            });
-        }
-
-        // Initialize status check & heartbeat
-        soulseekController.checkStatus();
-        soulseekController.startStatusPolling();
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('view') === 'soulseek' || window.location.hash === '#soulseek') {
@@ -17719,6 +19516,9 @@
             } else if (e.code === 'KeyI' || e.key === 'i' || e.key === 'I') {
                 e.preventDefault();
                 toggleMetadataPanel();
+            } else if ((e.code === 'KeyT' || e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                toggleTracklistPanel();
             } else if ((e.code === 'KeyN' || e.key === 'n') && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 e.preventDefault();
                 nextTrack();
@@ -17735,275 +19535,6 @@
         setupDownloadWorkspace();
     }
 
-    // Trigger PWA Installation or Browser Instructions
-    async function triggerPwaInstallPrompt() {
-        if (deferredInstallPrompt) {
-            deferredInstallPrompt.prompt();
-            try {
-                const choiceResult = await deferredInstallPrompt.userChoice;
-                if (choiceResult && choiceResult.outcome === 'accepted') {
-                    const installBtn = document.getElementById('installAppBtn');
-                    if (installBtn) installBtn.style.display = 'none';
-                    const statusPill = document.getElementById('downloadPwaStatusPill');
-                    if (statusPill) {
-                        statusPill.textContent = 'Installed (PWA)';
-                        statusPill.classList.add('active');
-                    }
-                }
-            } catch (_) {}
-            deferredInstallPrompt = null;
-        } else {
-            const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                                 window.navigator.standalone === true;
-            if (isStandalone) {
-                alert('CachyMusic is already installed and running as a standalone desktop/mobile app!');
-                return;
-            }
-
-            const ua = (navigator.userAgent || '').toLowerCase();
-            let advice = 'Install CachyMusic on your device:\n\n';
-            if (/iphone|ipad|ipod/i.test(ua)) {
-                advice += '• iOS Safari: Tap Share (square with upward arrow) ➔ "Add to Home Screen".';
-            } else if (/android/i.test(ua)) {
-                advice += '• Android Chrome: Tap Menu (⋮) ➔ "Install app" or "Add to Home screen".';
-            } else if (/mac/i.test(ua)) {
-                advice += '• macOS Safari: Click File ➔ "Add to Dock".\n• Chrome / Brave: Click the Install icon in the address bar.';
-            } else if (/win/i.test(ua)) {
-                advice += '• Windows: Click the Install icon in Edge/Chrome address bar, or download cachymusic.bat from the Windows tab.';
-            } else {
-                advice += '• Linux Desktop: Run ./install.sh in the project folder for complete system, launcher, and icon integration.\n• Chromium / Brave: Click the Install icon in the address bar.';
-            }
-            alert(advice);
-        }
-    }
-
-    // PWA & Desktop Installation Handler
-    function setupPwaInstallPrompt() {
-        const installBtn = document.getElementById('installAppBtn');
-        if (!installBtn) return;
-
-        // Window Controls Overlay (WCO) for desktop PWA titlebar integration
-        if ('windowControlsOverlay' in navigator) {
-            const handleWcoChange = () => {
-                const isOverlay = navigator.windowControlsOverlay.visible;
-                document.body.classList.toggle('wco-active', isOverlay);
-                if (isOverlay && typeof navigator.windowControlsOverlay.getTitlebarAreaRect === 'function') {
-                    const rect = navigator.windowControlsOverlay.getTitlebarAreaRect();
-                    if (rect && rect.height) {
-                        document.documentElement.style.setProperty('--wco-titlebar-height', `${rect.height}px`);
-                    }
-                }
-            };
-            navigator.windowControlsOverlay.addEventListener('geometrychange', handleWcoChange);
-            handleWcoChange();
-        }
-
-        // Check if already running in standalone display mode
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                             window.matchMedia('(display-mode: window-controls-overlay)').matches ||
-                             window.navigator.standalone === true;
-        if (isStandalone) {
-            installBtn.style.display = 'none';
-            const statusPill = document.getElementById('downloadPwaStatusPill');
-            if (statusPill) {
-                statusPill.textContent = 'Installed (Standalone)';
-                statusPill.classList.add('active');
-            }
-            const pwaInstallHint = document.getElementById('pwaInstallHint');
-            if (pwaInstallHint) {
-                pwaInstallHint.textContent = '✓ CachyMusic is currently running as an installed standalone application.';
-            }
-            return;
-        }
-
-        // Listen for beforeinstallprompt (Chromium, Brave, Chrome, Edge, Android)
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredInstallPrompt = e;
-            installBtn.style.display = 'inline-flex';
-            const statusPill = document.getElementById('downloadPwaStatusPill');
-            if (statusPill) {
-                statusPill.textContent = 'Install Ready';
-                statusPill.classList.add('active');
-            }
-        });
-
-        // Also display install button after initial load if not standalone,
-        // so desktop & mobile users on all browsers have a clear way to install
-        setTimeout(() => {
-            if (!isStandalone) {
-                installBtn.style.display = 'inline-flex';
-            }
-        }, 800);
-
-        installBtn.addEventListener('click', async () => {
-            if (deferredInstallPrompt) {
-                try {
-                    deferredInstallPrompt.prompt();
-                    const choiceResult = await deferredInstallPrompt.userChoice;
-                    if (choiceResult && choiceResult.outcome === 'accepted') {
-                        console.log('[PWA] User accepted install prompt');
-                        deferredInstallPrompt = null;
-                        installBtn.style.display = 'none';
-                    }
-                } catch (err) {
-                    console.warn('[PWA] Install prompt failed:', err);
-                }
-            } else {
-                switchWorkspace(currentWorkspace === 'download' ? 'player' : 'download');
-            }
-        });
-
-        window.addEventListener('appinstalled', () => {
-            installBtn.style.display = 'none';
-            deferredInstallPrompt = null;
-            const statusPill = document.getElementById('downloadPwaStatusPill');
-            if (statusPill) {
-                statusPill.textContent = 'Installed (PWA)';
-                statusPill.classList.add('active');
-            }
-            console.log('[PWA] CachyMusic installed successfully');
-        });
-    }
-
-    // Cross-Platform Download Hub & LAN Setup
-    let lanUrlFetched = false;
-    async function fetchLanStreamingUrl() {
-        if (lanUrlFetched) return;
-        try {
-            const res = await fetch('php/api/lan_info.php');
-            const data = await res.json();
-            if (data && data.success && data.lanUrl) {
-                lanUrlFetched = true;
-                const lanInput = document.getElementById('downloadLanUrlInput');
-                const copyBtn = document.getElementById('copyLanUrlBtn');
-                if (lanInput) lanInput.value = data.lanUrl;
-                if (copyBtn) copyBtn.dataset.copy = data.lanUrl;
-            }
-        } catch (e) {
-            console.warn('[LAN] Failed to fetch LAN streaming info:', e);
-        }
-    }
-
-    function setupDownloadWorkspace() {
-        const downloadTabs = document.querySelectorAll('.downloadTabBtn');
-        const downloadPanels = document.querySelectorAll('.downloadPanel');
-        const returnBtn = document.getElementById('downloadReturnBtn');
-
-        function activatePlatformTab(platform) {
-            downloadTabs.forEach(tab => {
-                const isActive = tab.dataset.platform === platform;
-                tab.classList.toggle('active', isActive);
-                tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
-            });
-
-            downloadPanels.forEach(panel => {
-                const isMatch = panel.id === `platform-${platform}`;
-                panel.classList.toggle('active', isMatch);
-                panel.style.display = isMatch ? 'block' : 'none';
-            });
-        }
-
-        downloadTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const platform = tab.dataset.platform;
-                if (platform) activatePlatformTab(platform);
-            });
-        });
-
-        if (returnBtn) {
-            returnBtn.addEventListener('click', () => {
-                switchWorkspace('player');
-            });
-        }
-
-        // Copy-to-clipboard buttons with animated feedback
-        document.querySelectorAll('.copyCodeBtn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                const textToCopy = btn.dataset.copy || (btn.previousElementSibling && btn.previousElementSibling.value);
-                if (!textToCopy) return;
-
-                let copySuccess = false;
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    try {
-                        await navigator.clipboard.writeText(textToCopy);
-                        copySuccess = true;
-                    } catch (_) {}
-                }
-
-                if (!copySuccess) {
-                    try {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = textToCopy;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textarea);
-                        copySuccess = true;
-                    } catch (_) {}
-                }
-
-                if (copySuccess) {
-                    const originalHtml = btn.innerHTML;
-                    btn.innerHTML = '✓ COPIED!';
-                    btn.classList.add('copied');
-                    setTimeout(() => {
-                        btn.innerHTML = originalHtml;
-                        btn.classList.remove('copied');
-                    }, 1800);
-                }
-            });
-        });
-
-        // Wire 1-Click PWA Buttons in Download Hub
-        const pwaActionBtns = document.querySelectorAll('.downloadDirectPwaBtn, #downloadPwaTriggerBtn');
-        pwaActionBtns.forEach(btn => {
-            btn.addEventListener('click', triggerPwaInstallPrompt);
-        });
-
-        // Auto-detect current operating system to highlight YOUR OS badge (or read ?platform=)
-        const urlParams = new URLSearchParams(window.location.search);
-        let defaultPlatform = urlParams.get('platform') || '';
-        let detected = 'linux';
-        const ua = (navigator.userAgent || '').toLowerCase();
-        if (/iphone|ipad|ipod|android/i.test(ua)) {
-            detected = 'mobile';
-        } else if (/win/i.test(ua)) {
-            detected = 'windows';
-        } else if (/mac/i.test(ua)) {
-            detected = 'macos';
-        } else {
-            detected = 'linux';
-        }
-
-        // Show "YOUR OS" badge on the detected platform tab
-        const detectedBadge = document.getElementById(`osBadge-${detected}`);
-        if (detectedBadge) {
-            detectedBadge.style.display = 'inline-block';
-        }
-
-        if (!defaultPlatform) {
-            defaultPlatform = detected;
-        }
-        activatePlatformTab(defaultPlatform);
-    }
-
-    function updateVolumeIcon(vol) {
-        let pathHtml = '';
-        if (vol === 0 || audio.muted) {
-            pathHtml = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
-        } else if (vol < 0.5) {
-            pathHtml = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>';
-        } else {
-            pathHtml = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
-        }
-
-        if (volumeIcon) volumeIcon.innerHTML = pathHtml;
-        const miniVolIcon = document.getElementById('miniVolumeIcon');
-        if (miniVolIcon) miniVolIcon.innerHTML = pathHtml;
-    }
 
     window.CachyMusicApp = {
         init,
@@ -18034,4 +19565,7 @@
     } else {
         init();
     }
+
+
+
 })();

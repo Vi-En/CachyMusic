@@ -4,6 +4,13 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.9] - 2026-11-03
+- Added full Search by Genre support with ID3 numeric code normalization (e.g. `(13)` / `13` -> Pop) and `genre:<term>` query filtering.
+- Removed background vinyl disc and ambient aura glow elements across minimalist themes for an ultra-clean listening experience.
+- Optimized mobile skip buttons by eliminating sticky hover states and delegating visual feedback to active button presses.
+- Added standalone external audio playback allowing direct playback of local files without modifying or polluting the main library.
+- Refined turntable boundaries to prevent container overflow, aligned player workspace tabs, and ensured dynamic visualizer adaptation across all themes.
+
 ## [1.1.8] - 2026-11-02
 - Eliminated tab switching latency and animation stutter with instant 0ms touch and click response.
 - Added pointerdown fast-path for mobile tab navigation and desktop workspace switching.

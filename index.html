@@ -50,20 +50,28 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="resources/images/icon-192.png">
     <link rel="icon" type="image/svg+xml" href="resources/images/music-hanzi.svg">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=1.1.8">
+    <link rel="preload" href="resources/fonts/NMSFuturaProBook_Kerned.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="modulepreload" href="scripts/modules/utils.js">
+    <link rel="modulepreload" href="scripts/modules/state.js">
+    <link rel="modulepreload" href="scripts/modules/ui-elements.js">
+    <link rel="modulepreload" href="scripts/modules/themes.js">
+    <link rel="modulepreload" href="scripts/modules/player-core.js">
+    <link rel="modulepreload" href="scripts/modules/audio-engine.js">
+    <link rel="modulepreload" href="scripts/modules/library.js">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=1.1.9">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 if (window.caches) {
                     caches.keys().then(function(keys) {
                         keys.forEach(function(k) {
-                            if (k !== 'cachymusic-v1.1.8' && !k.startsWith('cachymusic-artwork-')) {
+                            if (k !== 'cachymusic-v1.1.9' && !k.startsWith('cachymusic-artwork-')) {
                                 caches.delete(k);
                             }
                         });
                     }).catch(function() {});
                 }
-                navigator.serviceWorker.register('./sw.js?v=1.1.8').then(function(reg) {
+                navigator.serviceWorker.register('./sw.js?v=1.1.9').then(function(reg) {
                     reg.update();
                 }).catch(function(err) {
                     console.warn('[PWA] ServiceWorker registration failed:', err);
@@ -118,10 +126,6 @@
         </div>
 
         <div class="topActions">
-            <button type="button" id="themeModalBtn" class="topBtn themeModalBtn" title="Theme Overhaul (Default / The Atlas)">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path></svg>
-                <span id="topThemeLabel">THEMES</span>
-            </button>
             <button type="button" id="toggleFolderBtn" class="topBtn" title="Load Audio From Folder Path">
                 FOLDER SCAN
             </button>
@@ -129,7 +133,6 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 <span>SETTINGS</span>
             </button>
-            <span class="userStatus" id="userStatus" title="Local audio engine status">● READY</span>
         </div>
     </header>
 
@@ -283,7 +286,7 @@
         <!-- Center Panel: The Turntable Deck & Now Playing -->
         <section class="panel playerDeck mobileActive">
 
-            <!-- Player Deck Quick Controls (Metadata Inspector & Lyrics Toggles) -->
+            <!-- Player Deck Quick Controls (Metadata Inspector, Lyrics & Tracklist Toggles) -->
             <div class="deckTopControls" id="deckTopControls">
                 <button type="button" id="metadataToggleBtn" class="deckActionBtn metadataToggleBtn active" title="Toggle Track Metadata Inspector (I)" aria-label="Toggle Metadata Inspector" aria-pressed="true">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -298,6 +301,17 @@
                         <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 16h8v1H8v-1zm0-3h8v1H8v-1zm0-3h5v1H8v-1z"/>
                     </svg>
                     <span class="deckBtnLabel">LYRICS</span>
+                </button>
+                <button type="button" id="tracklistToggleBtn" class="deckActionBtn tracklistToggleBtn active" title="Toggle Tracklist Panel (T)" aria-label="Toggle Tracklist Panel" aria-pressed="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                    <span class="deckBtnLabel">TRACKS</span>
                 </button>
             </div>
 
@@ -509,10 +523,22 @@
                     <button type="button" id="mobileScanFolderBtn" class="actionBtn mobileFolderBtn" title="Choose Music Directory / Folder">
                         + FOLDER
                     </button>
-                    <label for="localFileInput" class="actionBtn uploadBtn" id="localFileInputLabel" title="Load Audio Files (Multi-Select)">
-                        + TRACKS
+                    <label for="localFileInput" class="actionBtn uploadBtn" id="localFileInputLabel" title="Open Audio Files (Standalone Playback)">
+                        OPEN FILE
                     </label>
-                    <input type="file" id="localFileInput" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.opus,.alac,.aiff" multiple style="display: none;" aria-label="Load Local Audio Files">
+                    <input type="file" id="localFileInput" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.opus,.alac,.aiff" multiple style="display: none;" aria-label="Open Local Audio Files">
+                </div>
+            </div>
+
+            <!-- Standalone / External File Playback Banner (VLC Style) -->
+            <div class="standaloneBanner" id="standaloneBanner" style="display: none;">
+                <div class="standaloneBannerContent">
+                    <span class="standaloneBannerBadge">STANDALONE FILE</span>
+                    <span id="standaloneBannerTitle" class="standaloneBannerTitle">External Audio</span>
+                </div>
+                <div class="standaloneBannerActions">
+                    <button type="button" id="standaloneResumeLibraryBtn" class="actionBtn standaloneResumeBtn" title="Return to Main Track Library">RESUME LIBRARY</button>
+                    <button type="button" id="standaloneCloseBtn" class="deleteBtn standaloneCloseBtn" title="Close Standalone File">✕</button>
                 </div>
             </div>
 
@@ -1866,6 +1892,7 @@
         <canvas id="visualizerCanvas" class="visualizerCanvas"></canvas>
     </div>
 
-    <script src="scripts/homepage.js?v=1.1.8"></script>
+    <!-- Canonical ES Module Entry -->
+    <script type="module" src="scripts/modules/app.js"></script>
 </body>
 </html>

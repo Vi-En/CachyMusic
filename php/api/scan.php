@@ -1,9 +1,8 @@
 <?php
 // CachyMusic - Ultra-Fast Audio Library Scanner & Metadata Engine
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
 }
-session_write_close();
 header('Content-Type: application/json; charset=utf-8');
 
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -234,6 +233,41 @@ if ($isDirectScanRequest) {
 /* Reads actual inside tags via ffprobe with pure PHP fallback               */
 /* ========================================================================= */
 
+function normalize_id3_genre($g) {
+    if (!$g) return null;
+    static $genres = [
+        0 => 'Blues', 1 => 'Classic Rock', 2 => 'Country', 3 => 'Dance', 4 => 'Disco', 5 => 'Funk',
+        6 => 'Grunge', 7 => 'Hip-Hop', 8 => 'Jazz', 9 => 'Metal', 10 => 'New Age', 11 => 'Oldies',
+        12 => 'Other', 13 => 'Pop', 14 => 'R&B', 15 => 'Rap', 16 => 'Reggae', 17 => 'Rock',
+        18 => 'Techno', 19 => 'Industrial', 20 => 'Alternative', 21 => 'Ska', 22 => 'Death Metal',
+        23 => 'Pranks', 24 => 'Soundtrack', 25 => 'Euro-Techno', 26 => 'Ambient', 27 => 'Trip-Hop',
+        28 => 'Vocal', 29 => 'Jazz+Funk', 30 => 'Fusion', 31 => 'Trance', 32 => 'Classical',
+        33 => 'Instrumental', 34 => 'Acid', 35 => 'House', 36 => 'Game', 37 => 'Sound Clip',
+        38 => 'Gospel', 39 => 'Noise', 40 => 'AlternRock', 41 => 'Bass', 42 => 'Soul',
+        43 => 'Punk', 44 => 'Space', 45 => 'Meditative', 46 => 'Instrumental Pop',
+        47 => 'Instrumental Rock', 48 => 'Ethnic', 49 => 'Gothic', 50 => 'Darkwave',
+        51 => 'Techno-Industrial', 52 => 'Electronic', 53 => 'Pop-Folk', 54 => 'Eurodance',
+        55 => 'Dream', 56 => 'Southern Rock', 57 => 'Comedy', 58 => 'Cult', 59 => 'Gangsta',
+        60 => 'Top 40', 61 => 'Christian Rap', 62 => 'Pop/Funk', 63 => 'Jungle',
+        64 => 'Native American', 65 => 'Cabaret', 66 => 'New Wave', 67 => 'Psychadelic',
+        68 => 'Rave', 69 => 'Showtunes', 70 => 'Trailer', 71 => 'Lo-Fi', 72 => 'Tribal',
+        73 => 'Acid Punk', 74 => 'Acid Jazz', 75 => 'Polka', 76 => 'Retro', 77 => 'Musical',
+        78 => 'Rock & Roll', 79 => 'Hard Rock'
+    ];
+    $g = trim((string)$g);
+    if (preg_match('/^\(?(\d+)\)?$/', $g, $m)) {
+        $idx = (int)$m[1];
+        if (isset($genres[$idx])) return $genres[$idx];
+    }
+    if (preg_match('/^\((\d+)\)\s*(.*)$/', $g, $m)) {
+        $idx = (int)$m[1];
+        $rest = trim($m[2]);
+        $name = $genres[$idx] ?? '';
+        return $name ? ($rest ? "$name $rest" : $name) : ($rest ?: $g);
+    }
+    return $g;
+}
+
 function extract_actual_audio_metadata($path, $ext, $fileSize) {
     $result = [
         'title'      => null,
@@ -341,7 +375,7 @@ function parse_ffprobe_data($data, $path, &$out) {
     elseif (!empty($tags['composer'])) $out['artist'] = $tags['composer'];
 
     if (!empty($tags['album'])) $out['album'] = $tags['album'];
-    if (!empty($tags['genre'])) $out['genre'] = $tags['genre'];
+    if (!empty($tags['genre'])) $out['genre'] = normalize_id3_genre($tags['genre']);
 
     $dateVal = $tags['date'] ?? $tags['year'] ?? $tags['tyer'] ?? $tags['tdrc'] ?? null;
     if ($dateVal && preg_match('/(\d{4})/', $dateVal, $m)) {
@@ -498,7 +532,7 @@ function parse_id3v2_frames($body, $version, &$out) {
                 break;
             case 'TCON':
                 $g = decode_id3_text($data);
-                $g = preg_replace('/^\((\d+)\)$/', '$1', $g);
+                $g = normalize_id3_genre($g);
                 if ($g !== '') $out['genre'] = $g;
                 break;
             case 'TYER':

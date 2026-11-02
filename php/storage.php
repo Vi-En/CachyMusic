@@ -258,6 +258,9 @@ class Storage {
         }
 
         $data = self::read();
+        if (($data['default_directory'] ?? '') === $dir) {
+            return true;
+        }
         $data['default_directory'] = $dir;
         self::write($data);
         return true;
@@ -674,6 +677,11 @@ class Storage {
         $tid = (int)$tid;
         if (!empty($fullPath)) self::$pathToTidIndex['byPath'][$fullPath] = $tid;
         if (!empty($trackData['file_path'])) self::$pathToTidIndex['byPath'][$trackData['file_path']] = $tid;
+
+        $existing = $data['tracks'][(string)$tid] ?? null;
+        if ($existing !== null && ($existing['mtime'] ?? 0) === ($trackData['mtime'] ?? 0) && ($existing['file_size'] ?? 0) === ($trackData['file_size'] ?? 0) && !empty($existing['title'])) {
+            return $tid;
+        }
 
         $trackData['tid'] = $tid;
         $data['tracks'][(string)$tid] = $trackData;

@@ -1,6 +1,7 @@
 <?php
 // CachyMusic - Playlists API (Zero-Dependency & MySQL-Compatible)
 if (session_status() === PHP_SESSION_NONE) {
+    session_cache_limiter('');
     session_start();
 }
 header('Content-Type: application/json; charset=utf-8');
@@ -9,13 +10,31 @@ header('Content-Type: application/json; charset=utf-8');
 @require_once(__DIR__ . '/../storage.php');
 
 $currentUser = $_SESSION['username'] ?? 'default';
-// Release session file lock immediately so concurrent requests do not block
-session_write_close();
+
+// Enable transparent gzip compression for playlists responses
+if (!in_array('ob_gzhandler', ob_list_handlers(), true) && extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
+    @ob_start('ob_gzhandler');
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true) ?: $_POST;
 
 if ($method === 'GET') {
+    $libFile = __DIR__ . '/../../data/library.json';
+    if (file_exists($libFile)) {
+        $mtime = filemtime($libFile);
+        $etag = '"pl-' . dechex($mtime) . '-' . dechex(filesize($libFile)) . '"';
+        header("ETag: $etag");
+        header("Last-Modified: " . gmdate('D, d M Y H:i:s', $mtime) . " GMT");
+        header("Cache-Control: public, max-age=60, stale-while-revalidate=300");
+
+        $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+        if (!empty($ifNoneMatch) && trim($ifNoneMatch, '" ') === trim($etag, '" ')) {
+            http_response_code(304);
+            exit;
+        }
+    }
     $plid = isset($_GET['plid']) ? (int)$_GET['plid'] : null;
 
     if ($plid) {
@@ -116,3 +135,4 @@ if ($method === 'POST') {
 
 echo json_encode(['success' => false, 'message' => 'Invalid request.']);
 exit;
+

@@ -12,3 +12,4 @@ StartupWMClass=cachymusic
 Categories=AudioVideo;Audio;Player;Music;
 Keywords=audio;music;player;workstation;flac;hifi;audiophile;cachyos;
 MimeType=audio/mpeg;audio/flac;audio/ogg;audio/wav;audio/x-wav;audio/mp4;audio/aac;audio/opus;
+

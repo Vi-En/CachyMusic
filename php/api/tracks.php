@@ -1,14 +1,53 @@
 <?php
-session_start();
-session_write_close();
-header('Content-Type: application/json; charset=utf-8');
-header("Access-Control-Allow-Origin: *");
+// CachyMusic - Tracks API Endpoint
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
+
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if (!empty($origin)) {
+    $parsed = parse_url($origin);
+    $host = $parsed['host'] ?? '';
+    $serverHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), PHP_URL_HOST);
+    if (in_array($host, ['localhost', '127.0.0.1', '::1'], true) || $host === $serverHost) {
+        header("Access-Control-Allow-Origin: $origin");
+        header("Access-Control-Allow-Credentials: true");
+    }
+} else {
+    header("Access-Control-Allow-Origin: *");
+}
+
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
+header("Access-Control-Allow-Headers: Content-Type, If-None-Match, If-Modified-Since");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
 
+// Enable transparent gzip compression for large library payloads
+if (!in_array('ob_gzhandler', ob_list_handlers(), true) && extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
+    @ob_start('ob_gzhandler');
+}
+
+// Conditional HTTP caching for GET and HEAD requests
+if (in_array($_SERVER['REQUEST_METHOD'] ?? '', ['GET', 'HEAD'], true) && empty($_GET['directory'])) {
+    $libFile = __DIR__ . '/../../data/library.json';
+    if (file_exists($libFile)) {
+        $mtime = filemtime($libFile);
+        $etag = '"tracks-' . dechex($mtime) . '-' . dechex(filesize($libFile)) . '"';
+        header("ETag: $etag");
+        header("Last-Modified: " . gmdate('D, d M Y H:i:s', $mtime) . " GMT");
+        header("Cache-Control: public, max-age=60, stale-while-revalidate=300");
+
+        $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+        if (!empty($ifNoneMatch) && trim($ifNoneMatch, '" ') === trim($etag, '" ')) {
+            http_response_code(304);
+            exit;
+        }
+    }
+}
+
+header('Content-Type: application/json; charset=utf-8');
 @require_once(__DIR__ . '/scan.php');
+
