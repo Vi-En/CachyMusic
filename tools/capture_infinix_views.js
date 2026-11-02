@@ -2,7 +2,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const outDir = '/home/lien/.gemini/antigravity/brain/8ef29818-f6ab-4782-82fa-f162ed09e52c/screenshots';
+const outDir = path.join(__dirname, 'screenshots');
 if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
 async function capture() {

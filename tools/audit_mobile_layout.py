@@ -25,7 +25,7 @@ views = [
     ('settings', 'workspace=settings')
 ]
 
-out_dir = '/home/lien/.gemini/antigravity/brain/8ef29818-f6ab-4782-82fa-f162ed09e52c/screenshots'
+out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'screenshots')
 os.makedirs(out_dir, exist_ok=True)
 
 print("=== Starting Mobile Layout & Contrast Audit ===")
