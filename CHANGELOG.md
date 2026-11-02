@@ -4,6 +4,11 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.1.8] - 2026-11-02
+- Eliminated tab switching latency and animation stutter with instant 0ms touch and click response.
+- Added pointerdown fast-path for mobile tab navigation and desktop workspace switching.
+- Isolated panel and workspace rendering with CSS layout containment to prevent frame drops.
+
 ## [1.1.7] - 2026-11-02
 - Fixed lyrics displayer layout and eliminated rogue scrollbars causing mobile deck misalignment.
 - Enforced strict zero-overflow boundaries on turntable stage and player deck during lyrics view.

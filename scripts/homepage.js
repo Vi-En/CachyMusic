@@ -302,6 +302,21 @@
     const trackListPanelEl = document.querySelector('.trackListPanel');
     const settingsPanelEl = document.querySelector('.settingsPanel');
     const infoPanelEl = document.getElementById('infoPanel');
+    const cachedMobileTabBtns = Array.from(document.querySelectorAll('.mobileTabBtn'));
+    const cachedAllPanelsList = [playerDeckEl, trackListPanelEl, settingsPanelEl].filter(Boolean);
+
+    function setMobileTabActive(targetId) {
+        for (let i = 0; i < cachedMobileTabBtns.length; i++) {
+            const b = cachedMobileTabBtns[i];
+            b.classList.toggle('active', b.dataset.target === targetId);
+        }
+    }
+
+    function setMobilePanelsInactive() {
+        for (let i = 0; i < cachedAllPanelsList.length; i++) {
+            cachedAllPanelsList[i].classList.remove('mobileActive');
+        }
+    }
 
     // DOM Elements - Deck Actions (Metadata Inspector & Lyrics Toggles)
     const metadataToggleBtn = document.getElementById('metadataToggleBtn');
@@ -580,8 +595,11 @@
         setMobileSearchPanelCollapsed(!isCollapsed);
     }
 
+    let lastRenderedMiniTrack = null;
     function updateMiniPlayerInfo(track) {
         if (!track) return;
+        if (lastRenderedMiniTrack === track) return;
+        lastRenderedMiniTrack = track;
         if (miniTitle) miniTitle.textContent = track.title || track.filename || 'Unknown Track';
         if (miniArtist) miniArtist.textContent = track.artist || 'Unknown Artist';
         if (miniArtPreview) {
@@ -776,8 +794,8 @@
             if (settingsWorkspace) settingsWorkspace.style.display = 'none';
             if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'flex';
 
-            document.querySelectorAll('.panel.mobileActive').forEach(p => p.classList.remove('mobileActive'));
-            document.querySelectorAll('.mobileTabBtn').forEach(b => b.classList.toggle('active', b.dataset.target === 'soulseekWorkspace'));
+            setMobilePanelsInactive();
+            setMobileTabActive('soulseekWorkspace');
             document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
 
             if (allTracks[currentTrackIndex]) {
@@ -806,8 +824,8 @@
             if (settingsWorkspace) settingsWorkspace.style.display = 'none';
             if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'flex';
 
-            document.querySelectorAll('.panel.mobileActive').forEach(p => p.classList.remove('mobileActive'));
-            document.querySelectorAll('.mobileTabBtn').forEach(b => b.classList.toggle('active', b.dataset.target === 'downloadWorkspace'));
+            setMobilePanelsInactive();
+            setMobileTabActive('downloadWorkspace');
             document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
 
             if (allTracks[currentTrackIndex]) {
@@ -839,8 +857,8 @@
             if (settingsWorkspace) settingsWorkspace.style.display = 'flex';
             if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'flex';
 
-            document.querySelectorAll('.panel.mobileActive').forEach(p => p.classList.remove('mobileActive'));
-            document.querySelectorAll('.mobileTabBtn').forEach(b => b.classList.toggle('active', b.dataset.target === 'settingsWorkspace'));
+            setMobilePanelsInactive();
+            setMobileTabActive('settingsWorkspace');
             document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
 
             if (allTracks[currentTrackIndex]) {
@@ -876,21 +894,20 @@
 
             if (targetMobilePanel || window.innerWidth <= 768) {
                 const activeTarget = targetMobilePanel || 'playerDeck';
-                const targetMobileBtn = document.querySelector(`.mobileTabBtn[data-target="${activeTarget}"]`);
-                if (targetMobileBtn) {
-                    document.querySelectorAll('.mobileTabBtn').forEach(b => b.classList.toggle('active', b === targetMobileBtn));
+                setMobileTabActive(activeTarget);
+
+                if (playerDeckEl) {
+                    playerDeckEl.classList.toggle('mobileActive', activeTarget === 'playerDeck');
+                    playerDeckEl.style.display = '';
                 }
-                const panels = {
-                    playerDeck: playerDeckEl || document.querySelector('.playerDeck'),
-                    trackListPanel: trackListPanelEl || document.querySelector('.trackListPanel'),
-                    settingsPanel: settingsPanelEl || document.querySelector('.settingsPanel')
-                };
-                Object.keys(panels).forEach(key => {
-                    if (panels[key]) {
-                        panels[key].classList.toggle('mobileActive', key === activeTarget);
-                        panels[key].style.display = '';
-                    }
-                });
+                if (trackListPanelEl) {
+                    trackListPanelEl.classList.toggle('mobileActive', activeTarget === 'trackListPanel');
+                    trackListPanelEl.style.display = '';
+                }
+                if (settingsPanelEl) {
+                    settingsPanelEl.classList.toggle('mobileActive', activeTarget === 'settingsPanel');
+                    settingsPanelEl.style.display = '';
+                }
 
                 document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
                 if (activeTarget === 'playerDeck') {
@@ -904,7 +921,7 @@
                         updateMiniPlayerPlayState(isPlaying);
                     }
                     if (typeof renderVirtualTrackWindow === 'function') {
-                        requestAnimationFrame(() => renderVirtualTrackWindow(true));
+                        renderVirtualTrackWindow(true);
                     }
                 } else if (activeTarget === 'settingsPanel') {
                     document.body.classList.add('mobile-tab-info');
@@ -919,10 +936,10 @@
                     metadataToggleBtn.setAttribute('aria-pressed', String(activeTarget === 'settingsPanel'));
                 }
             } else {
-                document.querySelectorAll('.panel').forEach(p => {
-                    p.classList.remove('mobileActive');
-                    p.style.display = '';
-                });
+                setMobilePanelsInactive();
+                if (playerDeckEl) playerDeckEl.style.display = '';
+                if (trackListPanelEl) trackListPanelEl.style.display = '';
+                if (settingsPanelEl) settingsPanelEl.style.display = '';
                 document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
                 if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'none';
                 if (metadataToggleBtn) {
@@ -15622,30 +15639,36 @@
             }
         });
 
-        // Mobile Viewport Navigation Switcher
+        // Mobile Viewport Navigation Switcher (Instant 0ms Pointerdown Fast-Path)
         const mobileTabBtns = document.querySelectorAll('.mobileTabBtn');
-        const panelDeck = document.querySelector('.playerDeck');
-        const panelTracks = document.querySelector('.trackListPanel');
-        const panelSettings = document.querySelector('.settingsPanel');
-        const mobilePanels = {
-            playerDeck: panelDeck,
-            trackListPanel: panelTracks,
-            settingsPanel: panelSettings
-        };
+        let lastMobileTabSwitchTime = 0;
+        let lastMobileTabSwitchTarget = '';
+
+        function activateMobileTab(btn, e) {
+            if (e && e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
+            const target = btn.dataset.target;
+            const now = performance.now();
+            if (lastMobileTabSwitchTarget === target && (now - lastMobileTabSwitchTime) < 320) {
+                return;
+            }
+            lastMobileTabSwitchTime = now;
+            lastMobileTabSwitchTarget = target;
+            if (target === 'soulseekWorkspace') {
+                switchWorkspace('soulseek');
+            } else if (target === 'downloadWorkspace') {
+                switchWorkspace('download');
+            } else if (target === 'settingsWorkspace') {
+                switchWorkspace('settings');
+            } else {
+                switchWorkspace('player', target);
+            }
+        }
 
         mobileTabBtns.forEach(btn => {
+            btn.addEventListener('pointerdown', (e) => activateMobileTab(btn, e), { passive: true });
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
-                const target = btn.dataset.target;
-                if (target === 'soulseekWorkspace') {
-                    switchWorkspace('soulseek');
-                } else if (target === 'downloadWorkspace') {
-                    switchWorkspace('download');
-                } else if (target === 'settingsWorkspace') {
-                    switchWorkspace('settings');
-                } else {
-                    switchWorkspace('player', target);
-                }
+                activateMobileTab(btn, e);
             });
         });
 
@@ -16040,22 +16063,52 @@
         // Top Navigation Bar & Dedicated Settings Workspace Triggers
         const topSettingsBtn = document.getElementById('topSettingsBtn');
         if (topSettingsBtn) {
-            topSettingsBtn.addEventListener('click', () => {
+            let lastTopSettingsTime = 0;
+            const handleTopSettings = (e) => {
+                if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
+                const now = performance.now();
+                if (now - lastTopSettingsTime < 320) return;
+                lastTopSettingsTime = now;
                 switchWorkspace(currentWorkspace === 'settings' ? 'player' : 'settings');
+            };
+            topSettingsBtn.addEventListener('pointerdown', handleTopSettings, { passive: true });
+            topSettingsBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleTopSettings(e);
             });
         }
 
         const wsSettingsBtn = document.getElementById('wsSettingsBtn');
         if (wsSettingsBtn) {
-            wsSettingsBtn.addEventListener('click', () => {
+            let lastWsSettingsTime = 0;
+            const handleWsSettings = (e) => {
+                if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
+                const now = performance.now();
+                if (now - lastWsSettingsTime < 320) return;
+                lastWsSettingsTime = now;
                 switchWorkspace('settings');
+            };
+            wsSettingsBtn.addEventListener('pointerdown', handleWsSettings, { passive: true });
+            wsSettingsBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleWsSettings(e);
             });
         }
 
         const settingsReturnBtn = document.getElementById('settingsReturnBtn');
         if (settingsReturnBtn) {
-            settingsReturnBtn.addEventListener('click', () => {
+            let lastSettingsReturnTime = 0;
+            const handleSettingsReturn = (e) => {
+                if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
+                const now = performance.now();
+                if (now - lastSettingsReturnTime < 320) return;
+                lastSettingsReturnTime = now;
                 switchWorkspace('player');
+            };
+            settingsReturnBtn.addEventListener('pointerdown', handleSettingsReturn, { passive: true });
+            settingsReturnBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleSettingsReturn(e);
             });
         }
 
@@ -16877,11 +16930,28 @@
             nextTrack();
             miniNextBtn.blur();
         });
-        if (miniDeckReturnBtn) miniDeckReturnBtn.addEventListener('click', () => switchWorkspace('player', 'playerDeck'));
+        function bindFastAction(el, action) {
+            if (!el) return;
+            let lastActionTime = 0;
+            const handler = (e) => {
+                if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
+                const now = performance.now();
+                if (now - lastActionTime < 320) return;
+                lastActionTime = now;
+                action(e);
+            };
+            el.addEventListener('pointerdown', handler, { passive: true });
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                handler(e);
+            });
+        }
+
+        if (miniDeckReturnBtn) bindFastAction(miniDeckReturnBtn, () => switchWorkspace('player', 'playerDeck'));
         const miniPlayerLeftEl = document.querySelector('.miniPlayerLeft');
         if (miniPlayerLeftEl) {
             miniPlayerLeftEl.style.cursor = 'pointer';
-            miniPlayerLeftEl.addEventListener('click', () => switchWorkspace('player', 'playerDeck'));
+            bindFastAction(miniPlayerLeftEl, () => switchWorkspace('player', 'playerDeck'));
         }
         if (miniProgressCon) {
             miniProgressCon.addEventListener('click', seekMiniAudio);
@@ -16904,9 +16974,9 @@
             });
         }
 
-        if (wsPlayerBtn) wsPlayerBtn.addEventListener('click', () => switchWorkspace('player'));
-        if (wsSoulseekBtn) wsSoulseekBtn.addEventListener('click', () => switchWorkspace('soulseek'));
-        if (wsDownloadBtn) wsDownloadBtn.addEventListener('click', () => switchWorkspace('download'));
+        if (wsPlayerBtn) bindFastAction(wsPlayerBtn, () => switchWorkspace('player'));
+        if (wsSoulseekBtn) bindFastAction(wsSoulseekBtn, () => switchWorkspace('soulseek'));
+        if (wsDownloadBtn) bindFastAction(wsDownloadBtn, () => switchWorkspace('download'));
 
         // Soulseek Power Button Listeners (Toolbar & Modal)
         if (slskPowerBtn) {

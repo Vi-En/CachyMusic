@@ -1213,10 +1213,14 @@ body.is-playing .statusDot
     color: #a1a1aa;
     border: 0.08rem solid #27272a;
     background: rgba(24, 24, 27, 0.45);
-    transition: all 0.2s ease;
+    transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease, transform 0.08s ease;
     flex: 1;
     text-align: center;
     white-space: nowrap;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .mobileTabBtn *
@@ -1233,7 +1237,8 @@ body.is-playing .statusDot
 
 .mobileTabBtn:active
 {
-    transform: scale(0.96);
+    transform: scale(0.94);
+    transition: transform 0.04s ease;
 }
 
 .mobileTabBtn.active
@@ -2069,7 +2074,6 @@ body.is-playing .statusDot
     padding: 0.6rem 0.8rem;
     background-color: #000;
     color: white;
-    animation: tabContentFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .playlistBannerTitle
@@ -2129,8 +2133,8 @@ body.is-playing .statusDot
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
-    animation: tabContentFade 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-    will-change: opacity, transform;
+    contain: content;
+    transform: translateZ(0);
 }
 
 .createPlaylistBar
@@ -2376,8 +2380,8 @@ body.is-playing .statusDot
     flex-direction: column;
     gap: 0;
     -webkit-overflow-scrolling: touch;
-    animation: tabContentFade 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-    will-change: opacity, transform;
+    contain: content;
+    transform: translateZ(0);
 }
 
 .trackList::-webkit-scrollbar
@@ -5634,8 +5638,12 @@ body.is-playing .playPauseBtn .playPauseGlowRing
         outline: none !important;
         clip-path: none !important;
         box-sizing: border-box !important;
-        animation: panelMobileFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        will-change: opacity, transform;
+        animation: none !important;
+        will-change: auto !important;
+        contain: layout paint;
+        transform: translateZ(0) !important;
+        opacity: 1 !important;
+        transition: none !important;
     }
 
     @keyframes panelMobileFadeIn
@@ -6883,8 +6891,12 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     letter-spacing: 0.08rem;
     border-radius: 0.3rem;
     cursor: pointer;
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.15s ease;
+    transition: background-color 0.1s ease, border-color 0.1s ease, color 0.1s ease, transform 0.08s ease;
     white-space: nowrap;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .wsTabBtn .wsLabel
@@ -6902,7 +6914,8 @@ body.is-playing .playPauseBtn .playPauseGlowRing
 
 .wsTabBtn:active
 {
-    transform: scale(0.96);
+    transform: scale(0.95);
+    transition: transform 0.04s ease;
 }
 
 .wsTabBtn.active
@@ -6996,8 +7009,11 @@ html[data-theme="minimalist-warm"] .wsTabBtn.active .wsBadge.offline,
 /* Workspace Visibility Modes */
 body.view-player .gridContainer
 {
-    animation: wsFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: opacity, transform;
+    contain: layout paint;
+    transform: translateZ(0);
+    opacity: 1 !important;
+    animation: none !important;
+    will-change: auto !important;
 }
 
 body.view-soulseek .gridContainer,
@@ -7017,8 +7033,11 @@ body.view-settings .visualizerDock
 body.view-soulseek .soulseekWorkspace
 {
     display: flex !important;
-    animation: wsFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: opacity, transform;
+    contain: layout paint;
+    transform: translateZ(0);
+    opacity: 1 !important;
+    animation: none !important;
+    will-change: auto !important;
 }
 
 body.view-download .soulseekWorkspace,
@@ -7030,15 +7049,21 @@ body.view-settings .soulseekWorkspace
 body.view-download .downloadWorkspace
 {
     display: flex !important;
-    animation: wsFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: opacity, transform;
+    contain: layout paint;
+    transform: translateZ(0);
+    opacity: 1 !important;
+    animation: none !important;
+    will-change: auto !important;
 }
 
 body.view-settings .settingsWorkspace
 {
     display: flex !important;
-    animation: wsFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: opacity, transform;
+    contain: layout paint;
+    transform: translateZ(0);
+    opacity: 1 !important;
+    animation: none !important;
+    will-change: auto !important;
 }
 
 body.view-soulseek .persistentMiniPlayer,
@@ -7046,7 +7071,11 @@ body.view-download .persistentMiniPlayer,
 body.view-settings .persistentMiniPlayer
 {
     display: flex !important;
-    animation: wsFadeIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    contain: layout paint;
+    transform: translateZ(0);
+    opacity: 1 !important;
+    animation: none !important;
+    will-change: auto !important;
 }
 
 body.view-soulseek #headerSearchContainer,
@@ -10674,8 +10703,10 @@ body.view-settings #headerSearchContainer
 .downloadPanel.active
 {
     display: block;
-    animation: downloadPanelFade 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    will-change: opacity, transform;
+    contain: layout paint;
+    transform: translateZ(0);
+    animation: none !important;
+    will-change: auto !important;
 }
 
 .downloadCardMain
