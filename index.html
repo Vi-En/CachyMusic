@@ -286,35 +286,6 @@
         <!-- Center Panel: The Turntable Deck & Now Playing -->
         <section class="panel playerDeck mobileActive">
 
-            <!-- Player Deck Quick Controls (Metadata Inspector, Lyrics & Tracklist Toggles) -->
-            <div class="deckTopControls" id="deckTopControls">
-                <button type="button" id="metadataToggleBtn" class="deckActionBtn metadataToggleBtn active" title="Toggle Track Metadata Inspector (I)" aria-label="Toggle Metadata Inspector" aria-pressed="true">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
-                    <span class="deckBtnLabel">METADATA</span>
-                </button>
-                <button type="button" id="lyricsToggleBtn" class="deckActionBtn lyricsToggleBtn" title="Toggle Lyrics View (L)" aria-label="Toggle Lyrics View">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                        <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 16h8v1H8v-1zm0-3h8v1H8v-1zm0-3h5v1H8v-1z"/>
-                    </svg>
-                    <span class="deckBtnLabel">LYRICS</span>
-                </button>
-                <button type="button" id="tracklistToggleBtn" class="deckActionBtn tracklistToggleBtn active" title="Toggle Tracklist Panel (T)" aria-label="Toggle Tracklist Panel" aria-pressed="true">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <line x1="8" y1="6" x2="21" y2="6"></line>
-                        <line x1="8" y1="12" x2="21" y2="12"></line>
-                        <line x1="8" y1="18" x2="21" y2="18"></line>
-                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                    </svg>
-                    <span class="deckBtnLabel">TRACKS</span>
-                </button>
-            </div>
-
             <!-- Turntable Stage: Embedded Artwork Backdrop Behind Vinyl Deck -->
             <div class="turntableStage" id="turntableStage">
                 <!-- Embedded Artwork Layer (Positioned Behind Turntable) -->
@@ -363,6 +334,35 @@
                         <div class="armShaft"></div>
                         <div class="armCartridge"></div>
                     </div>
+                </div>
+
+                <!-- Player Deck Quick Controls (Metadata Inspector, Lyrics & Tracklist Toggles) -->
+                <div class="deckTopControls" id="deckTopControls">
+                    <button type="button" id="metadataToggleBtn" class="deckActionBtn metadataToggleBtn active" title="Toggle Track Metadata Inspector (I)" aria-label="Toggle Metadata Inspector" aria-pressed="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <span class="deckBtnLabel">METADATA</span>
+                    </button>
+                    <button type="button" id="lyricsToggleBtn" class="deckActionBtn lyricsToggleBtn" title="Toggle Lyrics View (L)" aria-label="Toggle Lyrics View">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                            <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 16h8v1H8v-1zm0-3h8v1H8v-1zm0-3h5v1H8v-1z"/>
+                        </svg>
+                        <span class="deckBtnLabel">LYRICS</span>
+                    </button>
+                    <button type="button" id="tracklistToggleBtn" class="deckActionBtn tracklistToggleBtn active" title="Toggle Tracklist Panel (T)" aria-label="Toggle Tracklist Panel" aria-pressed="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="8" y1="6" x2="21" y2="6"></line>
+                            <line x1="8" y1="12" x2="21" y2="12"></line>
+                            <line x1="8" y1="18" x2="21" y2="18"></line>
+                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                        <span class="deckBtnLabel">TRACKS</span>
+                    </button>
                 </div>
             </div>
 
