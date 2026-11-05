@@ -3721,6 +3721,63 @@ body.is-playing .armCartridge::after
     line-height: 1.25;
 }
 
+/* Track Meta Side-Scrolling Marquee Animation */
+.marqueeContent
+{
+    display: inline-block;
+    white-space: nowrap;
+    will-change: transform;
+}
+
+#trackName.isMarquee,
+#artistName.isMarquee,
+.albumName.isMarquee
+{
+    text-align: left !important;
+    text-overflow: clip !important;
+    overflow: hidden !important;
+    mask-image: linear-gradient(to right, transparent 0%, black 8px, black calc(100% - 12px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 8px, black calc(100% - 12px), transparent 100%);
+}
+
+.isMarquee .marqueeContent
+{
+    animation: marqueeScroll var(--marquee-duration, 8s) ease-in-out infinite;
+}
+
+@keyframes marqueeScroll
+{
+    0%, 20%
+    {
+        transform: translateX(0);
+    }
+    55%, 75%
+    {
+        transform: translateX(calc(-1 * var(--marquee-overflow, 0px)));
+    }
+    92%, 100%
+    {
+        transform: translateX(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce)
+{
+    .isMarquee .marqueeContent
+    {
+        animation: none !important;
+    }
+    #trackName.isMarquee,
+    #artistName.isMarquee,
+    .albumName.isMarquee
+    {
+        text-overflow: ellipsis !important;
+        text-align: center !important;
+        mask-image: none !important;
+        -webkit-mask-image: none !important;
+    }
+}
+
 /* Timeline & Scrubber */
 .timelineCon
 {
@@ -6334,11 +6391,12 @@ body.is-playing .playPauseBtn .playPauseGlowRing
     /* MODALS: Elegant Opaque Mobile Bottom Sheets                               */
     /* ========================================================================= */
     .modalBackdrop,
-    .modal
+    .modal,
+    .slskModalOverlay
     {
         position: fixed !important;
         inset: 0 !important;
-        z-index: 100000 !important;
+        z-index: 100001 !important;
         align-items: flex-end !important;
         padding: 0 !important;
         background-color: rgba(0, 0, 0, 0.78) !important;
@@ -6365,6 +6423,81 @@ body.is-playing .playPauseBtn .playPauseGlowRing
         opacity: 1 !important;
         background: #0e0e11 !important;
         animation: slideUpSheet 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    }
+
+    /* Soulseek Settings Mobile Sheet Refinements */
+    .slskModalOverlay .slskModalCard
+    {
+        padding: 0 0 calc(1.5rem + env(safe-area-inset-bottom, 0px)) !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        max-height: 88dvh !important;
+    }
+
+    .slskModalOverlay .slskModalHeader
+    {
+        padding: 0.85rem 1.1rem !important;
+        flex-shrink: 0 !important;
+    }
+
+    .slskModalOverlay .slskModalBody
+    {
+        padding: 1rem 1.1rem !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        flex: 1 1 auto !important;
+        gap: 0.85rem !important;
+    }
+
+    #slskAccountModal .slskModalHeader .closeBtn,
+    #slskAccountModal #slskCloseAccountModalBtn,
+    .slskModalOverlay .slskModalHeader .closeBtn,
+    #slskCloseAccountModalBtn
+    {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        width: 44px !important;
+        height: 44px !important;
+        max-height: 44px !important;
+        font-size: 1.25rem !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    .slskModalOverlay .slskDirInputRow
+    {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.45rem !important;
+    }
+
+    .slskModalOverlay .slskModalSyncBtn
+    {
+        width: 100% !important;
+        height: 2.3rem !important;
+        min-height: 2.3rem !important;
+        justify-content: center !important;
+        font-size: 0.75rem !important;
+    }
+
+    .slskModalOverlay .slskModalActions
+    {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0.5rem !important;
+        width: 100% !important;
+        margin-top: 0.4rem !important;
+    }
+
+    .slskModalOverlay .slskModalActions .actionBtn
+    {
+        width: 100% !important;
+        height: 2.6rem !important;
+        min-height: 2.6rem !important;
+        font-size: 0.84rem !important;
+        justify-content: center !important;
     }
 
     @keyframes slideUpSheet
@@ -9999,7 +10132,7 @@ body.tracklist-collapsed #headerSearchContainer
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 100001;
 }
 
 .slskModalCard
@@ -10045,10 +10178,10 @@ body.tracklist-collapsed #headerSearchContainer
     border: 0.08rem solid rgba(255, 255, 255, 0.25) !important;
     border-radius: 0.35rem !important;
     font-size: 1rem !important;
-    width: 2rem !important;
-    height: 2rem !important;
-    min-height: 2rem !important;
-    max-height: 2rem !important;
+    width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    max-height: 2rem;
     line-height: 1 !important;
     box-sizing: border-box !important;
     cursor: pointer !important;
@@ -10182,24 +10315,126 @@ body.tracklist-collapsed #headerSearchContainer
 
 .slskModalAlert
 {
-    padding: 0.6rem 0.85rem;
-    border-radius: 0.3rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.45rem;
     font-size: 0.82rem;
-    line-height: 1.35;
+    line-height: 1.4;
+    word-break: break-word;
 }
 
 .slskModalAlert.error
 {
-    background-color: rgba(255, 59, 48, 0.15);
-    border: 0.08rem solid rgba(255, 59, 48, 0.4);
-    color: #ff6b6b;
+    background-color: rgba(239, 68, 68, 0.15) !important;
+    border: 1px solid rgba(239, 68, 68, 0.45) !important;
+    color: #fca5a5 !important;
+}
+
+.slskModalAlert.warning
+{
+    background-color: rgba(245, 158, 11, 0.15) !important;
+    border: 1px solid rgba(245, 158, 11, 0.45) !important;
+    color: #fde047 !important;
 }
 
 .slskModalAlert.success
 {
-    background-color: rgba(0, 255, 136, 0.15);
-    border: 0.08rem solid rgba(0, 255, 136, 0.4);
-    color: #00ff88;
+    background-color: rgba(16, 185, 129, 0.15) !important;
+    border: 1px solid rgba(16, 185, 129, 0.45) !important;
+    color: #86efac !important;
+}
+
+.slskAlertTitle
+{
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+    color: #ffffff;
+}
+
+.slskAlertBody
+{
+    font-size: 0.76rem;
+    opacity: 0.95;
+    line-height: 1.35;
+}
+
+/* Soulseek Status & Diagnostic Alert Banner */
+.slskWorkspaceNotice
+{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    background: rgba(234, 179, 8, 0.12);
+    border: 1px solid rgba(234, 179, 8, 0.35);
+    border-radius: 0.5rem;
+    margin: 0.5rem 1rem 0;
+    color: #fef08a;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    animation: fadeIn 0.25s ease;
+}
+
+.slskNoticeContent
+{
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.slskNoticeIcon
+{
+    font-size: 1.15rem;
+    flex-shrink: 0;
+}
+
+.slskNoticeText
+{
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.slskNoticeText strong
+{
+    font-size: 0.84rem;
+    color: #fef9c3;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+.slskNoticeText span
+{
+    color: #fde047;
+    font-size: 0.76rem;
+    word-break: break-word;
+}
+
+.slskNoticeActionBtn
+{
+    flex-shrink: 0;
+    padding: 0.35rem 0.75rem !important;
+    font-size: 0.74rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+    background: rgba(234, 179, 8, 0.22) !important;
+    border-color: rgba(234, 179, 8, 0.6) !important;
+    color: #fef9c3 !important;
+    border-radius: 0.35rem !important;
+}
+
+@media (max-width: 768px)
+{
+    .slskWorkspaceNotice
+    {
+        margin: 0.4rem 0.6rem 0;
+        padding: 0.55rem 0.75rem;
+        flex-direction: row;
+        align-items: center;
+    }
 }
 
 .slskModalActions

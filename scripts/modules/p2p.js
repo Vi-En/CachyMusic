@@ -1,4 +1,6 @@
 // CachyMusic - P2P Network, Downloads & PWA Integration
+import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
+
     // Trigger PWA Installation or Browser Instructions
     async function triggerPwaInstallPrompt() {
         if (deferredInstallPrompt) {
@@ -400,13 +402,10 @@
                 const data = await res.json();
 
                 if (!data.ok) {
-                    const errMsg = data.error || data.message || `Failed to ${targetState === 'on' ? 'connect' : 'disconnect'}`;
                     if (slskAccountAlert) {
-                        slskAccountAlert.className = 'slskModalAlert error';
-                        slskAccountAlert.textContent = errMsg;
-                        slskAccountAlert.style.display = 'block';
+                        renderSlskDiagnosticAlert(slskAccountAlert, data, `Failed to ${targetState === 'on' ? 'connect' : 'disconnect'}`);
                     } else {
-                        alert(errMsg);
+                        alert(data.error || data.message || `Failed to ${targetState === 'on' ? 'connect' : 'disconnect'}`);
                     }
                 } else {
                     if (slskAccountAlert) {
@@ -507,6 +506,46 @@
                 const mobileDot = document.querySelector('#slskMobileStatusDot .slskStatusDot');
                 if (mobileDot && slskStatusDot) {
                     mobileDot.className = slskStatusDot.className;
+                }
+
+                // Update Soulseek Workspace Diagnostic Notice Banner
+                const wsNotice = document.getElementById('slskWorkspaceNotice');
+                if (wsNotice) {
+                    const statusObj = this.lastStatus || {};
+                    if (statusObj.ok && statusObj.connected) {
+                        wsNotice.style.display = 'none';
+                    } else {
+                        const noticeTitle = document.getElementById('slskNoticeTitle');
+                        const noticeMsg = document.getElementById('slskNoticeMsg');
+                        const noticeIcon = document.getElementById('slskNoticeIcon');
+
+                        let nTitle = 'Soulseek Disconnected';
+                        let nMsg = 'Files are unexposed. Click Settings to configure or connect.';
+                        let nIcon = 'ℹ️';
+
+                        if (statusObj.reason === 'mobile_standalone' || statusObj.status === 'offline') {
+                            nTitle = 'Mobile Standalone Mode';
+                            nMsg = 'P2P transfers require a desktop workstation host. Standalone mobile runs as an offline Hi-Fi player.';
+                            nIcon = '📱';
+                        } else if (!statusObj.daemon_running || (statusObj.error && /12339|daemon|refused/i.test(statusObj.error))) {
+                            nTitle = 'Soulseek Daemon Offline';
+                            nMsg = 'Nicotine+ background service is offline on port 12339. Start the service on your host PC.';
+                            nIcon = '🔌';
+                        } else if (statusObj.has_credentials) {
+                            nTitle = 'Soulseek Offline';
+                            nMsg = statusObj.error ? `Auth issue: ${statusObj.error}` : 'Soulseek is currently disconnected. Click Settings to connect.';
+                            nIcon = '⚠️';
+                        } else {
+                            nTitle = 'Soulseek Not Configured';
+                            nMsg = 'Click Settings to enter your Soulseek username and password.';
+                            nIcon = '⚙️';
+                        }
+
+                        if (noticeTitle) noticeTitle.textContent = nTitle;
+                        if (noticeMsg) noticeMsg.textContent = nMsg;
+                        if (noticeIcon) noticeIcon.textContent = nIcon;
+                        wsNotice.style.display = 'flex';
+                    }
                 }
             }
         },
@@ -1524,6 +1563,67 @@
         if (slskEventsInitialized) return;
         slskEventsInitialized = true;
 
+        function renderSlskDiagnosticAlert(el, data = {}, fallbackMsg = 'Connection failed.') {
+            if (!el) return;
+            const rawErr = (typeof data === 'string' ? data : (data.error || data.message || fallbackMsg || '')).trim();
+            const reason = (typeof data === 'object' && data ? data.reason : '') || '';
+
+            let title = 'Connection Failed';
+            let explanation = rawErr || fallbackMsg;
+            let icon = '⚠️';
+
+            if (reason === 'mobile_standalone' || /standalone/i.test(rawErr)) {
+                title = 'Mobile Standalone Mode';
+                explanation = 'Soulseek P2P transfers require a desktop workstation with Nicotine+ daemon. In standalone mobile mode, CachyMusic operates as a local offline Hi-Fi player.';
+                icon = '📱';
+            } else if (reason === 'daemon_offline' || /port 12339|daemon|refused|could not launch/i.test(rawErr)) {
+                title = 'Soulseek Service Offline';
+                explanation = 'The background Nicotine+ daemon (port 12339) is offline on the host machine. Please start the Nicotine+ background service.';
+                icon = '🔌';
+            } else if (reason === 'invalid_credentials' || /password|invalid username|invaliduserpass|credentials/i.test(rawErr)) {
+                title = 'Invalid Soulseek Credentials';
+                explanation = 'Incorrect username or password. Please verify your Soulseek account credentials with server.slsknet.org.';
+                icon = '🔑';
+            } else if (reason === 'network_unreachable' || /timeout|etimedout|econn|unreachable/i.test(rawErr)) {
+                title = 'Network Unreachable';
+                explanation = 'Could not reach server.slsknet.org (port 2242). Please check your internet connection or firewall rules.';
+                icon = '🌐';
+            }
+
+            el.className = 'slskModalAlert error';
+            el.innerHTML = `
+                <div class="slskAlertTitle">${icon} <strong>${title}</strong></div>
+                <div class="slskAlertBody">${explanation}</div>
+            `;
+            el.style.display = 'block';
+        }
+        try { window.renderSlskDiagnosticAlert = renderSlskDiagnosticAlert; } catch (_) {}
+
+        function safeOpenSlskAccountModal() {
+            if (slskTransfersDrawer && slskTransfersDrawer.classList.contains('open')) {
+                slskTransfersDrawer.classList.remove('open');
+            }
+            if (typeof window.openSlskAccountModal === 'function') {
+                window.openSlskAccountModal();
+            } else if (typeof openSlskAccountModal === 'function') {
+                openSlskAccountModal();
+            } else if (slskAccountModal) {
+                slskAccountModal.style.display = 'flex';
+                if (typeof pushModalState === 'function') pushModalState('slskAccountModal');
+            }
+        }
+
+        function safeCloseSlskAccountModal() {
+            if (typeof window.closeSlskAccountModal === 'function') {
+                window.closeSlskAccountModal();
+            } else if (typeof closeSlskAccountModal === 'function') {
+                closeSlskAccountModal();
+            } else if (slskAccountModal) {
+                slskAccountModal.style.display = 'none';
+                if (typeof popModalState === 'function') popModalState('slskAccountModal');
+            }
+        }
+
         // Soulseek Power Button Listeners (Toolbar & Modal)
         if (slskPowerBtn) {
             slskPowerBtn.addEventListener('click', () => {
@@ -1540,7 +1640,7 @@
         // Soulseek Account Modal Listeners
         if (slskAccountBtn) {
             slskAccountBtn.addEventListener('click', async () => {
-                openSlskAccountModal();
+                safeOpenSlskAccountModal();
                 if (slskAccountAlert) slskAccountAlert.style.display = 'none';
                 try {
                     const res = await fetch('php/api/soulseek.php?action=account');
@@ -1676,111 +1776,131 @@
         }
 
         if (slskCloseAccountModalBtn) {
-            slskCloseAccountModalBtn.addEventListener('click', () => {
-                closeSlskAccountModal();
+            bindFastAction(slskCloseAccountModalBtn, () => {
+                safeCloseSlskAccountModal();
             });
         }
 
         if (slskAccountModal) {
-            slskAccountModal.addEventListener('click', (e) => {
+            bindFastAction(slskAccountModal, (e) => {
                 if (e.target === slskAccountModal) {
-                    closeSlskAccountModal();
+                    safeCloseSlskAccountModal();
                 }
             });
         }
 
-        if (slskSaveAccountBtn) {
-            slskSaveAccountBtn.addEventListener('click', async () => {
-                const username = (slskModalUsername ? slskModalUsername.value : '').trim();
-                const password = (slskModalPassword ? slskModalPassword.value : '').trim();
-                const newDir = (slskModalDownloadDir ? slskModalDownloadDir.value : '').trim();
-                const newSharedDir = (slskModalSharedDir ? slskModalSharedDir.value : '').trim();
+        async function saveSlskAccountSettings() {
+            if (!slskSaveAccountBtn || slskSaveAccountBtn.disabled) return;
+            const username = (slskModalUsername ? slskModalUsername.value : '').trim();
+            const password = (slskModalPassword ? slskModalPassword.value : '').trim();
+            const newDir = (slskModalDownloadDir ? slskModalDownloadDir.value : '').trim();
+            const newSharedDir = (slskModalSharedDir ? slskModalSharedDir.value : '').trim();
 
-                slskSaveAccountBtn.textContent = 'SAVING...';
-                slskSaveAccountBtn.disabled = true;
+            slskSaveAccountBtn.textContent = 'SAVING...';
+            slskSaveAccountBtn.disabled = true;
 
-                try {
-                    // Update downloads directory if changed
-                    if (newDir) {
-                        const dirRes = await fetch('php/api/soulseek.php?action=directory', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ directory: newDir })
-                        });
-                        const dirData = await dirRes.json();
-                        if (dirData.ok && dirData.downloads_dir) {
-                            soulseekController.downloadsDir = dirData.downloads_dir;
-                            if (slskDownloadsPathText) slskDownloadsPathText.textContent = dirData.downloads_dir;
-                        }
+            try {
+                // Update downloads directory if changed
+                if (newDir && newDir !== soulseekController.downloadsDir) {
+                    const dirRes = await fetch('php/api/soulseek.php?action=directory', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ directory: newDir })
+                    });
+                    const dirData = await dirRes.json();
+                    if (!dirData.ok) {
+                        renderSlskDiagnosticAlert(slskAccountAlert, dirData, 'Invalid download folder path.');
+                        return;
                     }
-
-                    // Update shared directory if changed
-                    if (newSharedDir) {
-                        const sRes = await fetch('php/api/soulseek.php?action=shared_directory', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ directory: newSharedDir })
-                        });
-                        const sData = await sRes.json();
-                        if (sData.ok && sData.shared_dir) {
-                            soulseekController.sharedDir = sData.shared_dir;
-                            if (slskSharedPathText) slskSharedPathText.textContent = sData.shared_dir;
-                        }
+                    if (dirData.downloads_dir) {
+                        soulseekController.downloadsDir = dirData.downloads_dir;
+                        if (slskDownloadsPathText) slskDownloadsPathText.textContent = dirData.downloads_dir;
                     }
+                }
 
-                    // Save credentials and connect
-                    if (username) {
-                        const res = await fetch('php/api/soulseek.php?action=login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                username,
-                                password,
-                                downloads_dir: newDir,
-                                shared_dir: newSharedDir
-                            })
-                        });
-                        const data = await res.json();
+                // Update shared directory if changed
+                if (newSharedDir && newSharedDir !== soulseekController.sharedDir) {
+                    const sRes = await fetch('php/api/soulseek.php?action=shared_directory', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ directory: newSharedDir })
+                    });
+                    const sData = await sRes.json();
+                    if (!sData.ok) {
+                        renderSlskDiagnosticAlert(slskAccountAlert, sData, 'Invalid shared folder path.');
+                        return;
+                    }
+                    if (sData.shared_dir) {
+                        soulseekController.sharedDir = sData.shared_dir;
+                        if (slskSharedPathText) slskSharedPathText.textContent = sData.shared_dir;
+                    }
+                }
 
-                        if (data.ok) {
-                            if (slskAccountAlert) {
-                                slskAccountAlert.className = 'slskModalAlert success';
-                                slskAccountAlert.textContent = `Connected as ${data.username || username}! Settings saved.`;
-                                slskAccountAlert.style.display = 'block';
-                            }
-                            setTimeout(() => {
-                                closeSlskAccountModal();
-                                soulseekController.checkStatus();
-                            }, 900);
-                        } else {
-                            if (slskAccountAlert) {
-                                slskAccountAlert.className = 'slskModalAlert error';
-                                slskAccountAlert.textContent = data.error || 'Connection failed.';
-                                slskAccountAlert.style.display = 'block';
-                            }
-                        }
-                    } else {
-                        // Directory only saved
+                // Save credentials and connect
+                if (username) {
+                    const res = await fetch('php/api/soulseek.php?action=login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username,
+                            password,
+                            downloads_dir: newDir,
+                            shared_dir: newSharedDir
+                        })
+                    });
+                    const data = await res.json();
+
+                    if (data.ok) {
                         if (slskAccountAlert) {
                             slskAccountAlert.className = 'slskModalAlert success';
-                            slskAccountAlert.textContent = 'Settings saved.';
+                            slskAccountAlert.textContent = `Connected as ${data.username || username}! Settings saved.`;
                             slskAccountAlert.style.display = 'block';
                         }
                         setTimeout(() => {
-                            closeSlskAccountModal();
+                            safeCloseSlskAccountModal();
                             soulseekController.checkStatus();
                         }, 900);
+                    } else {
+                        renderSlskDiagnosticAlert(slskAccountAlert, data, 'Connection failed.');
                     }
-                } catch (err) {
+                } else {
+                    // Directory only saved
                     if (slskAccountAlert) {
-                        slskAccountAlert.className = 'slskModalAlert error';
-                        slskAccountAlert.textContent = 'Network error saving settings.';
+                        slskAccountAlert.className = 'slskModalAlert success';
+                        slskAccountAlert.textContent = 'Settings saved.';
                         slskAccountAlert.style.display = 'block';
                     }
-                } finally {
-                    slskSaveAccountBtn.textContent = 'SAVE & CONNECT';
-                    slskSaveAccountBtn.disabled = false;
+                    setTimeout(() => {
+                        safeCloseSlskAccountModal();
+                        soulseekController.checkStatus();
+                    }, 900);
                 }
+            } catch (err) {
+                renderSlskDiagnosticAlert(slskAccountAlert, { error: 'Network error communicating with Soulseek backend.' }, 'Network error saving settings.');
+            } finally {
+                slskSaveAccountBtn.textContent = 'SAVE & CONNECT';
+                slskSaveAccountBtn.disabled = false;
+            }
+        }
+
+        if (slskSaveAccountBtn) {
+            bindFastAction(slskSaveAccountBtn, () => {
+                saveSlskAccountSettings();
+            });
+        }
+
+        const slskAccountForm = document.getElementById('slskAccountForm');
+        if (slskAccountForm) {
+            slskAccountForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                saveSlskAccountSettings();
+            });
+        }
+
+        const slskNoticeActionBtn = document.getElementById('slskNoticeActionBtn');
+        if (slskNoticeActionBtn) {
+            bindFastAction(slskNoticeActionBtn, () => {
+                safeOpenSlskAccountModal();
             });
         }
 

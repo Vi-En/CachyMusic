@@ -58,20 +58,20 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=1.1.9">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=1.2.0">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 if (window.caches) {
                     caches.keys().then(function(keys) {
                         keys.forEach(function(k) {
-                            if (k !== 'cachymusic-v1.1.9' && !k.startsWith('cachymusic-artwork-')) {
+                            if (k !== 'cachymusic-v1.2.0' && !k.startsWith('cachymusic-artwork-')) {
                                 caches.delete(k);
                             }
                         });
                     }).catch(function() {});
                 }
-                navigator.serviceWorker.register('./sw.js?v=1.1.9').then(function(reg) {
+                navigator.serviceWorker.register('./sw.js?v=1.2.0').then(function(reg) {
                     reg.update();
                 }).catch(function(err) {
                     console.warn('[PWA] ServiceWorker registration failed:', err);
@@ -670,6 +670,18 @@
                     </div>
                 </form>
             </div>
+        </div>
+
+        <!-- Soulseek Status & Diagnostic Alert Banner (Desktop & Mobile) -->
+        <div class="slskWorkspaceNotice" id="slskWorkspaceNotice" style="display: none;">
+            <div class="slskNoticeContent">
+                <span class="slskNoticeIcon" id="slskNoticeIcon">⚠️</span>
+                <div class="slskNoticeText">
+                    <strong id="slskNoticeTitle">Soulseek Disconnected</strong>
+                    <span id="slskNoticeMsg">Please configure your credentials or start background service.</span>
+                </div>
+            </div>
+            <button type="button" class="actionBtn slskNoticeActionBtn" id="slskNoticeActionBtn">SETTINGS</button>
         </div>
 
         <!-- Soulseek Controls & Search Panel (Desktop: normal flow, Mobile: swapped below results and collapsible) -->

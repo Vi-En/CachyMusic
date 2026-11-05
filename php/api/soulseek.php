@@ -79,20 +79,36 @@ function is_safe_soulseek_directory($dir) {
         if ($normalized === $bad || strpos($normalized, $bad . '/') === 0) return false;
     }
     $userHome = getenv('HOME') ?: ($_SERVER['HOME'] ?? '');
+    if (empty($userHome) && function_exists('posix_getpwuid') && function_exists('posix_getuid')) {
+        $pw = @posix_getpwuid(posix_getuid());
+        $userHome = $pw['dir'] ?? '';
+    }
     $projectRoot = realpath(__DIR__ . '/../../');
+    $safeRoots = array_filter([$userHome, $projectRoot, '/mnt', '/media', '/run/media']);
     $real = realpath($trimmed);
     if ($real !== false) {
-        if ($userHome && strpos($real, $userHome) === 0) return true;
-        if ($projectRoot && strpos($real, $projectRoot) === 0) return true;
+        foreach ($safeRoots as $root) {
+            $rootNorm = rtrim($root, '/');
+            if ($real === $rootNorm || strpos($real, $rootNorm . '/') === 0) return true;
+        }
         return false;
     }
     $parent = dirname($trimmed);
     $realParent = realpath($parent);
     if ($realParent !== false) {
-        if ($userHome && strpos($realParent, $userHome) === 0) return true;
-        if ($projectRoot && strpos($realParent, $projectRoot) === 0) return true;
+        foreach ($safeRoots as $root) {
+            $rootNorm = rtrim($root, '/');
+            if ($realParent === $rootNorm || strpos($realParent, $rootNorm . '/') === 0) return true;
+        }
     }
     return false;
+}
+
+function sanitize_soulseek_directory($candidate, $fallback) {
+    if (!empty($candidate) && is_safe_soulseek_directory($candidate)) {
+        return $candidate;
+    }
+    return $fallback;
 }
 
 function encrypt_soulseek_secret($plainText) {
@@ -228,8 +244,31 @@ switch ($action) {
             ? $statusData['login_username']
             : ($dbUser ?: 'Not configured');
 
-        $activeDownDir = !empty($statusData['downloads_dir']) ? $statusData['downloads_dir'] : (!empty($dbAcc['downloads_dir']) ? $dbAcc['downloads_dir'] : $DOWNLOADS_DIR);
-        $activeShareDir = !empty($statusData['shared_dir']) ? $statusData['shared_dir'] : (!empty($dbAcc['shared_dir']) ? $dbAcc['shared_dir'] : $DOWNLOADS_DIR);
+        $nicDownDir = $statusData['downloads_dir'] ?? '';
+        $dbDownDir = $dbAcc['downloads_dir'] ?? '';
+        $activeDownDir = is_safe_soulseek_directory($nicDownDir)
+            ? $nicDownDir
+            : (is_safe_soulseek_directory($dbDownDir) ? $dbDownDir : $DOWNLOADS_DIR);
+
+        $nicShareDir = $statusData['shared_dir'] ?? '';
+        $dbShareDir = $dbAcc['shared_dir'] ?? '';
+        $activeShareDir = is_safe_soulseek_directory($nicShareDir)
+            ? $nicShareDir
+            : (is_safe_soulseek_directory($dbShareDir) ? $dbShareDir : $DOWNLOADS_DIR);
+
+        // Auto-heal poisoned or unauthorized directory paths in Storage and Nicotine+
+        if ((!empty($dbDownDir) && !is_safe_soulseek_directory($dbDownDir)) || (!empty($dbShareDir) && !is_safe_soulseek_directory($dbShareDir))) {
+            $healAcc = Storage::getSoulseekAccount();
+            $healAcc['downloads_dir'] = $activeDownDir;
+            $healAcc['shared_dir'] = $activeShareDir;
+            Storage::saveSoulseekAccount($healAcc);
+        }
+        if ($statusRes['ok'] && !empty($nicDownDir) && !is_safe_soulseek_directory($nicDownDir)) {
+            @call_nicotine_api('POST', '/directory', ['directory' => $activeDownDir], 2);
+        }
+        if ($statusRes['ok'] && !empty($nicShareDir) && !is_safe_soulseek_directory($nicShareDir)) {
+            @call_nicotine_api('POST', '/shared_directory', ['directory' => $activeShareDir], 2);
+        }
 
         echo json_encode([
             'ok' => true,
@@ -306,12 +345,10 @@ switch ($action) {
                 exit;
             }
 
-            if (!empty($dbAcc['downloads_dir'])) {
-                call_nicotine_api('POST', '/directory', ['directory' => $dbAcc['downloads_dir']]);
-            }
-            if (!empty($dbAcc['shared_dir'])) {
-                call_nicotine_api('POST', '/shared_directory', ['directory' => $dbAcc['shared_dir']]);
-            }
+            $safeDown = sanitize_soulseek_directory($dbAcc['downloads_dir'] ?? '', $DOWNLOADS_DIR);
+            $safeShare = sanitize_soulseek_directory($dbAcc['shared_dir'] ?? '', $DOWNLOADS_DIR);
+            call_nicotine_api('POST', '/directory', ['directory' => $safeDown]);
+            call_nicotine_api('POST', '/shared_directory', ['directory' => $safeShare]);
 
             $powerPayload = ['state' => 'on'];
             if (!empty($username)) $powerPayload['username'] = $username;
@@ -323,10 +360,23 @@ switch ($action) {
                 $curAcc = Storage::getSoulseekAccount();
                 $curAcc['is_powered_on'] = 0;
                 Storage::saveSoulseekAccount($curAcc);
+                $errText = $loginRes['data']['error'] ?? $loginRes['error'] ?? 'Login failed on Soulseek network';
+                $reason = 'network_error';
+                if (stripos($errText, '12339') !== false || stripos($errText, 'refused') !== false) {
+                    $reason = 'daemon_offline';
+                    $errText = 'Soulseek daemon is unreachable on port 12339.';
+                } else if (stripos($errText, 'password') !== false || stripos($errText, 'invalid') !== false || stripos($errText, 'credentials') !== false) {
+                    $reason = 'invalid_credentials';
+                    $errText = 'Invalid Soulseek username or password. Please verify your credentials.';
+                } else if (stripos($errText, 'timed out') !== false || stripos($errText, 'timeout') !== false) {
+                    $reason = 'network_unreachable';
+                    $errText = 'Network timeout reaching Soulseek server (server.slsknet.org).';
+                }
                 echo json_encode([
                     'ok' => false,
                     'powered_on' => false,
-                    'error' => $loginRes['data']['error'] ?? $loginRes['error'] ?? 'Login failed on Soulseek network'
+                    'error' => $errText,
+                    'reason' => $reason
                 ]);
                 exit;
             }
@@ -361,8 +411,17 @@ switch ($action) {
 
             $uname = !empty($dbAcc['username']) ? $dbAcc['username'] : ($nicData['username'] ?? '');
             $hasPass = !empty($dbAcc['password']) || !empty($nicData['hasPassword']);
-            $downDir = !empty($nicData['downloads_dir']) ? $nicData['downloads_dir'] : ($dbAcc['downloads_dir'] ?? $DOWNLOADS_DIR);
-            $shareDir = !empty($nicData['shared_dir']) ? $nicData['shared_dir'] : ($dbAcc['shared_dir'] ?? $DOWNLOADS_DIR);
+            $nicDown = $nicData['downloads_dir'] ?? '';
+            $dbDown = $dbAcc['downloads_dir'] ?? '';
+            $downDir = is_safe_soulseek_directory($nicDown)
+                ? $nicDown
+                : (is_safe_soulseek_directory($dbDown) ? $dbDown : $DOWNLOADS_DIR);
+
+            $nicShare = $nicData['shared_dir'] ?? '';
+            $dbShare = $dbAcc['shared_dir'] ?? '';
+            $shareDir = is_safe_soulseek_directory($nicShare)
+                ? $nicShare
+                : (is_safe_soulseek_directory($dbShare) ? $dbShare : $DOWNLOADS_DIR);
 
             echo json_encode([
                 'ok' => true,
@@ -379,6 +438,17 @@ switch ($action) {
         $password = trim($input['password'] ?? '');
         $downloadsDir = trim($input['downloads_dir'] ?? $input['download_dir'] ?? '');
         $sharedDir = trim($input['shared_dir'] ?? '');
+
+        if (!empty($downloadsDir) && !is_safe_soulseek_directory($downloadsDir)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid or unauthorized download directory path.']);
+            exit;
+        }
+        if (!empty($sharedDir) && !is_safe_soulseek_directory($sharedDir)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Invalid or unauthorized shared directory path.']);
+            exit;
+        }
 
         $dbAcc = get_db_soulseek_account();
         $plainPassword = $password;
@@ -397,8 +467,8 @@ switch ($action) {
             $plainPassword = $password;
         }
 
-        $curDown = $downloadsDir ?: ($dbAcc['downloads_dir'] ?? $DOWNLOADS_DIR);
-        $curShare = $sharedDir ?: ($dbAcc['shared_dir'] ?? $curDown);
+        $curDown = sanitize_soulseek_directory($downloadsDir ?: ($dbAcc['downloads_dir'] ?? ''), $DOWNLOADS_DIR);
+        $curShare = sanitize_soulseek_directory($sharedDir ?: ($dbAcc['shared_dir'] ?? ''), $curDown);
 
         Storage::saveSoulseekAccount([
             'username' => $username,
@@ -407,6 +477,20 @@ switch ($action) {
             'downloads_dir' => $curDown,
             'shared_dir' => $curShare
         ]);
+
+        $serviceUp = ensure_standalone_service_running();
+        if (!$serviceUp) {
+            $curAcc = Storage::getSoulseekAccount();
+            $curAcc['is_powered_on'] = 0;
+            Storage::saveSoulseekAccount($curAcc);
+            echo json_encode([
+                'ok' => false,
+                'powered_on' => false,
+                'error' => 'Soulseek daemon is offline (port 12339). Nicotine+ background service is not running on the host machine.',
+                'reason' => 'daemon_offline'
+            ]);
+            exit;
+        }
 
         if (!empty($curDown)) call_nicotine_api('POST', '/directory', ['directory' => $curDown]);
         if (!empty($curShare)) call_nicotine_api('POST', '/shared_directory', ['directory' => $curShare]);
@@ -421,9 +505,22 @@ switch ($action) {
             $curAcc = Storage::getSoulseekAccount();
             $curAcc['is_powered_on'] = 0;
             Storage::saveSoulseekAccount($curAcc);
+            $errText = $res['data']['error'] ?? $res['error'] ?? 'Login failed on Soulseek network';
+            $reason = 'network_error';
+            if (stripos($errText, '12339') !== false || stripos($errText, 'refused') !== false) {
+                $reason = 'daemon_offline';
+                $errText = 'Soulseek daemon is unreachable on port 12339.';
+            } else if (stripos($errText, 'password') !== false || stripos($errText, 'invalid') !== false || stripos($errText, 'credentials') !== false) {
+                $reason = 'invalid_credentials';
+                $errText = 'Invalid Soulseek username or password. Please verify your credentials.';
+            } else if (stripos($errText, 'timed out') !== false || stripos($errText, 'timeout') !== false) {
+                $reason = 'network_unreachable';
+                $errText = 'Network timeout reaching Soulseek server (server.slsknet.org).';
+            }
             echo json_encode([
                 'ok' => false,
-                'error' => $res['data']['error'] ?? $res['error'] ?? 'Login failed on Soulseek network'
+                'error' => $errText,
+                'reason' => $reason
             ]);
             exit;
         }
@@ -630,7 +727,15 @@ switch ($action) {
         $raw = file_get_contents('php://input');
         $input = json_decode($raw, true) ?? $_POST;
         $dbAcc = get_db_soulseek_account();
-        $targetFolder = !empty($input['folder_path']) ? $input['folder_path'] : (!empty($dbAcc['downloads_dir']) ? $dbAcc['downloads_dir'] : $DOWNLOADS_DIR);
+        $reqFolder = trim($input['folder_path'] ?? '');
+        if (!empty($reqFolder) && !is_safe_soulseek_directory($reqFolder)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'message' => 'Invalid or unauthorized download folder path.']);
+            exit;
+        }
+        $targetFolder = !empty($reqFolder)
+            ? $reqFolder
+            : sanitize_soulseek_directory($dbAcc['downloads_dir'] ?? '', $DOWNLOADS_DIR);
 
         if (isset($input['items']) && is_array($input['items'])) {
             // 1-Click Album / Multi-Track Batch Download
@@ -878,9 +983,9 @@ switch ($action) {
         }
 
         $realPath = realpath($targetFile);
-        $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+        $ext = strtolower(pathinfo($realPath ?: '', PATHINFO_EXTENSION));
         $allowedAudioExts = ['mp3', 'flac', 'm4a', 'wav', 'ogg', 'aac', 'opus', 'wma'];
-        if (!$realPath || !is_file($realPath) || !in_array($ext, $allowedAudioExts, true)) {
+        if (!$realPath || !is_file($realPath) || !in_array($ext, $allowedAudioExts, true) || !is_safe_soulseek_directory(dirname($realPath))) {
             echo json_encode(['ok' => false, 'message' => 'Invalid or unsupported audio file for import.']);
             exit;
         }
@@ -907,6 +1012,31 @@ switch ($action) {
                 'codec' => $ext,
                 'cover' => null
             ];
+
+        if (class_exists('Storage')) {
+            Storage::upsertTrack([
+                'file_path' => $filename,
+                'full_path' => $realPath,
+                'title' => $meta['title'] ?: pathinfo($filename, PATHINFO_FILENAME),
+                'artist' => $meta['artist'] ?: 'Soulseek Download',
+                'album' => $meta['album'] ?: 'Downloads',
+                'genre' => $meta['genre'] ?: 'Audio',
+                'year' => $meta['year'] ?: null,
+                'track_num' => $meta['track'] ?: null,
+                'duration' => $meta['duration'] ?: 0,
+                'bitrate' => $meta['bitrate'] ?: null,
+                'sample_rate' => $meta['sampleRate'] ?: 44100,
+                'channels' => $meta['channels'] ?: 2,
+                'bit_depth' => $meta['bitDepth'] ?? 16,
+                'format' => strtoupper($meta['codec'] ?: $ext),
+                'file_size' => $fileSize,
+                'mtime' => filemtime($realPath),
+                'has_cover' => !empty($meta['hasCover']) || !empty($meta['cover']),
+                'lyrics' => $meta['lyrics'] ?? null,
+                'replay_gain' => $meta['replayGain'] ?? null,
+                'replay_peak' => $meta['replayPeak'] ?? null
+            ]);
+        }
 
         // Upsert to DB if connection exists
         $tid = null;

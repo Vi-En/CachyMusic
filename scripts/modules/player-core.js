@@ -130,6 +130,61 @@
     }
 
 
+    function updateMarqueeText(el, text) {
+        if (!el) return;
+        el.title = text || '';
+        el.innerHTML = '';
+        const span = document.createElement('span');
+        span.className = 'marqueeContent';
+        span.textContent = text || '';
+        el.appendChild(span);
+
+        requestAnimationFrame(() => {
+            if (!el.isConnected) return;
+            const overflow = span.scrollWidth - el.clientWidth;
+            if (overflow > 6) {
+                el.classList.add('isMarquee');
+                const duration = Math.max(6, Math.min(22, Math.round(overflow / 24) + 4));
+                span.style.setProperty('--marquee-overflow', `${Math.ceil(overflow) + 8}px`);
+                span.style.setProperty('--marquee-duration', `${duration}s`);
+            } else {
+                el.classList.remove('isMarquee');
+                span.style.removeProperty('--marquee-overflow');
+                span.style.removeProperty('--marquee-duration');
+            }
+        });
+    }
+
+    function recomputeMarquees() {
+        [trackName, artistName, albumName].forEach(el => {
+            if (!el) return;
+            const span = el.querySelector('.marqueeContent');
+            if (!span) return;
+            const overflow = span.scrollWidth - el.clientWidth;
+            if (overflow > 6) {
+                el.classList.add('isMarquee');
+                const duration = Math.max(6, Math.min(22, Math.round(overflow / 24) + 4));
+                span.style.setProperty('--marquee-overflow', `${Math.ceil(overflow) + 8}px`);
+                span.style.setProperty('--marquee-duration', `${duration}s`);
+            } else {
+                el.classList.remove('isMarquee');
+                span.style.removeProperty('--marquee-overflow');
+                span.style.removeProperty('--marquee-duration');
+            }
+        });
+    }
+
+    if (typeof window !== 'undefined') {
+        if (window.ResizeObserver) {
+            const metaBox = document.querySelector('.trackMeta');
+            if (metaBox) {
+                const ro = new ResizeObserver(() => recomputeMarquees());
+                ro.observe(metaBox);
+            }
+        }
+        window.addEventListener('resize', () => recomputeMarquees(), { passive: true });
+    }
+
     let currentPlayRequestId = 0;
     let currentTrackGeneration = 0;
     let activeLoadedMetadataHandler = null;
@@ -276,9 +331,9 @@
 
         // Center Deck Text - Real Tags or Fallback to Filename / Unknown
         updateEmptyPlayerState();
-        trackName.textContent = track.title ? track.title : (track.filename || 'Unknown');
-        artistName.textContent = track.artist ? track.artist : 'Unknown';
-        albumName.textContent = track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Album: Unknown';
+        updateMarqueeText(trackName, track.title ? track.title : (track.filename || 'Unknown'));
+        updateMarqueeText(artistName, track.artist ? track.artist : 'Unknown');
+        updateMarqueeText(albumName, track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Album: Unknown');
 
         // Dynamic Audio Specifications Badge
         updateTrackBadgeUi(track);
@@ -511,9 +566,9 @@
         if (miniProgressBar) miniProgressBar.style.width = '0%';
 
         updateEmptyPlayerState();
-        if (trackName) trackName.textContent = track.title ? track.title : (track.filename || 'Standalone Audio');
-        if (artistName) artistName.textContent = track.artist ? track.artist : 'External File';
-        if (albumName) albumName.textContent = track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Standalone File';
+        if (trackName) updateMarqueeText(trackName, track.title ? track.title : (track.filename || 'Standalone Audio'));
+        if (artistName) updateMarqueeText(artistName, track.artist ? track.artist : 'External File');
+        if (albumName) updateMarqueeText(albumName, track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Standalone File');
 
         updateTrackBadgeUi(track);
         const audioSrcBadge = document.getElementById('audioSourceBadge');
@@ -1012,9 +1067,9 @@
             }).catch(console.warn);
 
             if (nextTrack) {
-                if (trackName) trackName.textContent = nextTrack.title ? nextTrack.title : (nextTrack.filename || 'Unknown');
-                if (artistName) artistName.textContent = nextTrack.artist ? nextTrack.artist : 'Unknown';
-                if (albumName) albumName.textContent = nextTrack.album ? `Album: ${nextTrack.album}${nextTrack.year ? ' (' + nextTrack.year + ')' : ''}` : 'Album: Unknown';
+                if (trackName) updateMarqueeText(trackName, nextTrack.title ? nextTrack.title : (nextTrack.filename || 'Unknown'));
+                if (artistName) updateMarqueeText(artistName, nextTrack.artist ? nextTrack.artist : 'Unknown');
+                if (albumName) updateMarqueeText(albumName, nextTrack.album ? `Album: ${nextTrack.album}${nextTrack.year ? ' (' + nextTrack.year + ')' : ''}` : 'Album: Unknown');
                 updateTrackBadgeUi(nextTrack);
                 const coverSrc = nextTrack.cover || 'resources/images/default.svg';
                 if (deckArtworkBackdrop) deckArtworkBackdrop.src = coverSrc;
@@ -2197,6 +2252,8 @@
         try { window.lastSyncedPlayingState = lastSyncedPlayingState; } catch (_) {}
         try { window.loadTrack = loadTrack; } catch (_) {}
         try { window.nextTrack = nextTrack; } catch (_) {}
+        try { window.updateMarqueeText = updateMarqueeText; } catch (_) {}
+        try { window.recomputeMarquees = recomputeMarquees; } catch (_) {}
         try { window.onSoftwarePlaybackEnded = onSoftwarePlaybackEnded; } catch (_) {}
         try { window.pauseAudio = pauseAudio; } catch (_) {}
         try { window.pauseSoftwarePlayback = pauseSoftwarePlayback; } catch (_) {}

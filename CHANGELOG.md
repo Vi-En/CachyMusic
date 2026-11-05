@@ -4,6 +4,14 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.2.0] - 2026-11-05
+- **Soulseek P2P Client Overhaul**: Fixed live search result rendering crash caused by undefined `escapeRegex` module export, and resolved passive event listener warning on account settings save.
+- **Auto-Healing Directory Storage**: Hardened directory safety check against unauthorized/malformed paths and auto-healed stale configurations to default downloads folder.
+- **Service Worker Hardening**: Guarded against non-HTTP/Chrome extension scheme caching errors and included all dynamic ES modules in PWA pre-caching.
+- **Marquee Text Animation**: Added side-scrolling text overflow marquee animations for long track, artist, and album titles.
+- **Mobile Soulseek Responsive Layout**: Redesigned Soulseek Settings modal, transfers drawer, and workspace diagnostic banner with responsive z-indexes and touch-friendly targets.
+- **Mobile Turntable Navigation**: Streamlined player stage by relocating lyrics toggle to the bottom-right of the turntable container.
+
 ## [1.1.9] - 2026-11-03
 - Added full Search by Genre support with ID3 numeric code normalization (e.g. `(13)` / `13` -> Pop) and `genre:<term>` query filtering.
 - Removed background vinyl disc and ambient aura glow elements across minimalist themes for an ultra-clean listening experience.

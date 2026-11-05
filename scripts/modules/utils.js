@@ -179,8 +179,10 @@
     if (typeof window !== 'undefined') {
         Object.assign(window, {
             isFirefox,
+            isMobileDevice,
             safeStorage,
             escapeHtml,
+            escapeRegex,
             formatTime,
             formatFileSize,
             showToast
@@ -189,8 +191,10 @@
 
     export {
         isFirefox,
+        isMobileDevice,
         safeStorage,
         escapeHtml,
+        escapeRegex,
         formatTime,
         formatFileSize,
         showToast

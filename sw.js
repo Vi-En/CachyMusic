@@ -1,5 +1,5 @@
-// CachyMusic Audio Workstation - High-Performance Service Worker v1.1.9
-const CACHE_NAME = 'cachymusic-v1.1.9';
+// CachyMusic Audio Workstation - High-Performance Service Worker v1.2.0
+const CACHE_NAME = 'cachymusic-v1.2.0';
 const ART_CACHE = 'cachymusic-artwork-v4';
 const MAX_ARTWORK_ENTRIES = 200;
 
@@ -15,6 +15,12 @@ const PRECACHE_ASSETS = [
   './scripts/modules/audio-engine.js',
   './scripts/modules/player-core.js',
   './scripts/modules/library.js',
+  './scripts/modules/lyrics.js',
+  './scripts/modules/visualizer-themes-1.js',
+  './scripts/modules/visualizer-themes-2.js',
+  './scripts/modules/visualizer.js',
+  './scripts/modules/settings.js',
+  './scripts/modules/p2p.js',
   './scripts/modules/app.js',
   './scripts/dsp-worklet-processor.js',
   './resources/fonts/NMSFuturaProBook_Kerned.ttf',
@@ -77,7 +83,18 @@ self.addEventListener('activate', (event) => {
 // Fetch: Tiered caching strategy
 self.addEventListener('fetch', (event) => {
   const request = event.request;
-  const url = new URL(request.url);
+  if (request.method !== 'GET') return;
+  if (!request.url.startsWith('http://') && !request.url.startsWith('https://')) return;
+
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch (_) {
+    return;
+  }
+
+  // Only intercept same-origin requests; never cache browser extensions or external URLs
+  if (url.origin !== self.location.origin) return;
 
   // 1. Audio stream and Range requests should pass directly to network (never break 206 Partial Content)
   if (
@@ -87,8 +104,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname.includes('/mpris_state.php') ||
     url.pathname.includes('/hardware_volume.php') ||
     url.pathname.includes('/soulseek.php') ||
-    url.pathname.includes('/scan.php') ||
-    request.method !== 'GET'
+    url.pathname.includes('/scan.php')
   ) {
     return;
   }

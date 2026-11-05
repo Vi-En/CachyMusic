@@ -1459,6 +1459,10 @@
 
     function openSlskAccountModal() {
         if (!slskAccountModal) return;
+        const transfersDrawer = document.getElementById('slskTransfersDrawer');
+        if (transfersDrawer && transfersDrawer.classList.contains('open')) {
+            transfersDrawer.classList.remove('open');
+        }
         slskAccountModal.style.display = 'flex';
         pushModalState('slskAccountModal');
     }
