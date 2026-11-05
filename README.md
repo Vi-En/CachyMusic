@@ -13,6 +13,7 @@
 </div>
 
 ---
+## EXPECT BUGS, VISUAL ISSUES, AND SUCH IN THIS BETA.
 
 ## Overview
 
