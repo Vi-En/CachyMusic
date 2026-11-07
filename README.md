@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**High-Fidelity Music Player & Audiophile Audio Workstation**
+**High-Fidelity Music Player**
 
 [![Release](https://img.shields.io/github/v/release/Vi-En/CachyMusic?include_prereleases&label=release&color=00e5ff)](https://github.com/Vi-En/CachyMusic/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
