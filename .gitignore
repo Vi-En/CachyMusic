@@ -9,6 +9,12 @@ downloads/
 *.sqlite3
 *.db
 tools/screenshots/
+tools/test_*.js
+tools/retest_*.js
+tools/audit_mobile_*.js
+tools/capture_*.js
+tools/inspect_*.js
+tools/verify_*.js
 *.log
 *.pid
 *.port

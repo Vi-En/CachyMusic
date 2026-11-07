@@ -9,12 +9,10 @@ if (!empty($origin)) {
     $parsed = parse_url($origin);
     $host = $parsed['host'] ?? '';
     $serverHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), PHP_URL_HOST);
-    if (in_array($host, ['localhost', '127.0.0.1', '::1'], true) || $host === $serverHost) {
+    if (in_array($host, ['localhost', '127.0.0.1', '::1', 'appassets.androidplatform.net'], true) || $host === $serverHost) {
         header("Access-Control-Allow-Origin: $origin");
         header("Access-Control-Allow-Credentials: true");
     }
-} else {
-    header("Access-Control-Allow-Origin: *");
 }
 
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
@@ -93,38 +91,50 @@ if ($method === 'POST') {
     $tagWriteAttempted = false;
     $tagWriteSuccess = false;
 
-    if ($filePath && file_exists($filePath) && is_writable($filePath)) {
-        $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
-        $title = escapeshellarg($fields['title'] ?? $updatedTrack['title'] ?? '');
-        $artist = escapeshellarg($fields['artist'] ?? $updatedTrack['artist'] ?? '');
-        $album = escapeshellarg($fields['album'] ?? $updatedTrack['album'] ?? '');
-        $genre = escapeshellarg($fields['genre'] ?? $updatedTrack['genre'] ?? '');
-        $year = escapeshellarg((string)($fields['year'] ?? $updatedTrack['year'] ?? ''));
-        $trackNum = escapeshellarg((string)($fields['track_num'] ?? $updatedTrack['track_num'] ?? ''));
-        $escapedPath = escapeshellarg($filePath);
+    $realPath = $filePath ? realpath($filePath) : false;
+    $allowedExts = ['flac', 'mp3', 'm4a', 'ogg', 'wav', 'aac', 'opus', 'aiff'];
 
-        if ($ext === 'flac' && is_executable('/usr/bin/metaflac')) {
-            $tagWriteAttempted = true;
-            $cmd = "/usr/bin/metaflac --remove-tag=TITLE --set-tag=TITLE={$title} " .
-                   "--remove-tag=ARTIST --set-tag=ARTIST={$artist} " .
-                   "--remove-tag=ALBUM --set-tag=ALBUM={$album} " .
-                   "--remove-tag=GENRE --set-tag=GENRE={$genre} " .
-                   "--remove-tag=DATE --set-tag=DATE={$year} " .
-                   "--remove-tag=TRACKNUMBER --set-tag=TRACKNUMBER={$trackNum} {$escapedPath} 2>&1";
-            exec($cmd, $out, $ret);
-            $tagWriteSuccess = ($ret === 0);
-        } elseif (is_executable('/usr/bin/ffmpeg')) {
-            $tagWriteAttempted = true;
-            $tmpFile = tempnam(sys_get_temp_dir(), 'cm_tag_') . '.' . $ext;
-            $cmd = "/usr/bin/ffmpeg -y -v quiet -i {$escapedPath} -metadata title={$title} -metadata artist={$artist} " .
-                   "-metadata album={$album} -metadata genre={$genre} -metadata date={$year} -metadata track={$trackNum} " .
-                   "-codec copy " . escapeshellarg($tmpFile) . " 2>&1";
-            exec($cmd, $out, $ret);
-            if ($ret === 0 && file_exists($tmpFile) && filesize($tmpFile) > 1024) {
-                rename($tmpFile, $filePath);
-                $tagWriteSuccess = true;
-            } elseif (file_exists($tmpFile)) {
-                @unlink($tmpFile);
+    if ($realPath && is_file($realPath) && is_writable($realPath)) {
+        $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+        if (in_array($ext, $allowedExts, true)) {
+            $title = (string)($fields['title'] ?? $updatedTrack['title'] ?? '');
+            $artist = (string)($fields['artist'] ?? $updatedTrack['artist'] ?? '');
+            $album = (string)($fields['album'] ?? $updatedTrack['album'] ?? '');
+            $genre = (string)($fields['genre'] ?? $updatedTrack['genre'] ?? '');
+            $year = (string)($fields['year'] ?? $updatedTrack['year'] ?? '');
+            $trackNum = (string)($fields['track_num'] ?? $updatedTrack['track_num'] ?? '');
+            $escapedPath = escapeshellarg($realPath);
+
+            if ($ext === 'flac' && is_executable('/usr/bin/metaflac')) {
+                $tagWriteAttempted = true;
+                $cmd = "/usr/bin/metaflac " .
+                       "--remove-tag=TITLE " . escapeshellarg("--set-tag=TITLE=" . $title) . " " .
+                       "--remove-tag=ARTIST " . escapeshellarg("--set-tag=ARTIST=" . $artist) . " " .
+                       "--remove-tag=ALBUM " . escapeshellarg("--set-tag=ALBUM=" . $album) . " " .
+                       "--remove-tag=GENRE " . escapeshellarg("--set-tag=GENRE=" . $genre) . " " .
+                       "--remove-tag=DATE " . escapeshellarg("--set-tag=DATE=" . $year) . " " .
+                       "--remove-tag=TRACKNUMBER " . escapeshellarg("--set-tag=TRACKNUMBER=" . $trackNum) . " " .
+                       $escapedPath . " 2>&1";
+                exec($cmd, $out, $ret);
+                $tagWriteSuccess = ($ret === 0);
+            } elseif (is_executable('/usr/bin/ffmpeg')) {
+                $tagWriteAttempted = true;
+                $tmpFile = tempnam(sys_get_temp_dir(), 'cm_tag_') . '.' . $ext;
+                $cmd = "/usr/bin/ffmpeg -y -v quiet -i {$escapedPath} " .
+                       "-metadata " . escapeshellarg("title=" . $title) . " " .
+                       "-metadata " . escapeshellarg("artist=" . $artist) . " " .
+                       "-metadata " . escapeshellarg("album=" . $album) . " " .
+                       "-metadata " . escapeshellarg("genre=" . $genre) . " " .
+                       "-metadata " . escapeshellarg("date=" . $year) . " " .
+                       "-metadata " . escapeshellarg("track=" . $trackNum) . " " .
+                       "-codec copy " . escapeshellarg($tmpFile) . " 2>&1";
+                exec($cmd, $out, $ret);
+                if ($ret === 0 && file_exists($tmpFile) && filesize($tmpFile) > 1024) {
+                    rename($tmpFile, $realPath);
+                    $tagWriteSuccess = true;
+                } elseif (file_exists($tmpFile)) {
+                    @unlink($tmpFile);
+                }
             }
         }
     }
