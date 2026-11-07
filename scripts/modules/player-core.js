@@ -373,6 +373,7 @@
         }
 
         // Right Panel Metadata Inspector - Exact Embedded Tags or Unknown / N/A
+        try { window.currentInspectedTrack = track; } catch (_) {}
         statTitle.textContent = track.title ? track.title : 'Unknown';
         statArtist.textContent = track.artist ? track.artist : 'Unknown';
         statAlbum.textContent = track.album ? track.album : 'Unknown';
@@ -597,6 +598,7 @@
         updateAmbientLighting(coverSrc);
         window.appendDebugTelemetry?.(`[STANDALONE LOAD] "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
 
+        try { window.currentInspectedTrack = track; } catch (_) {}
         if (statTitle) statTitle.textContent = track.title ? track.title : (track.filename || 'Standalone Audio');
         if (statArtist) statArtist.textContent = track.artist ? track.artist : 'External File';
         if (statAlbum) statAlbum.textContent = track.album ? track.album : 'Standalone File';

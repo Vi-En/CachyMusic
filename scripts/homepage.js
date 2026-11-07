@@ -3339,6 +3339,36 @@ if (_g.particles.length === 0) {
     // Track Metadata & ID3 Tag Editor
     // =========================================================================
     let currentEditingTrack = null;
+    let pendingMetadataPayload = null;
+
+    function updateTrackMetadataDisplay(track) {
+        if (!track) return;
+        try { window.currentInspectedTrack = track; } catch (_) {}
+        if (statTitle) statTitle.textContent = track.title ? track.title : (track.filename || 'Unknown');
+        if (statArtist) statArtist.textContent = track.artist ? track.artist : 'Unknown';
+        if (statAlbum) statAlbum.textContent = track.album ? track.album : 'Unknown';
+        if (statGenre) statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(track.genre) : track.genre) || 'N/A';
+        if (statYear) statYear.textContent = track.year ? track.year.toString() : 'N/A';
+        if (statTrack) statTrack.textContent = (track.track || track.track_num) ? (track.track || track.track_num).toString() : 'N/A';
+        if (statBitrate) statBitrate.textContent = track.bitrate ? `${track.bitrate} kbps` : 'N/A';
+        if (statSampleRate) statSampleRate.textContent = track.sampleRate ? `${track.sampleRate} Hz` : 'N/A';
+        if (statBitDepth) {
+            const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
+            statBitDepth.textContent = bd ? `${bd}-Bit` : 'N/A';
+        }
+        if (statChannels) {
+            statChannels.textContent = track.channels === 2 ? 'Stereo' : (track.channels === 1 ? 'Mono' : (track.channels ? `${track.channels} ch` : 'N/A'));
+        }
+        if (statFormat) statFormat.textContent = track.format ? track.format.toUpperCase() : 'N/A';
+        if (statSize) statSize.textContent = track.size ? track.size : 'N/A';
+        if (statPath) {
+            statPath.textContent = track.filename ? track.filename : 'N/A';
+            statPath.title = track.fullPath || track.filename || 'N/A';
+        }
+        if (coverArtPreview) {
+            coverArtPreview.src = track.cover ? track.cover : 'resources/images/default.svg';
+        }
+    }
 
     function openMetadataEditor(track) {
         if (!track) {
@@ -3346,6 +3376,7 @@ if (_g.particles.length === 0) {
             return;
         }
         currentEditingTrack = track;
+        pendingMetadataPayload = null;
 
         const modal = document.getElementById('metadataEditorModal');
         const thumb = document.getElementById('metaEditorThumb');
@@ -3356,6 +3387,11 @@ if (_g.particles.length === 0) {
         const sampleRatePill = document.getElementById('metaEditorSampleRatePill');
         const bitDepthPill = document.getElementById('metaEditorBitDepthPill');
         const statusEl = document.getElementById('metaEditorStatus');
+        const form = document.getElementById('metaEditorForm');
+        const confirmCard = document.getElementById('metaEditorConfirmCard');
+        const saveBtn = document.getElementById('metaEditSaveBtn');
+        const proceedBtn = document.getElementById('metaEditConfirmProceedBtn');
+        const cancelConfirmBtn = document.getElementById('metaEditConfirmCancelBtn');
 
         const inputTitle = document.getElementById('metaEditTitle');
         const inputArtist = document.getElementById('metaEditArtist');
@@ -3366,6 +3402,21 @@ if (_g.particles.length === 0) {
         const inputComment = document.getElementById('metaEditComment');
 
         if (!modal) return;
+
+        // Reset confirmation card and display form
+        if (confirmCard) confirmCard.style.setProperty('display', 'none', 'important');
+        if (form) form.style.setProperty('display', 'block', 'important');
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'SAVE METADATA';
+        }
+        if (proceedBtn) {
+            proceedBtn.disabled = false;
+            proceedBtn.textContent = 'YES, WRITE & SAVE';
+        }
+        if (cancelConfirmBtn) {
+            cancelConfirmBtn.disabled = false;
+        }
 
         // Populate thumbnail
         if (thumb) {
@@ -3404,7 +3455,7 @@ if (_g.particles.length === 0) {
         if (inputTrackNum) inputTrackNum.value = (track.track || track.track_num) ? (track.track || track.track_num) : '';
         if (inputComment) inputComment.value = track.comment || '';
 
-        modal.style.display = 'flex';
+        modal.style.setProperty('display', 'flex', 'important');
         pushModalState('metadataEditorModal');
 
         if (window.innerWidth > 768 && inputTitle) {
@@ -3419,12 +3470,17 @@ if (_g.particles.length === 0) {
 
     function closeMetadataEditor() {
         const modal = document.getElementById('metadataEditorModal');
-        if (modal) modal.style.display = 'none';
+        if (modal) modal.style.setProperty('display', 'none', 'important');
+        const confirmCard = document.getElementById('metaEditorConfirmCard');
+        const form = document.getElementById('metaEditorForm');
+        if (confirmCard) confirmCard.style.setProperty('display', 'none', 'important');
+        if (form) form.style.setProperty('display', 'block', 'important');
         popModalState('metadataEditorModal');
         currentEditingTrack = null;
+        pendingMetadataPayload = null;
     }
 
-    async function saveMetadata(e) {
+    function requestSaveMetadataConfirmation(e) {
         if (e && typeof e.preventDefault === 'function') e.preventDefault();
         if (!currentEditingTrack) return;
 
@@ -3436,7 +3492,10 @@ if (_g.particles.length === 0) {
         const inputTrackNum = document.getElementById('metaEditTrackNum');
         const inputComment = document.getElementById('metaEditComment');
         const statusEl = document.getElementById('metaEditorStatus');
-        const saveBtn = document.getElementById('metaEditSaveBtn');
+        const form = document.getElementById('metaEditorForm');
+        const confirmCard = document.getElementById('metaEditorConfirmCard');
+        const confirmSummary = document.getElementById('metaEditorConfirmSummary');
+        const confirmDesc = document.getElementById('metaEditorConfirmDesc');
 
         const newTitle = (inputTitle ? inputTitle.value : '').trim();
         if (!newTitle) {
@@ -3456,17 +3515,103 @@ if (_g.particles.length === 0) {
         const newTrackNum = inputTrackNum && inputTrackNum.value ? parseInt(inputTrackNum.value, 10) : null;
         const newComment = (inputComment ? inputComment.value : '').trim();
 
-        if (saveBtn) {
-            saveBtn.disabled = true;
-            saveBtn.textContent = 'SAVING...';
-        }
-        if (statusEl) {
-            statusEl.textContent = 'Saving tags and updating library...';
-            statusEl.className = 'metaEditorStatus saving';
-            statusEl.style.display = 'block';
+        const track = currentEditingTrack;
+
+        // Compile list of modifications
+        const changes = [];
+        const origTitle = (track.title || '').trim();
+        const origArtist = (track.artist || '').trim();
+        const origAlbum = (track.album || '').trim();
+        const origGenre = (track.genre || '').trim();
+        const origYear = (track.year && track.year > 0) ? parseInt(track.year, 10) : null;
+        const origTrackNum = (track.track || track.track_num) ? parseInt(track.track || track.track_num, 10) : null;
+        const origComment = (track.comment || '').trim();
+
+        const escapeHtml = (str) => {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        };
+
+        if (newTitle !== origTitle) changes.push({ field: 'Title', from: origTitle || '(empty)', to: newTitle });
+        if (newArtist !== origArtist) changes.push({ field: 'Artist', from: origArtist || '(empty)', to: newArtist || '(empty)' });
+        if (newAlbum !== origAlbum) changes.push({ field: 'Album', from: origAlbum || '(empty)', to: newAlbum || '(empty)' });
+        if (newGenre !== origGenre) changes.push({ field: 'Genre', from: origGenre || '(empty)', to: newGenre || '(empty)' });
+        if (newYear !== origYear) changes.push({ field: 'Year', from: origYear ? String(origYear) : '(empty)', to: newYear ? String(newYear) : '(empty)' });
+        if (newTrackNum !== origTrackNum) changes.push({ field: 'Track #', from: origTrackNum ? String(origTrackNum) : '(empty)', to: newTrackNum ? String(newTrackNum) : '(empty)' });
+        if (newComment !== origComment) changes.push({ field: 'Comment', from: origComment || '(empty)', to: newComment || '(empty)' });
+
+        pendingMetadataPayload = {
+            newTitle,
+            newArtist,
+            newAlbum,
+            newGenre,
+            newYear,
+            newTrackNum,
+            newComment,
+            targetTrack: track
+        };
+
+        if (confirmDesc) {
+            confirmDesc.textContent = `Write ${changes.length} tag change${changes.length === 1 ? '' : 's'} to disk for "${escapeHtml(origTitle || track.filename || 'track')}"?`;
         }
 
-        const targetTrack = currentEditingTrack;
+        if (confirmSummary) {
+            if (changes.length === 0) {
+                confirmSummary.innerHTML = '<div class="metaEditNoChanges">No fields were modified. File tags already match.</div>';
+            } else {
+                confirmSummary.innerHTML = changes.map(ch => `
+                    <div class="metaEditChangeRow">
+                        <span class="metaEditChangeField">${escapeHtml(ch.field)}</span>
+                        <span class="metaEditChangeFrom" title="${escapeHtml(ch.from)}">${escapeHtml(ch.from)}</span>
+                        <span class="metaEditChangeArrow" aria-hidden="true">➔</span>
+                        <span class="metaEditChangeTo" title="${escapeHtml(ch.to)}">${escapeHtml(ch.to)}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Switch view from form to confirmation card
+        if (form) form.style.setProperty('display', 'none', 'important');
+        if (confirmCard) confirmCard.style.setProperty('display', 'flex', 'important');
+        const card = document.getElementById('metaEditorCard');
+        if (card) card.scrollTop = 0;
+    }
+
+    function cancelMetadataConfirmation() {
+        const form = document.getElementById('metaEditorForm');
+        const confirmCard = document.getElementById('metaEditorConfirmCard');
+        if (confirmCard) confirmCard.style.setProperty('display', 'none', 'important');
+        if (form) form.style.setProperty('display', 'block', 'important');
+    }
+
+    async function executeSaveMetadata() {
+        if (!pendingMetadataPayload || !pendingMetadataPayload.targetTrack) {
+            cancelMetadataConfirmation();
+            return;
+        }
+
+        const {
+            newTitle,
+            newArtist,
+            newAlbum,
+            newGenre,
+            newYear,
+            newTrackNum,
+            newComment,
+            targetTrack
+        } = pendingMetadataPayload;
+
+        const proceedBtn = document.getElementById('metaEditConfirmProceedBtn');
+        const cancelConfirmBtn = document.getElementById('metaEditConfirmCancelBtn');
+
+        if (proceedBtn) {
+            proceedBtn.disabled = true;
+            proceedBtn.textContent = 'WRITING TO DISK...';
+        }
+        if (cancelConfirmBtn) {
+            cancelConfirmBtn.disabled = true;
+        }
+
         const tid = targetTrack.tid || targetTrack.id || null;
 
         // Persist to backend PHP if tid is available
@@ -3552,14 +3697,6 @@ if (_g.particles.length === 0) {
             if (miniTitle) miniTitle.textContent = newTitle;
             if (miniArtist) miniArtist.textContent = newArtist || 'Unknown Artist';
 
-            // Update Left Inspector Panel
-            if (statTitle) statTitle.textContent = newTitle;
-            if (statArtist) statArtist.textContent = newArtist || 'Unknown';
-            if (statAlbum) statAlbum.textContent = newAlbum || 'Unknown';
-            if (statGenre) statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(newGenre) : newGenre) || 'N/A';
-            if (statYear) statYear.textContent = newYear ? newYear.toString() : 'N/A';
-            if (statTrack) statTrack.textContent = newTrackNum ? newTrackNum.toString() : 'N/A';
-
             // Update MediaSession
             if ('mediaSession' in navigator) {
                 try {
@@ -3575,17 +3712,28 @@ if (_g.particles.length === 0) {
             }
         }
 
+        // Always update Left Inspector Panel
+        if (typeof updateTrackMetadataDisplay === 'function') {
+            updateTrackMetadataDisplay(targetTrack);
+        } else {
+            if (statTitle) statTitle.textContent = newTitle;
+            if (statArtist) statArtist.textContent = newArtist || 'Unknown';
+            if (statAlbum) statAlbum.textContent = newAlbum || 'Unknown';
+            if (statGenre) statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(newGenre) : newGenre) || 'N/A';
+            if (statYear) statYear.textContent = newYear ? newYear.toString() : 'N/A';
+            if (statTrack) statTrack.textContent = newTrackNum ? newTrackNum.toString() : 'N/A';
+        }
+
         // Re-render track list DOM items
         renderVirtualTrackWindow(true);
         if (typeof updateQueueUi === 'function') updateQueueUi();
 
-        if (saveBtn) {
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'SAVE METADATA';
-        }
-
         closeMetadataEditor();
         showToast(`Metadata saved: "${newTitle}"`);
+    }
+
+    function saveMetadata(e) {
+        return requestSaveMetadataConfirmation(e);
     }
 
     // Add Track to Playlist Modal
@@ -3758,6 +3906,10 @@ if (_g.particles.length === 0) {
         try { window.openMetadataEditor = openMetadataEditor; } catch (_) {}
         try { window.closeMetadataEditor = closeMetadataEditor; } catch (_) {}
         try { window.saveMetadata = saveMetadata; } catch (_) {}
+        try { window.requestSaveMetadataConfirmation = requestSaveMetadataConfirmation; } catch (_) {}
+        try { window.cancelMetadataConfirmation = cancelMetadataConfirmation; } catch (_) {}
+        try { window.executeSaveMetadata = executeSaveMetadata; } catch (_) {}
+        try { window.updateTrackMetadataDisplay = updateTrackMetadataDisplay; } catch (_) {}
     }
 
 
@@ -6241,6 +6393,7 @@ if (_g.particles.length === 0) {
         }
 
         // Right Panel Metadata Inspector - Exact Embedded Tags or Unknown / N/A
+        try { window.currentInspectedTrack = track; } catch (_) {}
         statTitle.textContent = track.title ? track.title : 'Unknown';
         statArtist.textContent = track.artist ? track.artist : 'Unknown';
         statAlbum.textContent = track.album ? track.album : 'Unknown';
@@ -6465,6 +6618,7 @@ if (_g.particles.length === 0) {
         updateAmbientLighting(coverSrc);
         window.appendDebugTelemetry?.(`[STANDALONE LOAD] "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
 
+        try { window.currentInspectedTrack = track; } catch (_) {}
         if (statTitle) statTitle.textContent = track.title ? track.title : (track.filename || 'Standalone Audio');
         if (statArtist) statArtist.textContent = track.artist ? track.artist : 'External File';
         if (statAlbum) statAlbum.textContent = track.album ? track.album : 'Standalone File';
@@ -19722,17 +19876,6 @@ if (typeof window !== 'undefined') {
                 });
             }
 
-            if (editMetaBtn) {
-                editMetaBtn.addEventListener('click', () => {
-                    if (!selectedTrackForMenu) return;
-                    const track = selectedTrackForMenu;
-                    closeTrackActionMenu();
-                    if (typeof openMetadataEditor === 'function') {
-                        openMetadataEditor(track);
-                    }
-                });
-            }
-
             if (viewInfoBtn) {
                 viewInfoBtn.addEventListener('click', () => {
                     if (!selectedTrackForMenu) return;
@@ -19770,7 +19913,10 @@ if (typeof window !== 'undefined') {
             const closeBtn = document.getElementById('closeMetaEditorModalBtn');
             const cancelBtn = document.getElementById('metaEditCancelBtn');
             const form = document.getElementById('metaEditorForm');
+            const saveBtn = document.getElementById('metaEditSaveBtn');
             const infoEditBtn = document.getElementById('infoPanelEditMetaBtn');
+            const confirmCancelBtn = document.getElementById('metaEditConfirmCancelBtn');
+            const confirmProceedBtn = document.getElementById('metaEditConfirmProceedBtn');
 
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
@@ -19780,6 +19926,30 @@ if (typeof window !== 'undefined') {
             if (cancelBtn) {
                 cancelBtn.addEventListener('click', () => {
                     if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                });
+            }
+            if (saveBtn) {
+                saveBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (typeof requestSaveMetadataConfirmation === 'function') {
+                        requestSaveMetadataConfirmation(e);
+                    } else if (typeof saveMetadata === 'function') {
+                        saveMetadata(e);
+                    }
+                });
+            }
+            if (confirmCancelBtn) {
+                confirmCancelBtn.addEventListener('click', () => {
+                    if (typeof cancelMetadataConfirmation === 'function') {
+                        cancelMetadataConfirmation();
+                    }
+                });
+            }
+            if (confirmProceedBtn) {
+                confirmProceedBtn.addEventListener('click', () => {
+                    if (typeof executeSaveMetadata === 'function') {
+                        executeSaveMetadata();
+                    }
                 });
             }
             if (modal) {
@@ -19792,14 +19962,16 @@ if (typeof window !== 'undefined') {
             if (form) {
                 form.addEventListener('submit', (e) => {
                     e.preventDefault();
-                    if (typeof saveMetadata === 'function') {
+                    if (typeof requestSaveMetadataConfirmation === 'function') {
+                        requestSaveMetadataConfirmation(e);
+                    } else if (typeof saveMetadata === 'function') {
                         saveMetadata(e);
                     }
                 });
             }
             if (infoEditBtn) {
                 infoEditBtn.addEventListener('click', () => {
-                    const track = (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+                    const track = window.currentInspectedTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
                     if (track) {
                         if (typeof openMetadataEditor === 'function') openMetadataEditor(track);
                     } else {

@@ -1366,13 +1366,6 @@
                         <span class="trackMenuItemSub">Inspect sample rate, bit depth &amp; metadata</span>
                     </div>
                 </button>
-                <button type="button" class="trackMenuItemBtn" id="trackMenuEditMetaBtn">
-                    <span class="trackMenuIcon">✎</span>
-                    <div class="trackMenuItemText">
-                        <span class="trackMenuItemLabel">Edit Metadata / Tags</span>
-                        <span class="trackMenuItemSub">Modify track title, artist, album, genre &amp; year</span>
-                    </div>
-                </button>
                 <button type="button" class="trackMenuItemBtn danger" id="trackMenuRemoveBtn">
                     <span class="trackMenuIcon">✕</span>
                     <div class="trackMenuItemText">
@@ -1385,7 +1378,7 @@
     </div>
 
     <!-- Track Metadata & ID3 Tag Editor Modal -->
-    <div class="modalBackdrop metaEditorBackdrop" id="metadataEditorModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="metaEditorTitle">
+    <div class="modalBackdrop metaEditorBackdrop" id="metadataEditorModal" style="display: none !important;" role="dialog" aria-modal="true" aria-labelledby="metaEditorTitle">
         <div class="modalCard metaEditorCard" id="metaEditorCard">
             <div class="modalHeader metaEditorHeader">
                 <div class="metaEditorHeaderLeft">
@@ -1411,6 +1404,22 @@
                             <span class="metaEditorPill" id="metaEditorSampleRatePill">96.0 kHz</span>
                             <span class="metaEditorPill" id="metaEditorBitDepthPill">24-Bit</span>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Confirmation Card for Metadata Changes -->
+                <div class="metaEditorConfirmCard" id="metaEditorConfirmCard" style="display: none !important;">
+                    <div class="metaEditorConfirmHeader">
+                        <span class="metaEditorConfirmIcon" aria-hidden="true">⚠️</span>
+                        <div class="metaEditorConfirmInfo">
+                            <h4 class="metaEditorConfirmTitle">CONFIRM METADATA EDITS</h4>
+                            <p class="metaEditorConfirmDesc" id="metaEditorConfirmDesc">Are you sure you want to write these tags to disk and update your library?</p>
+                        </div>
+                    </div>
+                    <div class="metaEditorConfirmSummary" id="metaEditorConfirmSummary"></div>
+                    <div class="metaEditorConfirmActions">
+                        <button type="button" class="actionBtn metaEditorConfirmCancelBtn" id="metaEditConfirmCancelBtn">GO BACK</button>
+                        <button type="button" class="actionBtn primaryBtn metaEditorConfirmProceedBtn" id="metaEditConfirmProceedBtn">YES, WRITE &amp; SAVE</button>
                     </div>
                 </div>
 

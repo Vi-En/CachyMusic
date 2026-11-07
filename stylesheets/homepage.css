@@ -55789,10 +55789,17 @@ html:root[data-theme="sentinel"] body #metaBadgeRow :is(#trackBadge.formatBadge,
     background: rgba(0, 0, 0, 0.78) !important;
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
-    display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     padding: 1rem !important;
+}
+
+.metaEditorBackdrop:not([style*="display: none"]) {
+    display: flex !important;
+}
+
+.metaEditorBackdrop[style*="display: none"] {
+    display: none !important;
 }
 
 .metaEditorCard {
@@ -56027,6 +56034,172 @@ html:root[data-theme="sentinel"] body #metaBadgeRow :is(#trackBadge.formatBadge,
     cursor: not-allowed !important;
 }
 
+/* Metadata Confirmation Card */
+.metaEditorConfirmCard {
+    background: rgba(15, 23, 42, 0.95) !important;
+    border: 1.5px solid #f59e0b !important;
+    border-radius: 0.65rem !important;
+    padding: 1.15rem 1.25rem !important;
+    flex-direction: column !important;
+    gap: 0.85rem !important;
+    animation: modalPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 12px rgba(245, 158, 11, 0.25) !important;
+}
+
+.metaEditorConfirmCard:not([style*="display: none"]) {
+    display: flex !important;
+}
+
+.metaEditorConfirmCard[style*="display: none"] {
+    display: none !important;
+}
+
+.metaEditorConfirmHeader {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 0.85rem !important;
+}
+
+.metaEditorConfirmIcon {
+    font-size: 1.6rem !important;
+    line-height: 1 !important;
+    flex-shrink: 0 !important;
+}
+
+.metaEditorConfirmInfo {
+    flex: 1 !important;
+}
+
+.metaEditorConfirmTitle {
+    margin: 0 !important;
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+    color: #fbbf24 !important;
+}
+
+.metaEditorConfirmDesc {
+    margin: 0.25rem 0 0 0 !important;
+    font-size: 0.78rem !important;
+    line-height: 1.4 !important;
+    color: #e2e8f0 !important;
+}
+
+.metaEditorConfirmSummary {
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 0.45rem !important;
+    padding: 0.75rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.4rem !important;
+    max-height: 180px !important;
+    overflow-y: auto !important;
+}
+
+.metaEditChangeRow {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    font-size: 0.74rem !important;
+    padding: 0.25rem 0 !important;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08) !important;
+}
+
+.metaEditChangeRow:last-child {
+    border-bottom: none !important;
+}
+
+.metaEditChangeField {
+    font-weight: 800 !important;
+    color: #94a3b8 !important;
+    min-width: 4.25rem !important;
+    text-transform: uppercase !important;
+    font-size: 0.68rem !important;
+    letter-spacing: 0.05em !important;
+}
+
+.metaEditChangeFrom {
+    color: #f87171 !important;
+    text-decoration: line-through !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    max-width: 140px !important;
+}
+
+.metaEditChangeArrow {
+    color: #f59e0b !important;
+    font-size: 0.8rem !important;
+    flex-shrink: 0 !important;
+}
+
+.metaEditChangeTo {
+    color: #4ade80 !important;
+    font-weight: 700 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    max-width: 160px !important;
+}
+
+.metaEditNoChanges {
+    font-size: 0.75rem !important;
+    color: #94a3b8 !important;
+    font-style: italic !important;
+}
+
+.metaEditorConfirmActions {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    margin-top: 0.25rem !important;
+}
+
+.metaEditorConfirmCancelBtn {
+    background: transparent !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+    color: #e2e8f0 !important;
+    padding: 0.5rem 1.15rem !important;
+    border-radius: 0.4rem !important;
+    font-size: 0.75rem !important;
+    font-weight: 800 !important;
+    cursor: pointer !important;
+    min-height: var(--touch-min, 44px) !important;
+    transition: all 0.15s ease !important;
+}
+
+.metaEditorConfirmCancelBtn:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.metaEditorConfirmProceedBtn {
+    background: #d97706 !important;
+    border: 1.5px solid #f59e0b !important;
+    color: #ffffff !important;
+    padding: 0.5rem 1.35rem !important;
+    border-radius: 0.4rem !important;
+    font-size: 0.75rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+    cursor: pointer !important;
+    min-height: var(--touch-min, 44px) !important;
+    transition: all 0.15s ease !important;
+}
+
+.metaEditorConfirmProceedBtn:hover:not(:disabled) {
+    background: #b45309 !important;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.5) !important;
+}
+
+.metaEditorConfirmProceedBtn:disabled {
+    opacity: 0.65 !important;
+    cursor: not-allowed !important;
+}
+
 /* Light theme overrides for Metadata Editor */
 :is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body #metadataEditorModal .modalCard {
     background: #ffffff !important;
@@ -56069,6 +56242,43 @@ html:root[data-theme="sentinel"] body #metaBadgeRow :is(#trackBadge.formatBadge,
     background: #0284c7 !important;
     border-color: #0284c7 !important;
     color: #ffffff !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorConfirmCard {
+    background: #fffbeb !important;
+    border-color: #d97706 !important;
+    color: #78350f !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorConfirmTitle {
+    color: #92400e !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorConfirmDesc {
+    color: #78350f !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorConfirmSummary {
+    background: #fef3c7 !important;
+    border-color: rgba(217, 119, 6, 0.3) !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditChangeField {
+    color: #78350f !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditChangeFrom {
+    color: #b91c1c !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditChangeTo {
+    color: #15803d !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorConfirmCancelBtn {
+    border-color: #94a3b8 !important;
+    color: #1e293b !important;
 }
 
 @media (max-width: 768px) {

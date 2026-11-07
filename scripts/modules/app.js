@@ -1633,17 +1633,6 @@ if (typeof window !== 'undefined') {
                 });
             }
 
-            if (editMetaBtn) {
-                editMetaBtn.addEventListener('click', () => {
-                    if (!selectedTrackForMenu) return;
-                    const track = selectedTrackForMenu;
-                    closeTrackActionMenu();
-                    if (typeof openMetadataEditor === 'function') {
-                        openMetadataEditor(track);
-                    }
-                });
-            }
-
             if (viewInfoBtn) {
                 viewInfoBtn.addEventListener('click', () => {
                     if (!selectedTrackForMenu) return;
@@ -1681,7 +1670,10 @@ if (typeof window !== 'undefined') {
             const closeBtn = document.getElementById('closeMetaEditorModalBtn');
             const cancelBtn = document.getElementById('metaEditCancelBtn');
             const form = document.getElementById('metaEditorForm');
+            const saveBtn = document.getElementById('metaEditSaveBtn');
             const infoEditBtn = document.getElementById('infoPanelEditMetaBtn');
+            const confirmCancelBtn = document.getElementById('metaEditConfirmCancelBtn');
+            const confirmProceedBtn = document.getElementById('metaEditConfirmProceedBtn');
 
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
@@ -1691,6 +1683,30 @@ if (typeof window !== 'undefined') {
             if (cancelBtn) {
                 cancelBtn.addEventListener('click', () => {
                     if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                });
+            }
+            if (saveBtn) {
+                saveBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (typeof requestSaveMetadataConfirmation === 'function') {
+                        requestSaveMetadataConfirmation(e);
+                    } else if (typeof saveMetadata === 'function') {
+                        saveMetadata(e);
+                    }
+                });
+            }
+            if (confirmCancelBtn) {
+                confirmCancelBtn.addEventListener('click', () => {
+                    if (typeof cancelMetadataConfirmation === 'function') {
+                        cancelMetadataConfirmation();
+                    }
+                });
+            }
+            if (confirmProceedBtn) {
+                confirmProceedBtn.addEventListener('click', () => {
+                    if (typeof executeSaveMetadata === 'function') {
+                        executeSaveMetadata();
+                    }
                 });
             }
             if (modal) {
@@ -1703,14 +1719,16 @@ if (typeof window !== 'undefined') {
             if (form) {
                 form.addEventListener('submit', (e) => {
                     e.preventDefault();
-                    if (typeof saveMetadata === 'function') {
+                    if (typeof requestSaveMetadataConfirmation === 'function') {
+                        requestSaveMetadataConfirmation(e);
+                    } else if (typeof saveMetadata === 'function') {
                         saveMetadata(e);
                     }
                 });
             }
             if (infoEditBtn) {
                 infoEditBtn.addEventListener('click', () => {
-                    const track = (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+                    const track = window.currentInspectedTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
                     if (track) {
                         if (typeof openMetadataEditor === 'function') openMetadataEditor(track);
                     } else {
