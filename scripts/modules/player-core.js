@@ -360,7 +360,7 @@
             coverArtPreview.src = coverSrc;
         }
         updateAmbientLighting(coverSrc);
-        appendDebugTelemetry(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
+        window.appendDebugTelemetry?.(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
 
         if (coverBadge) {
             if (track.cover) {
@@ -595,7 +595,7 @@
             coverArtPreview.src = coverSrc;
         }
         updateAmbientLighting(coverSrc);
-        appendDebugTelemetry(`[STANDALONE LOAD] "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
+        window.appendDebugTelemetry?.(`[STANDALONE LOAD] "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
 
         if (statTitle) statTitle.textContent = track.title ? track.title : (track.filename || 'Standalone Audio');
         if (statArtist) statArtist.textContent = track.artist ? track.artist : 'External File';
@@ -1706,7 +1706,7 @@
             if ((trackDur > 5 && curTime < 3.0) || curTime === 0) {
                 console.warn(`[AudioEngine] Premature stream end detected at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}".`);
                 logAudioPlaybackEvent('warn', `Premature stream termination at ${curTime.toFixed(2)}s on "${trackTitle}"`);
-                appendDebugTelemetry(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
+                window.appendDebugTelemetry?.(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
                 if (trackPlaybackRetryCount < 2) {
                     trackPlaybackRetryCount++;
                     setTimeout(() => {
@@ -1722,7 +1722,7 @@
                     return;
                 }
             } else {
-                appendDebugTelemetry(`[EVENT] Track finished naturally at ${curTime.toFixed(1)}s`);
+                window.appendDebugTelemetry?.(`[EVENT] Track finished naturally at ${curTime.toFixed(1)}s`);
             }
 
             if (sleepTimerMode === 'end') {
@@ -1801,7 +1801,8 @@
         }
 
         const curTheme = getActiveTheme();
-        const isLightSurface = (curTheme === 'default' || curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm');
+        const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
+        const isLightSurface = (curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm' || (curTheme === 'default' && !isMobileViewport));
         const hasTrack = Boolean(track && allTracks.length > 0);
         const format = hasTrack ? resolveTrackFormat(track) : 'NONE';
         const isLossless = hasTrack && ['FLAC', 'WAV', 'ALAC', 'AIFF', 'APE', 'WV', 'DSD', 'DSF', 'PCM'].includes(format);
@@ -1832,6 +1833,7 @@
 
         // 1. Update Top Summary Badge, Description & Indicator Dot
         if (!hasTrack) {
+            if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'idle';
             if (auditQualityBadge) {
                 auditQualityBadge.textContent = `IDLE (${shortEngineLabel} READY)`;
                 auditQualityBadge.className = 'signalQualityBadge highPrecision';
@@ -1843,6 +1845,7 @@
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         } else if (isLossless && !hasPeq && !isBassBoost && !isVocalBoost && !isTrebleBoost && !isCrossfeed && !isSurroundWidener && !isAmbiophonics && !isPhaseInvert && !isMonoMix) {
+            if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'bit-perfect';
             if (auditQualityBadge) {
                 auditQualityBadge.textContent = `LOSSLESS ${format} → ${shortEngineLabel}`;
                 auditQualityBadge.className = 'signalQualityBadge bitPerfect';
@@ -1850,10 +1853,11 @@
             if (auditQualityDesc) {
                 auditQualityDesc.textContent = `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${isUltrasonic || ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
             }
-            const dotCol = isLightSurface ? '#065f46' : '#10b981';
+            const dotCol = isLightSurface ? '#059669' : '#10b981';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         } else if (isLossless) {
+            if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'dsp';
             if (auditQualityBadge) {
                 auditQualityBadge.textContent = `LOSSLESS ${format} → ${isPrecision64 ? '64-BIT' : '32-BIT'} DSP`;
                 auditQualityBadge.className = 'signalQualityBadge dspEnhanced';
@@ -1861,10 +1865,11 @@
             if (auditQualityDesc) {
                 auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
             }
-            const dotCol = isLightSurface ? '#9a3412' : '#fbbf24';
+            const dotCol = isLightSurface ? '#b45309' : '#fbbf24';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         } else {
+            if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'lossy';
             if (auditQualityBadge) {
                 auditQualityBadge.textContent = `${format} LOSSY → ${dspActive ? (isPrecision64 ? '64-BIT DSP' : '32-BIT DSP') : '32-BIT DECODE'}`;
                 auditQualityBadge.className = 'signalQualityBadge highPrecision';
@@ -1872,7 +1877,7 @@
             if (auditQualityDesc) {
                 auditQualityDesc.textContent = `Compressed ${format} stream decoded by browser into 32-bit IEEE 754 floating-point PCM${activeStages.length > 0 ? `, processed via ${workletPrecisionStr} (${activeStages.join(', ')})` : ' with flat EQ response'}.`;
             }
-            const dotCol = isLightSurface ? '#075985' : '#38bdf8';
+            const dotCol = isLightSurface ? '#0284c7' : '#38bdf8';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         }

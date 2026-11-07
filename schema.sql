@@ -104,3 +104,4 @@ CREATE TABLE IF NOT EXISTS `SoulseekAccount` (
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_single_slsk` CHECK (`id` = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

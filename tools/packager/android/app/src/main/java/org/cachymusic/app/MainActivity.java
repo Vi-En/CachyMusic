@@ -48,6 +48,8 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.channels.Channels;
@@ -65,7 +67,7 @@ public class MainActivity extends Activity {
     private static final String TAG = "CachyMusic";
     private static final String PREFS_NAME = "cachymusic_prefs";
     private static final String CACHED_LIB_FILE = "cached_library.json";
-    private static final String STANDALONE_URL = "https://appassets.androidcache.net/index.html";
+    private static final String STANDALONE_URL = "https://appassets.androidplatform.net/index.html";
     private static final int FILECHOOSER_RESULTCODE = 1001;
     private static final int FOLDER_PICKER_RESULTCODE = 1002;
 
@@ -110,6 +112,28 @@ public class MainActivity extends Activity {
         public String getSavedLibraryJson() {
             return readLibraryCacheJson();
         }
+
+        @JavascriptInterface
+        public void setSoulseekHost(String host) {
+            SharedPreferences sp = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE);
+            sp.edit().putString("slsk_host", host != null ? host.trim() : "").apply();
+        }
+
+        @JavascriptInterface
+        public String getSoulseekHost() {
+            SharedPreferences sp = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE);
+            return sp.getString("slsk_host", "");
+        }
+
+        @JavascriptInterface
+        public String callSoulseekApi(String action, String bodyJson, String queryString) {
+            return SoulseekClient.getInstance(getApplicationContext()).dispatchApi(action, bodyJson, queryString);
+        }
+    }
+
+    private String getSavedSoulseekHost() {
+        SharedPreferences sp = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE);
+        return sp.getString("slsk_host", "");
     }
 
     private void saveLibraryCacheJson(JSONArray tracksArray, String directoryName) {
@@ -161,6 +185,8 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        // Ensure standalone mobile operation: no remote workstation host needed
+        getSharedPreferences("cachymusic_prefs", MODE_PRIVATE).edit().remove("slsk_host").apply();
 
         // Ensure modern media and audio read permissions are granted on Android 13/14+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -183,9 +209,9 @@ public class MainActivity extends Activity {
 
         setContentView(webView);
 
-        // Configure modern offline asset loader (appassets.androidcache.net is a secure https context)
+        // Configure a native app origin isolated from browser-installed PWA workers.
         assetLoader = new WebViewAssetLoader.Builder()
-                .setDomain("appassets.androidcache.net")
+                .setDomain("appassets.androidplatform.net")
                 .addPathHandler("/", new WebViewAssetLoader.AssetsPathHandler(this))
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
                 .build();
@@ -301,8 +327,14 @@ public class MainActivity extends Activity {
                                 new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
                     }
                     if (path.contains("soulseek.php")) {
-                        String json = "{\"success\": false, \"status\": \"offline\", \"message\": \"Standalone mode active\"}";
-                        return new WebResourceResponse("application/json", "UTF-8",
+                        // 100% Standalone Native Android Soulseek Client
+                        String action = uri.getQueryParameter("action");
+                        String json = SoulseekClient.getInstance(getApplicationContext()).dispatchApi(action, "{}", uri.getQuery());
+                        Map<String, String> respHeaders = new HashMap<>();
+                        respHeaders.put("Access-Control-Allow-Origin", "*");
+                        respHeaders.put("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                        respHeaders.put("Content-Type", "application/json; charset=utf-8");
+                        return new WebResourceResponse("application/json", "UTF-8", 200, "OK", respHeaders,
                                 new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
                     }
                     if (path.contains("hardware_volume.php")) {
@@ -1198,7 +1230,7 @@ public class MainActivity extends Activity {
             String encodedUri = URLEncoder.encode(uri.toString(), "UTF-8");
             String encodedName = URLEncoder.encode(filename, "UTF-8");
             String encodedMime = URLEncoder.encode(detectedMime, "UTF-8");
-            String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri
+            String streamUrl = "https://appassets.androidplatform.net/android-media?uri=" + encodedUri
                     + "&name=" + encodedName
                     + "&mime=" + encodedMime
                     + "&size=" + size
@@ -1217,7 +1249,7 @@ public class MainActivity extends Activity {
             obj.put("format", format);
             obj.put("size", size);
             obj.put("src", streamUrl);
-            obj.put("cover", "https://appassets.androidcache.net/android-media-art?uri=" + encodedUri);
+            obj.put("cover", "https://appassets.androidplatform.net/android-media-art?uri=" + encodedUri);
             return obj;
         } catch (Exception e) {
             return null;
@@ -1283,7 +1315,7 @@ public class MainActivity extends Activity {
                             String encodedUri = URLEncoder.encode(trackUri.toString(), "UTF-8");
                             String encodedName = URLEncoder.encode(resolvedFilename, "UTF-8");
                             String encodedMime = URLEncoder.encode(detectedMime, "UTF-8");
-                            String streamUrl = "https://appassets.androidcache.net/android-media?uri=" + encodedUri
+                            String streamUrl = "https://appassets.androidplatform.net/android-media?uri=" + encodedUri
                                     + "&name=" + encodedName
                                     + "&mime=" + encodedMime
                                     + "&size=" + size
@@ -1303,7 +1335,7 @@ public class MainActivity extends Activity {
                             obj.put("format", format);
                             obj.put("size", size);
                             obj.put("src", streamUrl);
-                            obj.put("cover", "https://appassets.androidcache.net/android-media-art?uri=" + encodedUri);
+                            obj.put("cover", "https://appassets.androidplatform.net/android-media-art?uri=" + encodedUri);
                             list.add(obj);
 
                             if (list.size() % 25 == 0 || list.size() == totalRows) {

@@ -6,10 +6,16 @@ if (!empty($origin)) {
     $parsed = parse_url($origin);
     $host = $parsed['host'] ?? '';
     $serverHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), PHP_URL_HOST);
-    if (in_array($host, ['localhost', '127.0.0.1', '::1'], true) || $host === $serverHost) {
+    $isLocalOrLan = in_array($host, ['localhost', '127.0.0.1', '::1', 'appassets.androidplatform.net'], true)
+        || $host === $serverHost
+        || preg_match('/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/', $host)
+        || strpos($origin, 'androidplatform.net') !== false;
+    if ($isLocalOrLan) {
         header("Access-Control-Allow-Origin: $origin");
         header("Access-Control-Allow-Credentials: true");
     }
+} else {
+    header("Access-Control-Allow-Origin: *");
 }
 
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
@@ -84,7 +90,7 @@ function is_safe_soulseek_directory($dir) {
         $userHome = $pw['dir'] ?? '';
     }
     $projectRoot = realpath(__DIR__ . '/../../');
-    $safeRoots = array_filter([$userHome, $projectRoot, '/mnt', '/media', '/run/media']);
+    $safeRoots = array_filter([$userHome, $projectRoot, '/mnt', '/media', '/run/media', '/storage', '/sdcard', '/data']);
     $real = realpath($trimmed);
     if ($real !== false) {
         foreach ($safeRoots as $root) {
@@ -440,14 +446,10 @@ switch ($action) {
         $sharedDir = trim($input['shared_dir'] ?? '');
 
         if (!empty($downloadsDir) && !is_safe_soulseek_directory($downloadsDir)) {
-            http_response_code(400);
-            echo json_encode(['ok' => false, 'error' => 'Invalid or unauthorized download directory path.']);
-            exit;
+            $downloadsDir = $DOWNLOADS_DIR;
         }
         if (!empty($sharedDir) && !is_safe_soulseek_directory($sharedDir)) {
-            http_response_code(400);
-            echo json_encode(['ok' => false, 'error' => 'Invalid or unauthorized shared directory path.']);
-            exit;
+            $sharedDir = $downloadsDir ?: $DOWNLOADS_DIR;
         }
 
         $dbAcc = get_db_soulseek_account();
@@ -551,14 +553,14 @@ switch ($action) {
         $newDir = trim($input['directory'] ?? $input['downloads_dir'] ?? '');
         if (!empty($newDir)) {
             if (!is_safe_soulseek_directory($newDir)) {
-                http_response_code(400);
-                echo json_encode(['ok' => false, 'error' => 'Invalid or unauthorized download directory path.']);
-                exit;
+                $newDir = $DOWNLOADS_DIR;
             }
             $curAcc = Storage::getSoulseekAccount();
             $curAcc['downloads_dir'] = $newDir;
             Storage::saveSoulseekAccount($curAcc);
             call_nicotine_api('POST', '/directory', ['directory' => $newDir]);
+        } else {
+            $newDir = $DOWNLOADS_DIR;
         }
         echo json_encode(['ok' => true, 'downloads_dir' => $newDir]);
         exit;
@@ -570,14 +572,14 @@ switch ($action) {
         $newDir = trim($input['directory'] ?? $input['shared_dir'] ?? '');
         if (!empty($newDir)) {
             if (!is_safe_soulseek_directory($newDir)) {
-                http_response_code(400);
-                echo json_encode(['ok' => false, 'error' => 'Invalid or unauthorized shared directory path.']);
-                exit;
+                $newDir = $DOWNLOADS_DIR;
             }
             $curAcc = Storage::getSoulseekAccount();
             $curAcc['shared_dir'] = $newDir;
             Storage::saveSoulseekAccount($curAcc);
             call_nicotine_api('POST', '/shared_directory', ['directory' => $newDir]);
+        } else {
+            $newDir = $DOWNLOADS_DIR;
         }
         echo json_encode(['ok' => true, 'shared_dir' => $newDir]);
         exit;

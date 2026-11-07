@@ -609,6 +609,30 @@ if (_g.particles.length === 0) {
     const modalNewPlaylistName = document.getElementById('modalNewPlaylistName');
     const modalCreateAndAddBtn = document.getElementById('modalCreateAndAddBtn');
 
+    // DOM Elements - Metadata & ID3 Tag Editor Modal
+    const metadataEditorModal = document.getElementById('metadataEditorModal');
+    const closeMetaEditorModalBtn = document.getElementById('closeMetaEditorModalBtn');
+    const metaEditCancelBtn = document.getElementById('metaEditCancelBtn');
+    const metaEditorForm = document.getElementById('metaEditorForm');
+    const metaEditSaveBtn = document.getElementById('metaEditSaveBtn');
+    const metaEditTitle = document.getElementById('metaEditTitle');
+    const metaEditArtist = document.getElementById('metaEditArtist');
+    const metaEditAlbum = document.getElementById('metaEditAlbum');
+    const metaEditGenre = document.getElementById('metaEditGenre');
+    const metaEditYear = document.getElementById('metaEditYear');
+    const metaEditTrackNum = document.getElementById('metaEditTrackNum');
+    const metaEditComment = document.getElementById('metaEditComment');
+    const metaEditorThumb = document.getElementById('metaEditorThumb');
+    const metaEditorFileTitle = document.getElementById('metaEditorFileTitle');
+    const metaEditorFilePath = document.getElementById('metaEditorFilePath');
+    const metaEditorStatus = document.getElementById('metaEditorStatus');
+    const metaEditorFormatPill = document.getElementById('metaEditorFormatPill');
+    const metaEditorBitratePill = document.getElementById('metaEditorBitratePill');
+    const metaEditorSampleRatePill = document.getElementById('metaEditorSampleRatePill');
+    const metaEditorBitDepthPill = document.getElementById('metaEditorBitDepthPill');
+    const infoPanelEditMetaBtn = document.getElementById('infoPanelEditMetaBtn');
+    const trackMenuEditMetaBtn = document.getElementById('trackMenuEditMetaBtn');
+
     // DOM Elements - Theme Overhaul
     const validThemeIds = [
         'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
@@ -967,6 +991,9 @@ if (_g.particles.length === 0) {
             updateMiniPlayerPlayState(isPlaying);
 
             if (typeof soulseekController !== 'undefined') {
+                if (typeof soulseekController.setSubView === 'function') {
+                    soulseekController.setSubView('results');
+                }
                 soulseekController.checkStatus();
                 soulseekController.startTransfersPolling();
             }
@@ -1284,6 +1311,28 @@ if (_g.particles.length === 0) {
         try { window.lyricsToggleBtn = lyricsToggleBtn; } catch (_) {}
         try { window.lyricsTrackName = lyricsTrackName; } catch (_) {}
         try { window.metadataToggleBtn = metadataToggleBtn; } catch (_) {}
+        try { window.metadataEditorModal = metadataEditorModal; } catch (_) {}
+        try { window.closeMetaEditorModalBtn = closeMetaEditorModalBtn; } catch (_) {}
+        try { window.metaEditCancelBtn = metaEditCancelBtn; } catch (_) {}
+        try { window.metaEditorForm = metaEditorForm; } catch (_) {}
+        try { window.metaEditSaveBtn = metaEditSaveBtn; } catch (_) {}
+        try { window.metaEditTitle = metaEditTitle; } catch (_) {}
+        try { window.metaEditArtist = metaEditArtist; } catch (_) {}
+        try { window.metaEditAlbum = metaEditAlbum; } catch (_) {}
+        try { window.metaEditGenre = metaEditGenre; } catch (_) {}
+        try { window.metaEditYear = metaEditYear; } catch (_) {}
+        try { window.metaEditTrackNum = metaEditTrackNum; } catch (_) {}
+        try { window.metaEditComment = metaEditComment; } catch (_) {}
+        try { window.metaEditorThumb = metaEditorThumb; } catch (_) {}
+        try { window.metaEditorFileTitle = metaEditorFileTitle; } catch (_) {}
+        try { window.metaEditorFilePath = metaEditorFilePath; } catch (_) {}
+        try { window.metaEditorStatus = metaEditorStatus; } catch (_) {}
+        try { window.metaEditorFormatPill = metaEditorFormatPill; } catch (_) {}
+        try { window.metaEditorBitratePill = metaEditorBitratePill; } catch (_) {}
+        try { window.metaEditorSampleRatePill = metaEditorSampleRatePill; } catch (_) {}
+        try { window.metaEditorBitDepthPill = metaEditorBitDepthPill; } catch (_) {}
+        try { window.infoPanelEditMetaBtn = infoPanelEditMetaBtn; } catch (_) {}
+        try { window.trackMenuEditMetaBtn = trackMenuEditMetaBtn; } catch (_) {}
         try { window.miniArtPreview = miniArtPreview; } catch (_) {}
         try { window.miniArtist = miniArtist; } catch (_) {}
         try { window.miniCurrentTime = miniCurrentTime; } catch (_) {}
@@ -1483,6 +1532,28 @@ if (_g.particles.length === 0) {
         try { window.wsSettingsBtn = wsSettingsBtn; } catch (_) {}
         try { window.wsSoulseekBadge = wsSoulseekBadge; } catch (_) {}
         try { window.wsSoulseekBtn = wsSoulseekBtn; } catch (_) {}
+        try { window.metadataEditorModal = metadataEditorModal; } catch (_) {}
+        try { window.closeMetaEditorModalBtn = closeMetaEditorModalBtn; } catch (_) {}
+        try { window.metaEditCancelBtn = metaEditCancelBtn; } catch (_) {}
+        try { window.metaEditorForm = metaEditorForm; } catch (_) {}
+        try { window.metaEditSaveBtn = metaEditSaveBtn; } catch (_) {}
+        try { window.metaEditTitle = metaEditTitle; } catch (_) {}
+        try { window.metaEditArtist = metaEditArtist; } catch (_) {}
+        try { window.metaEditAlbum = metaEditAlbum; } catch (_) {}
+        try { window.metaEditGenre = metaEditGenre; } catch (_) {}
+        try { window.metaEditYear = metaEditYear; } catch (_) {}
+        try { window.metaEditTrackNum = metaEditTrackNum; } catch (_) {}
+        try { window.metaEditComment = metaEditComment; } catch (_) {}
+        try { window.metaEditorThumb = metaEditorThumb; } catch (_) {}
+        try { window.metaEditorFileTitle = metaEditorFileTitle; } catch (_) {}
+        try { window.metaEditorFilePath = metaEditorFilePath; } catch (_) {}
+        try { window.metaEditorStatus = metaEditorStatus; } catch (_) {}
+        try { window.metaEditorFormatPill = metaEditorFormatPill; } catch (_) {}
+        try { window.metaEditorBitratePill = metaEditorBitratePill; } catch (_) {}
+        try { window.metaEditorSampleRatePill = metaEditorSampleRatePill; } catch (_) {}
+        try { window.metaEditorBitDepthPill = metaEditorBitDepthPill; } catch (_) {}
+        try { window.infoPanelEditMetaBtn = infoPanelEditMetaBtn; } catch (_) {}
+        try { window.trackMenuEditMetaBtn = trackMenuEditMetaBtn; } catch (_) {}
     }
 
 
@@ -2945,22 +3016,25 @@ if (_g.particles.length === 0) {
             batchModalEl.style.display = 'none';
             return;
         }
+        const metadataEditorModalEl = document.getElementById('metadataEditorModal');
+        if (metadataEditorModalEl && (metadataEditorModalEl.style.display === 'flex' || window.getComputedStyle(metadataEditorModalEl).display === 'flex')) {
+            metadataEditorModalEl.style.display = 'none';
+            return;
+        }
     });
 
     function openSlskAccountModal() {
-        if (!slskAccountModal) return;
-        const transfersDrawer = document.getElementById('slskTransfersDrawer');
-        if (transfersDrawer && transfersDrawer.classList.contains('open')) {
-            transfersDrawer.classList.remove('open');
-        }
-        slskAccountModal.style.display = 'flex';
-        pushModalState('slskAccountModal');
+        const modal = document.getElementById('slskAccountModal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        if (typeof pushModalState === 'function') pushModalState('slskAccountModal');
     }
 
     function closeSlskAccountModal() {
-        if (!slskAccountModal) return;
-        slskAccountModal.style.display = 'none';
-        popModalState('slskAccountModal');
+        const modal = document.getElementById('slskAccountModal');
+        if (!modal) return;
+        modal.style.display = 'none';
+        if (typeof popModalState === 'function') popModalState('slskAccountModal');
     }
 
     // =========================================================================
@@ -3261,6 +3335,259 @@ if (_g.particles.length === 0) {
         selectedTrackIndexForMenu = -1;
     }
 
+    // =========================================================================
+    // Track Metadata & ID3 Tag Editor
+    // =========================================================================
+    let currentEditingTrack = null;
+
+    function openMetadataEditor(track) {
+        if (!track) {
+            showToast('No track selected to edit metadata.');
+            return;
+        }
+        currentEditingTrack = track;
+
+        const modal = document.getElementById('metadataEditorModal');
+        const thumb = document.getElementById('metaEditorThumb');
+        const fileTitle = document.getElementById('metaEditorFileTitle');
+        const filePath = document.getElementById('metaEditorFilePath');
+        const formatPill = document.getElementById('metaEditorFormatPill');
+        const bitratePill = document.getElementById('metaEditorBitratePill');
+        const sampleRatePill = document.getElementById('metaEditorSampleRatePill');
+        const bitDepthPill = document.getElementById('metaEditorBitDepthPill');
+        const statusEl = document.getElementById('metaEditorStatus');
+
+        const inputTitle = document.getElementById('metaEditTitle');
+        const inputArtist = document.getElementById('metaEditArtist');
+        const inputAlbum = document.getElementById('metaEditAlbum');
+        const inputGenre = document.getElementById('metaEditGenre');
+        const inputYear = document.getElementById('metaEditYear');
+        const inputTrackNum = document.getElementById('metaEditTrackNum');
+        const inputComment = document.getElementById('metaEditComment');
+
+        if (!modal) return;
+
+        // Populate thumbnail
+        if (thumb) {
+            thumb.src = track.cover ? (track.cover + (track.cover.includes('?') ? '&thumb=1' : '?thumb=1')) : 'resources/images/default.svg';
+        }
+
+        // Summary Title & Path
+        if (fileTitle) fileTitle.textContent = track.title || track.filename || 'Untitled Track';
+        if (filePath) filePath.textContent = track.fullPath || track.filename || 'Local Audio Track';
+
+        // Technical Spec Badges
+        if (formatPill) formatPill.textContent = (track.format || 'AUDIO').toUpperCase();
+        if (bitratePill) bitratePill.textContent = track.bitrate ? `${track.bitrate} kbps` : 'N/A';
+        if (sampleRatePill) {
+            const sr = track.sampleRate;
+            sampleRatePill.textContent = sr ? (sr >= 1000 ? `${(sr / 1000).toFixed(1)} kHz` : `${sr} Hz`) : '44.1 kHz';
+        }
+        if (bitDepthPill) {
+            const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
+            bitDepthPill.textContent = `${bd}-Bit`;
+        }
+
+        // Clear status alert
+        if (statusEl) {
+            statusEl.style.display = 'none';
+            statusEl.textContent = '';
+            statusEl.className = 'metaEditorStatus';
+        }
+
+        // Populate form inputs
+        if (inputTitle) inputTitle.value = track.title || '';
+        if (inputArtist) inputArtist.value = track.artist || '';
+        if (inputAlbum) inputAlbum.value = track.album || '';
+        if (inputGenre) inputGenre.value = track.genre || '';
+        if (inputYear) inputYear.value = (track.year && track.year > 0) ? track.year : '';
+        if (inputTrackNum) inputTrackNum.value = (track.track || track.track_num) ? (track.track || track.track_num) : '';
+        if (inputComment) inputComment.value = track.comment || '';
+
+        modal.style.display = 'flex';
+        pushModalState('metadataEditorModal');
+
+        if (window.innerWidth > 768 && inputTitle) {
+            setTimeout(() => {
+                try {
+                    inputTitle.focus();
+                    inputTitle.select();
+                } catch (_) {}
+            }, 60);
+        }
+    }
+
+    function closeMetadataEditor() {
+        const modal = document.getElementById('metadataEditorModal');
+        if (modal) modal.style.display = 'none';
+        popModalState('metadataEditorModal');
+        currentEditingTrack = null;
+    }
+
+    async function saveMetadata(e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (!currentEditingTrack) return;
+
+        const inputTitle = document.getElementById('metaEditTitle');
+        const inputArtist = document.getElementById('metaEditArtist');
+        const inputAlbum = document.getElementById('metaEditAlbum');
+        const inputGenre = document.getElementById('metaEditGenre');
+        const inputYear = document.getElementById('metaEditYear');
+        const inputTrackNum = document.getElementById('metaEditTrackNum');
+        const inputComment = document.getElementById('metaEditComment');
+        const statusEl = document.getElementById('metaEditorStatus');
+        const saveBtn = document.getElementById('metaEditSaveBtn');
+
+        const newTitle = (inputTitle ? inputTitle.value : '').trim();
+        if (!newTitle) {
+            if (statusEl) {
+                statusEl.textContent = 'Track title cannot be empty.';
+                statusEl.className = 'metaEditorStatus error';
+                statusEl.style.display = 'block';
+            }
+            if (inputTitle) inputTitle.focus();
+            return;
+        }
+
+        const newArtist = (inputArtist ? inputArtist.value : '').trim();
+        const newAlbum = (inputAlbum ? inputAlbum.value : '').trim();
+        const newGenre = (inputGenre ? inputGenre.value : '').trim();
+        const newYear = inputYear && inputYear.value ? parseInt(inputYear.value, 10) : null;
+        const newTrackNum = inputTrackNum && inputTrackNum.value ? parseInt(inputTrackNum.value, 10) : null;
+        const newComment = (inputComment ? inputComment.value : '').trim();
+
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'SAVING...';
+        }
+        if (statusEl) {
+            statusEl.textContent = 'Saving tags and updating library...';
+            statusEl.className = 'metaEditorStatus saving';
+            statusEl.style.display = 'block';
+        }
+
+        const targetTrack = currentEditingTrack;
+        const tid = targetTrack.tid || targetTrack.id || null;
+
+        // Persist to backend PHP if tid is available
+        if (tid && typeof fetch === 'function') {
+            try {
+                const resp = await fetch('php/api/metadata.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tid: tid,
+                        title: newTitle,
+                        artist: newArtist,
+                        album: newAlbum,
+                        genre: newGenre,
+                        year: newYear,
+                        track_num: newTrackNum,
+                        comment: newComment
+                    })
+                });
+                if (resp.ok) {
+                    await resp.json().catch(() => null);
+                }
+            } catch (netErr) {
+                console.warn('Backend metadata persistence skipped or offline:', netErr);
+            }
+        }
+
+        // Update target track properties
+        targetTrack.title = newTitle;
+        targetTrack.artist = newArtist;
+        targetTrack.album = newAlbum;
+        targetTrack.genre = newGenre;
+        targetTrack.year = newYear;
+        targetTrack.track = newTrackNum;
+        targetTrack.track_num = newTrackNum;
+        targetTrack.comment = newComment;
+
+        // Propagate across in-memory collections
+        const updateInList = (list) => {
+            if (!Array.isArray(list)) return;
+            for (let i = 0; i < list.length; i++) {
+                const t = list[i];
+                if ((targetTrack.tid && t.tid === targetTrack.tid) ||
+                    (targetTrack.fullPath && t.fullPath === targetTrack.fullPath) ||
+                    (targetTrack.id && t.id === targetTrack.id)) {
+                    t.title = newTitle;
+                    t.artist = newArtist;
+                    t.album = newAlbum;
+                    t.genre = newGenre;
+                    t.year = newYear;
+                    t.track = newTrackNum;
+                    t.track_num = newTrackNum;
+                    t.comment = newComment;
+                }
+            }
+        };
+
+        updateInList(allTracks);
+        updateInList(displayedTracks);
+        updateInList(playQueue);
+
+        // Persist to IndexedDB
+        try {
+            if (typeof saveLibraryToIndexedDB === 'function' && Array.isArray(allTracks) && allTracks.length > 0) {
+                saveLibraryToIndexedDB(allTracks, (folderPathInput && folderPathInput.value) || '');
+            }
+        } catch (_) {}
+
+        // Check if currently playing track was updated
+        const activeTrack = (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+        const isCurrentPlaying = activeTrack && (
+            (targetTrack.tid && activeTrack.tid === targetTrack.tid) ||
+            (targetTrack.fullPath && activeTrack.fullPath === targetTrack.fullPath) ||
+            (targetTrack.id && activeTrack.id === targetTrack.id)
+        );
+
+        if (isCurrentPlaying) {
+            if (trackName) trackName.textContent = newTitle;
+            if (artistName) artistName.textContent = newArtist || 'Unknown Artist';
+            if (albumName) albumName.textContent = newAlbum || 'Unknown Album';
+            if (lyricsTrackName) lyricsTrackName.textContent = newTitle;
+            if (lyricsArtistName) lyricsArtistName.textContent = newArtist || 'Unknown Artist';
+            if (miniTitle) miniTitle.textContent = newTitle;
+            if (miniArtist) miniArtist.textContent = newArtist || 'Unknown Artist';
+
+            // Update Left Inspector Panel
+            if (statTitle) statTitle.textContent = newTitle;
+            if (statArtist) statArtist.textContent = newArtist || 'Unknown';
+            if (statAlbum) statAlbum.textContent = newAlbum || 'Unknown';
+            if (statGenre) statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(newGenre) : newGenre) || 'N/A';
+            if (statYear) statYear.textContent = newYear ? newYear.toString() : 'N/A';
+            if (statTrack) statTrack.textContent = newTrackNum ? newTrackNum.toString() : 'N/A';
+
+            // Update MediaSession
+            if ('mediaSession' in navigator) {
+                try {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: newTitle,
+                        artist: newArtist || 'Unknown Artist',
+                        album: newAlbum || 'CachyMusic Workstation',
+                        artwork: targetTrack.cover ? [
+                            { src: targetTrack.cover, sizes: '512x512', type: 'image/jpeg' }
+                        ] : []
+                    });
+                } catch (_) {}
+            }
+        }
+
+        // Re-render track list DOM items
+        renderVirtualTrackWindow(true);
+        if (typeof updateQueueUi === 'function') updateQueueUi();
+
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'SAVE METADATA';
+        }
+
+        closeMetadataEditor();
+        showToast(`Metadata saved: "${newTitle}"`);
+    }
+
     // Add Track to Playlist Modal
     function openAddToPlaylistModal(track) {
         selectedTrackForPlaylist = track;
@@ -3428,6 +3755,9 @@ if (_g.particles.length === 0) {
         try { window.closePlaylistModal = closePlaylistModal; } catch (_) {}
         try { window.addTrackToPlaylist = addTrackToPlaylist; } catch (_) {}
         try { window.removeTrackFromCurrentPlaylist = removeTrackFromCurrentPlaylist; } catch (_) {}
+        try { window.openMetadataEditor = openMetadataEditor; } catch (_) {}
+        try { window.closeMetadataEditor = closeMetadataEditor; } catch (_) {}
+        try { window.saveMetadata = saveMetadata; } catch (_) {}
     }
 
 
@@ -3970,18 +4300,21 @@ if (_g.particles.length === 0) {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
         const rect = canvas.getBoundingClientRect();
-        const w = rect.width || canvas.width;
-        const h = rect.height || canvas.height;
+        if (!rect || rect.width < 16 || rect.height < 16) return;
+        const w = rect.width;
+        const h = rect.height;
 
-        if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-            canvas.width = Math.round(w * dpr);
-            canvas.height = Math.round(h * dpr);
+        const targetW = Math.min(4096, Math.round(w * dpr));
+        const targetH = Math.min(2048, Math.round(h * dpr));
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
         }
 
         ctx.save();
-        ctx.scale(dpr, dpr);
+        ctx.scale(targetW / w, targetH / h);
         ctx.clearRect(0, 0, w, h);
 
         const minFreq = 20;
@@ -4002,9 +4335,9 @@ if (_g.particles.length === 0) {
         // 1. Grid Lines
         ctx.lineWidth = 1;
         const gridFreqs = [50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000];
-        ctx.strokeStyle = isLightCanvas ? 'rgba(28, 25, 23, 0.12)' : 'rgba(255, 255, 255, 0.08)';
-        ctx.fillStyle = isLightCanvas ? 'rgba(28, 25, 23, 0.72)' : 'rgba(255, 255, 255, 0.60)';
-        ctx.font = '600 9px monospace';
+        ctx.strokeStyle = isLightCanvas ? 'rgba(24, 24, 27, 0.16)' : 'rgba(226, 232, 240, 0.13)';
+        ctx.fillStyle = isLightCanvas ? 'rgba(9, 9, 11, 0.88)' : 'rgba(241, 245, 249, 0.88)';
+        ctx.font = '700 9.5px monospace';
         ctx.textAlign = 'center';
 
         gridFreqs.forEach(f => {
@@ -4014,7 +4347,9 @@ if (_g.particles.length === 0) {
             ctx.lineTo(x, h);
             ctx.stroke();
             const lbl = f >= 1000 ? `${f / 1000}k` : `${f}`;
-            ctx.fillText(lbl, x, h - 5);
+            if (x > 46 && x < w - 12) {
+                ctx.fillText(lbl, x, h - 5);
+            }
         });
 
         // Horizontal dB lines (+12, +6, 0, -6, -12)
@@ -4023,9 +4358,9 @@ if (_g.particles.length === 0) {
             const y = dbToY(d);
             ctx.beginPath();
             if (isLightCanvas) {
-                ctx.strokeStyle = (d === 0) ? 'rgba(28, 25, 23, 0.32)' : 'rgba(28, 25, 23, 0.08)';
+                ctx.strokeStyle = (d === 0) ? 'rgba(24, 24, 27, 0.40)' : 'rgba(24, 24, 27, 0.11)';
             } else {
-                ctx.strokeStyle = (d === 0) ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.06)';
+                ctx.strokeStyle = (d === 0) ? 'rgba(248, 250, 252, 0.36)' : 'rgba(226, 232, 240, 0.09)';
             }
             ctx.moveTo(0, y);
             ctx.lineTo(w, y);
@@ -4093,10 +4428,11 @@ if (_g.particles.length === 0) {
                 ctx.lineTo(points[i].x, points[i].y);
             }
             const activeStroke = isWarmTheme ? '#9a3412' : (isLightCanvas ? '#09090b' : (curTheme === 'minimalist-obsidian' ? '#38bdf8' : '#00e5ff'));
+            const isFx = document.documentElement.classList.contains('is-firefox') || /firefox|fxios/i.test(navigator.userAgent || '');
             ctx.strokeStyle = isPeqBypassed ? '#dc2626' : activeStroke;
             ctx.lineWidth = 2.5;
             ctx.shadowColor = isPeqBypassed ? '#dc2626' : activeStroke;
-            ctx.shadowBlur = isLightCanvas ? 3 : 8;
+            ctx.shadowBlur = isFx ? 0 : (isLightCanvas ? 2 : 3);
             ctx.stroke();
             ctx.shadowBlur = 0;
         }
@@ -4142,6 +4478,15 @@ if (_g.particles.length === 0) {
 
         if (!peqGrid) return;
 
+        function syncBipolarSliderFill(slider, val, minVal, maxVal) {
+            if (!slider) return;
+            const span = (maxVal - minVal) || 1;
+            const pct = Math.max(0, Math.min(100, ((val - minVal) / span) * 100));
+            slider.style.setProperty('--fill-low', `${Math.min(50, pct).toFixed(2)}%`);
+            slider.style.setProperty('--fill-high', `${Math.max(50, pct).toFixed(2)}%`);
+            slider.dataset.polarity = val > 0.01 ? 'boost' : (val < -0.01 ? 'cut' : 'flat');
+        }
+
         // Populate 10 Tactile Vertical Faders
         peqGrid.innerHTML = '';
         PEQ_FREQS.forEach((freq, i) => {
@@ -4157,21 +4502,34 @@ if (_g.particles.length === 0) {
                 <span class="peqFaderDb ${dbClass}" id="peqFaderDb-${i}">${sign}${val.toFixed(1)}</span>
                 <div class="peqFaderTrackCon">
                     <div class="peqFaderTrackZero"></div>
-                    <input type="range" class="peqSlider" id="peqSlider-${i}" min="-15" max="15" step="0.5" value="${val}" aria-label="${hzText} Hz Band Gain">
+                    <input type="range" class="peqSlider" id="peqSlider-${i}" min="-15" max="15" step="0.5" value="${val}" aria-label="${hzText} Hz Band Gain" aria-orientation="vertical">
                 </div>
                 <span class="peqFaderHz">${hzText}</span>
                 <button type="button" class="peqFaderQBtn" id="peqFaderQ-${i}" title="Click to adjust Q-Factor (Bandwidth) for ${hzText} Hz">${`Q ${qVal.toFixed(1)}`}</button>
             `;
 
             const slider = col.querySelector('.peqSlider');
+            syncBipolarSliderFill(slider, val, -15, 15);
             slider.addEventListener('input', (e) => {
                 const gain = parseFloat(e.target.value);
                 setPeqBandGain(i, gain);
+                syncBipolarSliderFill(slider, gain, -15, 15);
                 const dbEl = document.getElementById(`peqFaderDb-${i}`);
                 if (dbEl) {
                     const s = gain > 0 ? '+' : '';
                     dbEl.textContent = `${s}${gain.toFixed(1)}`;
                     dbEl.className = `peqFaderDb ${gain > 0 ? 'boost' : (gain < 0 ? 'cut' : '')}`;
+                }
+                drawPeqCurve();
+            });
+            slider.addEventListener('dblclick', () => {
+                slider.value = 0;
+                setPeqBandGain(i, 0);
+                syncBipolarSliderFill(slider, 0, -15, 15);
+                const dbEl = document.getElementById(`peqFaderDb-${i}`);
+                if (dbEl) {
+                    dbEl.textContent = '0.0';
+                    dbEl.className = 'peqFaderDb';
                 }
                 drawPeqCurve();
             });
@@ -4231,7 +4589,10 @@ if (_g.particles.length === 0) {
                     const slider = document.getElementById(`peqSlider-${i}`);
                     const dbEl = document.getElementById(`peqFaderDb-${i}`);
                     const qBtn = document.getElementById(`peqFaderQ-${i}`);
-                    if (slider) slider.value = 0;
+                    if (slider) {
+                        slider.value = 0;
+                        syncBipolarSliderFill(slider, 0, -15, 15);
+                    }
                     if (dbEl) {
                         dbEl.textContent = '0.0';
                         dbEl.className = 'peqFaderDb';
@@ -4257,11 +4618,14 @@ if (_g.particles.length === 0) {
         }
 
         if (balanceSlider) {
-            balanceSlider.value = Math.round(stereoBalance * 100);
+            const initBalPct = Math.round(stereoBalance * 100);
+            balanceSlider.value = initBalPct;
+            syncBipolarSliderFill(balanceSlider, initBalPct, -100, 100);
             if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(stereoBalance);
             balanceSlider.addEventListener('input', (e) => {
                 const rawPct = parseInt(e.target.value, 10) || 0;
                 stereoBalance = Math.max(-1.0, Math.min(1.0, rawPct / 100));
+                syncBipolarSliderFill(balanceSlider, rawPct, -100, 100);
                 safeStorage.setItem('cachymusic_stereo_balance', stereoBalance.toFixed(2));
                 if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(stereoBalance);
                 updateWorkletParams();
@@ -4273,8 +4637,11 @@ if (_g.particles.length === 0) {
             balanceResetBtn.addEventListener('click', () => {
                 stereoBalance = 0;
                 safeStorage.setItem('cachymusic_stereo_balance', '0');
-                if (balanceSlider) balanceSlider.value = 0;
-                if (balanceValueEl) balanceValueEl.textContent = 'CENTER';
+                if (balanceSlider) {
+                    balanceSlider.value = 0;
+                    syncBipolarSliderFill(balanceSlider, 0, -100, 100);
+                }
+                if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(0);
                 updateWorkletParams();
                 updateAudioRouting();
             });
@@ -4310,7 +4677,10 @@ if (_g.particles.length === 0) {
                     const slider = document.getElementById(`peqSlider-${i}`);
                     const dbEl = document.getElementById(`peqFaderDb-${i}`);
                     const g = peqGains[i];
-                    if (slider) slider.value = g;
+                    if (slider) {
+                        slider.value = g;
+                        syncBipolarSliderFill(slider, g, -15, 15);
+                    }
                     if (dbEl) {
                         const s = g > 0 ? '+' : '';
                         dbEl.textContent = `${s}${g.toFixed(1)}`;
@@ -4348,7 +4718,10 @@ if (_g.particles.length === 0) {
                         const slider = document.getElementById(`peqSlider-${i}`);
                         const dbEl = document.getElementById(`peqFaderDb-${i}`);
                         const g = peqGains[i];
-                        if (slider) slider.value = g;
+                        if (slider) {
+                            slider.value = g;
+                            syncBipolarSliderFill(slider, g, -15, 15);
+                        }
                         if (dbEl) {
                             const s = g > 0 ? '+' : '';
                             dbEl.textContent = `${s}${g.toFixed(1)}`;
@@ -4371,6 +4744,10 @@ if (_g.particles.length === 0) {
             peqModal.style.display = 'flex';
             pushModalState('peqModal');
             drawPeqCurve();
+            requestAnimationFrame(() => {
+                drawPeqCurve();
+                setTimeout(drawPeqCurve, 60);
+            });
         };
 
         closePeqModal = function() {
@@ -4386,6 +4763,12 @@ if (_g.particles.length === 0) {
                 if (e.target === peqModal) closePeqModal();
             });
         }
+
+        window.addEventListener('resize', () => {
+            if (peqModal && peqModal.style.display !== 'none') {
+                drawPeqCurve();
+            }
+        }, { passive: true });
 
         setTimeout(drawPeqCurve, 100);
     }
@@ -5845,7 +6228,7 @@ if (_g.particles.length === 0) {
             coverArtPreview.src = coverSrc;
         }
         updateAmbientLighting(coverSrc);
-        appendDebugTelemetry(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
+        window.appendDebugTelemetry?.(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
 
         if (coverBadge) {
             if (track.cover) {
@@ -6080,7 +6463,7 @@ if (_g.particles.length === 0) {
             coverArtPreview.src = coverSrc;
         }
         updateAmbientLighting(coverSrc);
-        appendDebugTelemetry(`[STANDALONE LOAD] "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
+        window.appendDebugTelemetry?.(`[STANDALONE LOAD] "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
 
         if (statTitle) statTitle.textContent = track.title ? track.title : (track.filename || 'Standalone Audio');
         if (statArtist) statArtist.textContent = track.artist ? track.artist : 'External File';
@@ -7191,7 +7574,7 @@ if (_g.particles.length === 0) {
             if ((trackDur > 5 && curTime < 3.0) || curTime === 0) {
                 console.warn(`[AudioEngine] Premature stream end detected at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}".`);
                 logAudioPlaybackEvent('warn', `Premature stream termination at ${curTime.toFixed(2)}s on "${trackTitle}"`);
-                appendDebugTelemetry(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
+                window.appendDebugTelemetry?.(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
                 if (trackPlaybackRetryCount < 2) {
                     trackPlaybackRetryCount++;
                     setTimeout(() => {
@@ -7207,7 +7590,7 @@ if (_g.particles.length === 0) {
                     return;
                 }
             } else {
-                appendDebugTelemetry(`[EVENT] Track finished naturally at ${curTime.toFixed(1)}s`);
+                window.appendDebugTelemetry?.(`[EVENT] Track finished naturally at ${curTime.toFixed(1)}s`);
             }
 
             if (sleepTimerMode === 'end') {
@@ -7286,7 +7669,8 @@ if (_g.particles.length === 0) {
         }
 
         const curTheme = getActiveTheme();
-        const isLightSurface = (curTheme === 'default' || curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm');
+        const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
+        const isLightSurface = (curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm' || (curTheme === 'default' && !isMobileViewport));
         const hasTrack = Boolean(track && allTracks.length > 0);
         const format = hasTrack ? resolveTrackFormat(track) : 'NONE';
         const isLossless = hasTrack && ['FLAC', 'WAV', 'ALAC', 'AIFF', 'APE', 'WV', 'DSD', 'DSF', 'PCM'].includes(format);
@@ -7317,6 +7701,7 @@ if (_g.particles.length === 0) {
 
         // 1. Update Top Summary Badge, Description & Indicator Dot
         if (!hasTrack) {
+            if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'idle';
             if (auditQualityBadge) {
                 auditQualityBadge.textContent = `IDLE (${shortEngineLabel} READY)`;
                 auditQualityBadge.className = 'signalQualityBadge highPrecision';
@@ -7328,6 +7713,7 @@ if (_g.particles.length === 0) {
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         } else if (isLossless && !hasPeq && !isBassBoost && !isVocalBoost && !isTrebleBoost && !isCrossfeed && !isSurroundWidener && !isAmbiophonics && !isPhaseInvert && !isMonoMix) {
+            if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'bit-perfect';
             if (auditQualityBadge) {
                 auditQualityBadge.textContent = `LOSSLESS ${format} → ${shortEngineLabel}`;
                 auditQualityBadge.className = 'signalQualityBadge bitPerfect';
@@ -7335,10 +7721,11 @@ if (_g.particles.length === 0) {
             if (auditQualityDesc) {
                 auditQualityDesc.textContent = `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${isUltrasonic || ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
             }
-            const dotCol = isLightSurface ? '#065f46' : '#10b981';
+            const dotCol = isLightSurface ? '#059669' : '#10b981';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         } else if (isLossless) {
+            if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'dsp';
             if (auditQualityBadge) {
                 auditQualityBadge.textContent = `LOSSLESS ${format} → ${isPrecision64 ? '64-BIT' : '32-BIT'} DSP`;
                 auditQualityBadge.className = 'signalQualityBadge dspEnhanced';
@@ -7346,10 +7733,11 @@ if (_g.particles.length === 0) {
             if (auditQualityDesc) {
                 auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
             }
-            const dotCol = isLightSurface ? '#9a3412' : '#fbbf24';
+            const dotCol = isLightSurface ? '#b45309' : '#fbbf24';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         } else {
+            if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'lossy';
             if (auditQualityBadge) {
                 auditQualityBadge.textContent = `${format} LOSSY → ${dspActive ? (isPrecision64 ? '64-BIT DSP' : '32-BIT DSP') : '32-BIT DECODE'}`;
                 auditQualityBadge.className = 'signalQualityBadge highPrecision';
@@ -7357,7 +7745,7 @@ if (_g.particles.length === 0) {
             if (auditQualityDesc) {
                 auditQualityDesc.textContent = `Compressed ${format} stream decoded by browser into 32-bit IEEE 754 floating-point PCM${activeStages.length > 0 ? `, processed via ${workletPrecisionStr} (${activeStages.join(', ')})` : ' with flat EQ response'}.`;
             }
-            const dotCol = isLightSurface ? '#075985' : '#38bdf8';
+            const dotCol = isLightSurface ? '#0284c7' : '#38bdf8';
             if (deckSignalDot) deckSignalDot.style.color = dotCol;
             if (auditQualityDot) auditQualityDot.style.color = dotCol;
         }
@@ -15676,6 +16064,55 @@ if (_g.particles.length === 0) {
 
 
 
+    function getSlskApiUrl(action, queryParams = '') {
+        let base = 'php/api/soulseek.php';
+        try {
+            const isNativeAndroid = typeof AndroidBridge !== 'undefined'
+                && typeof AndroidBridge.isAndroid === 'function'
+                && AndroidBridge.isAndroid();
+            if (!isNativeAndroid) {
+                const host = (typeof safeStorage !== 'undefined' ? safeStorage.getItem('cachymusic_slsk_host') : '') || '';
+                if (host && host.trim()) {
+                    base = `${host.trim().replace(/\/+$/, '')}/php/api/soulseek.php`;
+                }
+            }
+        } catch (_) {}
+        const paramStr = queryParams ? `&${queryParams}` : '';
+        return `${base}?action=${encodeURIComponent(action)}${paramStr}`;
+    }
+
+    // Setup Android Standalone Bridge hook for Soulseek fetch requests
+    if (typeof window !== 'undefined' && window.AndroidBridge && typeof window.AndroidBridge.callSoulseekApi === 'function') {
+        try {
+            if (typeof safeStorage !== 'undefined') safeStorage.removeItem('cachymusic_slsk_host');
+            localStorage.removeItem('cachymusic_slsk_host');
+        } catch (_) {}
+
+        const origFetch = window.fetch;
+        window.fetch = async function(resource, init) {
+            const urlStr = typeof resource === 'string' ? resource : (resource && resource.url ? resource.url : '');
+            if (urlStr.includes('soulseek.php')) {
+                try {
+                    const urlObj = new URL(urlStr, window.location.href);
+                    const action = urlObj.searchParams.get('action') || 'status';
+                    let bodyStr = '{}';
+                    if (init && init.body) {
+                        bodyStr = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
+                    }
+                    const respJson = window.AndroidBridge.callSoulseekApi(action, bodyStr, urlObj.search);
+                    return new Response(respJson, {
+                        status: 200,
+                        statusText: 'OK',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                } catch (bridgeErr) {
+                    console.warn('AndroidBridge callSoulseekApi fallback:', bridgeErr);
+                }
+            }
+            return origFetch.apply(this, arguments);
+        };
+    }
+
     // =========================================================================
     // Soulseek Controller - Nicotine+ REST Engine
     // =========================================================================
@@ -15812,7 +16249,7 @@ if (_g.particles.length === 0) {
             }
 
             try {
-                const res = await fetch('php/api/soulseek.php?action=power', {
+                const res = await fetch(getSlskApiUrl('power'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ state: targetState })
@@ -15841,7 +16278,7 @@ if (_g.particles.length === 0) {
 
         async checkStatus() {
             try {
-                const res = await fetch('php/api/soulseek.php?action=status');
+                const res = await fetch(getSlskApiUrl('status'));
                 const data = await res.json();
                 this.lastStatus = data;
 
@@ -15867,9 +16304,11 @@ if (_g.particles.length === 0) {
 
                 this.updatePowerUI(data);
 
+                const isNative = data.daemon_type === 'embedded-native' || (typeof AndroidBridge !== 'undefined' && AndroidBridge.isAndroid());
+                const clientLabel = isNative ? 'SOULSEEK' : 'NICOTINE+';
                 const slskBadge = document.getElementById('slskBadge');
                 if (slskBadge) {
-                    slskBadge.textContent = 'NICOTINE+';
+                    slskBadge.textContent = clientLabel;
                 }
 
                 if (data.ok) {
@@ -15885,7 +16324,7 @@ if (_g.particles.length === 0) {
                         if (slskUsername) slskUsername.textContent = `${data.login_username} (Connecting)`;
                     } else if (data.has_credentials) {
                         if (slskStatusDot) slskStatusDot.className = 'slskStatusDot offline';
-                        if (slskStatusText) slskStatusText.textContent = data.error ? `AUTH FAILED: ${data.error}` : 'NICOTINE+ OFFLINE (DISCONNECTED)';
+                        if (slskStatusText) slskStatusText.textContent = data.error ? `AUTH FAILED: ${data.error}` : `${clientLabel} OFFLINE (DISCONNECTED)`;
                         if (wsSoulseekBadge) wsSoulseekBadge.className = 'wsBadge offline';
                         if (slskUsername) slskUsername.textContent = `${data.login_username} (Offline)`;
                     } else {
@@ -15897,17 +16336,17 @@ if (_g.particles.length === 0) {
                     if (slskStartDaemonBtn) slskStartDaemonBtn.style.display = 'none';
                 } else if (data.daemon_running) {
                     if (slskStatusDot) slskStatusDot.className = 'slskStatusDot busy';
-                    if (slskStatusText) slskStatusText.textContent = 'NICOTINE+ INITIALIZING...';
+                    if (slskStatusText) slskStatusText.textContent = `${clientLabel} INITIALIZING...`;
                     if (wsSoulseekBadge) wsSoulseekBadge.className = 'wsBadge busy';
                     if (slskStartDaemonBtn) slskStartDaemonBtn.style.display = 'none';
                 } else {
                     if (slskStatusDot) slskStatusDot.className = 'slskStatusDot offline';
-                    if (slskStatusText) slskStatusText.textContent = 'NICOTINE+ OFFLINE';
+                    if (slskStatusText) slskStatusText.textContent = `${clientLabel} OFFLINE`;
                     if (wsSoulseekBadge) wsSoulseekBadge.className = 'wsBadge offline';
                     if (slskStartDaemonBtn) {
                         slskStartDaemonBtn.style.display = 'inline-block';
                         slskStartDaemonBtn.disabled = false;
-                        slskStartDaemonBtn.textContent = '▶ START NICOTINE+';
+                        slskStartDaemonBtn.textContent = `▶ START ${clientLabel}`;
                     }
                 }
             } catch (err) {
@@ -15941,9 +16380,9 @@ if (_g.particles.length === 0) {
                         let nMsg = 'Files are unexposed. Click Settings to configure or connect.';
                         let nIcon = 'ℹ️';
 
-                        if (statusObj.reason === 'mobile_standalone' || statusObj.status === 'offline') {
-                            nTitle = 'Mobile Standalone Mode';
-                            nMsg = 'P2P transfers require a desktop workstation host. Standalone mobile runs as an offline Hi-Fi player.';
+                        if (statusObj.reason === 'mobile_standalone') {
+                            nTitle = 'Soulseek Standalone Mode';
+                            nMsg = 'Soulseek is currently disconnected. Click Settings to enter credentials and connect directly to the Soulseek network.';
                             nIcon = '📱';
                         } else if (!statusObj.daemon_running || (statusObj.error && /12339|daemon|refused/i.test(statusObj.error))) {
                             nTitle = 'Soulseek Daemon Offline';
@@ -15980,7 +16419,7 @@ if (_g.particles.length === 0) {
             if (wsSoulseekBadge) wsSoulseekBadge.className = 'wsBadge busy';
 
             try {
-                const res = await fetch('php/api/soulseek.php?action=start_daemon', { method: 'POST' });
+                const res = await fetch(getSlskApiUrl('start_daemon'), { method: 'POST' });
                 const data = await res.json();
                 
                 let attempts = 0;
@@ -16065,18 +16504,21 @@ if (_g.particles.length === 0) {
                     return;
                 }
 
-                const confirmPower = confirm('Soulseek is currently disconnected. Would you like to connect to search the network?');
-                if (confirmPower) {
-                    await this.togglePower();
-                    if (!this.isConnected) return;
-                } else {
-                    return;
-                }
+                await this.togglePower();
+                if (!this.isConnected) return;
             }
 
             this.activeQuery = q;
             if (window.innerWidth <= 768) {
                 setMobileSearchPanelCollapsed(true);
+                const textFiltersCon = document.getElementById('slskTextFiltersCon');
+                const textFilterBtn = document.getElementById('slskTextFilterToggleBtn');
+                if (textFiltersCon && textFiltersCon.classList.contains('open')) {
+                    textFiltersCon.classList.remove('open');
+                    if (textFilterBtn && !this.includeFilterQuery && !this.excludeFilterQuery) {
+                        textFilterBtn.classList.remove('active');
+                    }
+                }
             }
             this.rawResults = [];
             this.activeSubFilter = null;
@@ -16099,8 +16541,9 @@ if (_g.particles.length === 0) {
             try {
                 const searchModeSelect = document.getElementById('slskSearchModeSelect');
                 const searchMode = searchModeSelect ? searchModeSelect.value : 'global';
+                const isNativeMobile = !!(window.CachyNativeSoulseek && typeof window.CachyNativeSoulseek.call === 'function');
 
-                const res = await fetch('php/api/soulseek.php?action=search', {
+                const res = await fetch(getSlskApiUrl('search', `query=${encodeURIComponent(q)}&mode=${encodeURIComponent(searchMode)}`), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query: q, mode: searchMode })
@@ -16109,7 +16552,7 @@ if (_g.particles.length === 0) {
 
                 if (!data.ok) {
                     const peerStatusEl = document.getElementById('slskSearchingPeerStatus');
-                    if (peerStatusEl) peerStatusEl.textContent = `Search error: ${data.message || 'Check Nicotine+'}`;
+                    if (peerStatusEl) peerStatusEl.textContent = `Search error: ${data.message || data.error || (isNativeMobile ? 'Check Soulseek login' : 'Check Nicotine+')}`;
                     this.isSearching = false;
                     return;
                 }
@@ -16117,7 +16560,7 @@ if (_g.particles.length === 0) {
                 this.activeToken = data.token;
 
                 let pollCount = 0;
-                const maxPolls = 14;
+                const maxPolls = 16;
 
                 const doPoll = async () => {
                     pollCount++;
@@ -16137,13 +16580,14 @@ if (_g.particles.length === 0) {
                     }
                 };
 
-                setTimeout(doPoll, 350);
-                this.searchPollTimer = setInterval(doPoll, 1100);
+                setTimeout(doPoll, 400);
+                this.searchPollTimer = setInterval(doPoll, 1000);
 
             } catch (err) {
                 console.warn('Search request error:', err);
                 const peerStatusEl = document.getElementById('slskSearchingPeerStatus');
-                if (peerStatusEl) peerStatusEl.textContent = 'Connection error reaching Nicotine+ daemon';
+                const isNativeMobile = !!(window.CachyNativeSoulseek && typeof window.CachyNativeSoulseek.call === 'function');
+                if (peerStatusEl) peerStatusEl.textContent = isNativeMobile ? 'Connection error reaching Soulseek network' : 'Connection error reaching Nicotine+ daemon';
                 this.isSearching = false;
             }
         },
@@ -16151,7 +16595,7 @@ if (_g.particles.length === 0) {
         async pollResults(token) {
             if (!token) return;
             try {
-                const res = await fetch(`php/api/soulseek.php?action=results&token=${token}&limit=250`);
+                const res = await fetch(getSlskApiUrl('results', `token=${encodeURIComponent(token)}&limit=250`));
                 const data = await res.json();
 
                 if (data.ok && Array.isArray(data.items)) {
@@ -16616,7 +17060,7 @@ if (_g.particles.length === 0) {
             }
 
             try {
-                const res = await fetch('php/api/soulseek.php?action=download', {
+                const res = await fetch(getSlskApiUrl('download'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -16637,7 +17081,6 @@ if (_g.particles.length === 0) {
                     if (autoPlayWhenDone) {
                         this.autoPlayQueue.add(item.filename);
                     }
-                    this.openTransfersDrawer();
                     this.pollTransfers();
                 } else {
                     if (btnEl) {
@@ -16657,12 +17100,37 @@ if (_g.particles.length === 0) {
             }
         },
 
+        activeSubView: 'results',
+
+        setSubView(mode) {
+            const nextMode = mode === 'transfers' ? 'transfers' : 'results';
+            this.activeSubView = nextMode;
+            const wsEl = document.getElementById('soulseekWorkspace');
+            if (wsEl) {
+                wsEl.setAttribute('data-slsk-subview', nextMode);
+            }
+            if (slskTransfersDrawer) {
+                slskTransfersDrawer.classList.toggle('open', nextMode === 'transfers');
+            }
+            if (slskToggleTransfersBtn) {
+                slskToggleTransfersBtn.classList.toggle('active', nextMode === 'transfers');
+                slskToggleTransfersBtn.setAttribute('aria-pressed', nextMode === 'transfers' ? 'true' : 'false');
+            }
+            if (nextMode === 'transfers') {
+                this.pollTransfers();
+            }
+        },
+
+        toggleTransfersTab() {
+            this.setSubView(this.activeSubView === 'transfers' ? 'results' : 'transfers');
+        },
+
         openTransfersDrawer() {
-            if (slskTransfersDrawer) slskTransfersDrawer.classList.add('open');
+            this.setSubView('transfers');
         },
 
         closeTransfersDrawer() {
-            if (slskTransfersDrawer) slskTransfersDrawer.classList.remove('open');
+            this.setSubView('results');
         },
 
         startTransfersPolling() {
@@ -16685,7 +17153,7 @@ if (_g.particles.length === 0) {
             if (isFin) {
                 return `
                     <button type="button" class="slskPlayNowBtn">PLAY NOW</button>
-                    <button type="button" class="slskTransferBtn slskCancelBtn" title="Remove Completed Transfer">✕</button>
+                    <button type="button" class="slskTransferBtn slskCancelBtn slskIconOnlyBtn" title="Remove Completed Transfer">✕</button>
                 `;
             } else if (item.status === 'Paused') {
                 return `
@@ -16695,7 +17163,7 @@ if (_g.particles.length === 0) {
             } else if (item.status === 'Cancelled' || (item.status && item.status.startsWith('Error'))) {
                 return `
                     <button type="button" class="slskTransferBtn slskResumeBtn" title="Retry Download">RETRY</button>
-                    <button type="button" class="slskTransferBtn slskCancelBtn" title="Remove Transfer">✕</button>
+                    <button type="button" class="slskTransferBtn slskCancelBtn slskIconOnlyBtn" title="Remove Transfer">✕</button>
                 `;
             } else {
                 return `
@@ -16722,7 +17190,7 @@ if (_g.particles.length === 0) {
                     pauseBtn.disabled = true;
                     pauseBtn.textContent = '...';
                     try {
-                        await fetch('php/api/soulseek.php?action=pause_download', {
+                        await fetch(getSlskApiUrl('pause_download'), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -16747,7 +17215,7 @@ if (_g.particles.length === 0) {
                     resumeBtn.disabled = true;
                     resumeBtn.textContent = '...';
                     try {
-                        await fetch('php/api/soulseek.php?action=resume_download', {
+                        await fetch(getSlskApiUrl('resume_download'), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -16772,7 +17240,7 @@ if (_g.particles.length === 0) {
                     cancelBtn.disabled = true;
                     row.style.opacity = '0.35';
                     try {
-                        await fetch('php/api/soulseek.php?action=cancel_download', {
+                        await fetch(getSlskApiUrl('cancel_download'), {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -16793,7 +17261,7 @@ if (_g.particles.length === 0) {
 
         async pollTransfers() {
             try {
-                const res = await fetch('php/api/soulseek.php?action=transfers');
+                const res = await fetch(getSlskApiUrl('transfers'));
                 const data = await res.json();
 
                 if (!data.ok || !Array.isArray(data.items)) return;
@@ -16815,7 +17283,7 @@ if (_g.particles.length === 0) {
                             slskResumeAllBtn.disabled = true;
                             slskResumeAllBtn.textContent = 'RESUMING...';
                             try {
-                                await fetch('php/api/soulseek.php?action=resume_all', { method: 'POST' });
+                                await fetch(getSlskApiUrl('resume_all'), { method: 'POST' });
                                 await this.pollTransfers();
                             } catch (_) {}
                             finally {
@@ -16916,7 +17384,7 @@ if (_g.particles.length === 0) {
 
         async importAndPlay(filenameOrPath, autoPlay = true) {
             try {
-                const res = await fetch('php/api/soulseek.php?action=import_track', {
+                const res = await fetch(getSlskApiUrl('import_track'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ file: filenameOrPath })
@@ -16991,12 +17459,12 @@ if (_g.particles.length === 0) {
             let icon = '⚠️';
 
             if (reason === 'mobile_standalone' || /standalone/i.test(rawErr)) {
-                title = 'Mobile Standalone Mode';
-                explanation = 'Soulseek P2P transfers require a desktop workstation with Nicotine+ daemon. In standalone mobile mode, CachyMusic operates as a local offline Hi-Fi player.';
+                title = 'Desktop Workstation Required';
+                explanation = 'Soulseek P2P transfers require a desktop workstation running the Nicotine+ daemon. In the settings field above, enter your Desktop Host IP (e.g. http://192.168.1.50:8000) to connect your mobile device.';
                 icon = '📱';
             } else if (reason === 'daemon_offline' || /port 12339|daemon|refused|could not launch/i.test(rawErr)) {
                 title = 'Soulseek Service Offline';
-                explanation = 'The background Nicotine+ daemon (port 12339) is offline on the host machine. Please start the Nicotine+ background service.';
+                explanation = 'The background Nicotine+ daemon (port 12339) is offline on the host machine. Please start the Nicotine+ background service on your desktop.';
                 icon = '🔌';
             } else if (reason === 'invalid_credentials' || /password|invalid username|invaliduserpass|credentials/i.test(rawErr)) {
                 title = 'Invalid Soulseek Credentials';
@@ -17018,26 +17486,24 @@ if (_g.particles.length === 0) {
         try { window.renderSlskDiagnosticAlert = renderSlskDiagnosticAlert; } catch (_) {}
 
         function safeOpenSlskAccountModal() {
-            if (slskTransfersDrawer && slskTransfersDrawer.classList.contains('open')) {
-                slskTransfersDrawer.classList.remove('open');
+            const hostGroup = document.getElementById('slskModalHostGroup');
+            if (hostGroup) {
+                const isNativeAndroid = typeof AndroidBridge !== 'undefined'
+                    && typeof AndroidBridge.isAndroid === 'function'
+                    && AndroidBridge.isAndroid();
+                hostGroup.style.display = isNativeAndroid ? 'none' : 'block';
             }
-            if (typeof window.openSlskAccountModal === 'function') {
-                window.openSlskAccountModal();
-            } else if (typeof openSlskAccountModal === 'function') {
-                openSlskAccountModal();
-            } else if (slskAccountModal) {
-                slskAccountModal.style.display = 'flex';
+            const modal = document.getElementById('slskAccountModal');
+            if (modal) {
+                modal.style.display = 'flex';
                 if (typeof pushModalState === 'function') pushModalState('slskAccountModal');
             }
         }
 
         function safeCloseSlskAccountModal() {
-            if (typeof window.closeSlskAccountModal === 'function') {
-                window.closeSlskAccountModal();
-            } else if (typeof closeSlskAccountModal === 'function') {
-                closeSlskAccountModal();
-            } else if (slskAccountModal) {
-                slskAccountModal.style.display = 'none';
+            const modal = document.getElementById('slskAccountModal');
+            if (modal) {
+                modal.style.display = 'none';
                 if (typeof popModalState === 'function') popModalState('slskAccountModal');
             }
         }
@@ -17060,8 +17526,12 @@ if (_g.particles.length === 0) {
             slskAccountBtn.addEventListener('click', async () => {
                 safeOpenSlskAccountModal();
                 if (slskAccountAlert) slskAccountAlert.style.display = 'none';
+                const hostInput = document.getElementById('slskModalHost');
+                if (hostInput) {
+                    hostInput.value = (typeof safeStorage !== 'undefined' ? safeStorage.getItem('cachymusic_slsk_host') : '') || '';
+                }
                 try {
-                    const res = await fetch('php/api/soulseek.php?action=account');
+                    const res = await fetch(getSlskApiUrl('account'));
                     const data = await res.json();
                     if (data.username && slskModalUsername) {
                         slskModalUsername.value = data.username;
@@ -17123,7 +17593,7 @@ if (_g.particles.length === 0) {
                 slskSyncCurrentDirBtn.disabled = true;
 
                 try {
-                    const res = await fetch('php/api/soulseek.php?action=directory', {
+                    const res = await fetch(getSlskApiUrl('directory'), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ directory: currentFolder })
@@ -17194,21 +17664,48 @@ if (_g.particles.length === 0) {
         }
 
         if (slskCloseAccountModalBtn) {
-            bindFastAction(slskCloseAccountModalBtn, () => {
+            slskCloseAccountModalBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 safeCloseSlskAccountModal();
             });
+            slskCloseAccountModalBtn.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+            }, { passive: true });
         }
 
         if (slskAccountModal) {
-            bindFastAction(slskAccountModal, (e) => {
+            slskAccountModal.addEventListener('click', (e) => {
                 if (e.target === slskAccountModal) {
                     safeCloseSlskAccountModal();
                 }
             });
         }
 
+        const slskModalAutoDetectHostBtn = document.getElementById('slskModalAutoDetectHostBtn');
+        if (slskModalAutoDetectHostBtn) {
+            slskModalAutoDetectHostBtn.addEventListener('click', () => {
+                const hostInput = document.getElementById('slskModalHost');
+                if (!hostInput) return;
+                if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('androidplatform.net')) {
+                    hostInput.value = window.location.origin;
+                } else {
+                    const promptVal = prompt('Enter your desktop workstation IP and port (e.g. http://192.168.1.50:8000):', hostInput.value || 'http://192.168.1.');
+                    if (promptVal) hostInput.value = promptVal.trim();
+                }
+            });
+        }
+
         async function saveSlskAccountSettings() {
             if (!slskSaveAccountBtn || slskSaveAccountBtn.disabled) return;
+            const hostInput = document.getElementById('slskModalHost');
+            if (hostInput) {
+                const hostVal = hostInput.value.trim();
+                safeStorage.setItem('cachymusic_slsk_host', hostVal);
+                if (typeof AndroidBridge !== 'undefined' && typeof AndroidBridge.setSoulseekHost === 'function') {
+                    try { AndroidBridge.setSoulseekHost(hostVal); } catch (_) {}
+                }
+            }
             const username = (slskModalUsername ? slskModalUsername.value : '').trim();
             const password = (slskModalPassword ? slskModalPassword.value : '').trim();
             const newDir = (slskModalDownloadDir ? slskModalDownloadDir.value : '').trim();
@@ -17220,43 +17717,39 @@ if (_g.particles.length === 0) {
             try {
                 // Update downloads directory if changed
                 if (newDir && newDir !== soulseekController.downloadsDir) {
-                    const dirRes = await fetch('php/api/soulseek.php?action=directory', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ directory: newDir })
-                    });
-                    const dirData = await dirRes.json();
-                    if (!dirData.ok) {
-                        renderSlskDiagnosticAlert(slskAccountAlert, dirData, 'Invalid download folder path.');
-                        return;
-                    }
-                    if (dirData.downloads_dir) {
-                        soulseekController.downloadsDir = dirData.downloads_dir;
-                        if (slskDownloadsPathText) slskDownloadsPathText.textContent = dirData.downloads_dir;
-                    }
+                    try {
+                        const dirRes = await fetch(getSlskApiUrl('directory'), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ directory: newDir })
+                        });
+                        const dirData = await dirRes.json();
+                        if (dirData && dirData.downloads_dir) {
+                            soulseekController.downloadsDir = dirData.downloads_dir;
+                            if (slskDownloadsPathText) slskDownloadsPathText.textContent = dirData.downloads_dir;
+                        }
+                    } catch (_) {}
                 }
 
                 // Update shared directory if changed
                 if (newSharedDir && newSharedDir !== soulseekController.sharedDir) {
-                    const sRes = await fetch('php/api/soulseek.php?action=shared_directory', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ directory: newSharedDir })
-                    });
-                    const sData = await sRes.json();
-                    if (!sData.ok) {
-                        renderSlskDiagnosticAlert(slskAccountAlert, sData, 'Invalid shared folder path.');
-                        return;
-                    }
-                    if (sData.shared_dir) {
-                        soulseekController.sharedDir = sData.shared_dir;
-                        if (slskSharedPathText) slskSharedPathText.textContent = sData.shared_dir;
-                    }
+                    try {
+                        const sRes = await fetch(getSlskApiUrl('shared_directory'), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ directory: newSharedDir })
+                        });
+                        const sData = await sRes.json();
+                        if (sData && sData.shared_dir) {
+                            soulseekController.sharedDir = sData.shared_dir;
+                            if (slskSharedPathText) slskSharedPathText.textContent = sData.shared_dir;
+                        }
+                    } catch (_) {}
                 }
 
                 // Save credentials and connect
                 if (username) {
-                    const res = await fetch('php/api/soulseek.php?action=login', {
+                    const res = await fetch(getSlskApiUrl('login'), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -17294,7 +17787,10 @@ if (_g.particles.length === 0) {
                     }, 900);
                 }
             } catch (err) {
-                renderSlskDiagnosticAlert(slskAccountAlert, { error: 'Network error communicating with Soulseek backend.' }, 'Network error saving settings.');
+                renderSlskDiagnosticAlert(slskAccountAlert, {
+                    error: err && err.message ? err.message : 'Network error communicating with Soulseek backend.',
+                    reason: isMobileDevice ? 'mobile_standalone' : 'daemon_offline'
+                }, 'Network error saving settings.');
             } finally {
                 slskSaveAccountBtn.textContent = 'SAVE & CONNECT';
                 slskSaveAccountBtn.disabled = false;
@@ -17322,10 +17818,17 @@ if (_g.particles.length === 0) {
             });
         }
 
+        const slskNoticeConnectBtn = document.getElementById('slskNoticeConnectBtn');
+        if (slskNoticeConnectBtn && slskPowerBtn) {
+            bindFastAction(slskNoticeConnectBtn, () => {
+                slskPowerBtn.click();
+            });
+        }
+
         if (slskLogoutBtn) {
             slskLogoutBtn.addEventListener('click', async () => {
                 try {
-                    await fetch('php/api/soulseek.php?action=logout', { method: 'POST' });
+                    await fetch(getSlskApiUrl('logout'), { method: 'POST' });
                     if (slskModalUsername) slskModalUsername.value = '';
                     if (slskModalPassword) {
                         slskModalPassword.value = '';
@@ -17343,16 +17846,46 @@ if (_g.particles.length === 0) {
             });
         }
 
-        if (slskSearchInput) {
-            slskSearchInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    soulseekController.search(slskSearchInput.value);
-                }
+        const slskSearchForm = document.getElementById('slskSearchForm');
+        let lastInstantSearchTs = 0;
+        let lastInstantSearchQuery = '';
+
+        const triggerInstantSearch = () => {
+            if (!slskSearchInput) return;
+            const rawVal = slskSearchInput.value.trim();
+            if (!rawVal) return;
+            const now = Date.now();
+            if (now - lastInstantSearchTs < 350 && rawVal === lastInstantSearchQuery) {
+                return;
+            }
+            lastInstantSearchTs = now;
+            lastInstantSearchQuery = rawVal;
+            if (window.innerWidth <= 768) {
+                slskSearchInput.blur();
+            }
+            soulseekController.search(rawVal);
+        };
+
+        if (slskSearchForm) {
+            slskSearchForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                triggerInstantSearch();
             });
+        }
+
+        if (slskSearchInput) {
+            const handleSearchKey = (e) => {
+                if (e.isComposing) return;
+                if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13) {
+                    e.preventDefault();
+                    triggerInstantSearch();
+                }
+            };
+            slskSearchInput.addEventListener('keydown', handleSearchKey);
+            slskSearchInput.addEventListener('keyup', handleSearchKey);
             slskSearchInput.addEventListener('input', () => {
                 if (slskSearchClearBtn) {
-                    slskSearchClearBtn.style.display = slskSearchInput.value ? 'block' : 'none';
+                    slskSearchClearBtn.style.display = slskSearchInput.value ? 'inline-flex' : 'none';
                 }
             });
         }
@@ -17363,8 +17896,9 @@ if (_g.particles.length === 0) {
             });
         }
         if (slskSearchSubmitBtn) {
-            slskSearchSubmitBtn.addEventListener('click', () => {
-                if (slskSearchInput) soulseekController.search(slskSearchInput.value);
+            slskSearchSubmitBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                triggerInstantSearch();
             });
         }
         if (slskFilterChips) {
@@ -17393,7 +17927,7 @@ if (_g.particles.length === 0) {
                 soulseekController.includeFilterQuery = slskIncludeFilterInput.value.trim();
                 soulseekController.inResultFilterQuery = soulseekController.includeFilterQuery;
                 if (slskIncludeFilterClearBtn) {
-                    slskIncludeFilterClearBtn.style.display = slskIncludeFilterInput.value ? 'block' : 'none';
+                    slskIncludeFilterClearBtn.style.display = slskIncludeFilterInput.value ? 'inline-flex' : 'none';
                 }
                 soulseekController.applyFilterAndRender();
             });
@@ -17414,7 +17948,7 @@ if (_g.particles.length === 0) {
             slskExcludeFilterInput.addEventListener('input', () => {
                 soulseekController.excludeFilterQuery = slskExcludeFilterInput.value.trim();
                 if (slskExcludeFilterClearBtn) {
-                    slskExcludeFilterClearBtn.style.display = slskExcludeFilterInput.value ? 'block' : 'none';
+                    slskExcludeFilterClearBtn.style.display = slskExcludeFilterInput.value ? 'inline-flex' : 'none';
                 }
                 soulseekController.applyFilterAndRender();
             });
@@ -17459,7 +17993,7 @@ if (_g.particles.length === 0) {
                 const q = btn.dataset.query;
                 if (slskSearchInput) {
                     slskSearchInput.value = q;
-                    if (slskSearchClearBtn) slskSearchClearBtn.style.display = 'block';
+                    if (slskSearchClearBtn) slskSearchClearBtn.style.display = 'inline-flex';
                 }
                 if (window.innerWidth <= 768) {
                     setMobileSearchPanelCollapsed(true);
@@ -17475,7 +18009,25 @@ if (_g.particles.length === 0) {
         }
         if (slskToggleTransfersBtn) {
             slskToggleTransfersBtn.addEventListener('click', () => {
-                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
+                soulseekController.toggleTransfersTab();
+            });
+        }
+        const slskBackToResultsBtn = document.getElementById('slskBackToResultsBtn');
+        if (slskBackToResultsBtn) {
+            slskBackToResultsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                soulseekController.setSubView('results');
+            });
+        }
+        const slskTextFilterToggleBtn = document.getElementById('slskTextFilterToggleBtn');
+        const slskTextFiltersCon = document.getElementById('slskTextFiltersCon');
+        if (slskTextFilterToggleBtn && slskTextFiltersCon) {
+            slskTextFilterToggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const isOpen = slskTextFiltersCon.classList.toggle('open');
+                const hasText = Boolean((slskIncludeFilterInput?.value || '').trim() || (slskExcludeFilterInput?.value || '').trim());
+                slskTextFilterToggleBtn.classList.toggle('active', isOpen || hasText);
             });
         }
         if (slskPanelToggleBar) {
@@ -17487,26 +18039,24 @@ if (_g.particles.length === 0) {
         if (slskMobileTransfersBtn) {
             slskMobileTransfersBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
+                soulseekController.toggleTransfersTab();
             });
         }
         if (slskResultsList) {
             slskResultsList.addEventListener('click', () => {
-                if (window.innerWidth <= 768 && slskControlsPanel && !slskControlsPanel.classList.contains('is-collapsed')) {
-                    setMobileSearchPanelCollapsed(true);
+                if (window.innerWidth <= 768) {
+                    if (slskTextFiltersCon && slskTextFiltersCon.classList.contains('open')) {
+                        slskTextFiltersCon.classList.remove('open');
+                        const hasText = Boolean((slskIncludeFilterInput?.value || '').trim() || (slskExcludeFilterInput?.value || '').trim());
+                        if (slskTextFilterToggleBtn) slskTextFilterToggleBtn.classList.toggle('active', hasText);
+                    }
                 }
-            });
-        }
-        if (slskTransfersHeader) {
-            slskTransfersHeader.addEventListener('click', (e) => {
-                if (e.target.closest('#slskScanDownloadsBtn') || e.target.closest('#slskCloseDrawerBtn')) return;
-                if (slskTransfersDrawer) slskTransfersDrawer.classList.toggle('open');
             });
         }
         if (slskCloseDrawerBtn) {
             slskCloseDrawerBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                soulseekController.closeTransfersDrawer();
+                soulseekController.setSubView('results');
             });
         }
         if (slskScanDownloadsBtn) {
@@ -19132,6 +19682,7 @@ if (typeof window !== 'undefined') {
             const playNextBtn = document.getElementById('trackMenuPlayNextBtn');
             const enqueueBtn = document.getElementById('trackMenuEnqueueBtn');
             const addToPlaylistBtn = document.getElementById('trackMenuAddToPlaylistBtn');
+            const editMetaBtn = document.getElementById('trackMenuEditMetaBtn');
             const viewInfoBtn = document.getElementById('trackMenuViewInfoBtn');
             const removeBtn = document.getElementById('trackMenuRemoveBtn');
 
@@ -19171,6 +19722,17 @@ if (typeof window !== 'undefined') {
                 });
             }
 
+            if (editMetaBtn) {
+                editMetaBtn.addEventListener('click', () => {
+                    if (!selectedTrackForMenu) return;
+                    const track = selectedTrackForMenu;
+                    closeTrackActionMenu();
+                    if (typeof openMetadataEditor === 'function') {
+                        openMetadataEditor(track);
+                    }
+                });
+            }
+
             if (viewInfoBtn) {
                 viewInfoBtn.addEventListener('click', () => {
                     if (!selectedTrackForMenu) return;
@@ -19202,6 +19764,51 @@ if (typeof window !== 'undefined') {
             }
         }
         setupTrackActionMenuModal();
+
+        function setupMetadataEditorModal() {
+            const modal = document.getElementById('metadataEditorModal');
+            const closeBtn = document.getElementById('closeMetaEditorModalBtn');
+            const cancelBtn = document.getElementById('metaEditCancelBtn');
+            const form = document.getElementById('metaEditorForm');
+            const infoEditBtn = document.getElementById('infoPanelEditMetaBtn');
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                });
+            }
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                });
+            }
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                    }
+                });
+            }
+            if (form) {
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    if (typeof saveMetadata === 'function') {
+                        saveMetadata(e);
+                    }
+                });
+            }
+            if (infoEditBtn) {
+                infoEditBtn.addEventListener('click', () => {
+                    const track = (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+                    if (track) {
+                        if (typeof openMetadataEditor === 'function') openMetadataEditor(track);
+                    } else {
+                        showToast('No active track loaded to edit metadata');
+                    }
+                });
+            }
+        }
+        setupMetadataEditorModal();
 
         async function handleOpenStandaloneAudioFiles(files) {
             const rawFiles = Array.from(files || []);
@@ -19598,6 +20205,12 @@ if (typeof window !== 'undefined') {
                 const batchModalEl = document.getElementById('batchAddSongsModal');
                 if (batchModalEl && batchModalEl.style.display === 'flex') {
                     closeBatchAddModal();
+                    return;
+                }
+                const metaModalEl = document.getElementById('metadataEditorModal');
+                if (metaModalEl && (metaModalEl.style.display === 'flex' || window.getComputedStyle(metaModalEl).display === 'flex')) {
+                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                    else metaModalEl.style.display = 'none';
                     return;
                 }
             }

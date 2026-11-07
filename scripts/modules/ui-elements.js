@@ -193,6 +193,30 @@
     const modalNewPlaylistName = document.getElementById('modalNewPlaylistName');
     const modalCreateAndAddBtn = document.getElementById('modalCreateAndAddBtn');
 
+    // DOM Elements - Metadata & ID3 Tag Editor Modal
+    const metadataEditorModal = document.getElementById('metadataEditorModal');
+    const closeMetaEditorModalBtn = document.getElementById('closeMetaEditorModalBtn');
+    const metaEditCancelBtn = document.getElementById('metaEditCancelBtn');
+    const metaEditorForm = document.getElementById('metaEditorForm');
+    const metaEditSaveBtn = document.getElementById('metaEditSaveBtn');
+    const metaEditTitle = document.getElementById('metaEditTitle');
+    const metaEditArtist = document.getElementById('metaEditArtist');
+    const metaEditAlbum = document.getElementById('metaEditAlbum');
+    const metaEditGenre = document.getElementById('metaEditGenre');
+    const metaEditYear = document.getElementById('metaEditYear');
+    const metaEditTrackNum = document.getElementById('metaEditTrackNum');
+    const metaEditComment = document.getElementById('metaEditComment');
+    const metaEditorThumb = document.getElementById('metaEditorThumb');
+    const metaEditorFileTitle = document.getElementById('metaEditorFileTitle');
+    const metaEditorFilePath = document.getElementById('metaEditorFilePath');
+    const metaEditorStatus = document.getElementById('metaEditorStatus');
+    const metaEditorFormatPill = document.getElementById('metaEditorFormatPill');
+    const metaEditorBitratePill = document.getElementById('metaEditorBitratePill');
+    const metaEditorSampleRatePill = document.getElementById('metaEditorSampleRatePill');
+    const metaEditorBitDepthPill = document.getElementById('metaEditorBitDepthPill');
+    const infoPanelEditMetaBtn = document.getElementById('infoPanelEditMetaBtn');
+    const trackMenuEditMetaBtn = document.getElementById('trackMenuEditMetaBtn');
+
     // DOM Elements - Theme Overhaul
     const validThemeIds = [
         'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
@@ -551,6 +575,9 @@
             updateMiniPlayerPlayState(isPlaying);
 
             if (typeof soulseekController !== 'undefined') {
+                if (typeof soulseekController.setSubView === 'function') {
+                    soulseekController.setSubView('results');
+                }
                 soulseekController.checkStatus();
                 soulseekController.startTransfersPolling();
             }
@@ -868,6 +895,28 @@
         try { window.lyricsToggleBtn = lyricsToggleBtn; } catch (_) {}
         try { window.lyricsTrackName = lyricsTrackName; } catch (_) {}
         try { window.metadataToggleBtn = metadataToggleBtn; } catch (_) {}
+        try { window.metadataEditorModal = metadataEditorModal; } catch (_) {}
+        try { window.closeMetaEditorModalBtn = closeMetaEditorModalBtn; } catch (_) {}
+        try { window.metaEditCancelBtn = metaEditCancelBtn; } catch (_) {}
+        try { window.metaEditorForm = metaEditorForm; } catch (_) {}
+        try { window.metaEditSaveBtn = metaEditSaveBtn; } catch (_) {}
+        try { window.metaEditTitle = metaEditTitle; } catch (_) {}
+        try { window.metaEditArtist = metaEditArtist; } catch (_) {}
+        try { window.metaEditAlbum = metaEditAlbum; } catch (_) {}
+        try { window.metaEditGenre = metaEditGenre; } catch (_) {}
+        try { window.metaEditYear = metaEditYear; } catch (_) {}
+        try { window.metaEditTrackNum = metaEditTrackNum; } catch (_) {}
+        try { window.metaEditComment = metaEditComment; } catch (_) {}
+        try { window.metaEditorThumb = metaEditorThumb; } catch (_) {}
+        try { window.metaEditorFileTitle = metaEditorFileTitle; } catch (_) {}
+        try { window.metaEditorFilePath = metaEditorFilePath; } catch (_) {}
+        try { window.metaEditorStatus = metaEditorStatus; } catch (_) {}
+        try { window.metaEditorFormatPill = metaEditorFormatPill; } catch (_) {}
+        try { window.metaEditorBitratePill = metaEditorBitratePill; } catch (_) {}
+        try { window.metaEditorSampleRatePill = metaEditorSampleRatePill; } catch (_) {}
+        try { window.metaEditorBitDepthPill = metaEditorBitDepthPill; } catch (_) {}
+        try { window.infoPanelEditMetaBtn = infoPanelEditMetaBtn; } catch (_) {}
+        try { window.trackMenuEditMetaBtn = trackMenuEditMetaBtn; } catch (_) {}
         try { window.miniArtPreview = miniArtPreview; } catch (_) {}
         try { window.miniArtist = miniArtist; } catch (_) {}
         try { window.miniCurrentTime = miniCurrentTime; } catch (_) {}
@@ -1067,6 +1116,28 @@
         try { window.wsSettingsBtn = wsSettingsBtn; } catch (_) {}
         try { window.wsSoulseekBadge = wsSoulseekBadge; } catch (_) {}
         try { window.wsSoulseekBtn = wsSoulseekBtn; } catch (_) {}
+        try { window.metadataEditorModal = metadataEditorModal; } catch (_) {}
+        try { window.closeMetaEditorModalBtn = closeMetaEditorModalBtn; } catch (_) {}
+        try { window.metaEditCancelBtn = metaEditCancelBtn; } catch (_) {}
+        try { window.metaEditorForm = metaEditorForm; } catch (_) {}
+        try { window.metaEditSaveBtn = metaEditSaveBtn; } catch (_) {}
+        try { window.metaEditTitle = metaEditTitle; } catch (_) {}
+        try { window.metaEditArtist = metaEditArtist; } catch (_) {}
+        try { window.metaEditAlbum = metaEditAlbum; } catch (_) {}
+        try { window.metaEditGenre = metaEditGenre; } catch (_) {}
+        try { window.metaEditYear = metaEditYear; } catch (_) {}
+        try { window.metaEditTrackNum = metaEditTrackNum; } catch (_) {}
+        try { window.metaEditComment = metaEditComment; } catch (_) {}
+        try { window.metaEditorThumb = metaEditorThumb; } catch (_) {}
+        try { window.metaEditorFileTitle = metaEditorFileTitle; } catch (_) {}
+        try { window.metaEditorFilePath = metaEditorFilePath; } catch (_) {}
+        try { window.metaEditorStatus = metaEditorStatus; } catch (_) {}
+        try { window.metaEditorFormatPill = metaEditorFormatPill; } catch (_) {}
+        try { window.metaEditorBitratePill = metaEditorBitratePill; } catch (_) {}
+        try { window.metaEditorSampleRatePill = metaEditorSampleRatePill; } catch (_) {}
+        try { window.metaEditorBitDepthPill = metaEditorBitDepthPill; } catch (_) {}
+        try { window.infoPanelEditMetaBtn = infoPanelEditMetaBtn; } catch (_) {}
+        try { window.trackMenuEditMetaBtn = trackMenuEditMetaBtn; } catch (_) {}
     }
 
     export {
@@ -1093,6 +1164,7 @@
         clearQueueBtn,
         closeFolderTrayBtn,
         closeModalBtn,
+        closeMetaEditorModalBtn,
         closePeqModal,
         closeSignalPathModalBtn,
         closeSleepTimerModalBtn,
@@ -1120,6 +1192,7 @@
         getActiveTheme,
         gridContainer,
         hideTrackLoadingOverlay,
+        infoPanelEditMetaBtn,
         infoPanelEl,
         installAppBtn,
         isAtlasThemeActive,
@@ -1133,7 +1206,26 @@
         lyricsScrollArea,
         lyricsToggleBtn,
         lyricsTrackName,
+        metadataEditorModal,
         metadataToggleBtn,
+        metaEditAlbum,
+        metaEditArtist,
+        metaEditCancelBtn,
+        metaEditComment,
+        metaEditGenre,
+        metaEditSaveBtn,
+        metaEditTitle,
+        metaEditTrackNum,
+        metaEditYear,
+        metaEditorBitDepthPill,
+        metaEditorBitratePill,
+        metaEditorFilePath,
+        metaEditorFileTitle,
+        metaEditorFormatPill,
+        metaEditorForm,
+        metaEditorSampleRatePill,
+        metaEditorStatus,
+        metaEditorThumb,
         miniArtPreview,
         miniArtist,
         miniCurrentTime,
@@ -1306,6 +1398,7 @@
         trackCount,
         trackList,
         trackListPanelEl,
+        trackMenuEditMetaBtn,
         trackName,
         trackSearch,
         turntableCenterCanvas,

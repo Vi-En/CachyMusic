@@ -712,6 +712,58 @@ class Storage {
         return null;
     }
 
+    public static function updateTrackMetadata($tid, $fields) {
+        $tid = (int)$tid;
+        if ($tid <= 0) return false;
+
+        $data = self::read();
+        $strTid = (string)$tid;
+        $track = $data['tracks'][$strTid] ?? null;
+
+        if ($track === null) {
+            foreach ($data['tracks'] ?? [] as $k => $t) {
+                if ((int)($t['tid'] ?? 0) === $tid || (int)$k === $tid) {
+                    $strTid = (string)$k;
+                    $track = $t;
+                    break;
+                }
+            }
+        }
+
+        if ($track === null) return false;
+
+        $updatable = ['title', 'artist', 'album', 'genre', 'year', 'track_num', 'lyrics'];
+        $hasChanges = false;
+        foreach ($updatable as $key) {
+            if (array_key_exists($key, $fields)) {
+                $val = trim((string)$fields[$key]);
+                if ($key === 'year' || $key === 'track_num') {
+                    $val = is_numeric($val) ? (int)$val : null;
+                }
+                $track[$key] = $val;
+                $hasChanges = true;
+            }
+        }
+
+        if ($hasChanges) {
+            $data['tracks'][$strTid] = $track;
+            self::write($data);
+
+            if (self::hasMySQL()) {
+                $conn = $GLOBALS['connection'];
+                $stmt = $conn->prepare("UPDATE Tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, track_num = ? WHERE tid = ?");
+                if ($stmt) {
+                    $yr = $track['year'] ?? null;
+                    $trk = $track['track_num'] ?? null;
+                    $stmt->bind_param("ssssiii", $track['title'], $track['artist'], $track['album'], $track['genre'], $yr, $trk, $tid);
+                    $stmt->execute();
+                }
+            }
+        }
+
+        return $track;
+    }
+
     // --- SOULSEEK ACCOUNT ---
     public static function getSoulseekAccount() {
         if (self::hasMySQL()) {

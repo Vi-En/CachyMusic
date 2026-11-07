@@ -74,14 +74,6 @@ class MprisPlayer(dbus.service.Object):
                 new_pos = float(data.get("position", 0.0))
                 new_dur = float(data.get("duration", 0.0))
                 new_vol = float(data.get("volume", 0.8))
-                new_shuffle = bool(data.get("shuffle", False))
-                raw_repeat = str(data.get("repeat", "off")).lower()
-                if raw_repeat == "one":
-                    new_loop = "Track"
-                elif raw_repeat == "all":
-                    new_loop = "Playlist"
-                else:
-                    new_loop = "None"
                 
                 changed_props = {}
                 
@@ -101,14 +93,6 @@ class MprisPlayer(dbus.service.Object):
                 if abs(new_vol - self.volume_level) > 0.02:
                     self.volume_level = new_vol
                     changed_props["Volume"] = dbus.Double(self.volume_level)
-
-                if new_shuffle != self.is_shuffle:
-                    self.is_shuffle = new_shuffle
-                    changed_props["Shuffle"] = dbus.Boolean(self.is_shuffle)
-
-                if new_loop != self.loop_status:
-                    self.loop_status = new_loop
-                    changed_props["LoopStatus"] = dbus.String(self.loop_status)
                     
                 self.position_sec = new_pos
                 
@@ -231,11 +215,7 @@ class MprisPlayer(dbus.service.Object):
                 self.volume_level = float(value)
                 self.send_player_command("SetVolume", {"volume": self.volume_level})
             elif prop == "Shuffle":
-                self.is_shuffle = bool(value)
-                self.send_player_command("SetShuffle", {"shuffle": self.is_shuffle})
-            elif prop == "LoopStatus":
-                self.loop_status = str(value)
-                self.send_player_command("SetLoopStatus", {"loopStatus": self.loop_status})
+                self.send_player_command("ToggleShuffle")
 
     @dbus.service.signal(dbus.PROPERTIES_IFACE, signature="sa{sv}as")
     def PropertiesChanged(self, interface, changed_properties, invalidated_properties):
@@ -272,3 +252,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

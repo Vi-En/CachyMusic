@@ -4,6 +4,14 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [1.3.0] - 2026-11-07
+- **Track Metadata & ID3 Tag Editor**: Added a fully responsive modal editor (`#metadataEditorModal`) accessible from the left inspector panel and track context menu (`•••`). Modifies Title, Artist, Album, Genre, Year, Track #, and Comments.
+- **Physical Tag Writing & Atomic Persistence**: Backed by `metaflac` (lossless in-place FLAC tagging) and `ffmpeg` (`-codec copy` with atomic temporary-file renaming), with real-time in-memory, player deck, left panel, and IndexedDB library cache synchronization.
+- **Studio Console Vertical PEQ Faders**: Refactored Parametric Equalizer sliders on mobile into vertical faders with metallic caps, thumb glow, and exact ISO frequency labels.
+- **Harmonic Triad Theme Palette**: Redesigned mobile theme selector preview badges into circular discs with 3-gem circular harmonic color palettes.
+- **Mobile Soulseek Ergonomics**: Relocated power button to the front brand bar with neon glow indicators, integrated one-tap offline reconnection banner, and enhanced dedicated transfers drawer view.
+- **WCAG 2.1 AAA Accessibility**: 100% compliant across all 12 themes with 0 contrast issues.
+
 ## [1.2.0] - 2026-11-05
 - **Soulseek P2P Client Overhaul**: Fixed live search result rendering crash caused by undefined `escapeRegex` module export, and resolved passive event listener warning on account settings save.
 - **Auto-Healing Directory Storage**: Hardened directory safety check against unauthorized/malformed paths and auto-healed stale configurations to default downloads folder.

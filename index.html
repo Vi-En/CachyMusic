@@ -58,25 +58,39 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=1.2.0">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=1.3.0">
     <script>
+        const isNativeAndroid = window.AndroidBridge
+            && typeof window.AndroidBridge.isAndroid === 'function'
+            && window.AndroidBridge.isAndroid();
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                if (window.caches) {
-                    caches.keys().then(function(keys) {
-                        keys.forEach(function(k) {
-                            if (k !== 'cachymusic-v1.2.0' && !k.startsWith('cachymusic-artwork-')) {
-                                caches.delete(k);
-                            }
-                        });
-                    }).catch(function() {});
-                }
-                navigator.serviceWorker.register('./sw.js?v=1.2.0').then(function(reg) {
-                    reg.update();
-                }).catch(function(err) {
-                    console.warn('[PWA] ServiceWorker registration failed:', err);
+            if (isNativeAndroid) {
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    if (!registrations.length) return;
+                    return Promise.all(registrations.map(function(registration) {
+                        return registration.unregister();
+                    })).then(function() {
+                        window.location.reload();
+                    });
+                }).catch(function() {});
+            } else {
+                window.addEventListener('load', function() {
+                    if (window.caches) {
+                        caches.keys().then(function(keys) {
+                            keys.forEach(function(k) {
+                                if (k !== 'cachymusic-v1.3.0' && !k.startsWith('cachymusic-artwork-')) {
+                                    caches.delete(k);
+                                }
+                            });
+                        }).catch(function() {});
+                    }
+                    navigator.serviceWorker.register('./sw.js?v=1.3.0').then(function(reg) {
+                        reg.update();
+                    }).catch(function(err) {
+                        console.warn('[PWA] ServiceWorker registration failed:', err);
+                    });
                 });
-            });
+            }
         }
     </script>
 </head>
@@ -188,9 +202,14 @@
 
         <!-- Left Panel: Track Metadata & Embedded Artwork Inspector -->
         <section class="panel settingsPanel" id="infoPanel">
-            <div class="panelHeader">
-                <h2>TRACK METADATA</h2>
-                <span class="panelSub">ID3 &amp; AUDIO METRICS</span>
+            <div class="panelHeader infoPanelHeader">
+                <div class="infoPanelHeaderTitle">
+                    <h2>TRACK METADATA</h2>
+                    <span class="panelSub">ID3 &amp; AUDIO METRICS</span>
+                </div>
+                <button type="button" class="actionBtn editMetaTriggerBtn" id="infoPanelEditMetaBtn" title="Edit Metadata for Current Track" aria-label="Edit Current Track Metadata">
+                    ✎ EDIT
+                </button>
             </div>
 
             <!-- Metadata Inspector (ID3 Tags) -->
@@ -618,59 +637,69 @@
         </section>
     </main>
 
-    <!-- Soulseek Studio Workspace (In-Page Native View) -->
-    <section class="soulseekWorkspace" id="soulseekWorkspace" style="display: none;">
-        <!-- Soulseek Account & Settings Modal -->
-        <div class="slskModalOverlay" id="slskAccountModal" style="display: none;">
-            <div class="slskModalCard">
-                <div class="slskModalHeader">
-                    <h3>SOULSEEK SETTINGS</h3>
-                    <button type="button" class="closeBtn" id="slskCloseAccountModalBtn" aria-label="Close Settings">✕</button>
-                </div>
-                <form id="slskAccountForm" class="slskModalBody" onsubmit="return false;">
-                    <p class="slskModalDesc">
-                        Credentials are encrypted and securely stored in your local database. Soulseek is disconnected by default so your shared files are never exposed until you explicitly connect.
-                    </p>
-                    <div class="slskFormGroup">
-                        <label for="slskModalUsername">USERNAME</label>
-                        <input type="text" id="slskModalUsername" placeholder="e.g. musiclover123" autocomplete="username">
-                    </div>
-                    <div class="slskFormGroup">
-                        <label for="slskModalPassword">PASSWORD</label>
-                        <input type="password" id="slskModalPassword" placeholder="Enter password" autocomplete="current-password">
-                    </div>
-
-                    <hr class="slskModalDivider">
-
-                    <div class="slskFormGroup">
-                        <label for="slskModalDownloadDir">DOWNLOAD DIRECTORY</label>
-                        <div class="slskDirInputRow">
-                            <input type="text" id="slskModalDownloadDir" placeholder="/path/to/music/folder" class="slskDirInput">
-                            <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalSyncPlayerDirBtn" title="Use Current Music Library Folder">
-                                USE PLAYER DIR
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="slskFormGroup">
-                        <label for="slskModalSharedDir">SHAREABLE FOLDER (OTHERS CAN DOWNLOAD FROM YOU)</label>
-                        <div class="slskDirInputRow">
-                            <input type="text" id="slskModalSharedDir" placeholder="/path/to/share/folder" class="slskDirInput">
-                            <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalSyncSharePlayerDirBtn" title="Share Current Music Library Folder">
-                                USE PLAYER DIR
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="slskModalAlert" id="slskAccountAlert" style="display: none;"></div>
-                    <div class="slskModalActions">
-                        <button type="button" class="actionBtn slskModalPowerBtn" id="slskModalPowerBtn">CONNECT</button>
-                        <button type="button" class="actionBtn" id="slskLogoutBtn">LOGOUT / CLEAR</button>
-                        <button type="submit" class="actionBtn primaryBtn" id="slskSaveAccountBtn">SAVE &amp; CONNECT</button>
-                    </div>
-                </form>
+    <!-- Soulseek Account & Settings Modal (Direct child of body to guarantee topmost stacking context) -->
+    <div class="slskModalOverlay" id="slskAccountModal" style="display: none;">
+        <div class="slskModalCard">
+            <div class="slskModalHeader">
+                <h3>SOULSEEK SETTINGS</h3>
+                <button type="button" class="closeBtn" id="slskCloseAccountModalBtn" aria-label="Close Settings">✕</button>
             </div>
+            <form id="slskAccountForm" class="slskModalBody" onsubmit="return false;">
+                <p class="slskModalDesc">
+                    Credentials are encrypted and securely stored in your local database. Soulseek is disconnected by default so your shared files are never exposed until you explicitly connect.
+                </p>
+                <div class="slskFormGroup" id="slskModalHostGroup">
+                    <label for="slskModalHost">REMOTE WORKSTATION HOST (MOBILE / LAN)</label>
+                    <div class="slskDirInputRow">
+                        <input type="text" id="slskModalHost" placeholder="e.g. http://192.168.1.50:8000" class="slskDirInput" autocomplete="off">
+                        <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalAutoDetectHostBtn" title="Auto-detect desktop host URL">
+                            AUTO-DETECT
+                        </button>
+                    </div>
+                </div>
+                <div class="slskFormGroup">
+                    <label for="slskModalUsername">USERNAME</label>
+                    <input type="text" id="slskModalUsername" placeholder="e.g. musiclover123" autocomplete="username">
+                </div>
+                <div class="slskFormGroup">
+                    <label for="slskModalPassword">PASSWORD</label>
+                    <input type="password" id="slskModalPassword" placeholder="Enter password" autocomplete="current-password">
+                </div>
+
+                <hr class="slskModalDivider">
+
+                <div class="slskFormGroup">
+                    <label for="slskModalDownloadDir">DOWNLOAD DIRECTORY</label>
+                    <div class="slskDirInputRow">
+                        <input type="text" id="slskModalDownloadDir" placeholder="/path/to/music/folder" class="slskDirInput">
+                        <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalSyncPlayerDirBtn" title="Use Current Music Library Folder">
+                            USE PLAYER DIR
+                        </button>
+                    </div>
+                </div>
+
+                <div class="slskFormGroup">
+                    <label for="slskModalSharedDir">SHAREABLE FOLDER (OTHERS CAN DOWNLOAD FROM YOU)</label>
+                    <div class="slskDirInputRow">
+                        <input type="text" id="slskModalSharedDir" placeholder="/path/to/share/folder" class="slskDirInput">
+                        <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalSyncSharePlayerDirBtn" title="Share Current Music Library Folder">
+                            USE PLAYER DIR
+                        </button>
+                    </div>
+                </div>
+
+                <div class="slskModalAlert" id="slskAccountAlert" style="display: none;"></div>
+                <div class="slskModalActions">
+                    <button type="button" class="actionBtn slskModalPowerBtn" id="slskModalPowerBtn">CONNECT</button>
+                    <button type="button" class="actionBtn" id="slskLogoutBtn">LOGOUT / CLEAR</button>
+                    <button type="submit" class="actionBtn primaryBtn" id="slskSaveAccountBtn">SAVE &amp; CONNECT</button>
+                </div>
+            </form>
         </div>
+    </div>
+
+    <!-- Soulseek Studio Workspace (In-Page Native View) -->
+    <section class="soulseekWorkspace" id="soulseekWorkspace" data-slsk-subview="results" style="display: none;">
 
         <!-- Soulseek Status & Diagnostic Alert Banner (Desktop & Mobile) -->
         <div class="slskWorkspaceNotice" id="slskWorkspaceNotice" style="display: none;">
@@ -678,10 +707,13 @@
                 <span class="slskNoticeIcon" id="slskNoticeIcon">⚠️</span>
                 <div class="slskNoticeText">
                     <strong id="slskNoticeTitle">Soulseek Disconnected</strong>
-                    <span id="slskNoticeMsg">Please configure your credentials or start background service.</span>
+                    <span id="slskNoticeMsg">Soulseek is currently disconnected. Click Connect or Settings to start.</span>
                 </div>
             </div>
-            <button type="button" class="actionBtn slskNoticeActionBtn" id="slskNoticeActionBtn">SETTINGS</button>
+            <div class="slskNoticeActions">
+                <button type="button" class="actionBtn primaryBtn slskNoticeConnectBtn" id="slskNoticeConnectBtn">CONNECT</button>
+                <button type="button" class="actionBtn slskNoticeActionBtn" id="slskNoticeActionBtn">SETTINGS</button>
+            </div>
         </div>
 
         <!-- Soulseek Controls & Search Panel (Desktop: normal flow, Mobile: swapped below results and collapsible) -->
@@ -708,6 +740,10 @@
                 <!-- Soulseek Top Toolbar -->
                 <div class="slskToolbar">
                     <div class="slskBrand">
+                        <button type="button" id="slskPowerBtn" class="actionBtn slskPowerBtn" title="Connect / Disconnect Soulseek Network (Disconnects and stops sharing files)" aria-label="Toggle Soulseek Network Connection">
+                            <svg class="powerIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                            <span id="slskPowerBtnText">CONNECT</span>
+                        </button>
                         <span class="slskLogo">SOULSEEK</span>
                         <span class="slskBadge" id="slskBadge">NICOTINE+</span>
                         <div class="slskStatusPill" id="slskStatusPill" title="Soulseek Network Status">
@@ -730,11 +766,9 @@
                     </div>
 
                     <div class="slskToolbarActions">
-                        <button type="button" id="slskPowerBtn" class="actionBtn slskPowerBtn" title="Connect / Disconnect Soulseek Network (Disconnects and stops sharing files)">
-                            <span class="powerIcon">⏻</span> <span id="slskPowerBtnText">CONNECT</span>
-                        </button>
-                        <button type="button" id="slskAccountBtn" class="actionBtn" title="Soulseek Account &amp; Directory Settings">
-                            SETTINGS
+                        <button type="button" id="slskAccountBtn" class="actionBtn slskAccountBtn" title="Soulseek Account &amp; Directory Settings" aria-label="Soulseek Settings">
+                            <svg class="slskAccountIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                            <span class="slskAccountBtnText">SETTINGS</span>
                         </button>
                         <button type="button" id="slskRefreshStatusBtn" class="actionBtn" title="Refresh Connection Status">
                             REFRESH
@@ -747,18 +781,18 @@
 
                 <!-- Soulseek Search & Filter Header -->
                 <div class="slskSearchArea">
-                    <div class="slskSearchRow">
+                    <form class="slskSearchRow" id="slskSearchForm" action="javascript:void(0);" novalidate>
                         <div class="slskSearchBox">
-                            <input type="text" id="slskSearchInput" placeholder="Search track, artist, album, genre on Soulseek network..." autocomplete="off" aria-label="Search Soulseek P2P Network">
+                            <input type="search" id="slskSearchInput" enterkeyhint="search" inputmode="search" placeholder="Search track, artist, album, genre on Soulseek network..." autocomplete="off" aria-label="Search Soulseek P2P Network">
                             <button type="button" id="slskSearchClearBtn" class="slskClearBtn" title="Clear Search" aria-label="Clear Search" style="display: none;">✕</button>
                         </div>
-                        <select id="slskSearchModeSelect" class="slskModeSelect" title="Nicotine+ Search Scope" aria-label="Search Scope">
+                        <select id="slskSearchModeSelect" class="slskModeSelect" title="Soulseek Search Scope" aria-label="Search Scope">
                             <option value="global" selected>GLOBAL</option>
                             <option value="rooms">ROOMS</option>
                             <option value="buddies">BUDDIES</option>
                         </select>
-                        <button type="button" id="slskSearchSubmitBtn" class="actionBtn primaryBtn slskSubmitBtn">SEARCH</button>
-                    </div>
+                        <button type="submit" id="slskSearchSubmitBtn" class="actionBtn primaryBtn slskSubmitBtn">SEARCH</button>
+                    </form>
 
                     <div class="slskFilterRow">
                         <div class="slskFilterGroup" id="slskFilterChips">
@@ -766,8 +800,9 @@
                             <button type="button" class="slskChip" data-filter="flac">FLAC ONLY (LOSSLESS)</button>
                             <button type="button" class="slskChip" data-filter="320">320 KBPS MP3</button>
                             <button type="button" class="slskChip" data-filter="slots">FREE SLOTS ONLY</button>
+                            <button type="button" class="slskFilterToggleBtn" id="slskTextFilterToggleBtn" title="More Text Filters">FILTERS ▾</button>
                         </div>
-                        <div class="slskTextFiltersCon">
+                        <div class="slskTextFiltersCon" id="slskTextFiltersCon">
                             <div class="slskTextFilterItem">
                                 <label for="slskIncludeFilterInput" class="slskFilterLabel">Include Text:</label>
                                 <div class="slskFilterInputWrap">
@@ -865,11 +900,14 @@
             </div>
         </div>
 
-        <!-- Sliding Transfers Drawer (Collapsible) -->
-        <div class="slskTransfersDrawer" id="slskTransfersDrawer">
+        <!-- Dedicated Soulseek Transfers Tab View (Accessible Exclusively via Soulseek Toolbar) -->
+        <div class="slskTransfersDrawer" id="slskTransfersDrawer" role="tabpanel" aria-label="Soulseek Transfers">
             <div class="slskTransfersHeader" id="slskTransfersHeader">
                 <div class="slskTransfersTitle">
-                    <span class="drawerArrow" id="slskDrawerArrow">▲</span>
+                    <button type="button" id="slskBackToResultsBtn" class="actionBtn slskBackToResultsBtn" title="Return to Soulseek Search Results">
+                        ← RESULTS
+                    </button>
+                    <span class="drawerArrow" id="slskDrawerArrow" style="display: none;" aria-hidden="true">▲</span>
                     <strong class="slskDrawerTitleText"><span class="desktopOnly">SOULSEEK </span>TRANSFERS</strong>
                     <span class="counter" id="slskTransfersSummary">0 Active</span>
                 </div>
@@ -881,7 +919,7 @@
                         <span class="desktopOnly">SYNC ALL TO LIBRARY</span>
                         <span class="mobileOnly">SYNC ALL</span>
                     </button>
-                    <button type="button" id="slskCloseDrawerBtn" class="closeBtn" title="Collapse Transfers" aria-label="Collapse Transfers">✕</button>
+                    <button type="button" id="slskCloseDrawerBtn" class="closeBtn" title="Return to Results" aria-label="Return to Results" style="display: none;">✕</button>
                 </div>
             </div>
             <div class="slskTransfersBody" id="slskTransfersBody">
@@ -1328,6 +1366,13 @@
                         <span class="trackMenuItemSub">Inspect sample rate, bit depth &amp; metadata</span>
                     </div>
                 </button>
+                <button type="button" class="trackMenuItemBtn" id="trackMenuEditMetaBtn">
+                    <span class="trackMenuIcon">✎</span>
+                    <div class="trackMenuItemText">
+                        <span class="trackMenuItemLabel">Edit Metadata / Tags</span>
+                        <span class="trackMenuItemSub">Modify track title, artist, album, genre &amp; year</span>
+                    </div>
+                </button>
                 <button type="button" class="trackMenuItemBtn danger" id="trackMenuRemoveBtn">
                     <span class="trackMenuIcon">✕</span>
                     <div class="trackMenuItemText">
@@ -1335,6 +1380,94 @@
                         <span class="trackMenuItemSub" id="trackMenuRemoveSub">Remove this track from active view</span>
                     </div>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Track Metadata & ID3 Tag Editor Modal -->
+    <div class="modalBackdrop metaEditorBackdrop" id="metadataEditorModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="metaEditorTitle">
+        <div class="modalCard metaEditorCard" id="metaEditorCard">
+            <div class="modalHeader metaEditorHeader">
+                <div class="metaEditorHeaderLeft">
+                    <span class="metaEditorIcon" aria-hidden="true">✎</span>
+                    <div>
+                        <h3 id="metaEditorTitle">METADATA &amp; ID3 EDITOR</h3>
+                        <p class="metaEditorSubtitle">Edit embedded audio tags and library attributes</p>
+                    </div>
+                </div>
+                <button type="button" id="closeMetaEditorModalBtn" class="closeModalBtn" aria-label="Close Metadata Editor">✕</button>
+            </div>
+
+            <div class="metaEditorBody">
+                <!-- Track Summary Header with Cover & Audio Badges -->
+                <div class="metaEditorSummary">
+                    <img src="resources/images/default.svg" alt="Cover" class="metaEditorThumb" id="metaEditorThumb">
+                    <div class="metaEditorSummaryDetails">
+                        <div class="metaEditorFileTitle" id="metaEditorFileTitle">Track Title</div>
+                        <div class="metaEditorFilePath" id="metaEditorFilePath">/path/to/audio/file.flac</div>
+                        <div class="metaEditorPills">
+                            <span class="metaEditorPill" id="metaEditorFormatPill">FLAC</span>
+                            <span class="metaEditorPill" id="metaEditorBitratePill">3120 kbps</span>
+                            <span class="metaEditorPill" id="metaEditorSampleRatePill">96.0 kHz</span>
+                            <span class="metaEditorPill" id="metaEditorBitDepthPill">24-Bit</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Editable Form Fields -->
+                <form class="metaEditorForm" id="metaEditorForm" action="javascript:void(0);" novalidate>
+                    <div class="metaEditorFormGrid">
+                        <div class="metaEditorField metaFieldFull">
+                            <label for="metaEditTitle" class="metaEditorLabel">TRACK TITLE</label>
+                            <input type="text" id="metaEditTitle" class="metaEditorInput" placeholder="Enter track title" autocomplete="off" required>
+                        </div>
+                        <div class="metaEditorField">
+                            <label for="metaEditArtist" class="metaEditorLabel">ARTIST</label>
+                            <input type="text" id="metaEditArtist" class="metaEditorInput" placeholder="Enter artist name" autocomplete="off">
+                        </div>
+                        <div class="metaEditorField">
+                            <label for="metaEditAlbum" class="metaEditorLabel">ALBUM</label>
+                            <input type="text" id="metaEditAlbum" class="metaEditorInput" placeholder="Enter album name" autocomplete="off">
+                        </div>
+                        <div class="metaEditorField">
+                            <label for="metaEditGenre" class="metaEditorLabel">GENRE</label>
+                            <input type="text" id="metaEditGenre" class="metaEditorInput" list="metaGenreList" placeholder="e.g. Electronic, Ambient, Rock" autocomplete="off">
+                            <datalist id="metaGenreList">
+                                <option value="Electronic">
+                                <option value="Synthwave">
+                                <option value="Ambient">
+                                <option value="Rock">
+                                <option value="Pop">
+                                <option value="Classical">
+                                <option value="Jazz">
+                                <option value="Hip-Hop">
+                                <option value="Soundtrack">
+                                <option value="Metal">
+                                <option value="Folk">
+                                <option value="Indie">
+                            </datalist>
+                        </div>
+                        <div class="metaEditorField">
+                            <label for="metaEditYear" class="metaEditorLabel">YEAR</label>
+                            <input type="number" id="metaEditYear" class="metaEditorInput" placeholder="e.g. 2024" min="1900" max="2099">
+                        </div>
+                        <div class="metaEditorField">
+                            <label for="metaEditTrackNum" class="metaEditorLabel">TRACK NUMBER</label>
+                            <input type="number" id="metaEditTrackNum" class="metaEditorInput" placeholder="e.g. 1" min="1" max="999">
+                        </div>
+                        <div class="metaEditorField">
+                            <label for="metaEditComment" class="metaEditorLabel">COMMENT / NOTES</label>
+                            <input type="text" id="metaEditComment" class="metaEditorInput" placeholder="Optional comments or tags" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="metaEditorStatus" id="metaEditorStatus" style="display: none;"></div>
+
+                    <div class="metaEditorActions">
+                        <button type="button" class="actionBtn metaEditorCancelBtn" id="metaEditCancelBtn">CANCEL</button>
+                        <button type="submit" class="actionBtn primaryBtn metaEditorSaveBtn" id="metaEditSaveBtn">SAVE METADATA</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

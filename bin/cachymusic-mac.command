@@ -41,3 +41,4 @@ else
 fi
 
 echo "CachyMusic is running at $URL"
+

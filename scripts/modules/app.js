@@ -1593,6 +1593,7 @@ if (typeof window !== 'undefined') {
             const playNextBtn = document.getElementById('trackMenuPlayNextBtn');
             const enqueueBtn = document.getElementById('trackMenuEnqueueBtn');
             const addToPlaylistBtn = document.getElementById('trackMenuAddToPlaylistBtn');
+            const editMetaBtn = document.getElementById('trackMenuEditMetaBtn');
             const viewInfoBtn = document.getElementById('trackMenuViewInfoBtn');
             const removeBtn = document.getElementById('trackMenuRemoveBtn');
 
@@ -1632,6 +1633,17 @@ if (typeof window !== 'undefined') {
                 });
             }
 
+            if (editMetaBtn) {
+                editMetaBtn.addEventListener('click', () => {
+                    if (!selectedTrackForMenu) return;
+                    const track = selectedTrackForMenu;
+                    closeTrackActionMenu();
+                    if (typeof openMetadataEditor === 'function') {
+                        openMetadataEditor(track);
+                    }
+                });
+            }
+
             if (viewInfoBtn) {
                 viewInfoBtn.addEventListener('click', () => {
                     if (!selectedTrackForMenu) return;
@@ -1663,6 +1675,51 @@ if (typeof window !== 'undefined') {
             }
         }
         setupTrackActionMenuModal();
+
+        function setupMetadataEditorModal() {
+            const modal = document.getElementById('metadataEditorModal');
+            const closeBtn = document.getElementById('closeMetaEditorModalBtn');
+            const cancelBtn = document.getElementById('metaEditCancelBtn');
+            const form = document.getElementById('metaEditorForm');
+            const infoEditBtn = document.getElementById('infoPanelEditMetaBtn');
+
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                });
+            }
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                });
+            }
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                    }
+                });
+            }
+            if (form) {
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    if (typeof saveMetadata === 'function') {
+                        saveMetadata(e);
+                    }
+                });
+            }
+            if (infoEditBtn) {
+                infoEditBtn.addEventListener('click', () => {
+                    const track = (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+                    if (track) {
+                        if (typeof openMetadataEditor === 'function') openMetadataEditor(track);
+                    } else {
+                        showToast('No active track loaded to edit metadata');
+                    }
+                });
+            }
+        }
+        setupMetadataEditorModal();
 
         async function handleOpenStandaloneAudioFiles(files) {
             const rawFiles = Array.from(files || []);
@@ -2059,6 +2116,12 @@ if (typeof window !== 'undefined') {
                 const batchModalEl = document.getElementById('batchAddSongsModal');
                 if (batchModalEl && batchModalEl.style.display === 'flex') {
                     closeBatchAddModal();
+                    return;
+                }
+                const metaModalEl = document.getElementById('metadataEditorModal');
+                if (metaModalEl && (metaModalEl.style.display === 'flex' || window.getComputedStyle(metaModalEl).display === 'flex')) {
+                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
+                    else metaModalEl.style.display = 'none';
                     return;
                 }
             }

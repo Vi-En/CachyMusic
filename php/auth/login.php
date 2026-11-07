@@ -16,6 +16,12 @@ if (session_status() === PHP_SESSION_NONE) {
 header('Content-Type: application/json; charset=utf-8');
 require_once(__DIR__ . '/../database.php');
 
+if (!isset($connection) || !$connection) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Database connection failed.']);
+    exit;
+}
+
 $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true);
 
@@ -34,33 +40,29 @@ if (empty($username) || empty($password)) {
     exit;
 }
 
-$account = null;
-if (isset($connection) && $connection && !mysqli_connect_errno()) {
-    $stmt = $connection->prepare("SELECT id, password FROM Accounts WHERE username = ? LIMIT 1");
-    if ($stmt) {
-        $stmt->bind_param('s', $username);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        if ($result && $row = $result->fetch_assoc()) {
-            $account = $row;
-        }
-    }
-}
-
-if (!$account) {
-    $account = Storage::getAccountByUsername($username);
-}
-
-if ($account && password_verify($password, $account['password'])) {
-    session_regenerate_id(true);
-    $_SESSION['user_id'] = (int)$account['id'];
-    $_SESSION['username'] = $username;
-    echo json_encode([
-        'success'  => true,
-        'username' => $username,
-        'message'  => 'Login successful.'
-    ]);
+$stmt = $connection->prepare("SELECT id, password FROM Accounts WHERE username = ? LIMIT 1");
+if (!$stmt) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Query preparation error.']);
     exit;
+}
+
+$stmt->bind_param('s', $username);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result && $row = $result->fetch_assoc()) {
+    if (password_verify($password, $row['password'])) {
+        session_regenerate_id(true);
+        $_SESSION['user_id'] = (int)$row['id'];
+        $_SESSION['username'] = $username;
+        echo json_encode([
+            'success'  => true,
+            'username' => $username,
+            'message'  => 'Login successful.'
+        ]);
+        exit;
+    }
 }
 
 http_response_code(401);

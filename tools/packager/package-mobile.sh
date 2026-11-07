@@ -30,6 +30,7 @@ echo '{"success": true, "tracks": [], "count": 0, "directory": "", "needsDirecto
 echo '{"success": false, "status": "offline", "message": "Standalone mode"}' > "$ASSETS_DIR/php/api/soulseek.php"
 echo '{"success": true, "available": false, "supported": false, "backend": "android-unsupported"}' > "$ASSETS_DIR/php/api/hardware_volume.php"
 echo '{"success": true, "command": null}' > "$ASSETS_DIR/php/api/mpris_state.php"
+echo '{"success": true, "message": "Standalone mode"}' > "$ASSETS_DIR/php/api/metadata.php"
 echo '{"success": true, "lan_ip": "127.0.0.1", "port": 8000}' > "$ASSETS_DIR/php/api/lan_info.php"
 echo '{"success": true, "folders": []}' > "$ASSETS_DIR/php/api/browse_folder.php"
 cp "$PROJECT_ROOT/resources/images/default.svg" "$ASSETS_DIR/php/api/cover.php"

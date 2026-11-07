@@ -1,5 +1,5 @@
-// CachyMusic Audio Workstation - High-Performance Service Worker v1.2.0
-const CACHE_NAME = 'cachymusic-v1.2.0';
+// CachyMusic Audio Workstation - High-Performance Service Worker v1.3.0
+const CACHE_NAME = 'cachymusic-v1.3.0';
 const ART_CACHE = 'cachymusic-artwork-v4';
 const MAX_ARTWORK_ENTRIES = 200;
 
@@ -93,7 +93,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Only intercept same-origin requests; never cache browser extensions or external URLs
+  // Only intercept same-origin http/https requests; never cache browser extensions or external URLs
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
   if (url.origin !== self.location.origin) return;
 
   // 1. Audio stream and Range requests should pass directly to network (never break 206 Partial Content)

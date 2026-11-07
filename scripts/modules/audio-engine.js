@@ -535,18 +535,21 @@
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
         const rect = canvas.getBoundingClientRect();
-        const w = rect.width || canvas.width;
-        const h = rect.height || canvas.height;
+        if (!rect || rect.width < 16 || rect.height < 16) return;
+        const w = rect.width;
+        const h = rect.height;
 
-        if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-            canvas.width = Math.round(w * dpr);
-            canvas.height = Math.round(h * dpr);
+        const targetW = Math.min(4096, Math.round(w * dpr));
+        const targetH = Math.min(2048, Math.round(h * dpr));
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
         }
 
         ctx.save();
-        ctx.scale(dpr, dpr);
+        ctx.scale(targetW / w, targetH / h);
         ctx.clearRect(0, 0, w, h);
 
         const minFreq = 20;
@@ -567,9 +570,9 @@
         // 1. Grid Lines
         ctx.lineWidth = 1;
         const gridFreqs = [50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000];
-        ctx.strokeStyle = isLightCanvas ? 'rgba(28, 25, 23, 0.12)' : 'rgba(255, 255, 255, 0.08)';
-        ctx.fillStyle = isLightCanvas ? 'rgba(28, 25, 23, 0.72)' : 'rgba(255, 255, 255, 0.60)';
-        ctx.font = '600 9px monospace';
+        ctx.strokeStyle = isLightCanvas ? 'rgba(24, 24, 27, 0.16)' : 'rgba(226, 232, 240, 0.13)';
+        ctx.fillStyle = isLightCanvas ? 'rgba(9, 9, 11, 0.88)' : 'rgba(241, 245, 249, 0.88)';
+        ctx.font = '700 9.5px monospace';
         ctx.textAlign = 'center';
 
         gridFreqs.forEach(f => {
@@ -579,7 +582,9 @@
             ctx.lineTo(x, h);
             ctx.stroke();
             const lbl = f >= 1000 ? `${f / 1000}k` : `${f}`;
-            ctx.fillText(lbl, x, h - 5);
+            if (x > 46 && x < w - 12) {
+                ctx.fillText(lbl, x, h - 5);
+            }
         });
 
         // Horizontal dB lines (+12, +6, 0, -6, -12)
@@ -588,9 +593,9 @@
             const y = dbToY(d);
             ctx.beginPath();
             if (isLightCanvas) {
-                ctx.strokeStyle = (d === 0) ? 'rgba(28, 25, 23, 0.32)' : 'rgba(28, 25, 23, 0.08)';
+                ctx.strokeStyle = (d === 0) ? 'rgba(24, 24, 27, 0.40)' : 'rgba(24, 24, 27, 0.11)';
             } else {
-                ctx.strokeStyle = (d === 0) ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.06)';
+                ctx.strokeStyle = (d === 0) ? 'rgba(248, 250, 252, 0.36)' : 'rgba(226, 232, 240, 0.09)';
             }
             ctx.moveTo(0, y);
             ctx.lineTo(w, y);
@@ -658,10 +663,11 @@
                 ctx.lineTo(points[i].x, points[i].y);
             }
             const activeStroke = isWarmTheme ? '#9a3412' : (isLightCanvas ? '#09090b' : (curTheme === 'minimalist-obsidian' ? '#38bdf8' : '#00e5ff'));
+            const isFx = document.documentElement.classList.contains('is-firefox') || /firefox|fxios/i.test(navigator.userAgent || '');
             ctx.strokeStyle = isPeqBypassed ? '#dc2626' : activeStroke;
             ctx.lineWidth = 2.5;
             ctx.shadowColor = isPeqBypassed ? '#dc2626' : activeStroke;
-            ctx.shadowBlur = isLightCanvas ? 3 : 8;
+            ctx.shadowBlur = isFx ? 0 : (isLightCanvas ? 2 : 3);
             ctx.stroke();
             ctx.shadowBlur = 0;
         }
@@ -707,6 +713,15 @@
 
         if (!peqGrid) return;
 
+        function syncBipolarSliderFill(slider, val, minVal, maxVal) {
+            if (!slider) return;
+            const span = (maxVal - minVal) || 1;
+            const pct = Math.max(0, Math.min(100, ((val - minVal) / span) * 100));
+            slider.style.setProperty('--fill-low', `${Math.min(50, pct).toFixed(2)}%`);
+            slider.style.setProperty('--fill-high', `${Math.max(50, pct).toFixed(2)}%`);
+            slider.dataset.polarity = val > 0.01 ? 'boost' : (val < -0.01 ? 'cut' : 'flat');
+        }
+
         // Populate 10 Tactile Vertical Faders
         peqGrid.innerHTML = '';
         PEQ_FREQS.forEach((freq, i) => {
@@ -722,21 +737,34 @@
                 <span class="peqFaderDb ${dbClass}" id="peqFaderDb-${i}">${sign}${val.toFixed(1)}</span>
                 <div class="peqFaderTrackCon">
                     <div class="peqFaderTrackZero"></div>
-                    <input type="range" class="peqSlider" id="peqSlider-${i}" min="-15" max="15" step="0.5" value="${val}" aria-label="${hzText} Hz Band Gain">
+                    <input type="range" class="peqSlider" id="peqSlider-${i}" min="-15" max="15" step="0.5" value="${val}" aria-label="${hzText} Hz Band Gain" aria-orientation="vertical">
                 </div>
                 <span class="peqFaderHz">${hzText}</span>
                 <button type="button" class="peqFaderQBtn" id="peqFaderQ-${i}" title="Click to adjust Q-Factor (Bandwidth) for ${hzText} Hz">${`Q ${qVal.toFixed(1)}`}</button>
             `;
 
             const slider = col.querySelector('.peqSlider');
+            syncBipolarSliderFill(slider, val, -15, 15);
             slider.addEventListener('input', (e) => {
                 const gain = parseFloat(e.target.value);
                 setPeqBandGain(i, gain);
+                syncBipolarSliderFill(slider, gain, -15, 15);
                 const dbEl = document.getElementById(`peqFaderDb-${i}`);
                 if (dbEl) {
                     const s = gain > 0 ? '+' : '';
                     dbEl.textContent = `${s}${gain.toFixed(1)}`;
                     dbEl.className = `peqFaderDb ${gain > 0 ? 'boost' : (gain < 0 ? 'cut' : '')}`;
+                }
+                drawPeqCurve();
+            });
+            slider.addEventListener('dblclick', () => {
+                slider.value = 0;
+                setPeqBandGain(i, 0);
+                syncBipolarSliderFill(slider, 0, -15, 15);
+                const dbEl = document.getElementById(`peqFaderDb-${i}`);
+                if (dbEl) {
+                    dbEl.textContent = '0.0';
+                    dbEl.className = 'peqFaderDb';
                 }
                 drawPeqCurve();
             });
@@ -796,7 +824,10 @@
                     const slider = document.getElementById(`peqSlider-${i}`);
                     const dbEl = document.getElementById(`peqFaderDb-${i}`);
                     const qBtn = document.getElementById(`peqFaderQ-${i}`);
-                    if (slider) slider.value = 0;
+                    if (slider) {
+                        slider.value = 0;
+                        syncBipolarSliderFill(slider, 0, -15, 15);
+                    }
                     if (dbEl) {
                         dbEl.textContent = '0.0';
                         dbEl.className = 'peqFaderDb';
@@ -822,11 +853,14 @@
         }
 
         if (balanceSlider) {
-            balanceSlider.value = Math.round(stereoBalance * 100);
+            const initBalPct = Math.round(stereoBalance * 100);
+            balanceSlider.value = initBalPct;
+            syncBipolarSliderFill(balanceSlider, initBalPct, -100, 100);
             if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(stereoBalance);
             balanceSlider.addEventListener('input', (e) => {
                 const rawPct = parseInt(e.target.value, 10) || 0;
                 stereoBalance = Math.max(-1.0, Math.min(1.0, rawPct / 100));
+                syncBipolarSliderFill(balanceSlider, rawPct, -100, 100);
                 safeStorage.setItem('cachymusic_stereo_balance', stereoBalance.toFixed(2));
                 if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(stereoBalance);
                 updateWorkletParams();
@@ -838,8 +872,11 @@
             balanceResetBtn.addEventListener('click', () => {
                 stereoBalance = 0;
                 safeStorage.setItem('cachymusic_stereo_balance', '0');
-                if (balanceSlider) balanceSlider.value = 0;
-                if (balanceValueEl) balanceValueEl.textContent = 'CENTER';
+                if (balanceSlider) {
+                    balanceSlider.value = 0;
+                    syncBipolarSliderFill(balanceSlider, 0, -100, 100);
+                }
+                if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(0);
                 updateWorkletParams();
                 updateAudioRouting();
             });
@@ -875,7 +912,10 @@
                     const slider = document.getElementById(`peqSlider-${i}`);
                     const dbEl = document.getElementById(`peqFaderDb-${i}`);
                     const g = peqGains[i];
-                    if (slider) slider.value = g;
+                    if (slider) {
+                        slider.value = g;
+                        syncBipolarSliderFill(slider, g, -15, 15);
+                    }
                     if (dbEl) {
                         const s = g > 0 ? '+' : '';
                         dbEl.textContent = `${s}${g.toFixed(1)}`;
@@ -913,7 +953,10 @@
                         const slider = document.getElementById(`peqSlider-${i}`);
                         const dbEl = document.getElementById(`peqFaderDb-${i}`);
                         const g = peqGains[i];
-                        if (slider) slider.value = g;
+                        if (slider) {
+                            slider.value = g;
+                            syncBipolarSliderFill(slider, g, -15, 15);
+                        }
                         if (dbEl) {
                             const s = g > 0 ? '+' : '';
                             dbEl.textContent = `${s}${g.toFixed(1)}`;
@@ -936,6 +979,10 @@
             peqModal.style.display = 'flex';
             pushModalState('peqModal');
             drawPeqCurve();
+            requestAnimationFrame(() => {
+                drawPeqCurve();
+                setTimeout(drawPeqCurve, 60);
+            });
         };
 
         closePeqModal = function() {
@@ -951,6 +998,12 @@
                 if (e.target === peqModal) closePeqModal();
             });
         }
+
+        window.addEventListener('resize', () => {
+            if (peqModal && peqModal.style.display !== 'none') {
+                drawPeqCurve();
+            }
+        }, { passive: true });
 
         setTimeout(drawPeqCurve, 100);
     }

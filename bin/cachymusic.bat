@@ -51,3 +51,4 @@ start "" "%URL%"
 :done
 echo CachyMusic is running at %URL%
 exit /b 0
+

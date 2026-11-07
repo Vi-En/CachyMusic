@@ -16,6 +16,12 @@ if (session_status() === PHP_SESSION_NONE) {
 header('Content-Type: application/json; charset=utf-8');
 require_once(__DIR__ . '/../database.php');
 
+if (!isset($connection) || !$connection) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Database connection failed.']);
+    exit;
+}
+
 $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true);
 
@@ -53,26 +59,18 @@ if ($confirmPassword !== null && $password !== $confirmPassword) {
     exit;
 }
 
-$existingAccount = null;
-if (isset($connection) && $connection && !mysqli_connect_errno()) {
-    $checkStmt = $connection->prepare("SELECT id FROM Accounts WHERE username = ? LIMIT 1");
-    if ($checkStmt) {
-        $checkStmt->bind_param('s', $username);
-        $checkStmt->execute();
-        $result = $checkStmt->get_result();
-        if ($result && $result->num_rows > 0) {
-            $existingAccount = true;
-        }
-    }
+$checkStmt = $connection->prepare("SELECT id FROM Accounts WHERE username = ? LIMIT 1");
+if (!$checkStmt) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Database error preparing statement.']);
+    exit;
 }
 
-if (!$existingAccount) {
-    if (Storage::getAccountByUsername($username)) {
-        $existingAccount = true;
-    }
-}
+$checkStmt->bind_param('s', $username);
+$checkStmt->execute();
+$result = $checkStmt->get_result();
 
-if ($existingAccount) {
+if ($result && $result->num_rows > 0) {
     http_response_code(409);
     echo json_encode(['success' => false, 'message' => 'Username is already taken.']);
     exit;
@@ -81,24 +79,18 @@ if ($existingAccount) {
 $algo = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT;
 $hash = password_hash($password, $algo);
 
-$userId = false;
-if (isset($connection) && $connection && !mysqli_connect_errno()) {
-    $insertStmt = $connection->prepare("INSERT INTO Accounts (username, password) VALUES (?, ?)");
-    if ($insertStmt) {
-        $insertStmt->bind_param('ss', $username, $hash);
-        if ($insertStmt->execute()) {
-            $userId = (int)$connection->insert_id;
-        }
-    }
+$insertStmt = $connection->prepare("INSERT INTO Accounts (username, password) VALUES (?, ?)");
+if (!$insertStmt) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Database error preparing insert.']);
+    exit;
 }
 
-if (!$userId) {
-    $userId = Storage::createAccount($username, $hash);
-}
+$insertStmt->bind_param('ss', $username, $hash);
 
-if ($userId) {
+if ($insertStmt->execute()) {
     session_regenerate_id(true);
-    $_SESSION['user_id'] = $userId;
+    $_SESSION['user_id'] = $connection->insert_id;
     $_SESSION['username'] = $username;
     echo json_encode(['success' => true, 'message' => 'Account created successfully!']);
     exit;

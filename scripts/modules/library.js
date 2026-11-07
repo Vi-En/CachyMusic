@@ -1455,22 +1455,25 @@
             batchModalEl.style.display = 'none';
             return;
         }
+        const metadataEditorModalEl = document.getElementById('metadataEditorModal');
+        if (metadataEditorModalEl && (metadataEditorModalEl.style.display === 'flex' || window.getComputedStyle(metadataEditorModalEl).display === 'flex')) {
+            metadataEditorModalEl.style.display = 'none';
+            return;
+        }
     });
 
     function openSlskAccountModal() {
-        if (!slskAccountModal) return;
-        const transfersDrawer = document.getElementById('slskTransfersDrawer');
-        if (transfersDrawer && transfersDrawer.classList.contains('open')) {
-            transfersDrawer.classList.remove('open');
-        }
-        slskAccountModal.style.display = 'flex';
-        pushModalState('slskAccountModal');
+        const modal = document.getElementById('slskAccountModal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        if (typeof pushModalState === 'function') pushModalState('slskAccountModal');
     }
 
     function closeSlskAccountModal() {
-        if (!slskAccountModal) return;
-        slskAccountModal.style.display = 'none';
-        popModalState('slskAccountModal');
+        const modal = document.getElementById('slskAccountModal');
+        if (!modal) return;
+        modal.style.display = 'none';
+        if (typeof popModalState === 'function') popModalState('slskAccountModal');
     }
 
     // =========================================================================
@@ -1771,6 +1774,259 @@
         selectedTrackIndexForMenu = -1;
     }
 
+    // =========================================================================
+    // Track Metadata & ID3 Tag Editor
+    // =========================================================================
+    let currentEditingTrack = null;
+
+    function openMetadataEditor(track) {
+        if (!track) {
+            showToast('No track selected to edit metadata.');
+            return;
+        }
+        currentEditingTrack = track;
+
+        const modal = document.getElementById('metadataEditorModal');
+        const thumb = document.getElementById('metaEditorThumb');
+        const fileTitle = document.getElementById('metaEditorFileTitle');
+        const filePath = document.getElementById('metaEditorFilePath');
+        const formatPill = document.getElementById('metaEditorFormatPill');
+        const bitratePill = document.getElementById('metaEditorBitratePill');
+        const sampleRatePill = document.getElementById('metaEditorSampleRatePill');
+        const bitDepthPill = document.getElementById('metaEditorBitDepthPill');
+        const statusEl = document.getElementById('metaEditorStatus');
+
+        const inputTitle = document.getElementById('metaEditTitle');
+        const inputArtist = document.getElementById('metaEditArtist');
+        const inputAlbum = document.getElementById('metaEditAlbum');
+        const inputGenre = document.getElementById('metaEditGenre');
+        const inputYear = document.getElementById('metaEditYear');
+        const inputTrackNum = document.getElementById('metaEditTrackNum');
+        const inputComment = document.getElementById('metaEditComment');
+
+        if (!modal) return;
+
+        // Populate thumbnail
+        if (thumb) {
+            thumb.src = track.cover ? (track.cover + (track.cover.includes('?') ? '&thumb=1' : '?thumb=1')) : 'resources/images/default.svg';
+        }
+
+        // Summary Title & Path
+        if (fileTitle) fileTitle.textContent = track.title || track.filename || 'Untitled Track';
+        if (filePath) filePath.textContent = track.fullPath || track.filename || 'Local Audio Track';
+
+        // Technical Spec Badges
+        if (formatPill) formatPill.textContent = (track.format || 'AUDIO').toUpperCase();
+        if (bitratePill) bitratePill.textContent = track.bitrate ? `${track.bitrate} kbps` : 'N/A';
+        if (sampleRatePill) {
+            const sr = track.sampleRate;
+            sampleRatePill.textContent = sr ? (sr >= 1000 ? `${(sr / 1000).toFixed(1)} kHz` : `${sr} Hz`) : '44.1 kHz';
+        }
+        if (bitDepthPill) {
+            const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
+            bitDepthPill.textContent = `${bd}-Bit`;
+        }
+
+        // Clear status alert
+        if (statusEl) {
+            statusEl.style.display = 'none';
+            statusEl.textContent = '';
+            statusEl.className = 'metaEditorStatus';
+        }
+
+        // Populate form inputs
+        if (inputTitle) inputTitle.value = track.title || '';
+        if (inputArtist) inputArtist.value = track.artist || '';
+        if (inputAlbum) inputAlbum.value = track.album || '';
+        if (inputGenre) inputGenre.value = track.genre || '';
+        if (inputYear) inputYear.value = (track.year && track.year > 0) ? track.year : '';
+        if (inputTrackNum) inputTrackNum.value = (track.track || track.track_num) ? (track.track || track.track_num) : '';
+        if (inputComment) inputComment.value = track.comment || '';
+
+        modal.style.display = 'flex';
+        pushModalState('metadataEditorModal');
+
+        if (window.innerWidth > 768 && inputTitle) {
+            setTimeout(() => {
+                try {
+                    inputTitle.focus();
+                    inputTitle.select();
+                } catch (_) {}
+            }, 60);
+        }
+    }
+
+    function closeMetadataEditor() {
+        const modal = document.getElementById('metadataEditorModal');
+        if (modal) modal.style.display = 'none';
+        popModalState('metadataEditorModal');
+        currentEditingTrack = null;
+    }
+
+    async function saveMetadata(e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (!currentEditingTrack) return;
+
+        const inputTitle = document.getElementById('metaEditTitle');
+        const inputArtist = document.getElementById('metaEditArtist');
+        const inputAlbum = document.getElementById('metaEditAlbum');
+        const inputGenre = document.getElementById('metaEditGenre');
+        const inputYear = document.getElementById('metaEditYear');
+        const inputTrackNum = document.getElementById('metaEditTrackNum');
+        const inputComment = document.getElementById('metaEditComment');
+        const statusEl = document.getElementById('metaEditorStatus');
+        const saveBtn = document.getElementById('metaEditSaveBtn');
+
+        const newTitle = (inputTitle ? inputTitle.value : '').trim();
+        if (!newTitle) {
+            if (statusEl) {
+                statusEl.textContent = 'Track title cannot be empty.';
+                statusEl.className = 'metaEditorStatus error';
+                statusEl.style.display = 'block';
+            }
+            if (inputTitle) inputTitle.focus();
+            return;
+        }
+
+        const newArtist = (inputArtist ? inputArtist.value : '').trim();
+        const newAlbum = (inputAlbum ? inputAlbum.value : '').trim();
+        const newGenre = (inputGenre ? inputGenre.value : '').trim();
+        const newYear = inputYear && inputYear.value ? parseInt(inputYear.value, 10) : null;
+        const newTrackNum = inputTrackNum && inputTrackNum.value ? parseInt(inputTrackNum.value, 10) : null;
+        const newComment = (inputComment ? inputComment.value : '').trim();
+
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'SAVING...';
+        }
+        if (statusEl) {
+            statusEl.textContent = 'Saving tags and updating library...';
+            statusEl.className = 'metaEditorStatus saving';
+            statusEl.style.display = 'block';
+        }
+
+        const targetTrack = currentEditingTrack;
+        const tid = targetTrack.tid || targetTrack.id || null;
+
+        // Persist to backend PHP if tid is available
+        if (tid && typeof fetch === 'function') {
+            try {
+                const resp = await fetch('php/api/metadata.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tid: tid,
+                        title: newTitle,
+                        artist: newArtist,
+                        album: newAlbum,
+                        genre: newGenre,
+                        year: newYear,
+                        track_num: newTrackNum,
+                        comment: newComment
+                    })
+                });
+                if (resp.ok) {
+                    await resp.json().catch(() => null);
+                }
+            } catch (netErr) {
+                console.warn('Backend metadata persistence skipped or offline:', netErr);
+            }
+        }
+
+        // Update target track properties
+        targetTrack.title = newTitle;
+        targetTrack.artist = newArtist;
+        targetTrack.album = newAlbum;
+        targetTrack.genre = newGenre;
+        targetTrack.year = newYear;
+        targetTrack.track = newTrackNum;
+        targetTrack.track_num = newTrackNum;
+        targetTrack.comment = newComment;
+
+        // Propagate across in-memory collections
+        const updateInList = (list) => {
+            if (!Array.isArray(list)) return;
+            for (let i = 0; i < list.length; i++) {
+                const t = list[i];
+                if ((targetTrack.tid && t.tid === targetTrack.tid) ||
+                    (targetTrack.fullPath && t.fullPath === targetTrack.fullPath) ||
+                    (targetTrack.id && t.id === targetTrack.id)) {
+                    t.title = newTitle;
+                    t.artist = newArtist;
+                    t.album = newAlbum;
+                    t.genre = newGenre;
+                    t.year = newYear;
+                    t.track = newTrackNum;
+                    t.track_num = newTrackNum;
+                    t.comment = newComment;
+                }
+            }
+        };
+
+        updateInList(allTracks);
+        updateInList(displayedTracks);
+        updateInList(playQueue);
+
+        // Persist to IndexedDB
+        try {
+            if (typeof saveLibraryToIndexedDB === 'function' && Array.isArray(allTracks) && allTracks.length > 0) {
+                saveLibraryToIndexedDB(allTracks, (folderPathInput && folderPathInput.value) || '');
+            }
+        } catch (_) {}
+
+        // Check if currently playing track was updated
+        const activeTrack = (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+        const isCurrentPlaying = activeTrack && (
+            (targetTrack.tid && activeTrack.tid === targetTrack.tid) ||
+            (targetTrack.fullPath && activeTrack.fullPath === targetTrack.fullPath) ||
+            (targetTrack.id && activeTrack.id === targetTrack.id)
+        );
+
+        if (isCurrentPlaying) {
+            if (trackName) trackName.textContent = newTitle;
+            if (artistName) artistName.textContent = newArtist || 'Unknown Artist';
+            if (albumName) albumName.textContent = newAlbum || 'Unknown Album';
+            if (lyricsTrackName) lyricsTrackName.textContent = newTitle;
+            if (lyricsArtistName) lyricsArtistName.textContent = newArtist || 'Unknown Artist';
+            if (miniTitle) miniTitle.textContent = newTitle;
+            if (miniArtist) miniArtist.textContent = newArtist || 'Unknown Artist';
+
+            // Update Left Inspector Panel
+            if (statTitle) statTitle.textContent = newTitle;
+            if (statArtist) statArtist.textContent = newArtist || 'Unknown';
+            if (statAlbum) statAlbum.textContent = newAlbum || 'Unknown';
+            if (statGenre) statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(newGenre) : newGenre) || 'N/A';
+            if (statYear) statYear.textContent = newYear ? newYear.toString() : 'N/A';
+            if (statTrack) statTrack.textContent = newTrackNum ? newTrackNum.toString() : 'N/A';
+
+            // Update MediaSession
+            if ('mediaSession' in navigator) {
+                try {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: newTitle,
+                        artist: newArtist || 'Unknown Artist',
+                        album: newAlbum || 'CachyMusic Workstation',
+                        artwork: targetTrack.cover ? [
+                            { src: targetTrack.cover, sizes: '512x512', type: 'image/jpeg' }
+                        ] : []
+                    });
+                } catch (_) {}
+            }
+        }
+
+        // Re-render track list DOM items
+        renderVirtualTrackWindow(true);
+        if (typeof updateQueueUi === 'function') updateQueueUi();
+
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'SAVE METADATA';
+        }
+
+        closeMetadataEditor();
+        showToast(`Metadata saved: "${newTitle}"`);
+    }
+
     // Add Track to Playlist Modal
     function openAddToPlaylistModal(track) {
         selectedTrackForPlaylist = track;
@@ -1938,6 +2194,9 @@
         try { window.closePlaylistModal = closePlaylistModal; } catch (_) {}
         try { window.addTrackToPlaylist = addTrackToPlaylist; } catch (_) {}
         try { window.removeTrackFromCurrentPlaylist = removeTrackFromCurrentPlaylist; } catch (_) {}
+        try { window.openMetadataEditor = openMetadataEditor; } catch (_) {}
+        try { window.closeMetadataEditor = closeMetadataEditor; } catch (_) {}
+        try { window.saveMetadata = saveMetadata; } catch (_) {}
     }
 
     export {
@@ -1982,6 +2241,9 @@
         closePlaylistModal,
         addTrackToPlaylist,
         removeTrackFromCurrentPlaylist,
+        openMetadataEditor,
+        closeMetadataEditor,
+        saveMetadata,
         normalizeGenre,
         getTrackSearchString
     };
