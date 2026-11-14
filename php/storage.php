@@ -732,13 +732,15 @@ class Storage {
 
         if ($track === null) return false;
 
-        $updatable = ['title', 'artist', 'album', 'genre', 'year', 'track_num', 'lyrics'];
+        $updatable = ['title', 'artist', 'album', 'genre', 'year', 'track_num', 'lyrics', 'has_cover'];
         $hasChanges = false;
         foreach ($updatable as $key) {
             if (array_key_exists($key, $fields)) {
                 $val = trim((string)$fields[$key]);
                 if ($key === 'year' || $key === 'track_num') {
                     $val = is_numeric($val) ? (int)$val : null;
+                } elseif ($key === 'has_cover') {
+                    $val = !empty($fields[$key]) ? 1 : 0;
                 }
                 $track[$key] = $val;
                 $hasChanges = true;
@@ -751,11 +753,12 @@ class Storage {
 
             if (self::hasMySQL()) {
                 $conn = $GLOBALS['connection'];
-                $stmt = $conn->prepare("UPDATE Tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, track_num = ? WHERE tid = ?");
+                $hasCov = !empty($track['has_cover']) ? 1 : 0;
+                $stmt = $conn->prepare("UPDATE Tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, track_num = ?, has_cover = ? WHERE tid = ?");
                 if ($stmt) {
                     $yr = $track['year'] ?? null;
                     $trk = $track['track_num'] ?? null;
-                    $stmt->bind_param("ssssiii", $track['title'], $track['artist'], $track['album'], $track['genre'], $yr, $trk, $tid);
+                    $stmt->bind_param("ssssiiii", $track['title'], $track['artist'], $track['album'], $track['genre'], $yr, $trk, $hasCov, $tid);
                     $stmt->execute();
                 }
             }

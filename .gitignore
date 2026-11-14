@@ -8,16 +8,42 @@ downloads/
 *.sqlite
 *.sqlite3
 *.db
-tools/screenshots/
-tools/test_*.js
-tools/retest_*.js
-tools/audit_mobile_*.js
-tools/capture_*.js
-tools/inspect_*.js
-tools/verify_*.js
 *.log
 *.pid
 *.port
+
+# Presentations & Office Documents
+*.pptx
+*.ppt
+*.odp
+*.key
+*.docx
+*.xlsx
+
+# Security, Credentials & Environment
+*.env
+*.env.*
+*.pem
+*.cert
+*.crt
+*.p12
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+
+# Ephemeral Developer & Audit Tools
+tools/screenshots/
+tools/test_*.js
+tools/retest_*.js
+tools/audit_*
+tools/capture_*
+tools/inspect_*
+tools/verify_*
+tools/find_overflow.js
+tools/generate_minimalist_suites.py
+tools/apply_contrast_overhaul.py
+tools/update_presentation.py
 
 # Server Runtime Caches
 server/soulseek-config.json

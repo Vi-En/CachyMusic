@@ -1394,7 +1394,14 @@
             <div class="metaEditorBody">
                 <!-- Track Summary Header with Cover & Audio Badges -->
                 <div class="metaEditorSummary">
-                    <img src="resources/images/default.svg" alt="Cover" class="metaEditorThumb" id="metaEditorThumb">
+                    <div class="metaEditorThumbCon">
+                        <img src="resources/images/default.svg" alt="Cover" class="metaEditorThumb" id="metaEditorThumb">
+                        <button type="button" class="metaEditorThumbOverlayBtn" id="metaEditorUploadOverlayBtn" title="Change Cover Art">
+                            <span>📷</span>
+                            <span>Change</span>
+                        </button>
+                    </div>
+                    <input type="file" id="metaEditorCoverFileInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
                     <div class="metaEditorSummaryDetails">
                         <div class="metaEditorFileTitle" id="metaEditorFileTitle">Track Title</div>
                         <div class="metaEditorFilePath" id="metaEditorFilePath">/path/to/audio/file.flac</div>
@@ -1404,7 +1411,43 @@
                             <span class="metaEditorPill" id="metaEditorSampleRatePill">96.0 kHz</span>
                             <span class="metaEditorPill" id="metaEditorBitDepthPill">24-Bit</span>
                         </div>
+                        <div class="metaEditorCoverActions">
+                            <button type="button" class="metaEditorCoverActionBtn" id="metaEditorBrowseCoverBtn">
+                                📁 Choose Image
+                            </button>
+                            <button type="button" class="metaEditorCoverActionBtn onlineFinderBtn" id="metaEditorFindOnlineBtn">
+                                🌐 Find Online
+                            </button>
+                            <button type="button" class="metaEditorCoverActionBtn revertBtn" id="metaEditorRevertCoverBtn" style="display: none;">
+                                ✕ Revert
+                            </button>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Online Cover Art Finder Card -->
+                <div class="metaEditorOnlineCard" id="metaEditorOnlineCard" style="display: none !important;">
+                    <div class="metaEditorOnlineHeader">
+                        <div class="metaEditorOnlineBadge">
+                            <span class="onlineDot" aria-hidden="true"></span>
+                            <span id="metaEditorOnlineStatus">ONLINE ARTWORK FINDER</span>
+                        </div>
+                        <button type="button" class="metaEditorOnlineCloseBtn" id="metaEditorOnlineCloseBtn" aria-label="Close Finder">✕</button>
+                    </div>
+                    <div class="metaEditorOnlineSearchCon">
+                        <input type="text" id="metaEditorOnlineSearchInput" class="metaEditorOnlineInput" placeholder="Search by Artist / Album / Title..." autocomplete="off">
+                        <button type="button" id="metaEditorOnlineSearchSubmitBtn" class="metaEditorOnlineSearchBtn">SEARCH</button>
+                    </div>
+                    <div class="metaEditorOnlineContent" id="metaEditorOnlineContent" style="display: none;">
+                        <img id="metaEditorOnlinePreview" src="" alt="Found Artwork" class="metaEditorOnlinePreview">
+                        <div class="metaEditorOnlineDetails">
+                            <div class="metaEditorOnlineTitle" id="metaEditorOnlineTitle"></div>
+                            <div class="metaEditorOnlineArtist" id="metaEditorOnlineArtist"></div>
+                            <div class="metaEditorOnlineRes" id="metaEditorOnlineRes">600 × 600 HD (iTunes / Apple Music)</div>
+                            <button type="button" class="metaEditorApplyCoverBtn" id="metaEditorApplyCoverBtn">✓ APPLY ARTWORK</button>
+                        </div>
+                    </div>
+                    <div class="metaEditorOnlineMessage" id="metaEditorOnlineMessage" style="display: none;"></div>
                 </div>
 
                 <!-- Confirmation Card for Metadata Changes -->

@@ -1675,6 +1675,94 @@ if (typeof window !== 'undefined') {
             const confirmCancelBtn = document.getElementById('metaEditConfirmCancelBtn');
             const confirmProceedBtn = document.getElementById('metaEditConfirmProceedBtn');
 
+            const coverFileInput = document.getElementById('metaEditorCoverFileInput');
+            const uploadOverlayBtn = document.getElementById('metaEditorUploadOverlayBtn');
+            const browseCoverBtn = document.getElementById('metaEditorBrowseCoverBtn');
+            const findOnlineBtn = document.getElementById('metaEditorFindOnlineBtn');
+            const revertCoverBtn = document.getElementById('metaEditorRevertCoverBtn');
+            const onlineCloseBtn = document.getElementById('metaEditorOnlineCloseBtn');
+            const onlineSearchInput = document.getElementById('metaEditorOnlineSearchInput');
+            const onlineSearchSubmitBtn = document.getElementById('metaEditorOnlineSearchSubmitBtn');
+            const applyCoverBtn = document.getElementById('metaEditorApplyCoverBtn');
+
+            if (uploadOverlayBtn && coverFileInput) {
+                uploadOverlayBtn.addEventListener('click', () => coverFileInput.click());
+            }
+            if (browseCoverBtn && coverFileInput) {
+                browseCoverBtn.addEventListener('click', () => coverFileInput.click());
+            }
+            if (coverFileInput) {
+                coverFileInput.addEventListener('change', function() {
+                    if (this.files && this.files[0] && typeof handleCoverFileSelect === 'function') {
+                        handleCoverFileSelect(this.files[0]);
+                    }
+                });
+            }
+            if (findOnlineBtn) {
+                findOnlineBtn.addEventListener('click', () => {
+                    const onlineCard = document.getElementById('metaEditorOnlineCard');
+                    if (onlineCard) {
+                        const isHidden = window.getComputedStyle(onlineCard).display === 'none';
+                        if (isHidden) {
+                            onlineCard.style.setProperty('display', 'flex', 'important');
+                            const track = window.currentEditingTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+                            if (typeof autoFindCoverOnline === 'function' && track) {
+                                autoFindCoverOnline(track, true);
+                            }
+                        } else {
+                            onlineCard.style.setProperty('display', 'none', 'important');
+                        }
+                    }
+                });
+            }
+            if (revertCoverBtn) {
+                revertCoverBtn.addEventListener('click', () => {
+                    if (typeof revertCover === 'function') revertCover();
+                });
+            }
+            if (onlineCloseBtn) {
+                onlineCloseBtn.addEventListener('click', () => {
+                    const onlineCard = document.getElementById('metaEditorOnlineCard');
+                    if (onlineCard) onlineCard.style.setProperty('display', 'none', 'important');
+                });
+            }
+            if (onlineSearchSubmitBtn && onlineSearchInput) {
+                onlineSearchSubmitBtn.addEventListener('click', () => {
+                    const q = onlineSearchInput.value.trim();
+                    const track = window.currentEditingTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+                    if (typeof autoFindCoverOnline === 'function') {
+                        autoFindCoverOnline(track, true, q);
+                    }
+                });
+                onlineSearchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const q = onlineSearchInput.value.trim();
+                        const track = window.currentEditingTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+                        if (typeof autoFindCoverOnline === 'function') {
+                            autoFindCoverOnline(track, true, q);
+                        }
+                    }
+                });
+            }
+            if (applyCoverBtn) {
+                applyCoverBtn.addEventListener('click', () => {
+                    const preview = document.getElementById('metaEditorOnlinePreview');
+                    const title = document.getElementById('metaEditorOnlineTitle');
+                    const artist = document.getElementById('metaEditorOnlineArtist');
+                    if (preview && preview.src && typeof applyFoundCover === 'function') {
+                        applyFoundCover({
+                            source: 'iTunes Store HD',
+                            artworkUrl: preview.src,
+                            album: title ? title.textContent : '',
+                            artist: artist ? artist.textContent : ''
+                        });
+                        const onlineCard = document.getElementById('metaEditorOnlineCard');
+                        if (onlineCard) onlineCard.style.setProperty('display', 'none', 'important');
+                    }
+                });
+            }
+
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
                     if (typeof closeMetadataEditor === 'function') closeMetadataEditor();

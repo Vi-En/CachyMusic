@@ -55864,6 +55864,303 @@ html:root[data-theme="sentinel"] body #metaBadgeRow :is(#trackBadge.formatBadge,
     padding: 0.75rem !important;
 }
 
+.metaEditorThumbCon {
+    position: relative !important;
+    width: 4rem !important;
+    height: 4rem !important;
+    flex-shrink: 0 !important;
+    border-radius: 0.45rem !important;
+    overflow: hidden !important;
+    cursor: pointer !important;
+}
+
+.metaEditorThumbCon .metaEditorThumb {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 0 !important;
+    display: block !important;
+}
+
+.metaEditorThumbOverlayBtn {
+    position: absolute !important;
+    inset: 0 !important;
+    background: rgba(0, 0, 0, 0.65) !important;
+    border: none !important;
+    color: #ffffff !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.2rem !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
+    transition: opacity 0.15s ease !important;
+}
+
+.metaEditorThumbCon:hover .metaEditorThumbOverlayBtn,
+.metaEditorThumbOverlayBtn:focus-visible {
+    opacity: 1 !important;
+}
+
+.metaEditorOverlayIcon {
+    font-size: 1rem !important;
+    line-height: 1 !important;
+}
+
+.metaEditorOverlayText {
+    font-size: 0.62rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+}
+
+.metaEditorCoverActions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.45rem !important;
+    flex-wrap: wrap !important;
+    margin-top: 0.35rem !important;
+}
+
+.metaEditorCoverActionBtn {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #e2e8f0 !important;
+    padding: 0.3rem 0.65rem !important;
+    border-radius: 0.35rem !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    align-items: center !important;
+    gap: 0.3rem !important;
+}
+
+.metaEditorCoverActionBtn:not([style*="display: none"]) {
+    display: inline-flex !important;
+}
+
+.metaEditorCoverActionBtn[style*="display: none"] {
+    display: none !important;
+}
+
+.metaEditorCoverActionBtn:hover {
+    background: rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.metaEditorCoverActionBtn.onlineFinderBtn {
+    background: rgba(14, 165, 233, 0.12) !important;
+    border-color: rgba(56, 189, 248, 0.4) !important;
+    color: #38bdf8 !important;
+}
+
+.metaEditorCoverActionBtn.onlineFinderBtn:hover {
+    background: rgba(14, 165, 233, 0.25) !important;
+    border-color: #38bdf8 !important;
+    color: #ffffff !important;
+}
+
+.metaEditorCoverActionBtn.revertBtn {
+    background: rgba(239, 68, 68, 0.12) !important;
+    border-color: rgba(248, 113, 113, 0.4) !important;
+    color: #f87171 !important;
+}
+
+.metaEditorCoverActionBtn.revertBtn:hover {
+    background: rgba(239, 68, 68, 0.25) !important;
+    border-color: #ef4444 !important;
+    color: #ffffff !important;
+}
+
+/* Online Cover Art Finder Card */
+.metaEditorOnlineCard {
+    background: rgba(15, 23, 42, 0.95) !important;
+    border: 1px solid rgba(56, 189, 248, 0.35) !important;
+    border-radius: 0.65rem !important;
+    padding: 0.85rem 1rem !important;
+    flex-direction: column !important;
+    gap: 0.65rem !important;
+    margin-bottom: 0.75rem !important;
+    animation: modalPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
+}
+
+.metaEditorOnlineCard:not([style*="display: none"]) {
+    display: flex !important;
+}
+
+.metaEditorOnlineCard[style*="display: none"] {
+    display: none !important;
+}
+
+.metaEditorOnlineHeader {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+}
+
+.metaEditorOnlineBadge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.45rem !important;
+    font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+    color: #38bdf8 !important;
+    text-transform: uppercase !important;
+}
+
+.onlineDot {
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    background: #10b981 !important;
+    box-shadow: 0 0 8px #10b981 !important;
+    flex-shrink: 0 !important;
+    animation: pulse 1.6s infinite ease-in-out !important;
+}
+
+.metaEditorOnlineCloseBtn {
+    background: transparent !important;
+    border: none !important;
+    color: #94a3b8 !important;
+    font-size: 0.85rem !important;
+    cursor: pointer !important;
+    padding: 0.2rem !important;
+    line-height: 1 !important;
+}
+
+.metaEditorOnlineCloseBtn:hover {
+    color: #ffffff !important;
+}
+
+.metaEditorOnlineSearchRow {
+    display: flex !important;
+    gap: 0.5rem !important;
+}
+
+.metaEditorOnlineInput {
+    flex: 1 !important;
+    background: rgba(0, 0, 0, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
+    border-radius: 0.35rem !important;
+    color: #ffffff !important;
+    font-size: 0.76rem !important;
+    padding: 0.45rem 0.65rem !important;
+    outline: none !important;
+}
+
+.metaEditorOnlineInput:focus {
+    border-color: #38bdf8 !important;
+}
+
+.metaEditorOnlineSubmitBtn {
+    background: #0284c7 !important;
+    border: 1px solid #38bdf8 !important;
+    color: #ffffff !important;
+    border-radius: 0.35rem !important;
+    font-weight: 800 !important;
+    font-size: 0.72rem !important;
+    padding: 0.45rem 0.9rem !important;
+    cursor: pointer !important;
+    letter-spacing: 0.05em !important;
+}
+
+.metaEditorOnlineSubmitBtn:hover {
+    background: #0369a1 !important;
+}
+
+.metaEditorOnlineContent {
+    display: flex !important;
+    gap: 0.85rem !important;
+    align-items: center !important;
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 0.5rem !important;
+    padding: 0.65rem !important;
+}
+
+.metaEditorOnlinePreview {
+    width: 4.5rem !important;
+    height: 4.5rem !important;
+    object-fit: cover !important;
+    border-radius: 0.4rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    flex-shrink: 0 !important;
+    background: #000000 !important;
+}
+
+.metaEditorOnlineInfo {
+    flex: 1 !important;
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.2rem !important;
+}
+
+.metaEditorOnlineTitle {
+    font-size: 0.82rem !important;
+    font-weight: 800 !important;
+    color: #f8fafc !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.metaEditorOnlineArtist {
+    font-size: 0.72rem !important;
+    color: #94a3b8 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+.metaEditorOnlineMeta {
+    font-size: 0.68rem !important;
+    color: #38bdf8 !important;
+    font-weight: 700 !important;
+}
+
+.metaEditorApplyCoverBtn {
+    background: #059669 !important;
+    border: 1px solid #10b981 !important;
+    color: #ffffff !important;
+    font-size: 0.72rem !important;
+    font-weight: 800 !important;
+    padding: 0.4rem 0.9rem !important;
+    border-radius: 0.35rem !important;
+    cursor: pointer !important;
+    margin-top: 0.25rem !important;
+    align-self: flex-start !important;
+}
+
+.metaEditorApplyCoverBtn:hover {
+    background: #047857 !important;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4) !important;
+}
+
+.metaEditorOnlineMessage {
+    font-size: 0.74rem !important;
+    color: #94a3b8 !important;
+    padding: 0.4rem 0.2rem !important;
+    font-style: italic !important;
+}
+
+.metaEditCoverPreviewCon {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+}
+
+.metaEditMiniThumb {
+    width: 2.2rem !important;
+    height: 2.2rem !important;
+    object-fit: cover !important;
+    border-radius: 0.3rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
 .metaEditorThumb {
     width: 3.5rem !important;
     height: 3.5rem !important;
@@ -56279,6 +56576,43 @@ html:root[data-theme="sentinel"] body #metaBadgeRow :is(#trackBadge.formatBadge,
 :is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorConfirmCancelBtn {
     border-color: #94a3b8 !important;
     color: #1e293b !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorCoverActionBtn {
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #1e293b !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorCoverActionBtn.onlineFinderBtn {
+    background: rgba(14, 116, 144, 0.12) !important;
+    border-color: rgba(14, 116, 144, 0.4) !important;
+    color: #0e7490 !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorOnlineCard {
+    background: #ffffff !important;
+    border-color: rgba(14, 116, 144, 0.35) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorOnlineContent {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorOnlineTitle {
+    color: #0f172a !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorOnlineArtist {
+    color: #475569 !important;
+}
+
+:is(:root[data-theme="minimalist-light"], :root[data-theme="brutalist-light"], :root[data-theme="minimalist-warm"], html[data-theme="minimalist-light"], html[data-theme="brutalist-light"], html[data-theme="minimalist-warm"]) body .metaEditorOnlineInput {
+    background: #ffffff !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
 }
 
 @media (max-width: 768px) {

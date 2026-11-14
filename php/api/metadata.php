@@ -79,11 +79,75 @@ if ($method === 'POST') {
         }
     }
 
+    // Process imported or online-fetched cover artwork if provided
+    $coverData = $input['cover_data'] ?? null;
+    $coverSaved = false;
+    $rawBinary = null;
+    $coverMime = 'image/jpeg';
+
+    if (!empty($coverData) && is_string($coverData) && str_starts_with($coverData, 'data:image/')) {
+        if (preg_match('/^data:(image\/[a-zA-Z0-9\+\-\.]+);base64,(.+)$/', $coverData, $matches)) {
+            $coverMime = strtolower($matches[1]);
+            $decoded = base64_decode($matches[2], true);
+            if ($decoded && strlen($decoded) > 100) {
+                $rawBinary = $decoded;
+            }
+        }
+    }
+
+    if ($rawBinary !== null) {
+        $cacheDir = __DIR__ . '/../../data/covers';
+        if (!is_dir($cacheDir)) {
+            @mkdir($cacheDir, 0775, true);
+        }
+        if (!is_writable($cacheDir)) {
+            $xdg = getenv('XDG_CACHE_HOME') ?: (getenv('HOME') ? (getenv('HOME') . '/.cache') : sys_get_temp_dir());
+            $cacheDir = $xdg . '/cachymusic_covers';
+            if (!is_dir($cacheDir)) {
+                @mkdir($cacheDir, 0775, true);
+            }
+        }
+
+        $fullImgPath = $cacheDir . '/tid_' . $tid . '.img';
+        $mimePath = $cacheDir . '/tid_' . $tid . '.mime';
+        $thumbPath = $cacheDir . '/tid_' . $tid . '_thumb.jpg';
+
+        file_put_contents($fullImgPath, $rawBinary);
+        file_put_contents($mimePath, $coverMime);
+
+        // Generate thumbnail via ffmpeg if available or write raw
+        $thumbSaved = false;
+        if (is_executable('/usr/bin/ffmpeg')) {
+            $tmpIn = tempnam(sys_get_temp_dir(), 'cm_raw_');
+            file_put_contents($tmpIn, $rawBinary);
+            $tmpThumb = tempnam(sys_get_temp_dir(), 'cm_thm_') . '.jpg';
+            $tCmd = "/usr/bin/ffmpeg -y -v quiet -i " . escapeshellarg($tmpIn) . " -vf \"scale=200:200:force_original_aspect_ratio=decrease\" " . escapeshellarg($tmpThumb) . " 2>&1";
+            exec($tCmd, $tOut, $tRet);
+            if ($tRet === 0 && file_exists($tmpThumb) && filesize($tmpThumb) > 100) {
+                rename($tmpThumb, $thumbPath);
+                $thumbSaved = true;
+            }
+            if (file_exists($tmpIn)) @unlink($tmpIn);
+            if (file_exists($tmpThumb)) @unlink($tmpThumb);
+        }
+        if (!$thumbSaved) {
+            file_put_contents($thumbPath, $rawBinary);
+        }
+
+        $fields['has_cover'] = 1;
+        $coverSaved = true;
+    }
+
     $updatedTrack = Storage::updateTrackMetadata($tid, $fields);
     if (!$updatedTrack) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'Track not found or could not be updated.']);
         exit;
+    }
+
+    if ($coverSaved) {
+        $updatedTrack['has_cover'] = 1;
+        $updatedTrack['cover'] = 'php/api/cover.php?tid=' . $tid;
     }
 
     // Attempt hardware physical file tag write if file is local and writable
@@ -117,10 +181,28 @@ if ($method === 'POST') {
                        $escapedPath . " 2>&1";
                 exec($cmd, $out, $ret);
                 $tagWriteSuccess = ($ret === 0);
+
+                if ($rawBinary !== null) {
+                    $tmpCover = tempnam(sys_get_temp_dir(), 'cm_cov_') . ($coverMime === 'image/png' ? '.png' : '.jpg');
+                    file_put_contents($tmpCover, $rawBinary);
+                    $covCmd = "/usr/bin/metaflac --remove --block-type=PICTURE --import-picture-from=" . escapeshellarg($tmpCover) . " " . $escapedPath . " 2>&1";
+                    exec($covCmd, $cOut, $cRet);
+                    @unlink($tmpCover);
+                }
             } elseif (is_executable('/usr/bin/ffmpeg')) {
                 $tagWriteAttempted = true;
                 $tmpFile = tempnam(sys_get_temp_dir(), 'cm_tag_') . '.' . $ext;
-                $cmd = "/usr/bin/ffmpeg -y -v quiet -i {$escapedPath} " .
+                $covParam = "";
+                $tmpCover = null;
+                if ($rawBinary !== null) {
+                    $tmpCover = tempnam(sys_get_temp_dir(), 'cm_cov_') . ($coverMime === 'image/png' ? '.png' : '.jpg');
+                    file_put_contents($tmpCover, $rawBinary);
+                    $covParam = "-i " . escapeshellarg($tmpCover) . " -map 0:a -map 1:v? -id3v2_version 3 -metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" ";
+                } else {
+                    $covParam = "-map 0 ";
+                }
+
+                $cmd = "/usr/bin/ffmpeg -y -v quiet -i {$escapedPath} {$covParam}" .
                        "-metadata " . escapeshellarg("title=" . $title) . " " .
                        "-metadata " . escapeshellarg("artist=" . $artist) . " " .
                        "-metadata " . escapeshellarg("album=" . $album) . " " .
@@ -134,6 +216,9 @@ if ($method === 'POST') {
                     $tagWriteSuccess = true;
                 } elseif (file_exists($tmpFile)) {
                     @unlink($tmpFile);
+                }
+                if ($tmpCover && file_exists($tmpCover)) {
+                    @unlink($tmpCover);
                 }
             }
         }

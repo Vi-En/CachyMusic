@@ -1809,6 +1809,245 @@
         }
     }
 
+    let pendingCover = null;
+    let originalTrackCover = null;
+    let isCoverSearching = false;
+
+    async function convertImageUrlToDataUrl(url) {
+        if (!url) return null;
+        if (url.startsWith('data:image/')) return url;
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            const timer = setTimeout(() => {
+                img.src = '';
+                resolve(null);
+            }, 6000);
+            img.onload = () => {
+                clearTimeout(timer);
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width || 600;
+                    canvas.height = img.naturalHeight || img.height || 600;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+                    resolve(dataUrl);
+                } catch (err) {
+                    console.warn('Canvas toDataURL conversion skipped (CORS/taint):', err);
+                    resolve(null);
+                }
+            };
+            img.onerror = () => {
+                clearTimeout(timer);
+                resolve(null);
+            };
+            img.src = url;
+        });
+    }
+
+    async function searchCoverOnline(query) {
+        const cleanQuery = (query || '').trim();
+        if (!cleanQuery) return null;
+
+        // 1. Try iTunes Search API (Fast, CDN-cached, high resolution, CORS open)
+        try {
+            const itunesUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=album&limit=3`;
+            const resp = await fetch(itunesUrl);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data && Array.isArray(data.results) && data.results.length > 0) {
+                    const match = data.results[0];
+                    const rawArt = match.artworkUrl100 || match.artworkUrl60;
+                    if (rawArt) {
+                        const hdArt = rawArt.replace(/\/\d+x\d+bb\./, '/600x600bb.');
+                        return {
+                            source: 'iTunes Store HD',
+                            artworkUrl: hdArt,
+                            album: match.collectionName || cleanQuery,
+                            artist: match.artistName || '',
+                            resolution: '600×600'
+                        };
+                    }
+                }
+            }
+        } catch (itunesErr) {
+            console.warn('iTunes album cover search error:', itunesErr);
+        }
+
+        // 2. Fallback: iTunes entity=song
+        try {
+            const itunesSongUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(cleanQuery)}&entity=song&limit=3`;
+            const resp = await fetch(itunesSongUrl);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data && Array.isArray(data.results) && data.results.length > 0) {
+                    const match = data.results[0];
+                    const rawArt = match.artworkUrl100 || match.artworkUrl60;
+                    if (rawArt) {
+                        const hdArt = rawArt.replace(/\/\d+x\d+bb\./, '/600x600bb.');
+                        return {
+                            source: 'iTunes Store HD',
+                            artworkUrl: hdArt,
+                            album: match.collectionName || match.trackName || cleanQuery,
+                            artist: match.artistName || '',
+                            resolution: '600×600'
+                        };
+                    }
+                }
+            }
+        } catch (_) {}
+
+        return null;
+    }
+
+    function applyFoundCover(result) {
+        if (!result) return;
+        const thumb = document.getElementById('metaEditorThumb');
+        const revertBtn = document.getElementById('metaEditorRevertCoverBtn');
+        const statusEl = document.getElementById('metaEditorStatus');
+
+        pendingCover = {
+            source: result.source || 'online',
+            url: result.artworkUrl || result.url,
+            dataUrl: result.dataUrl || null,
+            preview: result.artworkUrl || result.dataUrl
+        };
+
+        if (thumb) {
+            thumb.src = pendingCover.preview;
+        }
+        if (revertBtn) {
+            revertBtn.style.setProperty('display', 'inline-flex', 'important');
+        }
+        if (statusEl) {
+            statusEl.textContent = 'Artwork match applied! Confirm edits below to save.';
+            statusEl.className = 'metaEditorStatus';
+            statusEl.style.display = 'block';
+        }
+    }
+
+    function revertCover() {
+        const thumb = document.getElementById('metaEditorThumb');
+        const revertBtn = document.getElementById('metaEditorRevertCoverBtn');
+        pendingCover = null;
+        if (thumb && originalTrackCover) {
+            thumb.src = originalTrackCover;
+        }
+        if (revertBtn) {
+            revertBtn.style.setProperty('display', 'none', 'important');
+        }
+        showToast('Reverted to original cover artwork');
+    }
+
+    function handleCoverFileSelect(fileOrEvent) {
+        const file = (fileOrEvent && fileOrEvent.target && fileOrEvent.target.files) ? fileOrEvent.target.files[0] : fileOrEvent;
+        if (!file) return;
+        if (!file.type || !file.type.startsWith('image/')) {
+            showToast('Selected file is not an image (PNG, JPG, WEBP supported).');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            const thumb = document.getElementById('metaEditorThumb');
+            const revertBtn = document.getElementById('metaEditorRevertCoverBtn');
+            const onlineCard = document.getElementById('metaEditorOnlineCard');
+
+            pendingCover = {
+                source: 'file',
+                name: file.name,
+                dataUrl: dataUrl,
+                preview: dataUrl
+            };
+
+            if (thumb) thumb.src = dataUrl;
+            if (revertBtn) revertBtn.style.setProperty('display', 'inline-flex', 'important');
+            if (onlineCard) onlineCard.style.setProperty('display', 'none', 'important');
+
+            showToast(`Loaded cover image: ${file.name}`);
+        };
+        reader.onerror = () => {
+            showToast('Failed to read image file.');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function autoFindCoverOnline(track, userInitiated = false, customQuery = null) {
+        if (!track) return;
+        const onlineCard = document.getElementById('metaEditorOnlineCard');
+        const onlineStatus = document.getElementById('metaEditorOnlineStatus');
+        const onlineContent = document.getElementById('metaEditorOnlineContent');
+        const onlineMessage = document.getElementById('metaEditorOnlineMessage');
+        const onlinePreview = document.getElementById('metaEditorOnlinePreview');
+        const onlineTitle = document.getElementById('metaEditorOnlineTitle');
+        const onlineArtist = document.getElementById('metaEditorOnlineArtist');
+        const onlineMeta = document.getElementById('metaEditorOnlineMeta');
+        const onlineSearchInput = document.getElementById('metaEditorOnlineSearchInput');
+
+        let query = customQuery;
+        if (!query) {
+            const inputArtist = document.getElementById('metaEditArtist');
+            const inputAlbum = document.getElementById('metaEditAlbum');
+            const inputTitle = document.getElementById('metaEditTitle');
+
+            const queryArtist = (inputArtist && inputArtist.value ? inputArtist.value : track.artist || '').trim();
+            const queryAlbum = (inputAlbum && inputAlbum.value ? inputAlbum.value : track.album || '').trim();
+            const queryTitle = (inputTitle && inputTitle.value ? inputTitle.value : track.title || '').trim();
+
+            query = [queryArtist, (queryAlbum || queryTitle)].filter(Boolean).join(' ');
+        }
+
+        if (!query) {
+            if (userInitiated && onlineMessage) {
+                onlineMessage.textContent = 'Please enter an artist or title to search online.';
+                onlineMessage.style.display = 'block';
+            }
+            return;
+        }
+
+        if (onlineSearchInput) onlineSearchInput.value = query;
+        if (onlineCard) onlineCard.style.setProperty('display', 'flex', 'important');
+        if (onlineStatus) onlineStatus.textContent = 'SEARCHING REPOSITORIES...';
+        if (onlineMessage) {
+            onlineMessage.textContent = `Searching high-resolution artwork for "${query}"...`;
+            onlineMessage.style.display = 'block';
+        }
+        if (onlineContent) onlineContent.style.display = 'none';
+
+        isCoverSearching = true;
+        const result = await searchCoverOnline(query);
+        isCoverSearching = false;
+
+        if (!currentEditingTrack) return;
+
+        if (result && result.artworkUrl) {
+            if (onlineStatus) onlineStatus.textContent = 'ONLINE ARTWORK MATCH';
+            if (onlineTitle) onlineTitle.textContent = result.album;
+            if (onlineArtist) onlineArtist.textContent = result.artist;
+            if (onlineMeta) onlineMeta.textContent = `${result.source} • ${result.resolution}`;
+            if (onlinePreview) {
+                onlinePreview.src = result.artworkUrl;
+            }
+            if (onlineContent) onlineContent.style.display = 'flex';
+            if (onlineMessage) onlineMessage.style.display = 'none';
+
+            // Autoload into preview if current track has no embedded cover!
+            const hasNoCover = !track.cover || track.cover.includes('default.svg');
+            if (hasNoCover || userInitiated) {
+                applyFoundCover(result);
+            }
+        } else {
+            if (onlineStatus) onlineStatus.textContent = 'ONLINE ARTWORK FINDER';
+            if (onlineContent) onlineContent.style.display = 'none';
+            if (onlineMessage) {
+                onlineMessage.textContent = `No matching artwork found for "${query}". Try searching with a custom query above.`;
+                onlineMessage.style.display = 'block';
+            }
+        }
+    }
+
     function openMetadataEditor(track) {
         if (!track) {
             showToast('No track selected to edit metadata.');
@@ -1816,6 +2055,8 @@
         }
         currentEditingTrack = track;
         pendingMetadataPayload = null;
+        pendingCover = null;
+        originalTrackCover = track.cover ? (track.cover + (track.cover.includes('?') ? '&thumb=1' : '?thumb=1')) : 'resources/images/default.svg';
 
         const modal = document.getElementById('metadataEditorModal');
         const thumb = document.getElementById('metaEditorThumb');
@@ -1831,6 +2072,8 @@
         const saveBtn = document.getElementById('metaEditSaveBtn');
         const proceedBtn = document.getElementById('metaEditConfirmProceedBtn');
         const cancelConfirmBtn = document.getElementById('metaEditConfirmCancelBtn');
+        const revertCoverBtn = document.getElementById('metaEditorRevertCoverBtn');
+        const onlineCard = document.getElementById('metaEditorOnlineCard');
 
         const inputTitle = document.getElementById('metaEditTitle');
         const inputArtist = document.getElementById('metaEditArtist');
@@ -1845,6 +2088,9 @@
         // Reset confirmation card and display form
         if (confirmCard) confirmCard.style.setProperty('display', 'none', 'important');
         if (form) form.style.setProperty('display', 'block', 'important');
+        if (revertCoverBtn) revertCoverBtn.style.setProperty('display', 'none', 'important');
+        if (onlineCard) onlineCard.style.setProperty('display', 'none', 'important');
+
         if (saveBtn) {
             saveBtn.disabled = false;
             saveBtn.textContent = 'SAVE METADATA';
@@ -1859,7 +2105,7 @@
 
         // Populate thumbnail
         if (thumb) {
-            thumb.src = track.cover ? (track.cover + (track.cover.includes('?') ? '&thumb=1' : '?thumb=1')) : 'resources/images/default.svg';
+            thumb.src = originalTrackCover;
         }
 
         // Summary Title & Path
@@ -1897,6 +2143,7 @@
         modal.style.setProperty('display', 'flex', 'important');
         pushModalState('metadataEditorModal');
 
+        // Focus title on desktop
         if (window.innerWidth > 768 && inputTitle) {
             setTimeout(() => {
                 try {
@@ -1905,6 +2152,15 @@
                 } catch (_) {}
             }, 60);
         }
+
+        // Autoload online cover art if track has no embedded cover!
+        if (!track.cover || track.cover.includes('default.svg')) {
+            setTimeout(() => {
+                if (currentEditingTrack === track) {
+                    autoFindCoverOnline(track, false);
+                }
+            }, 120);
+        }
     }
 
     function closeMetadataEditor() {
@@ -1912,11 +2168,18 @@
         if (modal) modal.style.setProperty('display', 'none', 'important');
         const confirmCard = document.getElementById('metaEditorConfirmCard');
         const form = document.getElementById('metaEditorForm');
+        const revertBtn = document.getElementById('metaEditorRevertCoverBtn');
+        const onlineCard = document.getElementById('metaEditorOnlineCard');
         if (confirmCard) confirmCard.style.setProperty('display', 'none', 'important');
         if (form) form.style.setProperty('display', 'block', 'important');
+        if (revertBtn) revertBtn.style.setProperty('display', 'none', 'important');
+        if (onlineCard) onlineCard.style.setProperty('display', 'none', 'important');
+
         popModalState('metadataEditorModal');
         currentEditingTrack = null;
         pendingMetadataPayload = null;
+        pendingCover = null;
+        originalTrackCover = null;
     }
 
     function requestSaveMetadataConfirmation(e) {
@@ -1979,6 +2242,15 @@
         if (newTrackNum !== origTrackNum) changes.push({ field: 'Track #', from: origTrackNum ? String(origTrackNum) : '(empty)', to: newTrackNum ? String(newTrackNum) : '(empty)' });
         if (newComment !== origComment) changes.push({ field: 'Comment', from: origComment || '(empty)', to: newComment || '(empty)' });
 
+        if (pendingCover && pendingCover.preview && pendingCover.preview !== originalTrackCover) {
+            changes.push({
+                field: 'Cover Art',
+                isCover: true,
+                from: originalTrackCover || 'resources/images/default.svg',
+                to: pendingCover.preview
+            });
+        }
+
         pendingMetadataPayload = {
             newTitle,
             newArtist,
@@ -1987,6 +2259,7 @@
             newYear,
             newTrackNum,
             newComment,
+            pendingCover,
             targetTrack: track
         };
 
@@ -1998,14 +2271,28 @@
             if (changes.length === 0) {
                 confirmSummary.innerHTML = '<div class="metaEditNoChanges">No fields were modified. File tags already match.</div>';
             } else {
-                confirmSummary.innerHTML = changes.map(ch => `
-                    <div class="metaEditChangeRow">
-                        <span class="metaEditChangeField">${escapeHtml(ch.field)}</span>
-                        <span class="metaEditChangeFrom" title="${escapeHtml(ch.from)}">${escapeHtml(ch.from)}</span>
-                        <span class="metaEditChangeArrow" aria-hidden="true">➔</span>
-                        <span class="metaEditChangeTo" title="${escapeHtml(ch.to)}">${escapeHtml(ch.to)}</span>
-                    </div>
-                `).join('');
+                confirmSummary.innerHTML = changes.map(ch => {
+                    if (ch.isCover) {
+                        return `
+                            <div class="metaEditChangeRow metaEditCoverChangeRow">
+                                <span class="metaEditChangeField">${escapeHtml(ch.field)}</span>
+                                <span class="metaEditCoverPreviewCon">
+                                    <img id="metaEditMiniThumbOrig" src="${escapeHtml(ch.from)}" class="metaEditMiniThumb" alt="Original Cover">
+                                    <span class="metaEditChangeArrow" aria-hidden="true">➔</span>
+                                    <img id="metaEditMiniThumbNew" src="${escapeHtml(ch.to)}" class="metaEditMiniThumb" alt="New Cover">
+                                </span>
+                            </div>
+                        `;
+                    }
+                    return `
+                        <div class="metaEditChangeRow">
+                            <span class="metaEditChangeField">${escapeHtml(ch.field)}</span>
+                            <span class="metaEditChangeFrom" title="${escapeHtml(ch.from)}">${escapeHtml(ch.from)}</span>
+                            <span class="metaEditChangeArrow" aria-hidden="true">➔</span>
+                            <span class="metaEditChangeTo" title="${escapeHtml(ch.to)}">${escapeHtml(ch.to)}</span>
+                        </div>
+                    `;
+                }).join('');
             }
         }
 
@@ -2037,6 +2324,7 @@
             newYear,
             newTrackNum,
             newComment,
+            pendingCover,
             targetTrack
         } = pendingMetadataPayload;
 
@@ -2051,24 +2339,42 @@
             cancelConfirmBtn.disabled = true;
         }
 
+        let coverDataPayload = null;
+        if (pendingCover) {
+            if (pendingCover.dataUrl) {
+                coverDataPayload = pendingCover.dataUrl;
+            } else if (pendingCover.url) {
+                try {
+                    coverDataPayload = await convertImageUrlToDataUrl(pendingCover.url);
+                } catch (_) {}
+                if (!coverDataPayload) {
+                    coverDataPayload = pendingCover.url;
+                }
+            }
+        }
+
         const tid = targetTrack.tid || targetTrack.id || null;
 
         // Persist to backend PHP if tid is available
         if (tid && typeof fetch === 'function') {
             try {
+                const postPayload = {
+                    tid: tid,
+                    title: newTitle,
+                    artist: newArtist,
+                    album: newAlbum,
+                    genre: newGenre,
+                    year: newYear,
+                    track_num: newTrackNum,
+                    comment: newComment
+                };
+                if (coverDataPayload && coverDataPayload.startsWith('data:image/')) {
+                    postPayload.cover_data = coverDataPayload;
+                }
                 const resp = await fetch('php/api/metadata.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        tid: tid,
-                        title: newTitle,
-                        artist: newArtist,
-                        album: newAlbum,
-                        genre: newGenre,
-                        year: newYear,
-                        track_num: newTrackNum,
-                        comment: newComment
-                    })
+                    body: JSON.stringify(postPayload)
                 });
                 if (resp.ok) {
                     await resp.json().catch(() => null);
@@ -2087,6 +2393,11 @@
         targetTrack.track = newTrackNum;
         targetTrack.track_num = newTrackNum;
         targetTrack.comment = newComment;
+        if (coverDataPayload) {
+            targetTrack.cover = coverDataPayload;
+            targetTrack.has_cover = 1;
+            targetTrack.hasCover = true;
+        }
 
         // Propagate across in-memory collections
         const updateInList = (list) => {
@@ -2104,6 +2415,11 @@
                     t.track = newTrackNum;
                     t.track_num = newTrackNum;
                     t.comment = newComment;
+                    if (coverDataPayload) {
+                        t.cover = coverDataPayload;
+                        t.has_cover = 1;
+                        t.hasCover = true;
+                    }
                 }
             }
         };
@@ -2136,6 +2452,12 @@
             if (miniTitle) miniTitle.textContent = newTitle;
             if (miniArtist) miniArtist.textContent = newArtist || 'Unknown Artist';
 
+            if (coverDataPayload) {
+                const turntableCover = document.getElementById('turntableCover') || document.getElementById('currentCover');
+                if (turntableCover) turntableCover.src = coverDataPayload;
+                if (typeof updateAmbientLighting === 'function') updateAmbientLighting(coverDataPayload);
+            }
+
             // Update MediaSession
             if ('mediaSession' in navigator) {
                 try {
@@ -2161,6 +2483,7 @@
             if (statGenre) statGenre.textContent = (typeof normalizeGenre === 'function' ? normalizeGenre(newGenre) : newGenre) || 'N/A';
             if (statYear) statYear.textContent = newYear ? newYear.toString() : 'N/A';
             if (statTrack) statTrack.textContent = newTrackNum ? newTrackNum.toString() : 'N/A';
+            if (coverDataPayload && coverArtPreview) coverArtPreview.src = coverDataPayload;
         }
 
         // Re-render track list DOM items
@@ -2168,7 +2491,7 @@
         if (typeof updateQueueUi === 'function') updateQueueUi();
 
         closeMetadataEditor();
-        showToast(`Metadata saved: "${newTitle}"`);
+        showToast(coverDataPayload ? `Metadata & cover saved: "${newTitle}"` : `Metadata saved: "${newTitle}"`);
     }
 
     function saveMetadata(e) {
@@ -2349,6 +2672,12 @@
         try { window.cancelMetadataConfirmation = cancelMetadataConfirmation; } catch (_) {}
         try { window.executeSaveMetadata = executeSaveMetadata; } catch (_) {}
         try { window.updateTrackMetadataDisplay = updateTrackMetadataDisplay; } catch (_) {}
+        try { window.handleCoverFileSelect = handleCoverFileSelect; } catch (_) {}
+        try { window.autoFindCoverOnline = autoFindCoverOnline; } catch (_) {}
+        try { window.searchCoverOnline = searchCoverOnline; } catch (_) {}
+        try { window.applyFoundCover = applyFoundCover; } catch (_) {}
+        try { window.revertCover = revertCover; } catch (_) {}
+        try { window.convertImageUrlToDataUrl = convertImageUrlToDataUrl; } catch (_) {}
     }
 
     export {
@@ -2400,6 +2729,12 @@
         cancelMetadataConfirmation,
         executeSaveMetadata,
         updateTrackMetadataDisplay,
+        handleCoverFileSelect,
+        autoFindCoverOnline,
+        searchCoverOnline,
+        applyFoundCover,
+        revertCover,
+        convertImageUrlToDataUrl,
         normalizeGenre,
         getTrackSearchString
     };
