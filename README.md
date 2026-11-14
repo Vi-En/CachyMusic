@@ -32,15 +32,15 @@ It is a lightweight, self-contained music player and audio workstation that runs
 
 ---
 
-## Downloads & Releases (v2.0.0)
+## Downloads & Releases (v2.0.1)
 
 | Platform | Package | Description |
 |:---|:---|:---|
 | **PWA / Web** | [`index.html`](index.html) / [`manifest.json`](manifest.json) | Install directly as a standalone offline-ready Progressive Web App on Android, Windows, Linux, iOS, and macOS. |
-| **Android** | [`CachyMusic-v2.0.0.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.0/CachyMusic-v2.0.0.apk) | Native self-contained standalone APK with `MediaPlaybackService`. |
-| **Linux (64-bit)** | [`CachyMusic-v2.0.0-linux.tar.gz`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.0/CachyMusic-v2.0.0-linux.tar.gz) | Standalone package with launcher (`bin/cachymusic`), MPRIS2 daemon, and AUR/Debian/AppImage scripts. |
-| **Windows** | [`CachyMusic-v2.0.0-windows.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.0/CachyMusic-v2.0.0-windows.zip) | Standalone zip package with silent `CachyMusic.vbs` runner, `cachymusic.bat` launcher, and PWA/PHP launch support. |
-| **Android Studio** | [`CachyMusic-v2.0.0-android-project.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.0/CachyMusic-v2.0.0-android-project.zip) | Complete source project archive ready for Android Studio import. |
+| **Android** | [`CachyMusic-v2.0.1.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.1/CachyMusic-v2.0.1.apk) | Native self-contained standalone APK with USB-C DAC/IEM (`Moondrop May`) hardware bridge & `MediaPlaybackService`. |
+| **Linux (64-bit)** | [`CachyMusic-v2.0.1-linux.tar.gz`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.1/CachyMusic-v2.0.1-linux.tar.gz) | Standalone package with launcher (`bin/cachymusic`), MPRIS2 daemon, and AUR/Debian/AppImage scripts. |
+| **Windows** | [`CachyMusic-v2.0.1-windows.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.1/CachyMusic-v2.0.1-windows.zip) | Standalone zip package with silent `CachyMusic.vbs` runner, `cachymusic.bat` launcher, and PWA/PHP launch support. |
+| **Android Studio** | [`CachyMusic-v2.0.1-android-project.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.1/CachyMusic-v2.0.1-android-project.zip) | Complete source project archive ready for Android Studio import. |
 
 
 ---

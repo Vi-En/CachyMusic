@@ -4,6 +4,12 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [2.0.1] - 2026-11-14
+- **Mobile FLAC `No Data` & Decompression Fixes**: Added `2.2s` `readyState === 0` stall watchdog + `NotSupportedError` fallback in `playAudio()`, non-blocking `AudioContext.resume()` race before `decodeAudioData()`, ID3v2-wrapped FLAC header stripping (`stripId3ToFlacMagic`), and `DECOMPRESSING BITSTREAM...` diagnostic status reporting.
+- **Native Math Precision Mode (`NATIVE (BYPASS)`)**: Added a 3rd Math Precision setting bypassing `dspWorkletNode` custom float math and re-dithering whenever user EQ/FX are flat.
+- **USB DAC / IEM / Headphone Detection & Hardware Gain**: Restored `hasHardwareGain` runtime capability, added native Android `AudioManager` + `UsbManager` output inspection & hotplug `AudioDeviceCallback` (unlocking USB-C DAC/IEMs such as Moondrop May with zero runtime permissions), upgraded Linux PipeWire/PulseAudio/ALSA sink detection (`hardware_volume.php`), and added `SCAN / PAIR DAC` (`selectAudioOutput()` / WebUSB) for standalone PWA browsers.
+- **Strict Deferred Audio Settings**: Refactored `setupNeutronSettingsControls()` to stage all DSP/audio toggles in a draft object with **DISCARD PENDING** support, committing to live playback and `localStorage` strictly on **APPLY AUDIO SETTINGS**.
+
 ## [2.0.0] - 2026-11-14
 - **Standalone Cross-Platform PWA Mode**: Full client-side execution across Linux, Windows, Android, iOS, and macOS without requiring PHP or external databases, with automatic runtime capability adaptation (`runtime-capabilities.js`), pure-JS metadata/artwork extraction (`tag-parser.js` for ID3v2, FLAC, WAV, Ogg Vorbis/Opus, MP4/M4A/ALAC), IndexedDB offline library persistence (`local-library.js`), and bumped Service Worker cache (`cachymusic-v2.0.0`).
 - **Modular ES6 Architecture & Single Namespace**: Removed legacy monolithic bundles (`scripts/homepage.js`, `scripts/index.js`, `scripts/register.js`), removed sample tracks/assets, and isolated exports solely on `window.__cachyMusic`.
