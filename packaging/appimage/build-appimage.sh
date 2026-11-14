@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CachyMusic v2.0.1 — Linux AppImage Builder
+# CachyMusic v2.0.2 — Linux AppImage Builder
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VERSION="2.0.1"
+VERSION="2.0.2"
 ARCH="${ARCH:-x86_64}"
 APPDIR="$PROJECT_ROOT/dist/CachyMusic.AppDir"
 OUT_APPIMAGE="$PROJECT_ROOT/dist/CachyMusic-${VERSION}-${ARCH}.AppImage"

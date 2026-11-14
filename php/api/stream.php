@@ -6,7 +6,7 @@ if (session_status() === PHP_SESSION_ACTIVE) {
 @set_time_limit(0);
 @ini_set('max_execution_time', '0');
 @ini_set('memory_limit', '512M');
-@ignore_user_abort(true);
+@ignore_user_abort(false);
 if (function_exists('apache_setenv')) {
     @apache_setenv('no-gzip', '1');
 }
@@ -181,7 +181,7 @@ if (!$isPathAllowed) {
 }
 
 // 5. Stream Audio with HTTP Byte-Range support
-ignore_user_abort(true);
+ignore_user_abort(false);
 
 while (ob_get_level() > 0) {
     @ob_end_clean();

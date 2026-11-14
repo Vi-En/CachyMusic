@@ -4,6 +4,12 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [2.0.2] - 2026-11-15
+- **Cross-Platform UI Layout & WCAG AAA Contrast**: Raised all 12 themes to strict WCAG 2.1 AAA readability (`minActive >= 7.05:1`, `disabledOnBg2 >= 5.72:1`, `borderMedOnBg1 >= 3.45:1`), enforced 1:1 square turntable sizing across desktop/mobile/landscape viewports, replaced crushed header text with responsive flex layouts, added collapsible mobile deck space optimization, compact mini player, 2-column mobile settings sub-grid, and full-width bottom-sheet modals.
+- **Resilient Progress Scrubber & Seek Stall Recovery**: Unified Pointer Events dragging/tapping across main and mini progress bars (`attachProgressScrubber`), preserved active play state across seeks with `pendingSoftwareSeekSec`, added a `1.6s` stall watchdog promoting stuck seeks to `playWithSoftwareDecoder()`, and improved PHP/Android stream seek responsiveness (`ignore_user_abort(false)`, cached Android media size, fast `HEAD` handling).
+- **Auto-Play Next / Previous Navigation**: Made manual Next (`nextTrack(true)`) wrap and auto-play, and updated Previous (`prevTrack()`) to auto-play when restarting (`>3s`) or stepping back (`<=3s`).
+- **Mobile & Android Notification Track Artwork**: Added `256x256` JPEG rasterization cache (`rasterizeCoverToDataUrl`) for PWA `MediaSession` artwork, and added native `/android-media-art` decoding (`MediaMetadataRetriever` -> `loadThumbnail` -> sibling folder cover -> `ic_launcher` fallback) feeding `METADATA_KEY_ALBUM_ART`, `METADATA_KEY_ART`, and `setLargeIcon()` in `MediaPlaybackService.java`.
+
 ## [2.0.1] - 2026-11-14
 - **Mobile FLAC `No Data` & Decompression Fixes**: Added `2.2s` `readyState === 0` stall watchdog + `NotSupportedError` fallback in `playAudio()`, non-blocking `AudioContext.resume()` race before `decodeAudioData()`, ID3v2-wrapped FLAC header stripping (`stripId3ToFlacMagic`), and `DECOMPRESSING BITSTREAM...` diagnostic status reporting.
 - **Native Math Precision Mode (`NATIVE (BYPASS)`)**: Added a 3rd Math Precision setting bypassing `dspWorkletNode` custom float math and re-dithering whenever user EQ/FX are flat.

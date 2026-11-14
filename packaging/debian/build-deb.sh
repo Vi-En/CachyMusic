@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CachyMusic v2.0.1 — Debian (.deb) Package Builder
+# CachyMusic v2.0.2 — Debian (.deb) Package Builder
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VERSION="2.0.1"
+VERSION="2.0.2"
 ARCH="all"
 PKG_NAME="cachymusic_${VERSION}_${ARCH}"
 STAGING_DIR="$PROJECT_ROOT/dist/$PKG_NAME"

@@ -1046,7 +1046,7 @@ function renderTrackList(preserveScroll = false) {
             `;
         } else {
             trackList.innerHTML = `
-                <div style="padding: 2.5rem 1rem; text-align: center; color: #cbd5e1; font-size: 1.05rem;">
+                <div class="emptyTrackSearchHint" style="padding: 2.5rem 1rem; text-align: center; color: var(--text-muted); font-size: var(--font-base);">
                     No tracks found matching your query.
                 </div>
             `;
@@ -2379,14 +2379,16 @@ function openAddToPlaylistModal(track) {
                 const success = await addTrackToPlaylist(pl.plid, track.tid || track.id, track);
                 if (success) {
                     btn.textContent = '✓ ADDED';
-                    btn.style.backgroundColor = '#00e676';
-                    btn.style.color = '#000000';
+                    btn.style.backgroundColor = 'var(--accent-color)';
+                    btn.style.color = 'var(--text-on-accent)';
+                    btn.style.borderColor = 'var(--accent-color)';
                     setTimeout(() => closePlaylistModal(), 700);
                 } else {
                     btn.textContent = 'ALREADY IN PLAYLIST';
-                    btn.style.backgroundColor = '#fff3e0';
-                    btn.style.color = '#e65100';
-                    btn.style.fontSize = '0.75rem';
+                    btn.style.backgroundColor = 'var(--bg-surface-3)';
+                    btn.style.color = 'var(--status-warning)';
+                    btn.style.borderColor = 'var(--status-warning)';
+                    btn.style.fontSize = 'var(--font-xs)';
                     btn.disabled = false;
                 }
             });

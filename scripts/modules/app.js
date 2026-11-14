@@ -597,97 +597,99 @@ store.subscribe('workspace:change', ({ detail }) => {
 
 
 
-        // Scrubber Dragging & Seeking (Mouse & Touch) - Defer audio seek to mouseup/touchend
-        let pendingSeekPct = null;
-
+        // Scrubber Dragging & Seeking (Unified Pointer Events for Main & Mini Progress Bars)
         function getClientX(e) {
             if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
             if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientX;
             return e.clientX;
         }
 
-        function updateScrubberVisual(e) {
+        function resolveScrubberDurationSec() {
             const s = store.state;
-            const rect = progressCon.getBoundingClientRect();
-            if (!rect || rect.width <= 0) return;
-            const clientX = getClientX(e);
-            if (typeof clientX !== 'number' || isNaN(clientX) || !isFinite(clientX)) return;
-            const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            if (isNaN(pct) || !isFinite(pct)) return;
-            pendingSeekPct = pct;
-            progressBar.style.width = `${pct * 100}%`;
-            const activeAudio = s.audio;
-            const dur = (s.isSoftwareDecoding && s.activeDecodedBuffer)
-                ? s.activeDecodedBuffer.duration
-                : ((activeAudio && activeAudio.duration) || ((s.allTracks[s.currentTrackIndex] && s.allTracks[s.currentTrackIndex].duration) || 0));
-            if (dur && !isNaN(dur) && isFinite(dur)) {
-                currentTimeEl.textContent = formatTime(pct * dur);
+            const track = s.allTracks[s.currentTrackIndex];
+            if (s.isSoftwareDecoding && s.activeDecodedBuffer && Number.isFinite(s.activeDecodedBuffer.duration) && s.activeDecodedBuffer.duration > 0) {
+                return s.activeDecodedBuffer.duration;
             }
+            if (s.audio && Number.isFinite(s.audio.duration) && s.audio.duration > 0) {
+                return s.audio.duration;
+            }
+            return (track && Number.isFinite(track.duration) && track.duration > 0) ? track.duration : 0;
         }
 
-        function commitSeek() {
-            const s = store.state;
-            if (pendingSeekPct !== null && typeof pendingSeekPct === 'number' && !isNaN(pendingSeekPct) && isFinite(pendingSeekPct)) {
-                const activeAudio = s.audio;
-                const totalDur = s.isSoftwareDecoding
-                    ? (s.activeDecodedBuffer ? s.activeDecodedBuffer.duration : ((s.allTracks[s.currentTrackIndex] && s.allTracks[s.currentTrackIndex].duration) || 0))
-                    : ((activeAudio && activeAudio.duration && !isNaN(activeAudio.duration) && isFinite(activeAudio.duration)) ? activeAudio.duration : 0);
-                if (totalDur > 0) {
-                    const targetSec = Math.max(0, Math.min(totalDur, pendingSeekPct * totalDur));
-                    seekAudio(targetSec);
+        function attachProgressScrubber(containerEl) {
+            if (!containerEl) return;
+            let activePointerId = null;
+            let pendingPct = null;
+            let cachedRect = null;
+
+            const updateVisual = (e) => {
+                const rect = (cachedRect && cachedRect.width > 0) ? cachedRect : containerEl.getBoundingClientRect();
+                if (!rect || rect.width <= 0) return null;
+                cachedRect = rect;
+                const clientX = getClientX(e);
+                if (typeof clientX !== 'number' || !Number.isFinite(clientX)) return null;
+                const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                if (!Number.isFinite(pct)) return null;
+                pendingPct = pct;
+                progressBar.style.width = `${pct * 100}%`;
+                if (miniProgressBar) miniProgressBar.style.width = `${pct * 100}%`;
+                const dur = resolveScrubberDurationSec();
+                if (dur > 0) {
+                    const formatted = formatTime(pct * dur);
+                    currentTimeEl.textContent = formatted;
+                    if (miniCurrentTime) miniCurrentTime.textContent = formatted;
                 }
-            }
-            pendingSeekPct = null;
-            s.isDraggingScrubber = false;
+                return pct;
+            };
+
+            const finishDrag = (e, shouldCommit) => {
+                if (activePointerId === null || e.pointerId !== activePointerId) return;
+                if (shouldCommit) {
+                    updateVisual(e);
+                }
+                try {
+                    if (containerEl.hasPointerCapture && containerEl.hasPointerCapture(activePointerId)) {
+                        containerEl.releasePointerCapture(activePointerId);
+                    }
+                } catch (_) { /* ignore pointer capture release errors */ }
+                activePointerId = null;
+                cachedRect = null;
+                containerEl.classList.remove('dragging');
+                store.state.isDraggingScrubber = false;
+                if (shouldCommit && pendingPct !== null && Number.isFinite(pendingPct)) {
+                    const totalDur = resolveScrubberDurationSec();
+                    if (totalDur > 0) {
+                        const targetSec = Math.max(0, Math.min(totalDur, pendingPct * totalDur));
+                        seekAudio(targetSec);
+                    }
+                }
+                pendingPct = null;
+            };
+
+            containerEl.addEventListener('pointerdown', (e) => {
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                if (activePointerId !== null) return;
+                activePointerId = e.pointerId;
+                cachedRect = containerEl.getBoundingClientRect();
+                store.state.isDraggingScrubber = true;
+                containerEl.classList.add('dragging');
+                try {
+                    if (containerEl.setPointerCapture) containerEl.setPointerCapture(e.pointerId);
+                } catch (_) { /* ignore synthetic pointer events without active pointer */ }
+                updateVisual(e);
+            });
+
+            containerEl.addEventListener('pointermove', (e) => {
+                if (activePointerId === null || e.pointerId !== activePointerId) return;
+                updateVisual(e);
+            });
+
+            containerEl.addEventListener('pointerup', (e) => finishDrag(e, true));
+            containerEl.addEventListener('pointercancel', (e) => finishDrag(e, false));
         }
 
         const progressHoverTooltip = document.getElementById('progressHoverTooltip');
-
-        progressCon.addEventListener('mousedown', (e) => {
-            store.state.isDraggingScrubber = true;
-            progressCon.classList.add('dragging');
-            updateScrubberVisual(e);
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (store.state.isDraggingScrubber) {
-                updateScrubberVisual(e);
-            }
-        });
-
-        window.addEventListener('mouseup', () => {
-            if (store.state.isDraggingScrubber) {
-                commitSeek();
-                progressCon.classList.remove('dragging');
-            }
-        });
-
-        progressCon.addEventListener('touchstart', (e) => {
-            store.state.isDraggingScrubber = true;
-            progressCon.classList.add('dragging');
-            updateScrubberVisual(e);
-        }, { passive: true });
-
-        window.addEventListener('touchmove', (e) => {
-            if (store.state.isDraggingScrubber) {
-                updateScrubberVisual(e);
-            }
-        }, { passive: true });
-
-        window.addEventListener('touchend', () => {
-            if (store.state.isDraggingScrubber) {
-                commitSeek();
-                progressCon.classList.remove('dragging');
-            }
-        });
-
-        window.addEventListener('touchcancel', () => {
-            if (store.state.isDraggingScrubber) {
-                pendingSeekPct = null;
-                store.state.isDraggingScrubber = false;
-                progressCon.classList.remove('dragging');
-            }
-        });
+        attachProgressScrubber(progressCon);
 
         let cachedProgressRect = null;
         let isHoverPending = false;
@@ -886,14 +888,27 @@ store.subscribe('workspace:change', ({ detail }) => {
         const libraryToolsChevronEl = document.getElementById('libraryToolsChevron');
 
         if (libraryToolsToggleBtnEl && libraryControls) {
-            libraryToolsToggleBtnEl.addEventListener('click', () => {
-                const isCollapsed = libraryControls.classList.toggle('mobileCollapsed');
+            const syncToolsToggleUi = () => {
+                const isMobile = window.innerWidth <= 768;
+                const isCollapsed = isMobile
+                    ? libraryControls.classList.contains('mobileCollapsed')
+                    : libraryControls.classList.contains('is-collapsed');
                 libraryToolsToggleBtnEl.classList.toggle('active', !isCollapsed);
                 libraryToolsToggleBtnEl.setAttribute('aria-expanded', String(!isCollapsed));
                 if (libraryToolsChevronEl) {
                     libraryToolsChevronEl.textContent = isCollapsed ? '▾' : '▴';
                 }
+            };
+            syncToolsToggleUi();
+            libraryToolsToggleBtnEl.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    libraryControls.classList.toggle('mobileCollapsed');
+                } else {
+                    libraryControls.classList.toggle('is-collapsed');
+                }
+                syncToolsToggleUi();
             });
+            window.addEventListener('resize', syncToolsToggleUi, { passive: true });
         }
 
         tabLibrary.addEventListener('click', () => {
@@ -2071,28 +2086,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         // Mini Player & Soulseek Studio Listeners
-        function seekMiniAudio(e) {
-            if (!miniProgressCon) return;
-            const s = store.state;
-            const rect = miniProgressCon.getBoundingClientRect();
-            if (!rect || rect.width <= 0) return;
-            const clientX = getClientX(e);
-            if (typeof clientX !== 'number' || isNaN(clientX) || !isFinite(clientX)) return;
-            const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            if (isNaN(pct) || !isFinite(pct)) return;
-            if (miniProgressBar) miniProgressBar.style.width = `${pct * 100}%`;
-            if (progressBar) progressBar.style.width = `${pct * 100}%`;
-            const activeAudio = s.audio;
-            const totalDur = s.isSoftwareDecoding
-                ? (s.activeDecodedBuffer ? s.activeDecodedBuffer.duration : ((s.allTracks[s.currentTrackIndex] && s.allTracks[s.currentTrackIndex].duration) || 0))
-                : ((activeAudio && activeAudio.duration && !isNaN(activeAudio.duration) && isFinite(activeAudio.duration)) ? activeAudio.duration : 0);
-            if (totalDur > 0) {
-                const targetSec = Math.max(0, Math.min(totalDur, pct * totalDur));
-                seekAudio(targetSec);
-                if (miniCurrentTime) miniCurrentTime.textContent = formatTime(targetSec);
-                currentTimeEl.textContent = formatTime(targetSec);
-            }
-        }
+        attachProgressScrubber(miniProgressCon);
 
         if (miniPlayBtn) miniPlayBtn.addEventListener('click', () => {
             togglePlayPause();
@@ -2111,9 +2105,6 @@ store.subscribe('workspace:change', ({ detail }) => {
         if (miniPlayerLeftEl) {
             miniPlayerLeftEl.style.cursor = 'pointer';
             bindFastAction(miniPlayerLeftEl, () => switchWorkspace('player', 'playerDeck'));
-        }
-        if (miniProgressCon) {
-            miniProgressCon.addEventListener('click', seekMiniAudio);
         }
         if (miniMuteBtn) {
             miniMuteBtn.addEventListener('click', () => {

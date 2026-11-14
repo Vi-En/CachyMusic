@@ -1,5 +1,5 @@
-// CachyMusic Audio Workstation - High-Performance Service Worker v2.0.1
-const CACHE_NAME = 'cachymusic-v2.0.1';
+// CachyMusic Audio Workstation - High-Performance Service Worker v2.0.2
+const CACHE_NAME = 'cachymusic-v2.0.2';
 const ART_CACHE = 'cachymusic-artwork-v4';
 const MAX_ARTWORK_ENTRIES = 200;
 

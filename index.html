@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>CachyMusic: Audio Workstation</title>
-    <script src="scripts/theme-preload.js?v=2.0.1"></script>
+    <script src="scripts/theme-preload.js?v=2.0.2"></script>
     <meta name="theme-color" content="#09090d">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,7 +25,7 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=2.0.1">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=2.0.2">
     <script>
         (function () {
             var isNativeAndroid = window.AndroidBridge
@@ -47,13 +47,13 @@
                 if (window.caches) {
                     caches.keys().then(function (keys) {
                         keys.forEach(function (k) {
-                            if (k !== 'cachymusic-v2.0.1' && !k.startsWith('cachymusic-artwork-')) {
+                            if (k !== 'cachymusic-v2.0.2' && !k.startsWith('cachymusic-artwork-')) {
                                 caches.delete(k);
                             }
                         });
                     }).catch(function () {});
                 }
-                navigator.serviceWorker.register('./sw.js?v=2.0.1').then(function (reg) {
+                navigator.serviceWorker.register('./sw.js?v=2.0.2').then(function (reg) {
                     reg.update();
                 }).catch(function (err) {
                     console.warn('[PWA] ServiceWorker registration failed:', err);

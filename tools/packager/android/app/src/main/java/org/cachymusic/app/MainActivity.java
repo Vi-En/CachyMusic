@@ -13,6 +13,8 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.hardware.usb.UsbConstants;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbInterface;
@@ -30,6 +32,7 @@ import android.os.Looper;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.util.Log;
+import android.util.Size;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
@@ -52,6 +55,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -447,17 +451,14 @@ public class MainActivity extends Activity {
                 Uri uri = request.getUrl();
                 String path = uri.getPath();
 
-                // 1. Direct local audio streaming via ContentResolver
+                // 1. Direct local audio streaming & artwork resolution via ContentResolver
                 if (path != null && path.startsWith("/android-media-art")) {
                     String uriParam = uri.getQueryParameter("uri");
                     if (uriParam != null) {
-                        try (MediaMetadataRetriever mmr = new MediaMetadataRetriever()) {
-                            mmr.setDataSource(MainActivity.this, Uri.parse(uriParam));
-                            byte[] art = mmr.getEmbeddedPicture();
-                            if (art != null) {
-                                return new WebResourceResponse("image/jpeg", null, new ByteArrayInputStream(art));
-                            }
-                        } catch (Exception ignored) {}
+                        byte[] art = resolveTrackArtworkBytes(MainActivity.this, Uri.parse(uriParam));
+                        if (art != null && art.length > 0) {
+                            return new WebResourceResponse("image/jpeg", null, new ByteArrayInputStream(art));
+                        }
                     }
                 }
 
@@ -932,6 +933,60 @@ public class MainActivity extends Activity {
     }
 
     private final Map<String, Map<Long, Byte>> flacPatchesCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Long> mediaSizeCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static byte[] resolveTrackArtworkBytes(Context ctx, Uri mediaUri) {
+        if (ctx == null || mediaUri == null) return null;
+        try (MediaMetadataRetriever mmr = new MediaMetadataRetriever()) {
+            mmr.setDataSource(ctx, mediaUri);
+            byte[] art = mmr.getEmbeddedPicture();
+            if (art != null && art.length > 0) {
+                return art;
+            }
+        } catch (Exception ignored) {}
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                Bitmap thumb = ctx.getContentResolver().loadThumbnail(mediaUri, new Size(256, 256), null);
+                if (thumb != null) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    thumb.compress(Bitmap.CompressFormat.JPEG, 88, baos);
+                    thumb.recycle();
+                    byte[] bytes = baos.toByteArray();
+                    if (bytes.length > 0) return bytes;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        try (Cursor cursor = ctx.getContentResolver().query(mediaUri, new String[]{MediaStore.MediaColumns.DATA}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int dataIdx = cursor.getColumnIndex(MediaStore.MediaColumns.DATA);
+                if (dataIdx != -1) {
+                    String filePath = cursor.getString(dataIdx);
+                    if (filePath != null && !filePath.isEmpty()) {
+                        File parent = new File(filePath).getParentFile();
+                        if (parent != null && parent.isDirectory()) {
+                            String[] coverNames = {"cover.jpg", "cover.png", "folder.jpg", "folder.png", "front.jpg", "album.jpg"};
+                            for (String name : coverNames) {
+                                File coverFile = new File(parent, name);
+                                if (coverFile.isFile() && coverFile.canRead() && coverFile.length() > 0 && coverFile.length() < 8 * 1024 * 1024) {
+                                    try (FileInputStream fis = new FileInputStream(coverFile);
+                                         ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                                        byte[] buf = new byte[8192];
+                                        int n;
+                                        while ((n = fis.read(buf)) > 0) baos.write(buf, 0, n);
+                                        return baos.toByteArray();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return null;
+    }
 
     private Map<Long, Byte> getFlacPatches(Uri uri) {
         if (uri == null) return java.util.Collections.emptyMap();
@@ -1168,6 +1223,11 @@ public class MainActivity extends Activity {
                     totalSize = Long.parseLong(sizeParam);
                 } catch (NumberFormatException ignored) {}
             }
+            String mediaKey = (mediaUri != null) ? mediaUri.toString() : (pathParam != null ? pathParam : "");
+            if (totalSize <= 0 && !mediaKey.isEmpty()) {
+                Long cachedSz = mediaSizeCache.get(mediaKey);
+                if (cachedSz != null && cachedSz > 0) totalSize = cachedSz;
+            }
 
             String mime = (mimeParam != null && !mimeParam.isEmpty() && !mimeParam.equals("application/octet-stream"))
                     ? mimeParam
@@ -1179,6 +1239,7 @@ public class MainActivity extends Activity {
             if (rangeHeader == null && requestHeaders != null) {
                 rangeHeader = requestHeaders.get("range");
             }
+            boolean isHead = request != null && "HEAD".equalsIgnoreCase(request.getMethod());
 
             File directFile = null;
             if (pathParam != null && !pathParam.trim().isEmpty()) {
@@ -1194,7 +1255,7 @@ public class MainActivity extends Activity {
             ParcelFileDescriptor pfd = null;
             AssetFileDescriptor afd = null;
 
-            if (directFile == null) {
+            if (directFile == null && (!isHead || totalSize <= 0)) {
                 try {
                     pfd = getContentResolver().openFileDescriptor(mediaUri, "r");
                 } catch (Exception e) {
@@ -1235,6 +1296,9 @@ public class MainActivity extends Activity {
                     } catch (Exception ignored) {}
                 }
             }
+            if (totalSize > 0 && !mediaKey.isEmpty()) {
+                mediaSizeCache.put(mediaKey, totalSize);
+            }
 
             if (rangeHeader != null) rangeHeader = rangeHeader.trim();
             if (totalSize > 0 && rangeHeader != null && rangeHeader.toLowerCase(Locale.ROOT).startsWith("bytes=")) {
@@ -1272,13 +1336,6 @@ public class MainActivity extends Activity {
                 }
 
                 long contentLength = end - start + 1;
-                Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
-                InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, start, contentLength, patches);
-                if (is == null) {
-                    Log.e(TAG, "Failed to create seekable stream for: " + mediaUri);
-                    return null;
-                }
-
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Accept-Ranges", "bytes");
                 headers.put("Content-Range", "bytes " + start + "-" + end + "/" + totalSize);
@@ -1288,18 +1345,24 @@ public class MainActivity extends Activity {
                 headers.put("Access-Control-Allow-Headers", "*");
                 headers.put("Cache-Control", "no-cache");
 
+                if (isHead) {
+                    if (pfd != null) { try { pfd.close(); } catch (Exception ignored) {} }
+                    if (afd != null) { try { afd.close(); } catch (Exception ignored) {} }
+                    return new WebResourceResponse(mime, null, 206, "Partial Content", headers,
+                            new ByteArrayInputStream(new byte[0]));
+                }
+
+                Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
+                InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, start, contentLength, patches);
+                if (is == null) {
+                    Log.e(TAG, "Failed to create seekable stream for: " + mediaUri);
+                    return null;
+                }
+
                 return new WebResourceResponse(mime, null, 206, "Partial Content", headers, is);
             }
 
             // Normal full stream response (or when totalSize unknown)
-            long streamLength = totalSize > 0 ? totalSize : Long.MAX_VALUE;
-            Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
-            InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, 0, streamLength, patches);
-            if (is == null) {
-                Log.e(TAG, "Failed to create full stream for: " + mediaUri);
-                return null;
-            }
-
             Map<String, String> headers = new HashMap<>();
             headers.put("Accept-Ranges", "bytes");
             if (totalSize > 0) {
@@ -1309,6 +1372,21 @@ public class MainActivity extends Activity {
             headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
             headers.put("Access-Control-Allow-Headers", "*");
             headers.put("Cache-Control", "no-cache");
+
+            if (isHead) {
+                if (pfd != null) { try { pfd.close(); } catch (Exception ignored) {} }
+                if (afd != null) { try { afd.close(); } catch (Exception ignored) {} }
+                return new WebResourceResponse(mime, null, 200, "OK", headers,
+                        new ByteArrayInputStream(new byte[0]));
+            }
+
+            long streamLength = totalSize > 0 ? totalSize : Long.MAX_VALUE;
+            Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
+            InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, 0, streamLength, patches);
+            if (is == null) {
+                Log.e(TAG, "Failed to create full stream for: " + mediaUri);
+                return null;
+            }
 
             return new WebResourceResponse(mime, null, 200, "OK", headers, is);
         } catch (Exception e) {

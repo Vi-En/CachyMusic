@@ -279,7 +279,15 @@ let currentTrackGeneration = 0;
 let activeLoadedMetadataHandler = null;
 let playPendingTimeout = null;
 let noDataStallTimer = null;
+let seekStallTimer = null;
 let lastPositionStateUpdate = 0;
+
+function clearSeekStallTimer() {
+    if (seekStallTimer) {
+        clearTimeout(seekStallTimer);
+        seekStallTimer = null;
+    }
+}
 
 function clearNoDataStallTimer() {
     if (noDataStallTimer) {
@@ -350,7 +358,9 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
     s.isSoftwareDecoding = false;
     currentPlayRequestId++;
     s.isPlayPending = false;
+    s.pendingSoftwareSeekSec = null;
     clearNoDataStallTimer();
+    clearSeekStallTimer();
     if (playPendingTimeout) {
         clearTimeout(playPendingTimeout);
         playPendingTimeout = null;
@@ -476,7 +486,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
             coverBadge.style.color = 'inherit';
         } else {
             coverBadge.textContent = 'MUSIC ICON';
-            coverBadge.style.color = '#888888';
+            coverBadge.style.color = 'var(--text-muted)';
         }
     }
 
@@ -751,25 +761,61 @@ function updateRepeatUI() {
 // Unified Seek Helper (HTML5 <audio> and Web Audio Software Decoder)
 function seekAudio(targetSec) {
     const s = store.state;
-    if (typeof targetSec !== 'number' || isNaN(targetSec)) return;
-    if (s.isSoftwareDecoding && s.activeDecodedBuffer) {
-        seekSoftwarePlayback(targetSec);
-        mediaSessionController.updatePositionState(true);
+    if (typeof targetSec !== 'number' || !Number.isFinite(targetSec)) return;
+    const track = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
+        ? s.standaloneTrackList[s.standaloneTrackIndex]
+        : s.allTracks[s.currentTrackIndex];
+    if (s.isSoftwareDecoding) {
+        if (s.activeDecodedBuffer) {
+            seekSoftwarePlayback(targetSec);
+            mediaSessionController.updatePositionState(true);
+        } else {
+            const estDur = (track && Number.isFinite(track.duration) && track.duration > 0) ? track.duration : Infinity;
+            const queuedTarget = Math.max(0, Math.min(estDur, targetSec));
+            s.pendingSoftwareSeekSec = queuedTarget;
+            updatePlaybackProgress(queuedTarget, Number.isFinite(estDur) ? estDur : 0);
+        }
         return;
     }
     const audio = s.audio;
     if (!audio) return;
-    const track = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
-        ? s.standaloneTrackList[s.standaloneTrackIndex]
-        : s.allTracks[s.currentTrackIndex];
-    const dur = (audio.duration && isFinite(audio.duration)) ? audio.duration : (track?.duration || Infinity);
+    const dur = (audio.duration && Number.isFinite(audio.duration))
+        ? audio.duration
+        : ((track && Number.isFinite(track.duration) && track.duration > 0) ? track.duration : Infinity);
     const clamped = Math.max(0, Math.min(dur, targetSec));
+    const shouldKeepPlaying = !s.userExplicitlyPaused;
+    clearSeekStallTimer();
+
+    if (shouldKeepPlaying && s.audioContext && s.audioContext.state === 'suspended') {
+        s.audioContext.resume().catch(() => {});
+    }
+
     try {
         audio.currentTime = clamped;
     } catch (_) {}
-    updatePlaybackProgress(clamped, isFinite(dur) ? dur : 0);
+
+    updatePlaybackProgress(clamped, Number.isFinite(dur) ? dur : 0);
     mediaSessionController.updatePositionState(true);
     if (mprisSyncHook) mprisSyncHook(true);
+
+    if (shouldKeepPlaying) {
+        if (audio.paused) {
+            s.isPlayPending = false;
+            playAudio(true);
+        }
+        const seekGen = currentTrackGeneration;
+        seekStallTimer = setTimeout(() => {
+            seekStallTimer = null;
+            if (seekGen !== currentTrackGeneration) return;
+            if (s.userExplicitlyPaused || s.isSoftwareDecoding || s.audio !== audio || !track) return;
+            const stillStalled = audio.seeking || audio.readyState < 3 || audio.paused;
+            if (stillStalled) {
+                logAudioPlaybackEvent('warn', `HTML5 seek to ${clamped.toFixed(1)}s stalled on ${track.format || 'stream'}; promoting to 32-bit in-memory decoder.`);
+                s.isPlayPending = false;
+                playWithSoftwareDecoder(track, clamped);
+            }
+        }, 1600);
+    }
 }
 
 // Play Audio (guarded against concurrent async race conditions and AbortError)
@@ -924,6 +970,7 @@ function pauseAudio() {
     const s = store.state;
     s.userExplicitlyPaused = true;
     clearNoDataStallTimer();
+    clearSeekStallTimer();
     if (s.isSoftwareDecoding) {
         pauseSoftwarePlayback();
         syncPlayPauseUI(false);
@@ -1096,20 +1143,25 @@ function executeGaplessHandoff(nextIndex) {
     }
 }
 
-function nextTrack() {
+function nextTrack(manual = true) {
     const s = store.state;
+    clearSeekStallTimer();
+    if (manual) {
+        s.userExplicitlyPaused = false;
+        s.isPlayPending = false;
+    }
     if (s.isStandalonePlayback && s.standaloneTrackList && s.standaloneTrackList.length > 0) {
-        if (s.repeatMode === 'one') {
+        if (s.repeatMode === 'one' && !manual) {
             seekAudio(0);
-            playAudio();
+            playAudio(true);
             return;
         }
-        if (s.standaloneTrackList.length > 1 && (s.standaloneTrackIndex + 1 < s.standaloneTrackList.length || s.repeatMode === 'all')) {
+        if (s.standaloneTrackList.length > 1 && (s.standaloneTrackIndex + 1 < s.standaloneTrackList.length || s.repeatMode === 'all' || manual)) {
             s.standaloneTrackIndex = (s.standaloneTrackIndex + 1) % s.standaloneTrackList.length;
             loadStandaloneTrack(s.standaloneTrackIndex, true);
-        } else if (s.repeatMode === 'all') {
+        } else if (s.repeatMode === 'all' || manual) {
             seekAudio(0);
-            playAudio();
+            playAudio(true);
         } else {
             pauseAudio();
             seekAudio(0);
@@ -1158,7 +1210,7 @@ function nextTrack() {
     } else {
         let nextIdx = currentIdxInPool + 1;
         if (nextIdx >= pool.length) {
-            if (s.repeatMode === 'off') {
+            if (!manual && s.repeatMode === 'off') {
                 pauseAudio();
                 seekAudio(0);
                 if (progressBar) progressBar.style.width = '0%';
@@ -1176,6 +1228,9 @@ function nextTrack() {
 
 function prevTrack() {
     const s = store.state;
+    clearSeekStallTimer();
+    s.userExplicitlyPaused = false;
+    s.isPlayPending = false;
     const curPos = s.isSoftwareDecoding
         ? (s.softwarePlaybackOffset + (!s.isSoftwarePaused && s.audioContext ? (s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0))
         : (s.audio ? s.audio.currentTime : 0);
@@ -1183,17 +1238,20 @@ function prevTrack() {
     if (s.isStandalonePlayback && s.standaloneTrackList && s.standaloneTrackList.length > 0) {
         if (curPos > 3) {
             seekAudio(0);
+            playAudio(true);
         } else if (s.standaloneTrackList.length > 1) {
             s.standaloneTrackIndex = (s.standaloneTrackIndex - 1 + s.standaloneTrackList.length) % s.standaloneTrackList.length;
             loadStandaloneTrack(s.standaloneTrackIndex, true);
         } else {
             seekAudio(0);
+            playAudio(true);
         }
         return;
     }
 
     if (curPos > 3) {
         seekAudio(0);
+        playAudio(true);
         return;
     }
 
@@ -1349,6 +1407,7 @@ function seekSoftwarePlayback(targetSec) {
 
 function stopSoftwarePlayback() {
     const s = store.state;
+    clearSeekStallTimer();
     cancelSoftwareProgressLoop();
     if (s.softwareSourceNode) {
         try {
@@ -1360,6 +1419,7 @@ function stopSoftwarePlayback() {
     }
     s.isSoftwareDecoding = false;
     s.isSoftwarePaused = false;
+    s.pendingSoftwareSeekSec = null;
     s.softwarePlaybackStartTime = 0;
     s.softwarePlaybackOffset = 0;
 }
@@ -1371,7 +1431,7 @@ function onSoftwarePlaybackEnded() {
     if (s.repeatMode === 'one') {
         loadTrack(s.currentTrackIndex, true, 0);
     } else {
-        nextTrack();
+        nextTrack(false);
     }
 }
 
@@ -1477,7 +1537,9 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
         if (totalDurationEl) totalDurationEl.textContent = formatTime(decodedBuffer.duration);
         if (miniTotalDuration) miniTotalDuration.textContent = formatTime(decodedBuffer.duration);
 
-        s.softwarePlaybackOffset = Math.max(0, Math.min(decodedBuffer.duration, startTime));
+        const requestedStart = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : startTime;
+        s.pendingSoftwareSeekSec = null;
+        s.softwarePlaybackOffset = Math.max(0, Math.min(decodedBuffer.duration, requestedStart));
         startSoftwareBufferPlayback();
         s.consecutiveSkipCount = 0;
         logAudioPlaybackEvent('info', `Web Audio Software Engine playing "${track.title || track.filename}" at ${decodedBuffer.sampleRate}Hz, ${decodedBuffer.numberOfChannels}ch, ${decodedBuffer.duration.toFixed(1)}s.`);
@@ -1511,6 +1573,7 @@ function attachAudioListeners(targetAudio) {
     targetAudio.addEventListener('playing', () => {
         if (targetAudio._isDisposed || targetAudio !== s.audio) return;
         clearNoDataStallTimer();
+        clearSeekStallTimer();
         if (s.userExplicitlyPaused && document.hidden) {
             targetAudio.pause();
             syncPlayPauseUI(false);
@@ -1540,6 +1603,10 @@ function attachAudioListeners(targetAudio) {
         syncPlayPauseUI(false);
     });
     targetAudio.addEventListener('waiting', () => {
+        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (!s.userExplicitlyPaused) isAudioBuffering = true;
+    });
+    targetAudio.addEventListener('seeking', () => {
         if (targetAudio._isDisposed || targetAudio !== s.audio) return;
         if (!s.userExplicitlyPaused) isAudioBuffering = true;
     });
@@ -1732,7 +1799,7 @@ function attachAudioListeners(targetAudio) {
             targetAudio.currentTime = 0;
             playAudio();
         } else {
-            nextTrack();
+            nextTrack(false);
         }
     });
 
@@ -1755,6 +1822,12 @@ function attachAudioListeners(targetAudio) {
 
     targetAudio.addEventListener('seeked', () => {
         if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        clearSeekStallTimer();
+        isAudioBuffering = false;
+        if (!s.userExplicitlyPaused && targetAudio.paused && !s.isSoftwareDecoding) {
+            s.isPlayPending = false;
+            playAudio(true);
+        }
         mediaSessionController.updatePositionState(true);
         if (mprisSyncHook) mprisSyncHook(true);
     });
@@ -1826,7 +1899,7 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
                 ? 'No audio track loaded. Native Bypass mode skips worklet DSP math & dithering when EQ/effects are flat, passing decoded Web Audio float frames directly.'
                 : `No audio track loaded. Browser Web Audio decodes streams to 32-bit IEEE 754 float; DSP worklet is configured for ${s.isPrecision64 ? '64-bit double-precision' : '32-bit single-precision'} math.`;
         }
-        const dotCol = isLightSurface ? '#475569' : '#94a3b8';
+        const dotCol = 'var(--text-muted)';
         if (deckSignalDot) deckSignalDot.style.color = dotCol;
         if (auditQualityDot) auditQualityDot.style.color = dotCol;
     } else if (isLossless && !hasPeq && !s.isBassBoost && !s.isVocalBoost && !s.isTrebleBoost && !s.isCrossfeed && !s.isSurroundWidener && !s.isAmbiophonics && !s.isPhaseInvert && !s.isMonoMix) {
@@ -1840,7 +1913,7 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
                 ? `Lossless ${format} decoded by host engine in Native Bypass mode (custom worklet float math & dither bypassed for direct path).`
                 : `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${s.isUltrasonic || s.ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
         }
-        const dotCol = isLightSurface ? '#059669' : '#10b981';
+        const dotCol = 'var(--status-success)';
         if (deckSignalDot) deckSignalDot.style.color = dotCol;
         if (auditQualityDot) auditQualityDot.style.color = dotCol;
     } else if (isLossless) {
@@ -1852,7 +1925,7 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
         if (auditQualityDesc) {
             auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${isNativeBypass ? '32-bit host DSP (user EQ/FX active)' : workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
         }
-        const dotCol = isLightSurface ? '#b45309' : '#fbbf24';
+        const dotCol = 'var(--status-warning)';
         if (deckSignalDot) deckSignalDot.style.color = dotCol;
         if (auditQualityDot) auditQualityDot.style.color = dotCol;
     } else {
@@ -1864,7 +1937,7 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
         if (auditQualityDesc) {
             auditQualityDesc.textContent = `Compressed ${format} stream decoded by browser into 32-bit IEEE 754 floating-point PCM${activeStages.length > 0 ? `, processed via ${workletPrecisionStr} (${activeStages.join(', ')})` : ' with flat EQ response'}.`;
         }
-        const dotCol = isLightSurface ? '#0284c7' : '#38bdf8';
+        const dotCol = 'var(--text-accent)';
         if (deckSignalDot) deckSignalDot.style.color = dotCol;
         if (auditQualityDot) auditQualityDot.style.color = dotCol;
     }
@@ -2081,12 +2154,9 @@ function updateDacStatusUi() {
     const bitStr = `${bd}-BIT`;
     const nyquistKhz = (currentRate / 2000).toFixed(1).replace(/\.0$/, '');
 
-    const curTheme = getActiveTheme();
-    const isLightSurface = (curTheme === 'default' || curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm');
-
     if (!hasActiveDsp()) {
         statDacStream.textContent = `BIT-PERFECT DIRECT (${bitStr} • ${rateStr} • ${nyquistKhz}kHz BANDWIDTH)`;
-        statDacStream.style.color = isLightSurface ? '#047857' : '#00ff88';
+        statDacStream.style.color = 'var(--status-success)';
         statDacStream.title = `Direct hardware stream matching ${bitStr} • ${rateStr} (${nyquistKhz} kHz Nyquist bandwidth) with zero downsampling and zero DSP coloration.`;
     } else {
         const activeDsp = [];
@@ -2097,7 +2167,7 @@ function updateDacStatusUi() {
         if (s.isLimiter) activeDsp.push('LIMITER');
         const dspStr = activeDsp.length > 0 ? activeDsp.join('+') : 'ACTIVE';
         statDacStream.textContent = `STUDIO DSP (${dspStr} • ${bitStr} • ${rateStr} • ${nyquistKhz}kHz)`;
-        statDacStream.style.color = isLightSurface ? '#9a3412' : '#ffaa00';
+        statDacStream.style.color = 'var(--status-warning)';
         statDacStream.title = `Processing through ${s.isPrecision64 ? '64-bit' : '32-bit'} floating-point Web Audio DSP stage at ${rateStr} (${nyquistKhz} kHz bandwidth).`;
     }
 }

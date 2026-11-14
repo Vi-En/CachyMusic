@@ -164,17 +164,21 @@ public class MediaPlaybackService extends Service {
     }
 
     private void updateSessionAndNotification(final String coverUrl) {
-        if (!coverUrl.equals(currentCoverKey)) {
-            currentCoverKey = coverUrl;
-            if (coverUrl.isEmpty()) {
-                cachedCoverBitmap = null;
+        String key = coverUrl != null ? coverUrl : "";
+        if (!key.equals(currentCoverKey)) {
+            currentCoverKey = key;
+            if (key.isEmpty()) {
+                cachedCoverBitmap = getFallbackCoverBitmap();
                 publishNotification();
             } else {
+                if (cachedCoverBitmap == null) {
+                    cachedCoverBitmap = getFallbackCoverBitmap();
+                }
                 publishNotification();
                 new Thread(() -> {
-                    Bitmap decoded = decodeCoverBitmap(coverUrl);
-                    if (coverUrl.equals(currentCoverKey)) {
-                        cachedCoverBitmap = decoded;
+                    Bitmap decoded = decodeCoverBitmap(key);
+                    if (key.equals(currentCoverKey)) {
+                        cachedCoverBitmap = (decoded != null) ? decoded : getFallbackCoverBitmap();
                         publishNotification();
                     }
                 }, "CachyCoverDecode").start();
@@ -211,6 +215,7 @@ public class MediaPlaybackService extends Service {
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, currentDurationMs);
         if (cachedCoverBitmap != null) {
             meta.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, cachedCoverBitmap);
+            meta.putBitmap(MediaMetadata.METADATA_KEY_ART, cachedCoverBitmap);
         }
         mediaSession.setMetadata(meta.build());
 
@@ -288,31 +293,66 @@ public class MediaPlaybackService extends Service {
         stopSelf();
     }
 
+    private Bitmap getFallbackCoverBitmap() {
+        try {
+            Bitmap fallback = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
+            return scaleBitmap(fallback, 256);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     private Bitmap decodeCoverBitmap(String coverUrl) {
-        if (coverUrl == null || coverUrl.isEmpty()) return null;
+        if (coverUrl == null || coverUrl.isEmpty()) return getFallbackCoverBitmap();
         try {
             BitmapFactory.Options opts = new BitmapFactory.Options();
-            opts.inPreferredConfig = Bitmap.Config.RGB_565;
+            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
 
             if (coverUrl.startsWith("data:image/")) {
                 int comma = coverUrl.indexOf(',');
                 if (comma > 0) {
                     byte[] raw = Base64.decode(coverUrl.substring(comma + 1), Base64.DEFAULT);
                     Bitmap bmp = BitmapFactory.decodeByteArray(raw, 0, raw.length, opts);
-                    return scaleBitmap(bmp, 256);
+                    if (bmp != null) return scaleBitmap(bmp, 256);
+                }
+            } else if (coverUrl.startsWith("https://appassets.androidplatform.net/") || coverUrl.startsWith("https://appassets.androidcache.net/")) {
+                Uri parsed = Uri.parse(coverUrl);
+                String path = parsed.getPath();
+                if (path != null && path.startsWith("/android-media-art")) {
+                    String uriParam = parsed.getQueryParameter("uri");
+                    if (uriParam != null && !uriParam.isEmpty()) {
+                        byte[] artBytes = MainActivity.resolveTrackArtworkBytes(this, Uri.parse(uriParam));
+                        if (artBytes != null && artBytes.length > 0) {
+                            Bitmap bmp = BitmapFactory.decodeByteArray(artBytes, 0, artBytes.length, opts);
+                            if (bmp != null) return scaleBitmap(bmp, 256);
+                        }
+                    }
+                } else if (path != null && path.length() > 1 && !path.toLowerCase(java.util.Locale.ROOT).endsWith(".svg")) {
+                    try (InputStream is = getAssets().open(path.substring(1))) {
+                        Bitmap bmp = BitmapFactory.decodeStream(is, null, opts);
+                        if (bmp != null) return scaleBitmap(bmp, 256);
+                    } catch (Exception ignored) {}
                 }
             } else if (coverUrl.startsWith("content://") || coverUrl.startsWith("file://")) {
-                try (InputStream is = getContentResolver().openInputStream(Uri.parse(coverUrl))) {
+                Uri targetUri = Uri.parse(coverUrl);
+                try (InputStream is = getContentResolver().openInputStream(targetUri)) {
                     if (is != null) {
-                        return scaleBitmap(BitmapFactory.decodeStream(is, null, opts), 256);
+                        Bitmap bmp = BitmapFactory.decodeStream(is, null, opts);
+                        if (bmp != null) return scaleBitmap(bmp, 256);
                     }
+                } catch (Exception ignored) {}
+                byte[] artBytes = MainActivity.resolveTrackArtworkBytes(this, targetUri);
+                if (artBytes != null && artBytes.length > 0) {
+                    Bitmap bmp = BitmapFactory.decodeByteArray(artBytes, 0, artBytes.length, opts);
+                    if (bmp != null) return scaleBitmap(bmp, 256);
                 }
             } else if (coverUrl.startsWith("http://") || coverUrl.startsWith("https://")) {
                 HttpURLConnection conn = (HttpURLConnection) new URL(coverUrl).openConnection();
                 conn.setConnectTimeout(3000);
                 conn.setReadTimeout(3000);
                 try (InputStream is = conn.getInputStream()) {
-                    return scaleBitmap(BitmapFactory.decodeStream(is, null, opts), 256);
+                    Bitmap bmp = BitmapFactory.decodeStream(is, null, opts);
+                    if (bmp != null) return scaleBitmap(bmp, 256);
                 } finally {
                     conn.disconnect();
                 }
@@ -320,7 +360,7 @@ public class MediaPlaybackService extends Service {
         } catch (Exception e) {
             Log.w(TAG, "Cover decode skipped: " + e.getMessage());
         }
-        return null;
+        return getFallbackCoverBitmap();
     }
 
     private static Bitmap scaleBitmap(Bitmap src, int maxPx) {

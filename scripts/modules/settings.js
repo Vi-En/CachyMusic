@@ -286,10 +286,10 @@ import {
         if (streamVal) {
             if (audio && audio.error) {
                 streamVal.textContent = `Error (Code ${audio.error.code})`;
-                streamVal.style.color = '#ef4444';
+                streamVal.style.color = 'var(--status-danger)';
             } else if (audio && !audio.paused) {
                 streamVal.textContent = 'Streaming Active (206/200)';
-                streamVal.style.color = '#10b981';
+                streamVal.style.color = 'var(--status-success)';
             } else {
                 streamVal.textContent = 'Standby / Paused';
                 streamVal.style.color = 'inherit';
@@ -323,7 +323,7 @@ import {
         }
         if (skipVal) {
             skipVal.textContent = s.consecutiveSkipCount > 0 ? `${s.consecutiveSkipCount} skip(s) logged` : 'No abnormal skips (0)';
-            skipVal.style.color = s.consecutiveSkipCount > 0 ? '#f59e0b' : 'inherit';
+            skipVal.style.color = s.consecutiveSkipCount > 0 ? 'var(--status-warning)' : 'inherit';
         }
         refreshDebugHudTelemetry();
     }

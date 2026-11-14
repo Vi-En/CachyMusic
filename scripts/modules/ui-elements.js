@@ -379,10 +379,10 @@ import { store } from './state.js';
         if (settingsTabScanStatus) {
             if (s.allTracks && s.allTracks.length > 0) {
                 settingsTabScanStatus.textContent = `● ${s.allTracks.length} tracks currently loaded in library.`;
-                settingsTabScanStatus.style.color = 'var(--accent-color, #00f0ff)';
+                settingsTabScanStatus.style.color = 'var(--text-accent)';
             } else {
                 settingsTabScanStatus.textContent = '● Ready to scan local music library.';
-                settingsTabScanStatus.style.color = 'var(--text-secondary, #888888)';
+                settingsTabScanStatus.style.color = 'var(--text-secondary)';
             }
         }
 

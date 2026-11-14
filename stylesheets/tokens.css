@@ -56,7 +56,14 @@
 
     button:disabled {
         cursor: not-allowed;
-        opacity: 0.5;
+        color: var(--text-disabled);
+        border-color: var(--border-subtle);
+        background: color-mix(in oklch, var(--bg-surface-2) 65%, var(--bg-canvas));
+    }
+
+    input::placeholder, textarea::placeholder {
+        color: var(--text-muted);
+        opacity: 1;
     }
 
     img, svg, canvas {
@@ -126,8 +133,8 @@
         /* Ergonomic Targets & Layout Proportions */
         --touch-min: max(44px, 2.75rem);
         --slider-scrub-zone: max(36px, 2.25rem);
-        --topbar-height: clamp(3.15rem, 5.8dvh, 4.0rem);
-        --mobile-tabbar-height: calc(3.6rem + var(--safe-bottom));
+        --topbar-height: clamp(2.85rem, 5.0dvh, 3.6rem);
+        --mobile-tabbar-height: calc(3.25rem + var(--safe-bottom));
         --turntable-size: clamp(10.5rem, min(52vw, 27dvh), 18.5rem);
         --platter-speed: 1.8s;
 
@@ -158,9 +165,9 @@
         --z-toast: 200;
 
         /* Semantic Status Defaults */
-        --status-success: oklch(0.73 0.17 156);
-        --status-warning: oklch(0.79 0.16 74);
-        --status-danger: oklch(0.65 0.21 25);
+        --status-success: oklch(0.76 0.17 156);
+        --status-warning: oklch(0.81 0.16 74);
+        --status-danger: oklch(0.79 0.165 24);
         --shadow-card: 0 10px 30px oklch(0 0 0 / 0.38);
         --shadow-modal: 0 24px 64px oklch(0 0 0 / 0.65);
     }
