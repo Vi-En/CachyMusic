@@ -1,21 +1,7 @@
-// CachyMusic - Centralized Workstation State
+// CachyMusic - Centralized Reactive WorkstationStore & State Architecture
 import { safeStorage } from './utils.js';
 
-const _g = typeof window !== 'undefined' ? window : globalThis;
-
-// State Variables initialized on global window scope
-_g.isInitialized = _g.isInitialized ?? false;
-_g.allTracks = _g.allTracks ?? [];
-_g.displayedTracks = _g.displayedTracks ?? [];
-_g.playlists = _g.playlists ?? [];
-_g.currentPlaylistId = _g.currentPlaylistId ?? null;
-_g.currentPlaylistName = _g.currentPlaylistName ?? '';
-_g.currentTrackIndex = _g.currentTrackIndex ?? 0;
-_g.isPlaying = _g.isPlaying ?? false;
-_g.isShuffle = _g.isShuffle ?? false;
-_g.repeatMode = _g.repeatMode ?? (safeStorage.getItem('cachymusic_repeat_mode') || 'all'); // 'off' | 'all' | 'one'
-
-const VALID_SORT_OPTIONS = [
+export const VALID_SORT_OPTIONS = [
     'default',
     'title-asc',
     'title-desc',
@@ -28,177 +14,72 @@ const VALID_SORT_OPTIONS = [
     'year-desc',
     'year-asc'
 ];
-_g.VALID_SORT_OPTIONS = VALID_SORT_OPTIONS;
 
-_g.currentSort = _g.currentSort ?? 'default';
-try {
-    const urlSort = new URLSearchParams(window.location.search).get('sort');
-    const savedSort = urlSort || safeStorage.getItem('cachymusic_track_sort');
-    if (savedSort && VALID_SORT_OPTIONS.includes(savedSort)) {
-        _g.currentSort = savedSort;
-    }
-} catch (_) {}
+export const PEQ_FREQS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+export const PEQ_Q_STEPS = [0.71, 1.0, 1.41, 2.2, 3.5];
+export const NUM_BANDS = 60;
+export const MAX_PARTICLES = 36;
 
-_g.searchQuery = _g.searchQuery ?? '';
-_g.isDraggingScrubber = _g.isDraggingScrubber ?? false;
-_g.selectedTrackForPlaylist = _g.selectedTrackForPlaylist ?? null;
-_g.isLyricsView = _g.isLyricsView ?? false;
-_g.parsedLyrics = _g.parsedLyrics ?? null;
-_g.activeLyricIndex = _g.activeLyricIndex ?? -1;
+export const VALID_THEME_IDS = [
+    'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
+    'abyssal-void', 'dissonance', 'sentinel',
+    'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian',
+    'brutalist-light', 'brutalist-dark'
+];
 
-// Visualizer State & Physics
-const urlVisParam = new URLSearchParams(window.location.search).get('vis');
-let savedMode = urlVisParam || safeStorage.getItem('cachymusic_vis_mode') || 'wave';
-if (savedMode === 'badapple') savedMode = 'thematic';
-_g.activeVisualizerMode = _g.activeVisualizerMode ?? savedMode; // 'wave' | 'dash' | 'thematic'
-_g.audioContext = _g.audioContext ?? null;
-_g.analyser = _g.analyser ?? null;
-_g.audioSourceNode = _g.audioSourceNode ?? null;
-
-// Universal Web Audio Software Decoder Engine (for 24-bit/32-bit FLAC, ALAC, AIFF & unsupported platform codecs)
-_g.isSoftwareDecoding = _g.isSoftwareDecoding ?? false;
-_g.isSoftwarePaused = _g.isSoftwarePaused ?? false;
-_g.activeDecodedBuffer = _g.activeDecodedBuffer ?? null;
-_g.softwareSourceNode = _g.softwareSourceNode ?? null;
-_g.softwareSourceGainNode = _g.softwareSourceGainNode ?? null;
-_g.softwarePlaybackStartTime = _g.softwarePlaybackStartTime ?? 0;
-_g.softwarePlaybackOffset = _g.softwarePlaybackOffset ?? 0;
-_g.softwarePlaybackRaf = _g.softwarePlaybackRaf ?? null;
-_g.alwaysSoftwareDecodeUrls = _g.alwaysSoftwareDecodeUrls ?? new Set();
-_g.animFrameId = _g.animFrameId ?? null;
-_g.lastRenderTime = _g.lastRenderTime ?? performance.now();
-_g.simPhase = _g.simPhase ?? 0;
-_g.isVisualizerLoopRunning = _g.isVisualizerLoopRunning ?? false;
-_g.resumeVisualizerLoop = _g.resumeVisualizerLoop ?? function() {};
-_g.smoothTurntableFidelity = _g.smoothTurntableFidelity ?? ((_g.activeVisualizerMode === 'thematic' || _g.activeVisualizerMode === 'badapple') ? 1.0 : 0.0);
-_g.isStandalonePlayback = _g.isStandalonePlayback ?? false;
-_g.standaloneTrackList = _g.standaloneTrackList ?? [];
-_g.standaloneTrackIndex = _g.standaloneTrackIndex ?? 0;
-
-// Audio DSP States (persisted in localStorage, bypass by default for pure native playback)
-_g.isAmpBoost = _g.isAmpBoost ?? (safeStorage.getItem('cachymusic_amp_boost') === 'true');
-_g.isBassBoost = _g.isBassBoost ?? (safeStorage.getItem('cachymusic_bass_boost') === 'true');
-_g.isVocalBoost = _g.isVocalBoost ?? (safeStorage.getItem('cachymusic_vocal_boost') === 'true');
-_g.isTrebleBoost = _g.isTrebleBoost ?? (safeStorage.getItem('cachymusic_treble_boost') === 'true');
-_g.isLimiter = _g.isLimiter ?? (safeStorage.getItem('cachymusic_limiter') === 'true');
-_g.isReplayGain = _g.isReplayGain ?? (safeStorage.getItem('cachymusic_replaygain') !== 'false');
-_g.isCrossfeed = _g.isCrossfeed ?? (safeStorage.getItem('cachymusic_crossfeed') === 'true');
-_g.isSubsonic = _g.isSubsonic ?? (safeStorage.getItem('cachymusic_subsonic') !== 'false');
-let initVol = parseFloat(safeStorage.getItem('cachymusic_volume') || '0.8');
-if (isNaN(initVol)) initVol = 0.8;
-_g.currentVolumeValue = _g.currentVolumeValue ?? initVol;
-
-// Neutron HiFi™ Audio Engine & Output Configuration
-_g.isPrecision64 = _g.isPrecision64 ?? (safeStorage.getItem('cachymusic_precision_64') !== null
-    ? safeStorage.getItem('cachymusic_precision_64') === 'true'
-    : safeStorage.getItem('cachymusic_engine_precision') !== '32');
-_g.isAgpEnabled = _g.isAgpEnabled ?? (safeStorage.getItem('cachymusic_agp') !== 'false');
-_g.isSurroundWidener = _g.isSurroundWidener ?? (safeStorage.getItem('cachymusic_surround_ms') === 'true');
-_g.isPhaseInvert = _g.isPhaseInvert ?? (safeStorage.getItem('cachymusic_phase_invert') === 'true');
-_g.isMonoMix = _g.isMonoMix ?? (safeStorage.getItem('cachymusic_mono_mix') === 'true');
-let initBalance = parseFloat(safeStorage.getItem('cachymusic_stereo_balance') || '0');
-if (isNaN(initBalance)) initBalance = 0;
-_g.stereoBalance = _g.stereoBalance ?? initBalance;
-_g.isPitchLockTempo = _g.isPitchLockTempo ?? (safeStorage.getItem('cachymusic_pitch_lock') === 'true');
-_g.currentPlaybackSpeed = _g.currentPlaybackSpeed ?? 1.0;
-_g.isHardwareGain = _g.isHardwareGain ?? (safeStorage.getItem('cachymusic_hardware_gain') === 'true' || safeStorage.getItem('cachymusic_hw_gain') === 'true');
-_g.isUltrasonic = _g.isUltrasonic ?? (safeStorage.getItem('cachymusic_ultrasonic') !== 'false');
-_g.ultrasonicCutoff = _g.ultrasonicCutoff ?? parseInt(safeStorage.getItem('cachymusic_ultrasonic_cutoff') || '32000', 10);
-_g.ditherMode = _g.ditherMode ?? (safeStorage.getItem('cachymusic_dither_mode') || 'shaped');
-_g.isAmbiophonics = _g.isAmbiophonics ?? (safeStorage.getItem('cachymusic_ambiophonics') === 'true');
-_g.bufferLatencyTarget = _g.bufferLatencyTarget ?? (safeStorage.getItem('cachymusic_buffer_latency') || 'playback');
-_g.isPeqBypassed = _g.isPeqBypassed ?? (safeStorage.getItem('cachymusic_peq_bypassed') === 'true');
-_g.dspWorkletNode = _g.dspWorkletNode ?? null;
-_g.hwVolumeBackend = _g.hwVolumeBackend ?? 'none';
-
-// 10-Band Parametric Equalizer (ISO standard 1-octave frequencies from 31 Hz to 16 kHz)
-const PEQ_FREQS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
-const PEQ_Q_STEPS = [0.71, 1.0, 1.41, 2.2, 3.5];
-_g.PEQ_FREQS = PEQ_FREQS;
-_g.PEQ_Q_STEPS = PEQ_Q_STEPS;
-_g.peqGains = _g.peqGains ?? [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-_g.peqQs = _g.peqQs ?? [1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41];
-try {
-    const savedPeq = JSON.parse(safeStorage.getItem('cachymusic_peq_gains') || '[]');
-    if (Array.isArray(savedPeq) && savedPeq.length === 10) {
-        _g.peqGains = savedPeq.map(v => typeof v === 'number' && !isNaN(v) ? Math.max(-15, Math.min(15, v)) : 0);
-    }
-    const savedQs = JSON.parse(safeStorage.getItem('cachymusic_peq_qs') || '[]');
-    if (Array.isArray(savedQs) && savedQs.length === 10) {
-        _g.peqQs = savedQs.map(v => typeof v === 'number' && !isNaN(v) ? Math.max(0.4, Math.min(8.0, v)) : 1.41);
-    }
-} catch (_) {}
-_g.peqNodes = _g.peqNodes ?? [];
-
-// Dual-Buffer Gapless Playback Engine
-_g.secondaryAudio = _g.secondaryAudio ?? null;
-_g.preloadedNextTrackIndex = _g.preloadedNextTrackIndex ?? -1;
-_g.isGaplessTransitioning = _g.isGaplessTransitioning ?? false;
-
-function hasActiveDsp() {
-    const hasPeq = !_g.isPeqBypassed && _g.peqGains.some(g => g !== 0);
-    const hasWorkletDsp = _g.isUltrasonic || (_g.ditherMode !== 'off') || _g.isAmbiophonics || _g.isSurroundWidener || _g.isPhaseInvert || _g.isMonoMix || (Math.abs(_g.stereoBalance) > 0.005);
-    return _g.isAmpBoost || _g.isBassBoost || _g.isVocalBoost || _g.isTrebleBoost || _g.isLimiter || _g.isCrossfeed || _g.isSubsonic || hasPeq || hasWorkletDsp || (_g.currentVolumeValue > 1.0);
+function resolveInitialSort() {
+    try {
+        const urlSort = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('sort') : null;
+        const savedSort = urlSort || safeStorage.getItem('cachymusic_track_sort');
+        if (savedSort && VALID_SORT_OPTIONS.includes(savedSort)) {
+            return savedSort;
+        }
+    } catch (_) {}
+    return 'default';
 }
-_g.hasActiveDsp = hasActiveDsp;
 
-// Web Audio BiquadFilter DSP, ReplayGain, PEQ, Amplification, Crossfeed & Limiter nodes
-_g.subsonicFilter = _g.subsonicFilter ?? null;
-_g.preAmpGainNode = _g.preAmpGainNode ?? null;
-_g.xfeedNetwork = _g.xfeedNetwork ?? null;
-_g.replayGainNode = _g.replayGainNode ?? null;
-_g.bassFilter = _g.bassFilter ?? null;
-_g.vocalFilter = _g.vocalFilter ?? null;
-_g.trebleFilter = _g.trebleFilter ?? null;
-_g.ampGainNode = _g.ampGainNode ?? null;
-_g.ampSoftClipper = _g.ampSoftClipper ?? null;
-_g.dspLimiter = _g.dspLimiter ?? null;
-_g.ceilingTrimGain = _g.ceilingTrimGain ?? null;
-
-// 60-band perceptual logarithmic frequency array & smoothing physics
-const NUM_BANDS = 60;
-_g.NUM_BANDS = NUM_BANDS;
-_g.smoothBands = _g.smoothBands ?? new Float32Array(NUM_BANDS);
-_g.smoothBass = _g.smoothBass ?? 0;
-_g.smoothTreble = _g.smoothTreble ?? 0;
-
-// Dash mode peak caps physics & smooth column interpolation
-_g.peakValues = _g.peakValues ?? new Float32Array(NUM_BANDS);
-_g.peakVelocity = _g.peakVelocity ?? new Float32Array(NUM_BANDS);
-_g.peakHold = _g.peakHold ?? new Int32Array(NUM_BANDS);
-_g.smoothDashLevels = _g.smoothDashLevels ?? new Float32Array(NUM_BANDS);
-
-// Thematic Wave continuous angle integration & smoothed pulse
-_g.yinYangAngle = _g.yinYangAngle ?? 0;
-_g.runeRingAngle = _g.runeRingAngle ?? 0;
-_g.atlasRotationAngle = _g.atlasRotationAngle ?? 0;
-_g.atlasPrecessionAngle = _g.atlasPrecessionAngle ?? 0;
-_g.smoothHeartPulse = _g.smoothHeartPulse ?? 1.0;
-
-// Turntable center expanding acoustic shockwave ripples
-_g.turntableShockwaves = _g.turntableShockwaves ?? [];
-function emitTurntableShockwave(x, y, minRadius, maxRadius, initialAlpha = 0.65, color = '#ff1744') {
-    if (_g.turntableShockwaves.length >= 10) _g.turntableShockwaves.shift();
-    _g.turntableShockwaves.push({
-        x,
-        y,
-        r: minRadius,
-        minR: minRadius,
-        maxR: maxRadius,
-        alpha: initialAlpha,
-        color: color,
-        speed: (maxRadius - minRadius) * 2.4
-    });
+function resolveInitialVisMode() {
+    try {
+        const urlVisParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('vis') : null;
+        let savedMode = urlVisParam || safeStorage.getItem('cachymusic_vis_mode') || 'wave';
+        if (savedMode === 'badapple') savedMode = 'thematic';
+        return savedMode;
+    } catch (_) {}
+    return 'wave';
 }
-_g.emitTurntableShockwave = emitTurntableShockwave;
 
-// Bad Apple / Wave floating particles
-_g.particles = _g.particles ?? [];
-const MAX_PARTICLES = 36;
-_g.MAX_PARTICLES = MAX_PARTICLES;
-if (_g.particles.length === 0) {
+function resolveInitialTheme() {
+    let t = safeStorage.getItem('cachymusic_active_theme')
+        || (typeof document !== 'undefined' && document.documentElement ? document.documentElement.getAttribute('data-theme') : null)
+        || 'default';
+    if (t === 'brutalist-minimalism-light' || t === 'brutalist-light') t = 'minimalist-light';
+    if (t === 'brutalist-minimalism-dark' || t === 'brutalist-dark') t = 'minimalist-dark';
+    if (!VALID_THEME_IDS.includes(t)) {
+        t = (t === 'atlas' || t === 'spotify' || t === 'apple') ? 'nms' : 'default';
+    }
+    return t;
+}
+
+function createInitialPeq() {
+    let peqGains = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let peqQs = [1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41, 1.41];
+    try {
+        const savedPeq = JSON.parse(safeStorage.getItem('cachymusic_peq_gains') || '[]');
+        if (Array.isArray(savedPeq) && savedPeq.length === 10) {
+            peqGains = savedPeq.map(v => typeof v === 'number' && !isNaN(v) ? Math.max(-15, Math.min(15, v)) : 0);
+        }
+        const savedQs = JSON.parse(safeStorage.getItem('cachymusic_peq_qs') || '[]');
+        if (Array.isArray(savedQs) && savedQs.length === 10) {
+            peqQs = savedQs.map(v => typeof v === 'number' && !isNaN(v) ? Math.max(0.4, Math.min(8.0, v)) : 1.41);
+        }
+    } catch (_) {}
+    return { peqGains, peqQs };
+}
+
+function createInitialParticles() {
+    const arr = [];
     for (let p = 0; p < MAX_PARTICLES; p++) {
-        _g.particles.push({
+        arr.push({
             x: Math.random(),
             y: Math.random(),
             vx: (Math.random() - 0.5) * 0.08,
@@ -209,14 +90,277 @@ if (_g.particles.length === 0) {
             vRot: (Math.random() - 0.5) * 0.04
         });
     }
+    return arr;
 }
 
-export {
-    VALID_SORT_OPTIONS,
-    PEQ_FREQS,
-    PEQ_Q_STEPS,
-    NUM_BANDS,
-    MAX_PARTICLES,
-    hasActiveDsp,
-    emitTurntableShockwave
-};
+const DSP_STATE_KEYS = new Set([
+    'isAmpBoost', 'isBassBoost', 'isVocalBoost', 'isTrebleBoost', 'isLimiter',
+    'isReplayGain', 'isCrossfeed', 'isSubsonic', 'currentVolumeValue',
+    'isPrecision64', 'isAgpEnabled', 'isSurroundWidener', 'isPhaseInvert',
+    'isMonoMix', 'stereoBalance', 'isPitchLockTempo', 'currentPlaybackSpeed',
+    'isHardwareGain', 'isUltrasonic', 'ultrasonicCutoff', 'ditherMode',
+    'isAmbiophonics', 'bufferLatencyTarget', 'isPeqBypassed', 'peqGains', 'peqQs',
+    'dspWorkletNode', 'hwVolumeBackend'
+]);
+
+const TRACK_STATE_KEYS = new Set([
+    'currentTrackIndex', 'currentTrack', 'isStandalonePlayback',
+    'standaloneTrackList', 'standaloneTrackIndex', 'preloadedNextTrackIndex'
+]);
+
+const PLAYBACK_STATE_KEYS = new Set([
+    'isPlaying', 'isShuffle', 'repeatMode', 'isSoftwareDecoding',
+    'isSoftwarePaused', 'softwarePlaybackOffset', 'currentPlaybackSpeed'
+]);
+
+const LIBRARY_STATE_KEYS = new Set([
+    'allTracks', 'displayedTracks', 'playlists', 'currentPlaylistId',
+    'currentPlaylistName', 'currentSort', 'searchQuery', 'currentFormatFilter',
+    'selectedTrackForPlaylist'
+]);
+
+export class WorkstationStore extends EventTarget {
+    constructor() {
+        super();
+        const { peqGains, peqQs } = createInitialPeq();
+        let initVol = parseFloat(safeStorage.getItem('cachymusic_volume') || '0.8');
+        if (isNaN(initVol)) initVol = 0.8;
+        let initBalance = parseFloat(safeStorage.getItem('cachymusic_stereo_balance') || '0');
+        if (isNaN(initBalance)) initBalance = 0;
+        const visMode = resolveInitialVisMode();
+
+        this.state = {
+            // App Lifecycle & Runtime Mode
+            isInitialized: false,
+            activeTheme: resolveInitialTheme(),
+            currentWorkspace: 'player',
+            deferredInstallPrompt: null,
+            activeScanAbortController: null,
+            isTrackLoadingCancelled: false,
+            currentTrackLoadingTitle: 'LOADING MUSIC LIBRARY...',
+            openPeqModal: null,
+            closePeqModal: null,
+            resumeVisualizerLoop: null,
+            ambientCanvas: null,
+            ambientCtx: null,
+            lastRenderedMiniTrack: null,
+            dismissedTracksMap: new Map(),
+
+            // Media Elements & Core References
+            audio: (typeof document !== 'undefined') ? document.getElementById('audioPlayer') : null,
+            secondaryAudio: null,
+            preloadedNextTrackIndex: -1,
+            isGaplessTransitioning: false,
+
+            // Library, Playlists & Queue
+            allTracks: [],
+            displayedTracks: [],
+            playlists: [],
+            playQueue: [],
+            currentPlaylistId: null,
+            currentPlaylistName: '',
+            currentTrackIndex: 0,
+            currentTrack: null,
+            currentSort: resolveInitialSort(),
+            searchQuery: '',
+            currentFormatFilter: 'all',
+            selectedTrackForPlaylist: null,
+
+            // Transport & Decoder State
+            isPlaying: false,
+            isShuffle: false,
+            repeatMode: safeStorage.getItem('cachymusic_repeat_mode') || 'all',
+            isDraggingScrubber: false,
+            isStandalonePlayback: false,
+            standaloneTrackList: [],
+            standaloneTrackIndex: 0,
+            isSoftwareDecoding: false,
+            isSoftwarePaused: false,
+            activeDecodedBuffer: null,
+            softwareSourceNode: null,
+            softwareSourceGainNode: null,
+            softwarePlaybackStartTime: 0,
+            softwarePlaybackOffset: 0,
+            softwarePlaybackRaf: null,
+            alwaysSoftwareDecodeUrls: new Set(),
+
+            // Lyrics
+            isLyricsView: false,
+            parsedLyrics: null,
+            activeLyricIndex: -1,
+
+            // Audio Context & DSP Engine
+            audioContext: null,
+            analyser: null,
+            audioSourceNode: null,
+            subsonicFilter: null,
+            preAmpGainNode: null,
+            xfeedNetwork: null,
+            replayGainNode: null,
+            bassFilter: null,
+            vocalFilter: null,
+            trebleFilter: null,
+            ampGainNode: null,
+            ampSoftClipper: null,
+            dspLimiter: null,
+            ceilingTrimGain: null,
+            peqNodes: [],
+            dspWorkletNode: null,
+            hwVolumeBackend: 'none',
+
+            // Audiophile DSP Toggles & Parameters
+            isAmpBoost: safeStorage.getItem('cachymusic_amp_boost') === 'true',
+            isBassBoost: safeStorage.getItem('cachymusic_bass_boost') === 'true',
+            isVocalBoost: safeStorage.getItem('cachymusic_vocal_boost') === 'true',
+            isTrebleBoost: safeStorage.getItem('cachymusic_treble_boost') === 'true',
+            isLimiter: safeStorage.getItem('cachymusic_limiter') === 'true',
+            isReplayGain: safeStorage.getItem('cachymusic_replaygain') !== 'false',
+            isCrossfeed: safeStorage.getItem('cachymusic_crossfeed') === 'true',
+            isSubsonic: safeStorage.getItem('cachymusic_subsonic') !== 'false',
+            currentVolumeValue: initVol,
+            isPrecision64: safeStorage.getItem('cachymusic_precision_64') !== null
+                ? safeStorage.getItem('cachymusic_precision_64') === 'true'
+                : safeStorage.getItem('cachymusic_engine_precision') !== '32',
+            isAgpEnabled: safeStorage.getItem('cachymusic_agp') !== 'false',
+            isSurroundWidener: safeStorage.getItem('cachymusic_surround_ms') === 'true',
+            isPhaseInvert: safeStorage.getItem('cachymusic_phase_invert') === 'true',
+            isMonoMix: safeStorage.getItem('cachymusic_mono_mix') === 'true',
+            stereoBalance: initBalance,
+            isPitchLockTempo: safeStorage.getItem('cachymusic_pitch_lock') === 'true',
+            currentPlaybackSpeed: 1.0,
+            isHardwareGain: safeStorage.getItem('cachymusic_hardware_gain') === 'true' || safeStorage.getItem('cachymusic_hw_gain') === 'true',
+            isUltrasonic: safeStorage.getItem('cachymusic_ultrasonic') !== 'false',
+            ultrasonicCutoff: parseInt(safeStorage.getItem('cachymusic_ultrasonic_cutoff') || '32000', 10),
+            ditherMode: safeStorage.getItem('cachymusic_dither_mode') || 'shaped',
+            isAmbiophonics: safeStorage.getItem('cachymusic_ambiophonics') === 'true',
+            bufferLatencyTarget: safeStorage.getItem('cachymusic_buffer_latency') || 'playback',
+            isPeqBypassed: safeStorage.getItem('cachymusic_peq_bypassed') === 'true',
+            peqGains,
+            peqQs,
+
+            // Desktop Web Notification preference (Opt-In, off by default)
+            backgroundNotificationsEnabled: safeStorage.getItem('cachymusic_bg_notifications') === 'true',
+
+            // Visualizer State & Physics
+            activeVisualizerMode: visMode,
+            animFrameId: null,
+            lastRenderTime: (typeof performance !== 'undefined') ? performance.now() : 0,
+            simPhase: 0,
+            isVisualizerLoopRunning: false,
+            smoothTurntableFidelity: (visMode === 'thematic' || visMode === 'badapple') ? 1.0 : 0.0,
+            smoothBands: new Float32Array(NUM_BANDS),
+            smoothBass: 0,
+            smoothTreble: 0,
+            peakValues: new Float32Array(NUM_BANDS),
+            peakVelocity: new Float32Array(NUM_BANDS),
+            peakHold: new Int32Array(NUM_BANDS),
+            smoothDashLevels: new Float32Array(NUM_BANDS),
+            yinYangAngle: 0,
+            runeRingAngle: 0,
+            atlasLuminance: 0.05,
+            atlasRotationAngle: 0,
+            atlasPrecessionAngle: 0,
+            smoothHeartPulse: 1.0,
+            turntableShockwaves: [],
+            shockwaveRings: [],
+            particles: createInitialParticles(),
+            eclipseRotation: 0,
+            euclidRotation: 0,
+            paradiseTime: 0,
+            abyssalTime: 0,
+            dissonanceTime: 0,
+            sentinelTime: 0,
+
+            // Sleep Timer & Telemetry Logs
+            sleepTimerInterval: null,
+            sleepTimerRemainingSec: 0,
+            sleepTimerMode: null,
+            sleepTimerOriginalVolume: null,
+            debugModeActive: safeStorage.getItem('cachymusic_debug_mode') === 'true',
+            audioPlaybackDebugLogs: [],
+            consecutiveSkipCount: 0,
+            trackPlaybackRetryCount: 0,
+            userExplicitlyPaused: true,
+            isPlayPending: false,
+            lastSyncedPlayingState: null,
+            currentPlayRequestId: 0,
+            currentTrackGeneration: 0,
+            currentInspectedTrack: null
+        };
+    }
+
+    setState(partial, explicitEvents = null) {
+        if (!partial || typeof partial !== 'object') return;
+        const keys = Object.keys(partial);
+        if (keys.length === 0) return;
+
+        Object.assign(this.state, partial);
+
+        const eventsToEmit = new Set(Array.isArray(explicitEvents) ? explicitEvents : []);
+        for (const k of keys) {
+            if (k === 'activeTheme') eventsToEmit.add('theme:change');
+            if (DSP_STATE_KEYS.has(k)) eventsToEmit.add('dsp:change');
+            if (TRACK_STATE_KEYS.has(k)) eventsToEmit.add('track:change');
+            if (PLAYBACK_STATE_KEYS.has(k)) eventsToEmit.add('playback:state');
+            if (LIBRARY_STATE_KEYS.has(k)) eventsToEmit.add('library:update');
+            if (k === 'activeVisualizerMode') eventsToEmit.add('visualizer:change');
+            if (k === 'isLyricsView' || k === 'parsedLyrics' || k === 'activeLyricIndex') eventsToEmit.add('lyrics:change');
+            if (k === 'playQueue') eventsToEmit.add('queue:change');
+        }
+
+        const detail = { patch: partial, state: this.state };
+        for (const eventName of eventsToEmit) {
+            this.dispatchEvent(new CustomEvent(eventName, { detail }));
+        }
+        this.dispatchEvent(new CustomEvent('state:change', { detail }));
+    }
+
+    emit(eventName, detail = null) {
+        this.dispatchEvent(new CustomEvent(eventName, { detail: detail ?? { state: this.state } }));
+    }
+
+    subscribe(eventName, listener) {
+        if (typeof listener !== 'function') return () => {};
+        this.addEventListener(eventName, listener);
+        return () => this.removeEventListener(eventName, listener);
+    }
+}
+
+export const store = new WorkstationStore();
+
+export function hasActiveDsp() {
+    const s = store.state;
+    const hasPeq = !s.isPeqBypassed && s.peqGains.some(g => g !== 0);
+    const hasWorkletDsp = s.isUltrasonic || (s.ditherMode !== 'off') || s.isAmbiophonics
+        || s.isSurroundWidener || s.isPhaseInvert || s.isMonoMix || (Math.abs(s.stereoBalance) > 0.005);
+    return s.isAmpBoost || s.isBassBoost || s.isVocalBoost || s.isTrebleBoost
+        || s.isLimiter || s.isCrossfeed || s.isSubsonic || hasPeq || hasWorkletDsp || (s.currentVolumeValue > 1.0);
+}
+
+export function emitShockwave(x, y, maxRadius, initialAlpha = 0.75) {
+    const rings = store.state.shockwaveRings;
+    if (rings.length >= 8) rings.shift();
+    rings.push({
+        x,
+        y,
+        r: 6,
+        maxR: maxRadius,
+        alpha: initialAlpha,
+        speed: (maxRadius - 6) * 2.6
+    });
+}
+
+export function emitTurntableShockwave(x, y, minRadius, maxRadius, initialAlpha = 0.65, color = '#ff1744') {
+    const shockwaves = store.state.turntableShockwaves;
+    if (shockwaves.length >= 10) shockwaves.shift();
+    shockwaves.push({
+        x,
+        y,
+        r: minRadius,
+        minR: minRadius,
+        maxR: maxRadius,
+        alpha: initialAlpha,
+        color,
+        speed: (maxRadius - minRadius) * 2.4
+    });
+}

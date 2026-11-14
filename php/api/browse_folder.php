@@ -1,22 +1,10 @@
 <?php
 session_start();
+require_once(__DIR__ . '/../platform.php');
 header('Content-Type: application/json; charset=utf-8');
+cachy_send_local_cors('GET, POST, OPTIONS');
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (!empty($origin)) {
-    $parsed = parse_url($origin);
-    $host = $parsed['host'] ?? '';
-    $serverHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), PHP_URL_HOST);
-    if (in_array($host, ['localhost', '127.0.0.1', '::1'], true) || $host === $serverHost) {
-        header("Access-Control-Allow-Origin: $origin");
-        header("Access-Control-Allow-Credentials: true");
-    }
-}
-
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
@@ -29,9 +17,9 @@ if (empty($initialDir)) {
     $initialDir = Storage::getDefaultDirectory();
 }
 
-$homeDir = getenv('HOME') ?: ($_SERVER['HOME'] ?? (getenv('USER') ? '/home/' . getenv('USER') : ''));
+$homeDir = cachy_home_dir();
 if (!empty($initialDir) && (str_starts_with($initialDir, '~') || str_starts_with($initialDir, '~/'))) {
-    $initialDir = preg_replace('#^~(/|$)#', rtrim($homeDir, '/') . '$1', $initialDir);
+    $initialDir = preg_replace('#^~(/|$)#', rtrim($homeDir, "/\\") . '$1', $initialDir);
 }
 
 $osFamily = PHP_OS_FAMILY;
@@ -114,9 +102,9 @@ if (!empty($zenity) && file_exists($zenity)) {
 }
 
 // 4. Linux / BSD: Try kdialog fallback (KDE)
-$kdialog = trim(shell_exec('which kdialog 2>/dev/null') ?? '');
+$kdialog = cachy_find_binary('kdialog') ?? '';
 if (!empty($kdialog) && file_exists($kdialog)) {
-    $startPath = (!empty($initialDir) && is_dir($initialDir)) ? $initialDir : (getenv('HOME') ?: '/');
+    $startPath = (!empty($initialDir) && is_dir($initialDir)) ? $initialDir : (cachy_home_dir() ?: '/');
     $cmd = escapeshellcmd($kdialog) . ' --getexistingdirectory ' . escapeshellarg($startPath) . ' --title ' . escapeshellarg('Select Music Folder');
 
     $descriptorSpec = [

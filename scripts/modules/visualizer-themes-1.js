@@ -1,10 +1,13 @@
 // CachyMusic - Turntable Center Visualizers (Atlas, Solar Eclipse, Euclid, Alien Paradise)
+import { emitTurntableShockwave, store } from './state.js';
+
     let atlasLuminance = 0.05;
     let atlasRotationAngle = 0;
     let atlasPrecessionAngle = 0;
 
     function drawTurntableCenterAtlasCore(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0) {
         if (!ctx || width === 0 || height === 0) return;
+        const turntableShockwaves = store.state.turntableShockwaves;
 
         const centerX = width / 2;
         const centerY = height / 2;
@@ -396,10 +399,9 @@
     // and starship banking with curved relativistic lightspeed trails along its orbit.
     // -------------------------------------------------------------------------
     let eclipseRotation = 0;
-    window.__setEclipseRotation = (r) => { eclipseRotation = r; };
-    window.__pauseEclipseRotation = false;
     function drawTurntableCenterSolarEclipse(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0) {
         if (!ctx || width === 0 || height === 0) return;
+        const turntableShockwaves = store.state.turntableShockwaves;
         const centerX = width / 2;
         const centerY = height / 2;
         const maxRadius = Math.min(width, height) * 0.48;
@@ -409,12 +411,10 @@
         const ringAspect = 0.58;
         const shipOrbitR = hubRadius * (1.72 + smoothBass * 0.12);
 
-        if (!window.__pauseEclipseRotation) {
-            if (playing) {
-                eclipseRotation += dt * (0.6 + beatPulse * 1.8 + snarePulse * 1.2) * fidelity;
-            } else {
-                eclipseRotation += dt * 0.18 * fidelity;
-            }
+        if (playing) {
+            eclipseRotation += dt * (0.6 + beatPulse * 1.8 + snarePulse * 1.2) * fidelity;
+        } else {
+            eclipseRotation += dt * 0.18 * fidelity;
         }
 
         // 1. Acoustic Shockwaves (Electric Cyan & Magenta)
@@ -853,6 +853,7 @@
     let euclidRotation = 0;
     function drawTurntableCenterEuclidPortal(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0) {
         if (!ctx || width === 0 || height === 0) return;
+        const turntableShockwaves = store.state.turntableShockwaves;
         const centerX = width / 2;
         const centerY = height / 2;
         const maxRadius = Math.min(width, height) * 0.48;
@@ -1075,6 +1076,7 @@
     let paradiseTime = 0;
     function drawTurntableCenterAlienParadise(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0) {
         if (!ctx || width === 0 || height === 0) return;
+        const turntableShockwaves = store.state.turntableShockwaves;
         const centerX = width / 2;
         const centerY = height / 2;
         const maxRadius = Math.min(width, height) * 0.48;
@@ -1284,20 +1286,6 @@
     // Visualizer Component: Turntable Center ABYSSAL VOID (Image 4 Reference)
     // Radiant emerald crescent, colossal gas giant silhouette, twin sub-light trails
     // -------------------------------------------------------------------------
-
-    // Attach visualizer theme drawing routines to window
-    if (typeof window !== "undefined") {
-        try { window.atlasLuminance = atlasLuminance; } catch (_) {}
-        try { window.atlasRotationAngle = atlasRotationAngle; } catch (_) {}
-        try { window.atlasPrecessionAngle = atlasPrecessionAngle; } catch (_) {}
-        try { window.drawTurntableCenterAlienParadise = drawTurntableCenterAlienParadise; } catch (_) {}
-        try { window.drawTurntableCenterAtlasCore = drawTurntableCenterAtlasCore; } catch (_) {}
-        try { window.drawTurntableCenterEuclidPortal = drawTurntableCenterEuclidPortal; } catch (_) {}
-        try { window.drawTurntableCenterSolarEclipse = drawTurntableCenterSolarEclipse; } catch (_) {}
-        try { window.eclipseRotation = eclipseRotation; } catch (_) {}
-        try { window.euclidRotation = euclidRotation; } catch (_) {}
-        try { window.paradiseTime = paradiseTime; } catch (_) {}
-    }
 
     export {
         atlasLuminance,

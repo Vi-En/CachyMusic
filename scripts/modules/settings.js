@@ -1,12 +1,24 @@
 // CachyMusic - Audio Settings, Sleep Timer & Telemetry HUD
+import { formatTime, popModalState, pushModalState, safeStorage, showCachyToast, showToast } from './utils.js';
+import { store } from './state.js';
+import {
+    signalPathModal,
+    sleepStatusCard,
+    sleepStatusRemaining,
+    sleepTimerBtn,
+    sleepTimerLabel,
+    sleepTimerModal
+} from './ui-elements.js';
+
     // Audiophile Sleep Timer Engine
     // Gentle 12-second logarithmic volume fade-out prevents sleep interruption
     // =========================================================================
     function setSleepTimer(minutes) {
+        const s = store.state;
         cancelSleepTimer(false);
         if (minutes === 'end') {
-            sleepTimerMode = 'end';
-            sleepTimerRemainingSec = 0;
+            s.sleepTimerMode = 'end';
+            s.sleepTimerRemainingSec = 0;
             if (sleepTimerLabel) sleepTimerLabel.textContent = '🌙 End of Track';
             if (sleepStatusRemaining) sleepStatusRemaining.textContent = 'Pauses at end of current track';
             if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
@@ -26,9 +38,9 @@
         const mins = parseInt(minutes, 10);
         if (isNaN(mins) || mins <= 0) return;
 
-        sleepTimerMode = 'countdown';
-        sleepTimerRemainingSec = mins * 60;
-        sleepTimerOriginalVolume = currentVolumeValue;
+        s.sleepTimerMode = 'countdown';
+        s.sleepTimerRemainingSec = mins * 60;
+        s.sleepTimerOriginalVolume = s.currentVolumeValue;
 
         updateSleepTimerStatusUi();
         if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
@@ -38,25 +50,25 @@
         showToast(`Sleep timer set: ${mins} minute${mins === 1 ? '' : 's'}`);
         closeSleepTimerModal();
 
-        sleepTimerInterval = setInterval(() => {
-            sleepTimerRemainingSec--;
+        s.sleepTimerInterval = setInterval(() => {
+            s.sleepTimerRemainingSec--;
             updateSleepTimerStatusUi();
 
             // Audiophile 12-second logarithmic gentle fade-out
-            if (sleepTimerRemainingSec <= 12 && sleepTimerRemainingSec > 0) {
-                if (sleepTimerOriginalVolume === null) sleepTimerOriginalVolume = currentVolumeValue;
-                const ratio = Math.max(0, sleepTimerRemainingSec / 12);
-                const fadedVol = sleepTimerOriginalVolume * Math.pow(ratio, 1.4);
-                setVolume(fadedVol, false);
+            if (s.sleepTimerRemainingSec <= 12 && s.sleepTimerRemainingSec > 0) {
+                if (s.sleepTimerOriginalVolume === null) s.sleepTimerOriginalVolume = s.currentVolumeValue;
+                const ratio = Math.max(0, s.sleepTimerRemainingSec / 12);
+                const fadedVol = s.sleepTimerOriginalVolume * Math.pow(ratio, 1.4);
+                store.emit('audio:set-volume', { volume: fadedVol, persist: false });
             }
 
-            if (sleepTimerRemainingSec <= 0) {
-                clearInterval(sleepTimerInterval);
-                sleepTimerInterval = null;
-                pauseAudio();
-                if (sleepTimerOriginalVolume !== null) {
-                    setVolume(sleepTimerOriginalVolume, true);
-                    sleepTimerOriginalVolume = null;
+            if (s.sleepTimerRemainingSec <= 0) {
+                clearInterval(s.sleepTimerInterval);
+                s.sleepTimerInterval = null;
+                store.emit('playback:pause');
+                if (s.sleepTimerOriginalVolume !== null) {
+                    store.emit('audio:set-volume', { volume: s.sleepTimerOriginalVolume, persist: true });
+                    s.sleepTimerOriginalVolume = null;
                 }
                 cancelSleepTimer(false);
                 showToast('🌙 Sleep timer finished: Playback paused.');
@@ -65,8 +77,9 @@
     }
 
     function updateSleepTimerStatusUi() {
-        const m = Math.floor(sleepTimerRemainingSec / 60);
-        const s = sleepTimerRemainingSec % 60;
+        const rem = store.state.sleepTimerRemainingSec;
+        const m = Math.floor(rem / 60);
+        const s = rem % 60;
         const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
         if (sleepTimerLabel) sleepTimerLabel.textContent = `🌙 ${timeStr}`;
         if (sleepStatusRemaining) sleepStatusRemaining.textContent = `${timeStr} remaining`;
@@ -78,16 +91,17 @@
     }
 
     function cancelSleepTimer(showFeedback = true) {
-        if (sleepTimerInterval) {
-            clearInterval(sleepTimerInterval);
-            sleepTimerInterval = null;
+        const s = store.state;
+        if (s.sleepTimerInterval) {
+            clearInterval(s.sleepTimerInterval);
+            s.sleepTimerInterval = null;
         }
-        if (sleepTimerOriginalVolume !== null) {
-            setVolume(sleepTimerOriginalVolume, true);
-            sleepTimerOriginalVolume = null;
+        if (s.sleepTimerOriginalVolume !== null) {
+            store.emit('audio:set-volume', { volume: s.sleepTimerOriginalVolume, persist: true });
+            s.sleepTimerOriginalVolume = null;
         }
-        sleepTimerMode = null;
-        sleepTimerRemainingSec = 0;
+        s.sleepTimerMode = null;
+        s.sleepTimerRemainingSec = 0;
         if (sleepTimerLabel) sleepTimerLabel.textContent = 'SLEEP TIMER';
         if (sleepStatusCard) sleepStatusCard.style.display = 'none';
         if (sleepTimerBtn) sleepTimerBtn.classList.remove('hasActiveTimer');
@@ -117,7 +131,7 @@
     // =========================================================================
 
     function openSignalPathModal() {
-        updateSignalPathUi();
+        store.emit('ui:sync-signal-path');
         if (signalPathModal) signalPathModal.style.display = 'flex';
         pushModalState('signalPathModal');
     }
@@ -128,49 +142,47 @@
     }
 
 
-    // Dynamic Ambient Atmosphere Lighting (Samples dominant vibrancy from album art)
-    let ambientCanvas = null;
-
     function updateDebugHudState() {
+        const s = store.state;
         const hud = document.getElementById('debugHudContainer');
         const pill = document.getElementById('settingsDebugPill');
         const enableBtn = document.getElementById('debugModeEnableBtn');
         const disableBtn = document.getElementById('debugModeDisableBtn');
 
         if (hud) {
-            hud.style.display = debugModeActive ? 'flex' : 'none';
+            hud.style.display = s.debugModeActive ? 'flex' : 'none';
         }
         if (pill) {
-            pill.textContent = debugModeActive ? 'ENABLED (HUD)' : 'DISABLED';
-            pill.className = `settingsEnginePill ${debugModeActive ? 'active' : ''}`;
+            pill.textContent = s.debugModeActive ? 'ENABLED (HUD)' : 'DISABLED';
+            pill.className = `settingsEnginePill ${s.debugModeActive ? 'active' : ''}`;
         }
-        if (enableBtn) enableBtn.classList.toggle('active', debugModeActive);
-        if (disableBtn) disableBtn.classList.toggle('active', !debugModeActive);
+        if (enableBtn) enableBtn.classList.toggle('active', s.debugModeActive);
+        if (disableBtn) disableBtn.classList.toggle('active', !s.debugModeActive);
 
-        if (debugModeActive) {
+        if (s.debugModeActive) {
             refreshDebugHudTelemetry();
         }
     }
 
     function setDebugMode(enabled) {
-        debugModeActive = Boolean(enabled);
+        const s = store.state;
+        s.debugModeActive = Boolean(enabled);
         try {
-            safeStorage.setItem('cachymusic_debug_mode', debugModeActive ? 'true' : 'false');
+            safeStorage.setItem('cachymusic_debug_mode', s.debugModeActive ? 'true' : 'false');
         } catch (_) {}
         updateDebugHudState();
-        if (debugModeActive) {
-            appendDebugTelemetry(`[SYSTEM] Debug Mode enabled. Monitoring Web Audio pipeline & MediaStore IPC.`);
-            if (typeof showCachyToast === 'function') {
-                showCachyToast('Debug Mode Active', 'Real-time Audio Diagnostics HUD visible.', 'info');
-            }
+        if (s.debugModeActive) {
+            appendDebugTelemetry('[SYSTEM] Debug Mode enabled. Monitoring Web Audio pipeline & MediaStore IPC.');
+            showCachyToast('Debug Mode Active', 'Real-time Audio Diagnostics HUD visible.', 'info');
         }
     }
 
     function appendDebugTelemetry(msg, level = 'info') {
+        const logs = store.state.audioPlaybackDebugLogs;
         const time = new Date().toLocaleTimeString();
         const entryText = `[${time}] ${msg}`;
-        window.audioPlaybackDebugLogs.push(entryText);
-        if (window.audioPlaybackDebugLogs.length > 80) window.audioPlaybackDebugLogs.shift();
+        logs.push(entryText);
+        if (logs.length > 80) logs.shift();
 
         const logList = document.getElementById('debugHudLogList');
         if (logList) {
@@ -186,7 +198,7 @@
 
         const logBox = document.getElementById('settingsAudioDebugLog');
         if (logBox) {
-            logBox.textContent = window.audioPlaybackDebugLogs.join('\n');
+            logBox.textContent = logs.join('\n');
             logBox.scrollTop = logBox.scrollHeight;
         }
 
@@ -194,8 +206,10 @@
     }
 
     function refreshDebugHudTelemetry() {
-        if (!debugModeActive) return;
-        const curTrack = allTracks[currentTrackIndex];
+        const s = store.state;
+        if (!s.debugModeActive) return;
+        const curTrack = s.allTracks[s.currentTrackIndex];
+        const audio = s.audio;
         const trackEl = document.getElementById('debugHudTrack');
         const codecEl = document.getElementById('debugHudCodec');
         const html5El = document.getElementById('debugHudHtml5');
@@ -204,7 +218,7 @@
 
         if (trackEl) {
             trackEl.textContent = curTrack
-                ? `#${currentTrackIndex + 1}: ${curTrack.title || curTrack.filename} (${formatTime(curTrack.duration)})`
+                ? `#${s.currentTrackIndex + 1}: ${curTrack.title || curTrack.filename} (${formatTime(curTrack.duration)})`
                 : 'None loaded';
         }
         if (codecEl && curTrack) {
@@ -214,12 +228,12 @@
             codecEl.textContent = `${fmt} • ${depth} • ${rate}`;
         }
         if (html5El) {
-            if (isSoftwareDecoding && activeDecodedBuffer) {
-                const cur = softwarePlaybackOffset + (audioContext && !isSoftwarePaused ? (audioContext.currentTime - softwarePlaybackStartTime) : 0);
-                const dur = activeDecodedBuffer.duration;
-                const state = isSoftwarePaused ? 'PAUSED' : 'PLAYING';
+            if (s.isSoftwareDecoding && s.activeDecodedBuffer) {
+                const cur = s.softwarePlaybackOffset + (s.audioContext && !s.isSoftwarePaused ? (s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0);
+                const dur = s.activeDecodedBuffer.duration;
+                const state = s.isSoftwarePaused ? 'PAUSED' : 'PLAYING';
                 html5El.textContent = `SOFTWARE ENGINE • ${state} (${cur.toFixed(1)}s / ${dur.toFixed(1)}s) • 32-bit Float PCM`;
-                html5El.title = `Decoded: ${activeDecodedBuffer.sampleRate}Hz, ${activeDecodedBuffer.numberOfChannels}ch, Web Audio Buffer`;
+                html5El.title = `Decoded: ${s.activeDecodedBuffer.sampleRate}Hz, ${s.activeDecodedBuffer.numberOfChannels}ch, Web Audio Buffer`;
             } else if (audio) {
                 const rLabels = ['No Data', 'Metadata Loaded', 'Current Frame Ready', 'Buffering', 'Ready to Play'];
                 const rText = rLabels[audio.readyState] || `State ${audio.readyState}`;
@@ -231,8 +245,8 @@
             }
         }
         if (ctxEl) {
-            const ctxState = audioContext ? audioContext.state : 'None';
-            const sRate = audioContext ? `${audioContext.sampleRate}Hz` : '--';
+            const ctxState = s.audioContext ? s.audioContext.state : 'None';
+            const sRate = s.audioContext ? `${s.audioContext.sampleRate}Hz` : '--';
             ctxEl.textContent = `State: ${ctxState} | Clock: ${sRate}`;
         }
         if (srcEl && audio) {
@@ -243,13 +257,14 @@
     }
 
     function logAudioPlaybackEvent(level, msg, meta = {}) {
+        const logs = store.state.audioPlaybackDebugLogs;
         const time = new Date().toLocaleTimeString();
         const entry = `[${time}] [${level.toUpperCase()}] ${msg}`;
-        window.audioPlaybackDebugLogs.push(entry);
-        if (window.audioPlaybackDebugLogs.length > 50) window.audioPlaybackDebugLogs.shift();
+        logs.push(entry);
+        if (logs.length > 50) logs.shift();
         const logBox = document.getElementById('settingsAudioDebugLog');
         if (logBox) {
-            logBox.textContent = window.audioPlaybackDebugLogs.join('\n');
+            logBox.textContent = logs.join('\n');
             logBox.scrollTop = logBox.scrollHeight;
         }
         appendDebugTelemetry(`[${level.toUpperCase()}] ${msg}`, level);
@@ -257,11 +272,13 @@
     }
 
     function updateAudioDiagnosticsUi(meta = {}) {
+        const s = store.state;
         const streamVal = document.getElementById('debugStreamStatus');
         const formatVal = document.getElementById('debugFormatVal');
         const pipeVal = document.getElementById('debugPipelineState');
         const skipVal = document.getElementById('debugSkipStatus');
-        const curTrack = allTracks[currentTrackIndex];
+        const curTrack = s.allTracks[s.currentTrackIndex];
+        const audio = s.audio;
 
         if (streamVal) {
             if (audio && audio.error) {
@@ -291,12 +308,12 @@
                 'Ready (Buffered)'
             ];
             const r = rStates[audio.readyState] || 'Ready';
-            const ctxState = audioContext ? (audioContext.state === 'running' ? 'Active' : 'Standby') : 'Inactive';
+            const ctxState = s.audioContext ? (s.audioContext.state === 'running' ? 'Active' : 'Standby') : 'Inactive';
             pipeVal.textContent = `${r} • DSP: ${ctxState}`;
         }
         if (skipVal) {
-            skipVal.textContent = consecutiveSkipCount > 0 ? `${consecutiveSkipCount} skip(s) logged` : 'No abnormal skips (0)';
-            skipVal.style.color = consecutiveSkipCount > 0 ? '#f59e0b' : 'inherit';
+            skipVal.textContent = s.consecutiveSkipCount > 0 ? `${s.consecutiveSkipCount} skip(s) logged` : 'No abnormal skips (0)';
+            skipVal.style.color = s.consecutiveSkipCount > 0 ? '#f59e0b' : 'inherit';
         }
         refreshDebugHudTelemetry();
     }
@@ -321,28 +338,14 @@
         }, 320);
     }
 
-
-    // Attach top-level Settings & Diagnostics functions to window
-    if (typeof window !== "undefined") {
-        try { window.ambientCanvas = ambientCanvas; } catch (_) {}
-        try { window.appendDebugTelemetry = appendDebugTelemetry; } catch (_) {}
-        try { window.cancelSleepTimer = cancelSleepTimer; } catch (_) {}
-        try { window.closeSignalPathModal = closeSignalPathModal; } catch (_) {}
-        try { window.closeSleepTimerModal = closeSleepTimerModal; } catch (_) {}
-        try { window.logAudioPlaybackEvent = logAudioPlaybackEvent; } catch (_) {}
-        try { window.openSignalPathModal = openSignalPathModal; } catch (_) {}
-        try { window.openSleepTimerModal = openSleepTimerModal; } catch (_) {}
-        try { window.refreshDebugHudTelemetry = refreshDebugHudTelemetry; } catch (_) {}
-        try { window.setDebugMode = setDebugMode; } catch (_) {}
-        try { window.setSleepTimer = setSleepTimer; } catch (_) {}
-        try { window.showThemeLoadingOverlay = showThemeLoadingOverlay; } catch (_) {}
-        try { window.updateAudioDiagnosticsUi = updateAudioDiagnosticsUi; } catch (_) {}
-        try { window.updateDebugHudState = updateDebugHudState; } catch (_) {}
-        try { window.updateSleepTimerStatusUi = updateSleepTimerStatusUi; } catch (_) {}
-    }
+    store.subscribe('theme:loading', ({ detail }) => {
+        if (detail && detail.themeName) showThemeLoadingOverlay(detail.themeName);
+    });
+    store.subscribe('telemetry:log', ({ detail }) => {
+        if (detail) logAudioPlaybackEvent(detail.level || 'info', detail.msg || '', detail.meta || {});
+    });
 
     export {
-        ambientCanvas,
         appendDebugTelemetry,
         cancelSleepTimer,
         closeSignalPathModal,

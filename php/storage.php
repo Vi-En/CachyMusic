@@ -1,17 +1,108 @@
 <?php
-// CachyMusic - Zero-Dependency Unified Storage Engine
-// Provides seamless persistence using local JSON file storage with automatic MySQL sync when available.
+// CachyMusic - Zero-Dependency Unified Storage Engine (v2.0.0)
+// Cross-platform persistence in cachy_data_dir() via SQLite3 WAL (when loaded) + POSIX atomic JSON, with MySQL sync when available.
+
+require_once(__DIR__ . '/platform.php');
 
 class Storage {
-    private static $dataFile = __DIR__ . '/../data/library.json';
+    private static $dataFile = null;
+    private static $sqliteFile = null;
+    private static $sqlite = null;
     private static $memoryCache = null;
     private static $memoryCacheMtime = 0;
     private static $batchDepth = 0;
     private static $isDirty = false;
     private static $pathToTidIndex = null;
 
+    private static function resolvePaths(): void {
+        if (self::$dataFile !== null) return;
+        $dir = cachy_data_dir();
+        self::$dataFile = $dir . DIRECTORY_SEPARATOR . 'library.json';
+        self::$sqliteFile = $dir . DIRECTORY_SEPARATOR . 'library.sqlite';
+        $legacyFile = __DIR__ . '/../data/library.json';
+        if (!file_exists(self::$dataFile) && is_file($legacyFile) && is_readable($legacyFile)) {
+            $raw = @file_get_contents($legacyFile);
+            if ($raw !== false && strlen($raw) > 2) {
+                @file_put_contents(self::$dataFile, $raw, LOCK_EX);
+            }
+        }
+    }
+
     public static function hasMySQL() {
-        return isset($GLOBALS['connection']) && $GLOBALS['connection'] && !mysqli_connect_errno();
+        return isset($GLOBALS['connection']) && $GLOBALS['connection'] && function_exists('mysqli_connect_errno') && !@mysqli_connect_errno();
+    }
+
+    public static function hasSqlite(): bool {
+        return class_exists('SQLite3');
+    }
+
+    public static function getDriver(): string {
+        if (self::hasMySQL()) return 'mysql';
+        if (self::hasSqlite()) return 'sqlite3';
+        return 'json';
+    }
+
+    private static function initSqlite(): void {
+        if (!self::hasSqlite() || self::$sqlite !== null) return;
+        self::resolvePaths();
+        try {
+            $db = new SQLite3(self::$sqliteFile);
+            $db->busyTimeout(2500);
+            @$db->exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON;');
+            $db->exec("
+                CREATE TABLE IF NOT EXISTS Meta (k TEXT PRIMARY KEY, v TEXT);
+                CREATE TABLE IF NOT EXISTS Tracks (
+                    tid INTEGER PRIMARY KEY, file_path TEXT UNIQUE, full_path TEXT,
+                    title TEXT, artist TEXT, album TEXT, genre TEXT, year INTEGER,
+                    track_num TEXT, duration REAL, bitrate INTEGER, sample_rate INTEGER,
+                    channels INTEGER, bit_depth INTEGER DEFAULT 16, format TEXT,
+                    file_size INTEGER, mtime INTEGER, has_cover INTEGER DEFAULT 0,
+                    lyrics TEXT, replay_gain REAL, replay_peak REAL
+                );
+                CREATE TABLE IF NOT EXISTS Playlists (plid INTEGER PRIMARY KEY, username TEXT, name TEXT, tracks_json TEXT);
+                CREATE TABLE IF NOT EXISTS SoulseekAccount (id INTEGER PRIMARY KEY, username TEXT, password TEXT, is_powered_on INTEGER, downloads_dir TEXT, shared_dir TEXT);
+                CREATE TABLE IF NOT EXISTS Accounts (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, created_at TEXT);
+            ");
+            self::$sqlite = $db;
+        } catch (Throwable $e) {
+            self::$sqlite = null;
+        }
+    }
+
+    private static function syncSqliteFromData(array $data): void {
+        self::initSqlite();
+        if (self::$sqlite === null) return;
+        $db = self::$sqlite;
+        try {
+            $db->exec('BEGIN IMMEDIATE');
+            $stmt = $db->prepare('REPLACE INTO Meta (k, v) VALUES (:k, :v)');
+            $stmt->bindValue(':k', 'default_directory', SQLITE3_TEXT);
+            $stmt->bindValue(':v', (string)($data['default_directory'] ?? ''), SQLITE3_TEXT);
+            $stmt->execute();
+
+            $s = $data['soulseek'] ?? [];
+            $sStmt = $db->prepare('REPLACE INTO SoulseekAccount (id, username, password, is_powered_on, downloads_dir, shared_dir) VALUES (1, :u, :p, :on, :dl, :sh)');
+            $sStmt->bindValue(':u', (string)($s['username'] ?? ''), SQLITE3_TEXT);
+            $sStmt->bindValue(':p', (string)($s['password'] ?? ''), SQLITE3_TEXT);
+            $sStmt->bindValue(':on', (int)($s['is_powered_on'] ?? 0), SQLITE3_INTEGER);
+            $sStmt->bindValue(':dl', (string)($s['downloads_dir'] ?? ''), SQLITE3_TEXT);
+            $sStmt->bindValue(':sh', (string)($s['shared_dir'] ?? ''), SQLITE3_TEXT);
+            $sStmt->execute();
+
+            $db->exec('DELETE FROM Playlists');
+            $pStmt = $db->prepare('INSERT INTO Playlists (plid, username, name, tracks_json) VALUES (:id, :u, :n, :t)');
+            foreach ($data['playlists'] ?? [] as $pl) {
+                $pStmt->bindValue(':id', (int)($pl['plid'] ?? 0), SQLITE3_INTEGER);
+                $pStmt->bindValue(':u', (string)($pl['username'] ?? 'default'), SQLITE3_TEXT);
+                $pStmt->bindValue(':n', (string)($pl['name'] ?? ''), SQLITE3_TEXT);
+                $pStmt->bindValue(':t', json_encode($pl['tracks'] ?? []), SQLITE3_TEXT);
+                $pStmt->execute();
+                $pStmt->reset();
+            }
+            $db->exec('COMMIT');
+        } catch (Throwable $e) {
+            @$db->exec('ROLLBACK');
+        }
     }
 
     public static function beginBatch() {
@@ -29,6 +120,7 @@ class Storage {
     }
 
     public static function init() {
+        self::resolvePaths();
         $dir = dirname(self::$dataFile);
         if (!is_dir($dir)) {
             @mkdir($dir, 0750, true);
@@ -37,6 +129,7 @@ class Storage {
         if (!file_exists($htaccess)) {
             @file_put_contents($htaccess, "Order deny,allow\nDeny from all\n");
         }
+        self::initSqlite();
 
         if (!file_exists(self::$dataFile)) {
             $defaultDir = '';
@@ -209,18 +302,15 @@ class Storage {
         clearstatcache(true, self::$dataFile);
         self::$memoryCacheMtime = @filemtime(self::$dataFile) ?: time();
         self::$isDirty = false;
+        self::syncSqliteFromData($data);
         return true;
     }
 
     // --- DEFAULT DIRECTORY ---
     public static function getDefaultDirectory() {
-        $placeholderAudio = realpath(__DIR__ . '/../resources/audio');
-        $isPlaceholder = function($path) use ($placeholderAudio) {
+        $isPlaceholder = function($path) {
             $trimmed = trim((string)$path);
-            if ($trimmed === '') return true;
-            if ($placeholderAudio && $trimmed === $placeholderAudio) return true;
-            if (str_ends_with(str_replace('\\', '/', $trimmed), '/resources/audio')) return true;
-            return false;
+            return ($trimmed === '');
         };
 
         $data = self::read();
@@ -708,6 +798,17 @@ class Storage {
         $t = $data['tracks'][(string)$tid] ?? $data['tracks'][$tid] ?? null;
         if ($t) {
             return $t['full_path'] ?: $t['file_path'];
+        }
+        return null;
+    }
+
+    public static function getTrackByPath($fullPath) {
+        if (empty($fullPath)) return null;
+        $normTarget = cachy_normalize_path((string)$fullPath);
+        $data = self::read();
+        foreach ($data['tracks'] ?? [] as $t) {
+            $fp = cachy_normalize_path((string)($t['full_path'] ?? $t['file_path'] ?? ''));
+            if ($fp === $normTarget) return $t;
         }
         return null;
     }

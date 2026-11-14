@@ -1,15 +1,91 @@
 // CachyMusic - P2P Network, Downloads & PWA Integration
-import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
+import {
+    escapeHtml,
+    escapeRegex,
+    formatFileSize,
+    isMobileDevice,
+    popModalState,
+    pushModalState,
+    safeStorage,
+    showCachyToast
+} from './utils.js';
+import { store } from './state.js';
+import { getRuntime } from './runtime-capabilities.js';
+import { applySearchAndSort } from './library.js';
+import { loadTrack } from './player-core.js';
+import {
+    bindFastAction,
+    folderPathInput,
+    installAppBtn,
+    setMobileSearchPanelCollapsed,
+    slskAccountAlert,
+    slskAccountBtn,
+    slskAccountModal,
+    slskActiveSearchMeta,
+    slskChangeDirBtn,
+    slskChangeSharedDirBtn,
+    slskClearSubFilterBtn,
+    slskCloseAccountModalBtn,
+    slskCloseDrawerBtn,
+    slskDownloadsPathText,
+    slskExcludeFilterClearBtn,
+    slskExcludeFilterInput,
+    slskFilterChips,
+    slskIncludeFilterClearBtn,
+    slskIncludeFilterInput,
+    slskLogoutBtn,
+    slskMobileActiveFilter,
+    slskMobileTransferCount,
+    slskMobileTransfersBtn,
+    slskModalDownloadDir,
+    slskModalPassword,
+    slskModalPowerBtn,
+    slskModalSharedDir,
+    slskModalSyncPlayerDirBtn,
+    slskModalSyncSharePlayerDirBtn,
+    slskModalUsername,
+    slskPanelToggleBar,
+    slskPlaceholder,
+    slskPowerBtn,
+    slskPowerBtnText,
+    slskRefreshStatusBtn,
+    slskResultCount,
+    slskResultsList,
+    slskSaveAccountBtn,
+    slskScanDownloadsBtn,
+    slskSearchClearBtn,
+    slskSearchInput,
+    slskSearchSubmitBtn,
+    slskSearchingState,
+    slskSearchingTitle,
+    slskSharedPathText,
+    slskStartDaemonBtn,
+    slskStatusDot,
+    slskStatusText,
+    slskSuggestedChips,
+    slskSuggestedRow,
+    slskSyncCurrentDirBtn,
+    slskToggleTransfersBtn,
+    slskTransferCount,
+    slskTransfersDrawer,
+    slskTransfersList,
+    slskTransfersSummary,
+    slskUsername,
+    soulseekWorkspace,
+    switchWorkspace,
+    toggleMobileSearchPanel,
+    wsSoulseekBadge
+} from './ui-elements.js';
 
     // Trigger PWA Installation or Browser Instructions
     async function triggerPwaInstallPrompt() {
-        if (deferredInstallPrompt) {
-            deferredInstallPrompt.prompt();
+        if (store.state.deferredInstallPrompt) {
+            store.state.deferredInstallPrompt.prompt();
             try {
-                const choiceResult = await deferredInstallPrompt.userChoice;
+                const choiceResult = await store.state.deferredInstallPrompt.userChoice;
                 if (choiceResult && choiceResult.outcome === 'accepted') {
-                    const installBtn = document.getElementById('installAppBtn');
-                    if (installBtn) installBtn.style.display = 'none';
+                    const btn = installAppBtn || document.getElementById('installAppBtn');
+                    if (btn) btn.style.display = 'none';
                     const statusPill = document.getElementById('downloadPwaStatusPill');
                     if (statusPill) {
                         statusPill.textContent = 'Installed (PWA)';
@@ -17,27 +93,27 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                     }
                 }
             } catch (_) {}
-            deferredInstallPrompt = null;
+            store.state.deferredInstallPrompt = null;
         } else {
             const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                                  window.navigator.standalone === true;
             if (isStandalone) {
-                alert('CachyMusic is already installed and running as a standalone desktop/mobile app!');
+                showCachyToast('CachyMusic is already installed and running as a standalone app.');
                 return;
             }
 
             const ua = (navigator.userAgent || '').toLowerCase();
             let advice = 'Install CachyMusic on your device:\n\n';
             if (/iphone|ipad|ipod/i.test(ua)) {
-                advice += '• iOS Safari: Tap Share (square with upward arrow) ➔ "Add to Home Screen".';
+                advice += '• iOS Safari: Tap Share (square with upward arrow) -> "Add to Home Screen".';
             } else if (/android/i.test(ua)) {
-                advice += '• Android Chrome: Tap Menu (⋮) ➔ "Install app" or "Add to Home screen".';
+                advice += '• Android Chrome: Tap Menu -> "Install app" or "Add to Home screen".';
             } else if (/mac/i.test(ua)) {
-                advice += '• macOS Safari: Click File ➔ "Add to Dock".\n• Chrome / Brave: Click the Install icon in the address bar.';
+                advice += '• macOS Safari: Click File -> "Add to Dock".\n• Chrome / Brave: Click the Install icon in the address bar.';
             } else if (/win/i.test(ua)) {
-                advice += '• Windows: Click the Install icon in Edge/Chrome address bar, or download cachymusic.bat from the Windows tab.';
+                advice += '• Windows: Click the Install icon in Edge/Chrome address bar, or run bin/cachymusic.bat.';
             } else {
-                advice += '• Linux Desktop: Run ./install.sh in the project folder for complete system, launcher, and icon integration.\n• Chromium / Brave: Click the Install icon in the address bar.';
+                advice += '• Linux Desktop: Click the Install icon in Chromium/Brave, or use the packaged .deb / AppImage / PKGBUILD.';
             }
             alert(advice);
         }
@@ -45,7 +121,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
     // PWA & Desktop Installation Handler
     function setupPwaInstallPrompt() {
-        const installBtn = document.getElementById('installAppBtn');
+        const installBtn = installAppBtn || document.getElementById('installAppBtn');
         if (!installBtn) return;
 
         // Window Controls Overlay (WCO) for desktop PWA titlebar integration
@@ -85,7 +161,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         // Listen for beforeinstallprompt (Chromium, Brave, Chrome, Edge, Android)
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
-            deferredInstallPrompt = e;
+            store.state.deferredInstallPrompt = e;
             installBtn.style.display = 'inline-flex';
             const statusPill = document.getElementById('downloadPwaStatusPill');
             if (statusPill) {
@@ -103,39 +179,47 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         }, 800);
 
         installBtn.addEventListener('click', async () => {
-            if (deferredInstallPrompt) {
+            if (store.state.deferredInstallPrompt) {
                 try {
-                    deferredInstallPrompt.prompt();
-                    const choiceResult = await deferredInstallPrompt.userChoice;
+                    store.state.deferredInstallPrompt.prompt();
+                    const choiceResult = await store.state.deferredInstallPrompt.userChoice;
                     if (choiceResult && choiceResult.outcome === 'accepted') {
-                        console.log('[PWA] User accepted install prompt');
-                        deferredInstallPrompt = null;
+                        store.state.deferredInstallPrompt = null;
                         installBtn.style.display = 'none';
                     }
                 } catch (err) {
                     console.warn('[PWA] Install prompt failed:', err);
                 }
             } else {
-                switchWorkspace(currentWorkspace === 'download' ? 'player' : 'download');
+                switchWorkspace(store.state.currentWorkspace === 'download' ? 'player' : 'download');
             }
         });
 
         window.addEventListener('appinstalled', () => {
             installBtn.style.display = 'none';
-            deferredInstallPrompt = null;
+            store.state.deferredInstallPrompt = null;
             const statusPill = document.getElementById('downloadPwaStatusPill');
             if (statusPill) {
                 statusPill.textContent = 'Installed (PWA)';
                 statusPill.classList.add('active');
             }
-            console.log('[PWA] CachyMusic installed successfully');
         });
     }
 
     // Cross-Platform Download Hub & LAN Setup
     let lanUrlFetched = false;
     async function fetchLanStreamingUrl() {
-        if (lanUrlFetched) return;
+        const rt = getRuntime();
+        if (lanUrlFetched || !rt.hasPhpBackend) {
+            if (!rt.hasPhpBackend && typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+                const lanInput = document.getElementById('downloadLanUrlInput');
+                const copyBtn = document.getElementById('copyLanUrlBtn');
+                if (lanInput && !lanInput.value) lanInput.value = window.location.origin;
+                if (copyBtn && !copyBtn.dataset.copy) copyBtn.dataset.copy = window.location.origin;
+                lanUrlFetched = true;
+            }
+            return;
+        }
         try {
             const res = await fetch('php/api/lan_info.php');
             const data = await res.json();
@@ -258,16 +342,19 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
 
 
+    function canReachSoulseekBackend() {
+        const rt = getRuntime();
+        return Boolean(rt.isAndroidNative || rt.hasPhpBackend || rt.getSoulseekHost());
+    }
+
     function getSlskApiUrl(action, queryParams = '') {
         let base = 'php/api/soulseek.php';
         try {
-            const isNativeAndroid = typeof AndroidBridge !== 'undefined'
-                && typeof AndroidBridge.isAndroid === 'function'
-                && AndroidBridge.isAndroid();
-            if (!isNativeAndroid) {
-                const host = (typeof safeStorage !== 'undefined' ? safeStorage.getItem('cachymusic_slsk_host') : '') || '';
-                if (host && host.trim()) {
-                    base = `${host.trim().replace(/\/+$/, '')}/php/api/soulseek.php`;
+            const rt = getRuntime();
+            if (!rt.isAndroidNative) {
+                const host = rt.getSoulseekHost();
+                if (host) {
+                    base = `${host}/php/api/soulseek.php`;
                 }
             }
         } catch (_) {}
@@ -275,36 +362,56 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         return `${base}?action=${encodeURIComponent(action)}${paramStr}`;
     }
 
-    // Setup Android Standalone Bridge hook for Soulseek fetch requests
-    if (typeof window !== 'undefined' && window.AndroidBridge && typeof window.AndroidBridge.callSoulseekApi === 'function') {
-        try {
-            if (typeof safeStorage !== 'undefined') safeStorage.removeItem('cachymusic_slsk_host');
-            localStorage.removeItem('cachymusic_slsk_host');
-        } catch (_) {}
+    /**
+     * Scoped Soulseek API transport replacing legacy window.fetch monkey-patching.
+     * Supports Android Native Bridge, paired Desktop LAN hosts, PHP Desktop backend,
+     * and offline standalone PWA synthetic responses with zero failing network requests.
+     */
+    async function slskFetch(action, init = {}, queryParams = '') {
+        const rt = getRuntime();
+        const url = getSlskApiUrl(action, queryParams);
 
-        const origFetch = window.fetch;
-        window.fetch = async function(resource, init) {
-            const urlStr = typeof resource === 'string' ? resource : (resource && resource.url ? resource.url : '');
-            if (urlStr.includes('soulseek.php')) {
-                try {
-                    const urlObj = new URL(urlStr, window.location.href);
-                    const action = urlObj.searchParams.get('action') || 'status';
-                    let bodyStr = '{}';
-                    if (init && init.body) {
-                        bodyStr = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
-                    }
-                    const respJson = window.AndroidBridge.callSoulseekApi(action, bodyStr, urlObj.search);
-                    return new Response(respJson, {
-                        status: 200,
-                        statusText: 'OK',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                } catch (bridgeErr) {
-                    console.warn('AndroidBridge callSoulseekApi fallback:', bridgeErr);
-                }
+        if (rt.isAndroidNative && typeof window !== 'undefined' && window.AndroidBridge && typeof window.AndroidBridge.callSoulseekApi === 'function') {
+            try {
+                safeStorage.removeItem('cachymusic_slsk_host');
+                localStorage.removeItem('cachymusic_slsk_host');
+            } catch (_) {}
+            try {
+                const urlObj = new URL(url, window.location.href);
+                const bodyStr = init && init.body
+                    ? (typeof init.body === 'string' ? init.body : JSON.stringify(init.body))
+                    : '{}';
+                const respJson = window.AndroidBridge.callSoulseekApi(action, bodyStr, urlObj.search);
+                return new Response(respJson, {
+                    status: 200,
+                    statusText: 'OK',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            } catch (bridgeErr) {
+                console.warn('AndroidBridge callSoulseekApi fallback:', bridgeErr);
             }
-            return origFetch.apply(this, arguments);
-        };
+        }
+
+        if (!canReachSoulseekBackend()) {
+            return new Response(JSON.stringify({
+                ok: false,
+                success: false,
+                standalone: true,
+                connected: false,
+                powered_on: false,
+                connecting: false,
+                has_credentials: false,
+                daemon_running: false,
+                reason: 'mobile_standalone',
+                error: 'Standalone PWA mode: pair a desktop CachyMusic host in Account Settings to enable Soulseek P2P.'
+            }), {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
+        return fetch(url, init);
     }
 
     // =========================================================================
@@ -336,10 +443,14 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         lastStatus: null,
 
         startStatusPolling() {
-            if (this.statusPollTimer) return;
+            if (this.statusPollTimer || !canReachSoulseekBackend()) return;
             const schedulePoll = () => {
+                if (!canReachSoulseekBackend()) {
+                    this.statusPollTimer = null;
+                    return;
+                }
                 let delay = 25000;
-                if (currentWorkspace === 'soulseek' || this.isConnecting || this.isSearching) {
+                if (store.state.currentWorkspace === 'soulseek' || this.isConnecting || this.isSearching) {
                     delay = 5000;
                 } else if (this.isConnected) {
                     delay = 15000;
@@ -443,7 +554,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
             }
 
             try {
-                const res = await fetch(getSlskApiUrl('power'), {
+                const res = await slskFetch('power', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ state: targetState })
@@ -472,7 +583,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
         async checkStatus() {
             try {
-                const res = await fetch(getSlskApiUrl('status'));
+                const res = await slskFetch('status');
                 const data = await res.json();
                 this.lastStatus = data;
 
@@ -498,14 +609,21 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
                 this.updatePowerUI(data);
 
-                const isNative = data.daemon_type === 'embedded-native' || (typeof AndroidBridge !== 'undefined' && AndroidBridge.isAndroid());
+                const rt = getRuntime();
+                const isNative = data.daemon_type === 'embedded-native' || rt.isAndroidNative;
                 const clientLabel = isNative ? 'SOULSEEK' : 'NICOTINE+';
                 const slskBadge = document.getElementById('slskBadge');
                 if (slskBadge) {
                     slskBadge.textContent = clientLabel;
                 }
 
-                if (data.ok) {
+                if (data.standalone) {
+                    if (slskStatusDot) slskStatusDot.className = 'slskStatusDot offline';
+                    if (slskStatusText) slskStatusText.textContent = 'STANDALONE PWA (UNPAIRED)';
+                    if (wsSoulseekBadge) wsSoulseekBadge.className = 'wsBadge offline';
+                    if (slskUsername) slskUsername.textContent = 'Pair Desktop Host';
+                    if (slskStartDaemonBtn) slskStartDaemonBtn.style.display = 'none';
+                } else if (data.ok) {
                     if (data.connected) {
                         if (slskStatusDot) slskStatusDot.className = 'slskStatusDot online';
                         if (slskStatusText) slskStatusText.textContent = `ONLINE: ${data.login_username}`;
@@ -549,7 +667,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 if (slskStatusText) slskStatusText.textContent = 'REST API OFFLINE';
                 if (wsSoulseekBadge) wsSoulseekBadge.className = 'wsBadge offline';
                 if (slskStartDaemonBtn) {
-                    slskStartDaemonBtn.style.display = 'inline-block';
+                    slskStartDaemonBtn.style.display = getRuntime().hasPhpBackend ? 'inline-block' : 'none';
                     slskStartDaemonBtn.disabled = false;
                     slskStartDaemonBtn.textContent = '▶ START NICOTINE+';
                 }
@@ -574,7 +692,11 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                         let nMsg = 'Files are unexposed. Click Settings to configure or connect.';
                         let nIcon = 'ℹ️';
 
-                        if (statusObj.reason === 'mobile_standalone') {
+                        if (statusObj.standalone) {
+                            nTitle = 'Standalone PWA Mode';
+                            nMsg = 'Soulseek P2P requires a paired CachyMusic Desktop Host (LAN IP) in Account Settings, or use local device music files.';
+                            nIcon = '🌐';
+                        } else if (statusObj.reason === 'mobile_standalone') {
                             nTitle = 'Soulseek Standalone Mode';
                             nMsg = 'Soulseek is currently disconnected. Click Settings to enter credentials and connect directly to the Soulseek network.';
                             nIcon = '📱';
@@ -602,6 +724,10 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         },
 
         async startDaemon() {
+            if (!getRuntime().hasPhpBackend && !getRuntime().getSoulseekHost()) {
+                showCachyToast('Pair a desktop host in Account Settings to control the remote daemon.');
+                return;
+            }
             if (slskStartDaemonBtn) {
                 slskStartDaemonBtn.textContent = 'STARTING...';
                 slskStartDaemonBtn.disabled = true;
@@ -613,7 +739,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
             if (wsSoulseekBadge) wsSoulseekBadge.className = 'wsBadge busy';
 
             try {
-                const res = await fetch(getSlskApiUrl('start_daemon'), { method: 'POST' });
+                const res = await slskFetch('start_daemon', { method: 'POST' });
                 const data = await res.json();
                 
                 let attempts = 0;
@@ -737,11 +863,11 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 const searchMode = searchModeSelect ? searchModeSelect.value : 'global';
                 const isNativeMobile = !!(window.CachyNativeSoulseek && typeof window.CachyNativeSoulseek.call === 'function');
 
-                const res = await fetch(getSlskApiUrl('search', `query=${encodeURIComponent(q)}&mode=${encodeURIComponent(searchMode)}`), {
+                const res = await slskFetch('search', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query: q, mode: searchMode })
-                });
+                }, `query=${encodeURIComponent(q)}&mode=${encodeURIComponent(searchMode)}`);
                 const data = await res.json();
 
                 if (!data.ok) {
@@ -789,7 +915,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         async pollResults(token) {
             if (!token) return;
             try {
-                const res = await fetch(getSlskApiUrl('results', `token=${encodeURIComponent(token)}&limit=250`));
+                const res = await slskFetch('results', {}, `token=${encodeURIComponent(token)}&limit=250`);
                 const data = await res.json();
 
                 if (data.ok && Array.isArray(data.items)) {
@@ -1254,7 +1380,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
             }
 
             try {
-                const res = await fetch(getSlskApiUrl('download'), {
+                const res = await slskFetch('download', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1384,7 +1510,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                     pauseBtn.disabled = true;
                     pauseBtn.textContent = '...';
                     try {
-                        await fetch(getSlskApiUrl('pause_download'), {
+                        await slskFetch('pause_download', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1409,7 +1535,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                     resumeBtn.disabled = true;
                     resumeBtn.textContent = '...';
                     try {
-                        await fetch(getSlskApiUrl('resume_download'), {
+                        await slskFetch('resume_download', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1434,7 +1560,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                     cancelBtn.disabled = true;
                     row.style.opacity = '0.35';
                     try {
-                        await fetch(getSlskApiUrl('cancel_download'), {
+                        await slskFetch('cancel_download', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1455,7 +1581,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
         async pollTransfers() {
             try {
-                const res = await fetch(getSlskApiUrl('transfers'));
+                const res = await slskFetch('transfers');
                 const data = await res.json();
 
                 if (!data.ok || !Array.isArray(data.items)) return;
@@ -1477,7 +1603,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                             slskResumeAllBtn.disabled = true;
                             slskResumeAllBtn.textContent = 'RESUMING...';
                             try {
-                                await fetch(getSlskApiUrl('resume_all'), { method: 'POST' });
+                                await slskFetch('resume_all', { method: 'POST' });
                                 await this.pollTransfers();
                             } catch (_) {}
                             finally {
@@ -1566,7 +1692,8 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
                     if (isFin && this.autoPlayQueue.has(item.filename)) {
                         this.autoPlayQueue.delete(item.filename);
-                        const shouldAutoPlay = !userExplicitlyPaused && !audio.paused && !document.hidden;
+                        const activeAudio = store.state.audio;
+                        const shouldAutoPlay = !store.state.userExplicitlyPaused && Boolean(activeAudio && !activeAudio.paused) && !document.hidden;
                         this.importAndPlay(item.localFile || item.filename, shouldAutoPlay);
                     }
                 });
@@ -1578,7 +1705,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
         async importAndPlay(filenameOrPath, autoPlay = true) {
             try {
-                const res = await fetch(getSlskApiUrl('import_track'), {
+                const res = await slskFetch('import_track', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ file: filenameOrPath })
@@ -1587,18 +1714,19 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
                 if (data.ok && data.track) {
                     const imported = data.track;
-                    const existingIdx = allTracks.findIndex(t => t.filename === imported.filename || t.fullPath === imported.fullPath);
+                    const tracks = store.state.allTracks;
+                    const existingIdx = tracks.findIndex(t => t.filename === imported.filename || t.fullPath === imported.fullPath);
                     let targetIdx;
 
                     if (existingIdx !== -1) {
                         targetIdx = existingIdx;
                     } else {
-                        allTracks.push(imported);
+                        tracks.push(imported);
                         applySearchAndSort();
-                        targetIdx = allTracks.length - 1;
+                        targetIdx = tracks.length - 1;
                     }
 
-                    if (autoPlay && !userExplicitlyPaused) {
+                    if (autoPlay && !store.state.userExplicitlyPaused) {
                         loadTrack(targetIdx, true);
                     } else {
                         loadTrack(targetIdx, false);
@@ -1610,6 +1738,10 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         },
 
         async syncAllDownloadsToLibrary() {
+            if (!getRuntime().hasPhpBackend) {
+                showCachyToast('Syncing downloads requires a desktop PHP backend or local Folder Import.');
+                return;
+            }
             if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = 'SCANNING...';
             try {
                 const targetDir = this.downloadsDir || '';
@@ -1620,9 +1752,9 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 });
                 const data = await res.json();
                 if (data.success && Array.isArray(data.tracks)) {
-                    allTracks = data.tracks;
+                    store.state.allTracks = data.tracks;
                     applySearchAndSort();
-                    if (allTracks.length > 0) {
+                    if (store.state.allTracks.length > 0) {
                         loadTrack(0, false);
                     }
                     if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = `✓ LOADED ${data.count} TRACKS`;
@@ -1677,20 +1809,16 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
             `;
             el.style.display = 'block';
         }
-        try { window.renderSlskDiagnosticAlert = renderSlskDiagnosticAlert; } catch (_) {}
 
         function safeOpenSlskAccountModal() {
             const hostGroup = document.getElementById('slskModalHostGroup');
             if (hostGroup) {
-                const isNativeAndroid = typeof AndroidBridge !== 'undefined'
-                    && typeof AndroidBridge.isAndroid === 'function'
-                    && AndroidBridge.isAndroid();
-                hostGroup.style.display = isNativeAndroid ? 'none' : 'block';
+                hostGroup.style.display = getRuntime().isAndroidNative ? 'none' : 'block';
             }
             const modal = document.getElementById('slskAccountModal');
             if (modal) {
                 modal.style.display = 'flex';
-                if (typeof pushModalState === 'function') pushModalState('slskAccountModal');
+                pushModalState('slskAccountModal');
             }
         }
 
@@ -1698,7 +1826,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
             const modal = document.getElementById('slskAccountModal');
             if (modal) {
                 modal.style.display = 'none';
-                if (typeof popModalState === 'function') popModalState('slskAccountModal');
+                popModalState('slskAccountModal');
             }
         }
 
@@ -1722,10 +1850,11 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 if (slskAccountAlert) slskAccountAlert.style.display = 'none';
                 const hostInput = document.getElementById('slskModalHost');
                 if (hostInput) {
-                    hostInput.value = (typeof safeStorage !== 'undefined' ? safeStorage.getItem('cachymusic_slsk_host') : '') || '';
+                    hostInput.value = safeStorage.getItem('cachymusic_slsk_host') || '';
                 }
+                if (!canReachSoulseekBackend()) return;
                 try {
-                    const res = await fetch(getSlskApiUrl('account'));
+                    const res = await slskFetch('account');
                     const data = await res.json();
                     if (data.username && slskModalUsername) {
                         slskModalUsername.value = data.username;
@@ -1766,8 +1895,8 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
             slskSyncCurrentDirBtn.addEventListener('click', async () => {
                 let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
 
-                // If not in input, ask scan.php for current library directory
-                if (!currentFolder) {
+                // If not in input, ask scan.php for current library directory (PHP Desktop only)
+                if (!currentFolder && getRuntime().hasPhpBackend) {
                     try {
                         const scanRes = await fetch('php/api/scan.php');
                         const scanData = await scanRes.json();
@@ -1779,7 +1908,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 }
 
                 if (!currentFolder) {
-                    alert('No active player music folder found. Please enter or scan a music folder first.');
+                    showCachyToast('No active server music folder found. Enter a folder path in Account Settings.');
                     return;
                 }
 
@@ -1787,7 +1916,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 slskSyncCurrentDirBtn.disabled = true;
 
                 try {
-                    const res = await fetch(getSlskApiUrl('directory'), {
+                    const res = await slskFetch('directory', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ directory: currentFolder })
@@ -1804,13 +1933,13 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                             slskSyncCurrentDirBtn.disabled = false;
                         }, 1800);
                     } else {
-                        alert(data.error || data.message || 'Failed to update Soulseek download folder.');
+                        showCachyToast(data.error || data.message || 'Failed to update Soulseek download folder.');
                         slskSyncCurrentDirBtn.textContent = 'SYNC WITH PLAYER DIR';
                         slskSyncCurrentDirBtn.disabled = false;
                     }
                 } catch (e) {
                     console.warn('Sync dir error:', e);
-                    alert('Network error communicating with Soulseek backend.');
+                    showCachyToast('Network error communicating with Soulseek backend.');
                     slskSyncCurrentDirBtn.textContent = 'SYNC WITH PLAYER DIR';
                     slskSyncCurrentDirBtn.disabled = false;
                 }
@@ -1821,7 +1950,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         if (slskModalSyncPlayerDirBtn) {
             slskModalSyncPlayerDirBtn.addEventListener('click', async () => {
                 let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
-                if (!currentFolder) {
+                if (!currentFolder && getRuntime().hasPhpBackend) {
                     try {
                         const scanRes = await fetch('php/api/scan.php');
                         const scanData = await scanRes.json();
@@ -1832,7 +1961,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 if (currentFolder && slskModalDownloadDir) {
                     slskModalDownloadDir.value = currentFolder;
                 } else {
-                    alert('No music folder currently scanned in the player.');
+                    showCachyToast('No music folder currently scanned in the player.');
                 }
             });
         }
@@ -1841,7 +1970,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         if (slskModalSyncSharePlayerDirBtn) {
             slskModalSyncSharePlayerDirBtn.addEventListener('click', async () => {
                 let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
-                if (!currentFolder) {
+                if (!currentFolder && getRuntime().hasPhpBackend) {
                     try {
                         const scanRes = await fetch('php/api/scan.php');
                         const scanData = await scanRes.json();
@@ -1852,7 +1981,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 if (currentFolder && slskModalSharedDir) {
                     slskModalSharedDir.value = currentFolder;
                 } else {
-                    alert('No music folder currently scanned in the player.');
+                    showCachyToast('No music folder currently scanned in the player.');
                 }
             });
         }
@@ -1912,7 +2041,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 // Update downloads directory if changed
                 if (newDir && newDir !== soulseekController.downloadsDir) {
                     try {
-                        const dirRes = await fetch(getSlskApiUrl('directory'), {
+                        const dirRes = await slskFetch('directory', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ directory: newDir })
@@ -1928,7 +2057,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                 // Update shared directory if changed
                 if (newSharedDir && newSharedDir !== soulseekController.sharedDir) {
                     try {
-                        const sRes = await fetch(getSlskApiUrl('shared_directory'), {
+                        const sRes = await slskFetch('shared_directory', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ directory: newSharedDir })
@@ -1943,7 +2072,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
 
                 // Save credentials and connect
                 if (username) {
-                    const res = await fetch(getSlskApiUrl('login'), {
+                    const res = await slskFetch('login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -1964,12 +2093,13 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                         setTimeout(() => {
                             safeCloseSlskAccountModal();
                             soulseekController.checkStatus();
+                            soulseekController.startStatusPolling();
                         }, 900);
                     } else {
                         renderSlskDiagnosticAlert(slskAccountAlert, data, 'Connection failed.');
                     }
                 } else {
-                    // Directory only saved
+                    // Directory or paired host only saved
                     if (slskAccountAlert) {
                         slskAccountAlert.className = 'slskModalAlert success';
                         slskAccountAlert.textContent = 'Settings saved.';
@@ -1978,6 +2108,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
                     setTimeout(() => {
                         safeCloseSlskAccountModal();
                         soulseekController.checkStatus();
+                        soulseekController.startStatusPolling();
                     }, 900);
                 }
             } catch (err) {
@@ -2022,7 +2153,7 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
         if (slskLogoutBtn) {
             slskLogoutBtn.addEventListener('click', async () => {
                 try {
-                    await fetch(getSlskApiUrl('logout'), { method: 'POST' });
+                    await slskFetch('logout', { method: 'POST' });
                     if (slskModalUsername) slskModalUsername.value = '';
                     if (slskModalPassword) {
                         slskModalPassword.value = '';
@@ -2260,23 +2391,9 @@ import { escapeHtml, escapeRegex, formatFileSize } from './utils.js';
             });
         }
 
-        // Initialize status check & heartbeat
+        // Initialize status check & conditional heartbeat
         soulseekController.checkStatus();
         soulseekController.startStatusPolling();
-
-
-    }
-    initSoulseekEventListeners();
-
-    // Attach top-level P2P / Soulseek functions and controller to window
-    if (typeof window !== "undefined") {
-        try { window.fetchLanStreamingUrl = fetchLanStreamingUrl; } catch (_) {}
-        try { window.lanUrlFetched = lanUrlFetched; } catch (_) {}
-        try { window.setupDownloadWorkspace = setupDownloadWorkspace; } catch (_) {}
-        try { window.setupPwaInstallPrompt = setupPwaInstallPrompt; } catch (_) {}
-        try { window.soulseekController = soulseekController; } catch (_) {}
-        try { window.initSoulseekEventListeners = initSoulseekEventListeners; } catch (_) {}
-        try { window.triggerPwaInstallPrompt = triggerPwaInstallPrompt; } catch (_) {}
     }
 
     export {

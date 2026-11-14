@@ -4,6 +4,14 @@ All notable changes to **CachyMusic** are documented in this file.
 
 ---
 
+## [2.0.0] - 2026-11-14
+- **Standalone Cross-Platform PWA Mode**: Full client-side execution across Linux, Windows, Android, iOS, and macOS without requiring PHP or external databases, with automatic runtime capability adaptation (`runtime-capabilities.js`), pure-JS metadata/artwork extraction (`tag-parser.js` for ID3v2, FLAC, WAV, Ogg Vorbis/Opus, MP4/M4A/ALAC), IndexedDB offline library persistence (`local-library.js`), and bumped Service Worker cache (`cachymusic-v2.0.0`).
+- **Modular ES6 Architecture & Single Namespace**: Removed legacy monolithic bundles (`scripts/homepage.js`, `scripts/index.js`, `scripts/register.js`), removed sample tracks/assets, and isolated exports solely on `window.__cachyMusic`.
+- **64-Bit DSP Worklet & Native Platform Bridges**: Upgraded AudioWorklet DSP pipeline (`dsp-worklet-processor.js`), added OS MediaSession sync + opt-in background track notifications (`media-session.js`), Android native `MediaPlaybackService.java` foreground service (`versionCode 20`, `versionName "2.0.0"`), and hardened Linux MPRIS2 integration.
+- **Layered CSS Architecture**: Split stylesheets cleanly into cascade layers (`tokens.css`, `themes.css`, `layout.css`, `components.css`, `homepage.css`) using continuous `clamp()` typography, `100dvh`, OKLCH WCAG 2.1 AAA palettes, and zero `!important` rules.
+- **Cross-Platform PHP Backend & Security**: Added OS-agnostic path/binary helpers (`php/platform.php`), SQLite3 WAL + atomic POSIX `rename()` JSON fallback (`php/storage.php`), pure-PHP WAV/OGG/M4A/cover tag parsers, and `aes-256-gcm` Soulseek credential encryption (`php/api/soulseek.php`).
+- **Multi-Platform Packaging**: Updated Arch `PKGBUILD` (`pkgver=2.0.0`), Windows launchers (`cachymusic.bat`, `CachyMusic.vbs`), Android APK build, and added Debian (`packaging/debian/build-deb.sh`) and AppImage (`packaging/appimage/build-appimage.sh`) packagers.
+
 ## [1.3.0] - 2026-11-07
 - **Track Metadata & ID3 Tag Editor**: Added a fully responsive modal editor (`#metadataEditorModal`) accessible from the left inspector panel and track context menu (`•••`). Modifies Title, Artist, Album, Genre, Year, Track #, and Comments.
 - **Physical Tag Writing & Atomic Persistence**: Backed by `metaflac` (lossless in-place FLAC tagging) and `ffmpeg` (`-codec copy` with atomic temporary-file renaming), with real-time in-memory, player deck, left panel, and IndexedDB library cache synchronization.

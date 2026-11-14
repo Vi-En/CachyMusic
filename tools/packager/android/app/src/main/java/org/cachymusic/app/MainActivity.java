@@ -4,9 +4,12 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ContentUris;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -77,6 +80,7 @@ public class MainActivity extends Activity {
     private WebViewAssetLoader assetLoader;
     private String currentUrl = STANDALONE_URL;
     private volatile boolean isScanCancelled = false;
+    private BroadcastReceiver mediaCommandReceiver;
 
     public class AndroidBridge {
         @JavascriptInterface
@@ -128,6 +132,39 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String callSoulseekApi(String action, String bodyJson, String queryString) {
             return SoulseekClient.getInstance(getApplicationContext()).dispatchApi(action, bodyJson, queryString);
+        }
+
+        @JavascriptInterface
+        public void updateMediaNotification(String title, String artist, String album, String coverUrl, boolean isPlaying, long durationMs, long positionMs) {
+            Intent svc = new Intent(MainActivity.this, MediaPlaybackService.class);
+            svc.setAction(MediaPlaybackService.ACTION_UPDATE);
+            svc.putExtra("title", title != null ? title : "CachyMusic");
+            svc.putExtra("artist", artist != null ? artist : "Unknown Artist");
+            svc.putExtra("album", album != null ? album : "");
+            svc.putExtra("cover", coverUrl != null ? coverUrl : "");
+            svc.putExtra("isPlaying", isPlaying);
+            svc.putExtra("durationMs", durationMs);
+            svc.putExtra("positionMs", positionMs);
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(svc);
+                } else {
+                    startService(svc);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to update MediaPlaybackService: " + e.getMessage());
+            }
+        }
+
+        @JavascriptInterface
+        public void stopMediaNotification() {
+            try {
+                Intent svc = new Intent(MainActivity.this, MediaPlaybackService.class);
+                svc.setAction(MediaPlaybackService.ACTION_STOP_SERVICE);
+                stopService(svc);
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to stop MediaPlaybackService: " + e.getMessage());
+            }
         }
     }
 
@@ -182,7 +219,46 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        mediaCommandReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if (intent == null || webView == null) return;
+                String cmd = intent.getStringExtra(MediaPlaybackService.EXTRA_CMD);
+                long seekMs = intent.getLongExtra("seekMs", 0L);
+                if (cmd == null) return;
+                String jsCall;
+                switch (cmd) {
+                    case "play":
+                        jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.playAudio(true);";
+                        break;
+                    case "pause":
+                    case "stop":
+                        jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.pauseAudio();";
+                        break;
+                    case "next":
+                        jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.nextTrack();";
+                        break;
+                    case "prev":
+                        jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.prevTrack();";
+                        break;
+                    case "seek":
+                        double seekSec = seekMs / 1000.0;
+                        jsCall = String.format(Locale.US, "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.seekAudio(%.3f);", seekSec);
+                        break;
+                    default:
+                        return;
+                }
+                final String finalJs = jsCall;
+                webView.post(() -> webView.evaluateJavascript(finalJs, null));
+            }
+        };
+        IntentFilter filter = new IntentFilter(MediaPlaybackService.BROADCAST_MEDIA_COMMAND);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(mediaCommandReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(mediaCommandReceiver, filter);
+        }
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         // Ensure standalone mobile operation: no remote workstation host needed
@@ -476,7 +552,7 @@ public class MainActivity extends Activity {
                 final String fName = folderName;
 
                 new Handler(Looper.getMainLooper()).post(() -> {
-                    String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress(0, 0, " + JSONObject.quote(fName) + ", 0); }";
+                    String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanProgress) { window.__cachyMusic.android.onScanProgress(0, 0, " + JSONObject.quote(fName) + ", 0); }";
                     webView.evaluateJavascript(js, null);
                 });
 
@@ -491,7 +567,7 @@ public class MainActivity extends Activity {
 
                 if (isScanCancelled) {
                     new Handler(Looper.getMainLooper()).post(() -> {
-                        webView.evaluateJavascript("if (window.onAndroidScanCancelled) { window.onAndroidScanCancelled(); }", null);
+                        webView.evaluateJavascript("if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanCancelled) { window.__cachyMusic.android.onScanCancelled(); }", null);
                     });
                     return;
                 }
@@ -520,7 +596,7 @@ public class MainActivity extends Activity {
                         }
                         final int finalEta = etaSec;
                         new Handler(Looper.getMainLooper()).post(() -> {
-                            String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress("
+                            String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanProgress) { window.__cachyMusic.android.onScanProgress("
                                     + count + ", " + total + ", " + JSONObject.quote(fName) + ", " + finalEta + "); }";
                             webView.evaluateJavascript(js, null);
                         });
@@ -529,7 +605,7 @@ public class MainActivity extends Activity {
 
                 if (isScanCancelled) {
                     new Handler(Looper.getMainLooper()).post(() -> {
-                        webView.evaluateJavascript("if (window.onAndroidScanCancelled) { window.onAndroidScanCancelled(); }", null);
+                        webView.evaluateJavascript("if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanCancelled) { window.__cachyMusic.android.onScanCancelled(); }", null);
                     });
                     return;
                 }
@@ -545,7 +621,7 @@ public class MainActivity extends Activity {
 
                 final String jsonString = tracksArray.toString();
                 new Handler(Looper.getMainLooper()).post(() -> {
-                    String js = "if (window.onAndroidTracksDiscovered) { window.onAndroidTracksDiscovered("
+                    String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onTracksDiscovered) { window.__cachyMusic.android.onTracksDiscovered("
                             + jsonString + ", " + JSONObject.quote(fName) + "); }";
                     webView.evaluateJavascript(js, null);
                 });
@@ -1348,7 +1424,7 @@ public class MainActivity extends Activity {
                                 }
                                 final int finalEta = etaSec;
                                 new Handler(Looper.getMainLooper()).post(() -> {
-                                    String js = "if (window.onAndroidScanProgress) { window.onAndroidScanProgress(" + count + ", " + totalRows + ", 'Device Music Library', " + finalEta + "); }";
+                                    String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanProgress) { window.__cachyMusic.android.onScanProgress(" + count + ", " + totalRows + ", 'Device Music Library', " + finalEta + "); }";
                                     webView.evaluateJavascript(js, null);
                                 });
                             }
@@ -1358,7 +1434,7 @@ public class MainActivity extends Activity {
 
                 if (isScanCancelled) {
                     new Handler(Looper.getMainLooper()).post(() -> {
-                        webView.evaluateJavascript("if (window.onAndroidScanCancelled) { window.onAndroidScanCancelled(); }", null);
+                        webView.evaluateJavascript("if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanCancelled) { window.__cachyMusic.android.onScanCancelled(); }", null);
                     });
                     return;
                 }
@@ -1372,7 +1448,7 @@ public class MainActivity extends Activity {
                 }
                 final String jsonString = tracksArray.toString();
                 new Handler(Looper.getMainLooper()).post(() -> {
-                    String js = "if (window.onAndroidTracksDiscovered) { window.onAndroidTracksDiscovered("
+                    String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onTracksDiscovered) { window.__cachyMusic.android.onTracksDiscovered("
                             + jsonString + ", 'Device Music Library'); }";
                     webView.evaluateJavascript(js, null);
                 });
@@ -1380,6 +1456,20 @@ public class MainActivity extends Activity {
                 Log.e(TAG, "MediaStore scan error: " + e.getMessage(), e);
             }
         }).start();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mediaCommandReceiver != null) {
+            try {
+                unregisterReceiver(mediaCommandReceiver);
+            } catch (Exception ignored) {}
+            mediaCommandReceiver = null;
+        }
+        try {
+            stopService(new Intent(this, MediaPlaybackService.class));
+        } catch (Exception ignored) {}
+        super.onDestroy();
     }
 
     @Override

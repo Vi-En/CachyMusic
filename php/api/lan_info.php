@@ -1,9 +1,9 @@
 <?php
 // CachyMusic - Local Network Streaming Info Resolver
 // Detects active Wi-Fi / Ethernet LAN IP address for lossless multi-device streaming
+require_once(__DIR__ . '/../platform.php');
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
+cachy_send_local_cors('GET, OPTIONS', true);
 
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -63,9 +63,10 @@ if (empty($lanIp)) {
 $lanUrl = "http://{$lanIp}:{$port}";
 
 echo json_encode([
-    'success' => true,
-    'lanIp'   => $lanIp,
-    'port'    => $port,
-    'lanUrl'  => $lanUrl
+    'success'  => true,
+    'lanIp'    => $lanIp,
+    'port'     => $port,
+    'lanUrl'   => $lanUrl,
+    'osFamily' => strtolower(PHP_OS_FAMILY)
 ], JSON_UNESCAPED_SLASHES);
 exit;

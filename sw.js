@@ -1,5 +1,5 @@
-// CachyMusic Audio Workstation - High-Performance Service Worker v1.3.0
-const CACHE_NAME = 'cachymusic-v1.3.0';
+// CachyMusic Audio Workstation - High-Performance Service Worker v2.0.0
+const CACHE_NAME = 'cachymusic-v2.0.0';
 const ART_CACHE = 'cachymusic-artwork-v4';
 const MAX_ARTWORK_ENTRIES = 200;
 
@@ -8,8 +8,17 @@ const PRECACHE_ASSETS = [
   './index.html',
   './manifest.json',
   './stylesheets/homepage.css',
+  './stylesheets/tokens.css',
+  './stylesheets/themes.css',
+  './stylesheets/layout.css',
+  './stylesheets/components.css',
+  './scripts/theme-preload.js',
   './scripts/modules/utils.js',
   './scripts/modules/state.js',
+  './scripts/modules/runtime-capabilities.js',
+  './scripts/modules/tag-parser.js',
+  './scripts/modules/local-library.js',
+  './scripts/modules/media-session.js',
   './scripts/modules/ui-elements.js',
   './scripts/modules/themes.js',
   './scripts/modules/audio-engine.js',
@@ -114,7 +123,7 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request, { cache: 'no-store' }).catch(async () => {
-        const cached = await caches.match('./index.html') || await caches.match('./');
+        const cached = await caches.match('./index.html', { ignoreSearch: true }) || await caches.match('./', { ignoreSearch: true });
         return cached || new Response('Offline: CachyMusic shell not cached', { status: 503, headers: { 'Content-Type': 'text/plain' } });
       })
     );
@@ -130,7 +139,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.woff2')
   ) {
     event.respondWith(
-      caches.match(request).then(async (cached) => {
+      caches.match(request, { ignoreSearch: url.pathname.includes('/resources/') }).then(async (cached) => {
         if (cached) return cached;
         try {
           const networkResponse = await fetch(request);
@@ -176,7 +185,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. Application scripts and styles: Network-First with cache fallback
+  // 5. Application scripts and styles: Network-First with ignoreSearch cache fallback
   if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('.html') || url.pathname.endsWith('.json')) {
     event.respondWith(
       fetch(request, { cache: 'no-store' }).then(async (networkResponse) => {
@@ -185,14 +194,14 @@ self.addEventListener('fetch', (event) => {
           cache.put(request, networkResponse.clone());
         }
         return networkResponse;
-      }).catch(() => caches.match(request))
+      }).catch(() => caches.match(request, { ignoreSearch: true }))
     );
     return;
   }
 
   // 6. Static media assets: Cache-first with background revalidation
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
+    caches.match(request, { ignoreSearch: true }).then((cachedResponse) => {
       const fetchPromise = fetch(request).then(async (networkResponse) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const cache = await caches.open(CACHE_NAME);
@@ -201,7 +210,7 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       }).catch(() => {
         if (request.headers.get('accept')?.includes('text/html')) {
-          return caches.match('./index.html');
+          return caches.match('./index.html', { ignoreSearch: true });
         }
       });
 

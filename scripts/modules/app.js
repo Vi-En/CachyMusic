@@ -1,20 +1,202 @@
 // CachyMusic - Application Orchestrator & Lifecycle Bootstrap
-import './utils.js';
-import './state.js';
-import './ui-elements.js';
-import './themes.js';
-import './audio-engine.js';
-import './player-core.js';
-import './library.js';
+import {
+    formatTime,
+    safeStorage,
+    setScanStatus,
+    showToast
+} from './utils.js';
+import { PEQ_FREQS, store } from './state.js';
+import {
+    applyRuntimeUiAdaptation,
+    detectRuntimeCapabilities,
+    getRuntime
+} from './runtime-capabilities.js';
+import { mediaSessionController } from './media-session.js';
+import {
+    backToLibraryBtn,
+    bannerAddTracksBtn,
+    bindFastAction,
+    browseFolderBtn,
+    cancelActiveTrackLoading,
+    cancelSleepTimerBtn,
+    clearQueueBtn,
+    closeFolderTrayBtn,
+    closeModalBtn,
+    closeSleepTimerModalBtn,
+    closeThemeModalBtn,
+    closeSignalPathModalBtn,
+    createPlaylistBtn,
+    currentTimeEl,
+    customSleepInput,
+    deleteCurrentPlaylistBtn,
+    folderPathInput,
+    folderPickerInput,
+    folderTray,
+    hideTrackLoadingOverlay,
+    infoPanelEl,
+    libraryControls,
+    localFileInput,
+    lyricsToggleBtn,
+    metadataToggleBtn,
+    miniCurrentTime,
+    miniDeckReturnBtn,
+    miniMuteBtn,
+    miniNextBtn,
+    miniPlayBtn,
+    miniPrevBtn,
+    miniProgressBar,
+    miniProgressCon,
+    miniVolumeSlider,
+    modalCreateAndAddBtn,
+    modalNewPlaylistName,
+    muteBtn,
+    newPlaylistInput,
+    nextBtn,
+    openSignalAuditBtn,
+    playPauseBtn,
+    playlistBanner,
+    playlistModal,
+    playlistsView,
+    prevBtn,
+    progressBar,
+    progressCon,
+    progressHover,
+    queueView,
+    quickNewPlaylistBtn,
+    refreshTracksBtn,
+    repeatBtn,
+    restoreTracksBtn,
+    scanFolderBtn,
+    setCustomSleepBtn,
+    setMobileSearchPanelCollapsed,
+    settingsReturnBtn,
+    showTrackLoadingOverlay,
+    shuffleBtn,
+    shufflePlayBtn,
+    signalPathBadgeBtn,
+    signalPathModal,
+    sleepTimerBtn,
+    sleepTimerModal,
+    slskAccountBtn,
+    slskAccountModal,
+    slskModalPowerBtn,
+    slskPowerBtn,
+    sortSelect,
+    speedBtns,
+    standaloneCloseBtn,
+    standaloneResumeLibraryBtn,
+    switchWorkspace,
+    tabLibrary,
+    tabPlaylists,
+    tabQueue,
+    themeModal,
+    themeModalBtn,
+    themeQuickBtns,
+    themeSelectCards,
+    toggleFolderBtn,
+    topSettingsBtn,
+    trackList,
+    trackListPanelEl,
+    trackSearch,
+    turntableCenterCanvas,
+    updateEmptyPlayerState,
+    updateTrackLoadingOverlay,
+    vinylTurntable,
+    visModeBtns,
+    visPillBtns,
+    visualizerDock,
+    volumeLevel,
+    volumeSlider,
+    wsDownloadBtn,
+    wsPlayerBtn,
+    wsSettingsBtn,
+    wsSoulseekBtn
+} from './ui-elements.js';
+import {
+    applyTheme,
+    closeThemeModal,
+    openThemeModal
+} from './themes.js';
+import * as audioEngineModule from './audio-engine.js';
+import {
+    checkHardwareGainStatus,
+    closePeqModal,
+    dispatchHardwareVolume,
+    initAudioContext,
+    initPeqWorkstation,
+    openPeqModal,
+    setVolume,
+    setupDspControls,
+    setupNeutronSettingsControls
+} from './audio-engine.js';
+import * as playerCoreModule from './player-core.js';
+import {
+    attachAudioListeners,
+    exitStandalonePlayback,
+    initMprisBridge,
+    loadStandaloneTrack,
+    loadTrack,
+    nextTrack,
+    pauseAudio,
+    playAudio,
+    prevTrack,
+    restoreSessionState,
+    seekAudio,
+    setupMediaSessionActionHandlers,
+    togglePlayPause,
+    updateRepeatUI,
+    updateVolumeIcon
+} from './player-core.js';
+import * as libraryModule from './library.js';
+import {
+    addToQueue,
+    addTrackToPlaylist,
+    applyFoundCover,
+    applySearchAndSort,
+    autoFindCoverOnline,
+    backToPlaylistsView,
+    cancelMetadataConfirmation,
+    clearQueue,
+    closeBatchAddModal,
+    closeMetadataEditor,
+    closePlaylistModal,
+    closeSlskAccountModal,
+    closeTrackActionMenu,
+    createPlaylist,
+    deletePlaylistById,
+    executeSaveMetadata,
+    handleCoverFileSelect,
+    importLocalAudioFiles,
+    loadLibraryFromIndexedDB,
+    loadPlaylists,
+    moveQueueItem,
+    openAddToPlaylistModal,
+    openBatchAddModal,
+    openMetadataEditor,
+    openPlaylist,
+    parseAudioFileMetadata,
+    playPlaylistDirectly,
+    promptLocalDirectoryOrFiles,
+    removeFromQueue,
+    removeTrackFromCurrentPlaylist,
+    removeTrackFromMainList,
+    renderPlaylistsView,
+    renderQueueView,
+    requestSaveMetadataConfirmation,
+    revertCover,
+    saveLibraryToIndexedDB,
+    saveMetadata,
+    scanDirectory,
+    updateQueueUi,
+    updateRestoreBtnUi,
+    updateTrackMetadataDisplay
+} from './library.js';
 
 // Dynamic Tier 3 Module Loaders (Visualizer, Lyrics, P2P/Soulseek, Settings)
 let visualizerPromise = null;
 function getVisualizerModule() {
     if (!visualizerPromise) {
         visualizerPromise = import('./visualizer.js').then(mod => {
-            if (typeof window !== 'undefined') {
-                Object.assign(window, mod);
-            }
             if (typeof mod.setupVisualizerMode === 'function') {
                 mod.setupVisualizerMode();
             }
@@ -36,12 +218,7 @@ function getVisualizerModule() {
 let lyricsPromise = null;
 function getLyricsModule() {
     if (!lyricsPromise) {
-        lyricsPromise = import('./lyrics.js').then(mod => {
-            if (typeof window !== 'undefined') {
-                Object.assign(window, mod);
-            }
-            return mod;
-        }).catch(err => {
+        lyricsPromise = import('./lyrics.js').catch(err => {
             console.warn('Failed to load lyrics.js', err);
             lyricsPromise = null;
         });
@@ -50,11 +227,13 @@ function getLyricsModule() {
 }
 
 let p2pPromise = null;
+let loadedP2pModule = null;
 function getP2pModule() {
     if (!p2pPromise) {
         p2pPromise = import('./p2p.js').then(mod => {
-            if (typeof window !== 'undefined') {
-                Object.assign(window, mod);
+            loadedP2pModule = mod;
+            if (typeof window !== 'undefined' && window.__cachyMusic) {
+                window.__cachyMusic.p2p = mod;
             }
             if (typeof mod.initSoulseekEventListeners === 'function') {
                 mod.initSoulseekEventListeners();
@@ -71,12 +250,7 @@ function getP2pModule() {
 let settingsPromise = null;
 function getSettingsModule() {
     if (!settingsPromise) {
-        settingsPromise = import('./settings.js').then(mod => {
-            if (typeof window !== 'undefined') {
-                Object.assign(window, mod);
-            }
-            return mod;
-        }).catch(err => {
+        settingsPromise = import('./settings.js').catch(err => {
             console.warn('Failed to load settings.js', err);
             settingsPromise = null;
         });
@@ -84,64 +258,30 @@ function getSettingsModule() {
     return settingsPromise;
 }
 
-if (typeof window !== 'undefined') {
-    window.getVisualizerModule = getVisualizerModule;
-    window.getLyricsModule = getLyricsModule;
-    window.getP2pModule = getP2pModule;
-    window.getSettingsModule = getSettingsModule;
-    window.toggleMetadataPanel = toggleMetadataPanel;
-    window.toggleTracklistPanel = toggleTracklistPanel;
+const toggleLyricsView = (forcedState) => getLyricsModule().then(m => m && m.toggleLyricsView && m.toggleLyricsView(forcedState));
+const openSleepTimerModal = () => getSettingsModule().then(m => m && m.openSleepTimerModal && m.openSleepTimerModal());
+const closeSleepTimerModal = () => getSettingsModule().then(m => m && m.closeSleepTimerModal && m.closeSleepTimerModal());
+const setSleepTimer = (mins) => getSettingsModule().then(m => m && m.setSleepTimer && m.setSleepTimer(mins));
+const cancelSleepTimer = (notify) => getSettingsModule().then(m => m && m.cancelSleepTimer && m.cancelSleepTimer(notify));
+const openSignalPathModal = () => getSettingsModule().then(m => m && m.openSignalPathModal && m.openSignalPathModal());
+const closeSignalPathModal = () => getSettingsModule().then(m => m && m.closeSignalPathModal && m.closeSignalPathModal());
+const setupPwaInstallPrompt = () => getP2pModule().then(m => m && m.setupPwaInstallPrompt && m.setupPwaInstallPrompt());
+const setupDownloadWorkspace = () => getP2pModule().then(m => m && m.setupDownloadWorkspace && m.setupDownloadWorkspace());
 
-    window.setupVisualizerMode = function() {
-        getVisualizerModule().then(m => m && m.setupVisualizerMode && m.setupVisualizerMode());
-    };
-    window.setVisualizerMode = function(mode) {
-        getVisualizerModule().then(m => m && m.setVisualizerMode && m.setVisualizerMode(mode));
-    };
-    window.startVisualizerLoop = function() {
-        getVisualizerModule().then(m => m && m.startVisualizerLoop && m.startVisualizerLoop());
-    };
-    window.setupCanvas = function() {
-        getVisualizerModule().then(m => m && m.setupCanvas && m.setupCanvas());
-    };
-    window.toggleLyricsView = function(forcedState) {
-        getLyricsModule().then(m => m && m.toggleLyricsView && m.toggleLyricsView(forcedState));
-    };
-    window.updateLyricsDisplay = function(track) {
-        if (isLyricsView) {
-            getLyricsModule().then(m => m && m.updateLyricsDisplay && m.updateLyricsDisplay(track));
-        }
-    };
-    window.updateActiveLyric = function(time) {
-        if (isLyricsView) {
-            getLyricsModule().then(m => m && m.updateActiveLyric && m.updateActiveLyric(time));
-        }
-    };
-    window.openSleepTimerModal = function() {
-        getSettingsModule().then(m => m && m.openSleepTimerModal && m.openSleepTimerModal());
-    };
-    window.closeSleepTimerModal = function() {
-        getSettingsModule().then(m => m && m.closeSleepTimerModal && m.closeSleepTimerModal());
-    };
-    window.openSignalPathModal = function() {
-        getSettingsModule().then(m => m && m.openSignalPathModal && m.openSignalPathModal());
-    };
-    window.closeSignalPathModal = function() {
-        getSettingsModule().then(m => m && m.closeSignalPathModal && m.closeSignalPathModal());
-    };
-    window.showThemeLoadingOverlay = function(name, sub) {
-        getSettingsModule().then(m => m && m.showThemeLoadingOverlay && m.showThemeLoadingOverlay(name, sub));
-    };
-    window.updateDebugHudState = function() {
-        getSettingsModule().then(m => m && m.updateDebugHudState && m.updateDebugHudState());
-    };
-    window.setupPwaInstallPrompt = function() {
-        getP2pModule().then(m => m && m.setupPwaInstallPrompt && m.setupPwaInstallPrompt());
-    };
-    window.setupDownloadWorkspace = function() {
-        getP2pModule().then(m => m && m.setupDownloadWorkspace && m.setupDownloadWorkspace());
-    };
-}
+store.subscribe('track:change', ({ detail }) => {
+    if (store.state.isLyricsView && detail && detail.track) {
+        getLyricsModule().then(m => m && m.updateLyricsDisplay && m.updateLyricsDisplay(detail.track));
+    }
+});
+
+store.subscribe('workspace:change', ({ detail }) => {
+    const ws = detail && detail.workspace;
+    if (ws === 'soulseek') {
+        getP2pModule().then(m => m && m.soulseekController && m.soulseekController.checkStatus());
+    } else if (ws === 'download') {
+        getP2pModule().then(m => m && m.fetchLanStreamingUrl && m.fetchLanStreamingUrl());
+    }
+});
 
     // Toggle Collapsible / Sliding Metadata Inspector Panel
     function toggleMetadataPanel(forcedState) {
@@ -201,12 +341,20 @@ if (typeof window !== 'undefined') {
     }
 
     async function init() {
-        if (isInitialized) return;
-        isInitialized = true;
+        const s = store.state;
+        if (s.isInitialized) return;
+        s.isInitialized = true;
+
+        const runtime = await detectRuntimeCapabilities();
+        applyRuntimeUiAdaptation(runtime);
+        if (typeof window !== 'undefined' && window.__cachyMusic) {
+            window.__cachyMusic.runtime = runtime;
+        }
 
         setupEventListeners();
+        setupMediaSessionActionHandlers();
         getVisualizerModule();
-        if (currentWorkspace === 'player') {
+        if (s.currentWorkspace === 'player') {
             const urlParams = new URLSearchParams(window.location.search);
             const initPanel = urlParams.get('panel') || 'playerDeck';
             if (window.innerWidth <= 768 || urlParams.get('panel')) {
@@ -217,7 +365,7 @@ if (typeof window !== 'undefined') {
         initPeqWorkstation();
         setupNeutronSettingsControls();
         checkHardwareGainStatus();
-        setVolume(currentVolumeValue, true);
+        setVolume(s.currentVolumeValue, true);
         await loadPlaylists();
 
         // Restore saved directory or cached library on startup
@@ -230,20 +378,20 @@ if (typeof window !== 'undefined') {
         }
 
         // 1. Check Android Native Bridge saved library first (on APK)
-        if (window.AndroidBridge && typeof window.AndroidBridge.getSavedLibraryJson === 'function') {
+        if (runtime.isAndroidNative && window.AndroidBridge && typeof window.AndroidBridge.getSavedLibraryJson === 'function') {
             try {
                 const rawJson = window.AndroidBridge.getSavedLibraryJson();
                 if (rawJson) {
                     const parsed = JSON.parse(rawJson);
                     if (parsed && Array.isArray(parsed.tracks) && parsed.tracks.length > 0) {
-                        allTracks = parsed.tracks;
+                        s.allTracks = parsed.tracks;
                         const dirName = parsed.directory || savedDir || 'Music Folder';
                         if (folderPathInput) folderPathInput.value = dirName;
                         const sInput = document.getElementById('settingsTabFolderPathInput');
                         if (sInput) sInput.value = dirName;
                         try { safeStorage.setItem('cachymusic_last_directory', dirName); } catch (_) {}
                         applySearchAndSort();
-                        setScanStatus(`Restored ${allTracks.length} tracks from "${dirName}".`, false);
+                        setScanStatus(`Restored ${s.allTracks.length} tracks from "${dirName}".`, false);
                     }
                 }
             } catch (err) {
@@ -251,19 +399,19 @@ if (typeof window !== 'undefined') {
             }
         }
 
-        // 2. If not restored from AndroidBridge and not a pure browser-blob directory, try scanning saved server directory
-        if (allTracks.length === 0 && savedMode !== 'browser_idb') {
+        // 2. Only hit scan.php on startup if PHP backend is active and directory mode isn't pure browser IndexedDB
+        if (s.allTracks.length === 0 && runtime.hasPhpBackend && savedMode !== 'browser_idb') {
             await scanDirectory(savedDir, false, true);
         }
 
         // 3. If still empty, check localStorage cached Android tracks
-        if (allTracks.length === 0) {
+        if (s.allTracks.length === 0) {
             try {
                 const cachedRaw = safeStorage.getItem('cachymusic_android_tracks');
                 if (cachedRaw) {
                     const cached = JSON.parse(cachedRaw);
                     if (Array.isArray(cached) && cached.length > 0) {
-                        allTracks = cached;
+                        s.allTracks = cached;
                         applySearchAndSort();
                         setScanStatus(`Restored ${cached.length} tracks from saved library.`, false);
                     }
@@ -273,11 +421,11 @@ if (typeof window !== 'undefined') {
             }
         }
 
-        // 4. If still empty, check IndexedDB saved library (browser folder picker / local files)
-        if (allTracks.length === 0) {
+        // 4. If still empty, check IndexedDB / OPFS / FileSystemDirectoryHandle saved library
+        if (s.allTracks.length === 0) {
             const idbLib = await loadLibraryFromIndexedDB();
             if (idbLib && Array.isArray(idbLib.tracks) && idbLib.tracks.length > 0) {
-                allTracks = idbLib.tracks;
+                s.allTracks = idbLib.tracks;
                 if (idbLib.directory) {
                     if (folderPathInput) folderPathInput.value = idbLib.directory;
                     const sInput = document.getElementById('settingsTabFolderPathInput');
@@ -285,7 +433,7 @@ if (typeof window !== 'undefined') {
                     try { safeStorage.setItem('cachymusic_last_directory', idbLib.directory); } catch (_) {}
                 }
                 applySearchAndSort();
-                setScanStatus(`Restored ${allTracks.length} tracks from "${idbLib.directory || 'Saved Folder'}".`, false);
+                setScanStatus(`Restored ${s.allTracks.length} tracks from "${idbLib.directory || 'Saved Folder'}".`, false);
             }
         }
 
@@ -371,16 +519,16 @@ if (typeof window !== 'undefined') {
 
         if (shuffleBtn) {
             shuffleBtn.addEventListener('click', () => {
-                isShuffle = !isShuffle;
-                shuffleBtn.classList.toggle('active', isShuffle);
-                shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
+                store.state.isShuffle = !store.state.isShuffle;
+                shuffleBtn.classList.toggle('active', store.state.isShuffle);
+                shuffleBtn.setAttribute('title', store.state.isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
                 shuffleBtn.blur();
             });
         }
 
         if (shufflePlayBtn) {
             shufflePlayBtn.addEventListener('click', () => {
-                isShuffle = true;
+                store.state.isShuffle = true;
                 if (shuffleBtn) {
                     shuffleBtn.classList.add('active');
                     shuffleBtn.setAttribute('title', 'Shuffle Active');
@@ -392,12 +540,12 @@ if (typeof window !== 'undefined') {
 
         if (repeatBtn) {
             repeatBtn.addEventListener('click', () => {
-                if (repeatMode === 'all') {
-                    repeatMode = 'one';
-                } else if (repeatMode === 'one') {
-                    repeatMode = 'off';
+                if (store.state.repeatMode === 'all') {
+                    store.state.repeatMode = 'one';
+                } else if (store.state.repeatMode === 'one') {
+                    store.state.repeatMode = 'off';
                 } else {
-                    repeatMode = 'all';
+                    store.state.repeatMode = 'all';
                 }
                 updateRepeatUI();
                 repeatBtn.blur();
@@ -405,13 +553,14 @@ if (typeof window !== 'undefined') {
         }
 
         // Continuous Native Media Event Synchronization
-        attachAudioListeners(audio);
+        attachAudioListeners(store.state.audio);
 
         const ensureContextRunning = () => {
-            if (!audioContext || audioContext.state === 'closed') {
+            const ctx = store.state.audioContext;
+            if (!ctx || ctx.state === 'closed') {
                 initAudioContext();
-            } else if (audioContext.state === 'suspended') {
-                audioContext.resume().catch(() => {});
+            } else if (ctx.state === 'suspended') {
+                ctx.resume().catch(() => {});
             }
         };
         ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
@@ -420,10 +569,11 @@ if (typeof window !== 'undefined') {
 
         // Remember playback position of currently playing track when window closes / navigates away
         function persistCurrentPlaybackTimeOnExit() {
-            if (!audio) return;
+            const activeAudio = store.state.audio;
+            if (!activeAudio) return;
             try {
-                const cur = audio.currentTime;
-                const dur = audio.duration;
+                const cur = activeAudio.currentTime;
+                const dur = activeAudio.duration;
                 if (cur > 0 && (!dur || isNaN(dur) || cur < (dur - 1))) {
                     safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
                 } else {
@@ -434,58 +584,11 @@ if (typeof window !== 'undefined') {
         window.addEventListener('beforeunload', persistCurrentPlaybackTimeOnExit);
         window.addEventListener('pagehide', persistCurrentPlaybackTimeOnExit);
 
-        // MediaSession API Integration (Explicit OS & Browser Media Control Integration)
-        if ('mediaSession' in navigator) {
-            try {
-                navigator.mediaSession.setActionHandler('play', () => {
-                    if (isPlaying && !audio.paused) return; // Prevent echo loop
-                    userExplicitlyPaused = false;
-                    playAudio(true);
-                });
-                navigator.mediaSession.setActionHandler('pause', () => {
-                    if (!isPlaying && audio.paused) return; // Prevent echo loop
-                    userExplicitlyPaused = true;
-                    pauseAudio();
-                });
-                navigator.mediaSession.setActionHandler('stop', () => {
-                    if (!isPlaying && audio.paused) return; // Prevent echo loop
-                    userExplicitlyPaused = true;
-                    pauseAudio();
-                });
-                navigator.mediaSession.setActionHandler('previoustrack', () => {
-                    userExplicitlyPaused = false;
-                    prevTrack();
-                });
-                navigator.mediaSession.setActionHandler('nexttrack', () => {
-                    userExplicitlyPaused = false;
-                    nextTrack();
-                });
-                navigator.mediaSession.setActionHandler('seekto', (details) => {
-                    if (details.seekTime !== undefined && !isNaN(details.seekTime)) {
-                        audio.currentTime = details.seekTime;
-                    }
-                });
-                navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                    const skip = details.seekOffset || 10;
-                    if (audio.duration && !isNaN(audio.duration)) {
-                        audio.currentTime = Math.min(audio.duration, audio.currentTime + skip);
-                    }
-                });
-                navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                    const skip = details.seekOffset || 10;
-                    audio.currentTime = Math.max(0, audio.currentTime - skip);
-                });
-            } catch (err) {
-                console.warn('MediaSession handler registration:', err);
-            }
-        }
-
-        // Keep OS media session locked as paused when tab is hidden while paused
+        // Keep OS media session synced as paused when tab is hidden while paused
         document.addEventListener('visibilitychange', () => {
-            if (document.hidden && (userExplicitlyPaused || audio.paused)) {
-                if ('mediaSession' in navigator) {
-                    navigator.mediaSession.playbackState = 'paused';
-                }
+            const activeAudio = store.state.audio;
+            if (document.hidden && (store.state.userExplicitlyPaused || !activeAudio || activeAudio.paused)) {
+                mediaSessionController.syncPlaybackState('paused');
             }
         });
 
@@ -494,7 +597,7 @@ if (typeof window !== 'undefined') {
 
 
 
-        // Scrubber Dragging & Seeking (Mouse & Touch) - Defer audio.currentTime to mouseup/touchend
+        // Scrubber Dragging & Seeking (Mouse & Touch) - Defer audio seek to mouseup/touchend
         let pendingSeekPct = null;
 
         function getClientX(e) {
@@ -504,6 +607,7 @@ if (typeof window !== 'undefined') {
         }
 
         function updateScrubberVisual(e) {
+            const s = store.state;
             const rect = progressCon.getBoundingClientRect();
             if (!rect || rect.width <= 0) return;
             const clientX = getClientX(e);
@@ -512,84 +616,75 @@ if (typeof window !== 'undefined') {
             if (isNaN(pct) || !isFinite(pct)) return;
             pendingSeekPct = pct;
             progressBar.style.width = `${pct * 100}%`;
-            const dur = (isSoftwareDecoding && activeDecodedBuffer)
-                ? activeDecodedBuffer.duration
-                : (audio.duration || ((allTracks[currentTrackIndex] && allTracks[currentTrackIndex].duration) || 0));
+            const activeAudio = s.audio;
+            const dur = (s.isSoftwareDecoding && s.activeDecodedBuffer)
+                ? s.activeDecodedBuffer.duration
+                : ((activeAudio && activeAudio.duration) || ((s.allTracks[s.currentTrackIndex] && s.allTracks[s.currentTrackIndex].duration) || 0));
             if (dur && !isNaN(dur) && isFinite(dur)) {
                 currentTimeEl.textContent = formatTime(pct * dur);
             }
         }
 
         function commitSeek() {
+            const s = store.state;
             if (pendingSeekPct !== null && typeof pendingSeekPct === 'number' && !isNaN(pendingSeekPct) && isFinite(pendingSeekPct)) {
-                if (isSoftwareDecoding) {
-                    const totalDur = activeDecodedBuffer ? activeDecodedBuffer.duration : ((allTracks[currentTrackIndex] && allTracks[currentTrackIndex].duration) || 0);
-                    if (totalDur > 0) {
-                        const targetSec = Math.max(0, Math.min(totalDur, pendingSeekPct * totalDur));
-                        seekSoftwarePlayback(targetSec);
-                    }
-                } else if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
-                    const targetSec = Math.max(0, Math.min(audio.duration, pendingSeekPct * audio.duration));
-                    if (!isNaN(targetSec) && isFinite(targetSec)) {
-                        audio.currentTime = targetSec;
-                        try {
-                            const cur = audio.currentTime;
-                            const dur = audio.duration;
-                            if (cur > 0 && cur < dur - 1) {
-                                safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
-                            }
-                        } catch (_) {}
-                    }
+                const activeAudio = s.audio;
+                const totalDur = s.isSoftwareDecoding
+                    ? (s.activeDecodedBuffer ? s.activeDecodedBuffer.duration : ((s.allTracks[s.currentTrackIndex] && s.allTracks[s.currentTrackIndex].duration) || 0))
+                    : ((activeAudio && activeAudio.duration && !isNaN(activeAudio.duration) && isFinite(activeAudio.duration)) ? activeAudio.duration : 0);
+                if (totalDur > 0) {
+                    const targetSec = Math.max(0, Math.min(totalDur, pendingSeekPct * totalDur));
+                    seekAudio(targetSec);
                 }
             }
             pendingSeekPct = null;
-            isDraggingScrubber = false;
+            s.isDraggingScrubber = false;
         }
 
         const progressHoverTooltip = document.getElementById('progressHoverTooltip');
 
         progressCon.addEventListener('mousedown', (e) => {
-            isDraggingScrubber = true;
+            store.state.isDraggingScrubber = true;
             progressCon.classList.add('dragging');
             updateScrubberVisual(e);
         });
 
         window.addEventListener('mousemove', (e) => {
-            if (isDraggingScrubber) {
+            if (store.state.isDraggingScrubber) {
                 updateScrubberVisual(e);
             }
         });
 
         window.addEventListener('mouseup', () => {
-            if (isDraggingScrubber) {
+            if (store.state.isDraggingScrubber) {
                 commitSeek();
                 progressCon.classList.remove('dragging');
             }
         });
 
         progressCon.addEventListener('touchstart', (e) => {
-            isDraggingScrubber = true;
+            store.state.isDraggingScrubber = true;
             progressCon.classList.add('dragging');
             updateScrubberVisual(e);
         }, { passive: true });
 
         window.addEventListener('touchmove', (e) => {
-            if (isDraggingScrubber) {
+            if (store.state.isDraggingScrubber) {
                 updateScrubberVisual(e);
             }
         }, { passive: true });
 
         window.addEventListener('touchend', () => {
-            if (isDraggingScrubber) {
+            if (store.state.isDraggingScrubber) {
                 commitSeek();
                 progressCon.classList.remove('dragging');
             }
         });
 
         window.addEventListener('touchcancel', () => {
-            if (isDraggingScrubber) {
+            if (store.state.isDraggingScrubber) {
                 pendingSeekPct = null;
-                isDraggingScrubber = false;
+                store.state.isDraggingScrubber = false;
                 progressCon.classList.remove('dragging');
             }
         });
@@ -609,9 +704,11 @@ if (typeof window !== 'undefined') {
                 const pct = Math.max(0, Math.min(1, (clientX - cachedProgressRect.left) / cachedProgressRect.width));
                 progressHover.style.width = `${pct * 100}%`;
                 if (progressHoverTooltip) {
-                    const totalDur = (audio.duration && !isNaN(audio.duration) && audio.duration > 0)
-                        ? audio.duration
-                        : ((allTracks[currentTrackIndex] && allTracks[currentTrackIndex].duration) || 0);
+                    const s = store.state;
+                    const activeAudio = s.audio;
+                    const totalDur = (activeAudio && activeAudio.duration && !isNaN(activeAudio.duration) && activeAudio.duration > 0)
+                        ? activeAudio.duration
+                        : ((s.allTracks[s.currentTrackIndex] && s.allTracks[s.currentTrackIndex].duration) || 0);
                     if (totalDur > 0) {
                         progressHoverTooltip.textContent = formatTime(pct * totalDur);
                         progressHoverTooltip.style.left = `${pct * 100}%`;
@@ -652,7 +749,7 @@ if (typeof window !== 'undefined') {
         window.addEventListener('resize', () => {
             const currentW = window.innerWidth;
             if ((lastInnerWidth <= 768 && currentW > 768) || (lastInnerWidth > 768 && currentW <= 768)) {
-                if (currentWorkspace === 'player') {
+                if (store.state.currentWorkspace === 'player') {
                     if (currentW <= 768) {
                         const activeMobile = document.querySelector('.panel.mobileActive');
                         const target = activeMobile ? (activeMobile.classList.contains('trackListPanel') ? 'trackListPanel' : activeMobile.classList.contains('settingsPanel') ? 'settingsPanel' : 'playerDeck') : 'playerDeck';
@@ -676,7 +773,7 @@ if (typeof window !== 'undefined') {
 
             // 5% step normally, 1% fine step if Shift key is held
             const step = (e.shiftKey ? 0.01 : 0.05) * (delta > 0 ? 1 : -1);
-            let targetVol = Math.round((currentVolumeValue + step) * 100) / 100;
+            let targetVol = Math.round((store.state.currentVolumeValue + step) * 100) / 100;
             targetVol = Math.max(0, Math.min(1.5, targetVol));
 
             setVolume(targetVol, true);
@@ -694,22 +791,24 @@ if (typeof window !== 'undefined') {
         });
 
         muteBtn.addEventListener('click', () => {
-            audio.muted = !audio.muted;
-            if (audio.muted) {
+            const s = store.state;
+            if (!s.audio) return;
+            s.audio.muted = !s.audio.muted;
+            if (s.audio.muted) {
                 volumeLevel.textContent = '0%';
                 updateVolumeIcon(0);
-                if (isHardwareGain) {
+                if (s.isHardwareGain) {
                     dispatchHardwareVolume(0);
                 }
             } else {
-                setVolume(currentVolumeValue, true);
+                setVolume(s.currentVolumeValue, true);
             }
         });
 
         // Search Input (Debounced 80ms for fluid typing without layout stutter)
         let searchDebounceTimer = null;
         trackSearch.addEventListener('input', (e) => {
-            searchQuery = e.target.value;
+            store.state.searchQuery = e.target.value;
             if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
                 applySearchAndSort();
@@ -718,11 +817,11 @@ if (typeof window !== 'undefined') {
 
         // Sort Select
         if (sortSelect) {
-            sortSelect.value = currentSort;
+            sortSelect.value = store.state.currentSort;
             sortSelect.addEventListener('change', (e) => {
-                currentSort = e.target.value;
+                store.state.currentSort = e.target.value;
                 try {
-                    safeStorage.setItem('cachymusic_track_sort', currentSort);
+                    safeStorage.setItem('cachymusic_track_sort', store.state.currentSort);
                 } catch (_) {}
                 applySearchAndSort();
             });
@@ -733,7 +832,7 @@ if (typeof window !== 'undefined') {
             refreshTracksBtn.addEventListener('click', async () => {
                 refreshTracksBtn.textContent = 'REFRESHING...';
                 refreshTracksBtn.disabled = true;
-                dismissedTracksMap.clear();
+                store.state.dismissedTracksMap.clear();
                 updateRestoreBtnUi();
                 const path = (folderPathInput && folderPathInput.value.trim()) 
                     ? folderPathInput.value.trim() 
@@ -750,16 +849,17 @@ if (typeof window !== 'undefined') {
         // Restore Removed Main Tracks
         if (restoreTracksBtn) {
             restoreTracksBtn.addEventListener('click', () => {
-                const count = dismissedTracksMap.size;
+                const s = store.state;
+                const count = s.dismissedTracksMap.size;
                 if (count === 0) return;
-                for (const [key, item] of dismissedTracksMap.entries()) {
-                    const alreadyExists = allTracks.some(t => (item.track.tid && t.tid == item.track.tid) || (item.track.fullPath && t.fullPath === item.track.fullPath) || (t.id == item.track.id));
+                for (const [, item] of s.dismissedTracksMap.entries()) {
+                    const alreadyExists = s.allTracks.some(t => (item.track.tid && t.tid == item.track.tid) || (item.track.fullPath && t.fullPath === item.track.fullPath) || (t.id == item.track.id));
                     if (!alreadyExists) {
-                        const insertIdx = Math.min(item.originalIndex ?? allTracks.length, allTracks.length);
-                        allTracks.splice(insertIdx, 0, item.track);
+                        const insertIdx = Math.min(item.originalIndex ?? s.allTracks.length, s.allTracks.length);
+                        s.allTracks.splice(insertIdx, 0, item.track);
                     }
                 }
-                dismissedTracksMap.clear();
+                s.dismissedTracksMap.clear();
                 applySearchAndSort();
                 updateRestoreBtnUi();
                 showToast(`Restored ${count} track${count === 1 ? '' : 's'} to list.`);
@@ -804,7 +904,7 @@ if (typeof window !== 'undefined') {
             playlistsView.style.display = 'none';
             if (queueView) queueView.style.display = 'none';
             if (quickFormatFilterBarEl) quickFormatFilterBarEl.style.display = 'flex';
-            if (currentPlaylistId) {
+            if (store.state.currentPlaylistId) {
                 playlistBanner.style.display = 'flex';
                 libraryControls.style.display = 'none';
                 if (libraryToolsToggleBtnEl) libraryToolsToggleBtnEl.style.display = 'none';
@@ -849,7 +949,7 @@ if (typeof window !== 'undefined') {
             pill.addEventListener('click', () => {
                 formatPillBtns.forEach(p => p.classList.remove('active'));
                 pill.classList.add('active');
-                currentFormatFilter = pill.dataset.filter || 'all';
+                store.state.currentFormatFilter = pill.dataset.filter || 'all';
                 applySearchAndSort();
             });
         });
@@ -861,6 +961,7 @@ if (typeof window !== 'undefined') {
 
         if (queueView) {
             queueView.addEventListener('click', (e) => {
+                const s = store.state;
                 const moveUpBtn = e.target.closest('.moveUpBtn');
                 if (moveUpBtn) {
                     const idx = parseInt(moveUpBtn.dataset.idx, 10);
@@ -876,10 +977,10 @@ if (typeof window !== 'undefined') {
                 const playNowBtn = e.target.closest('.queuePlayNowBtn');
                 if (playNowBtn) {
                     const idx = parseInt(playNowBtn.dataset.idx, 10);
-                    if (idx >= 0 && idx < playQueue.length) {
-                        const track = playQueue.splice(idx, 1)[0];
+                    if (idx >= 0 && idx < s.playQueue.length) {
+                        const track = s.playQueue.splice(idx, 1)[0];
                         updateQueueUi();
-                        const masterIdx = allTracks.findIndex(t =>
+                        const masterIdx = s.allTracks.findIndex(t =>
                             (track.id && t.id === track.id) ||
                             (track.tid && t.tid === track.tid) ||
                             t.filename === track.filename
@@ -899,7 +1000,7 @@ if (typeof window !== 'undefined') {
                 const enqueueUpcomingBtn = e.target.closest('.enqueueUpcomingBtn');
                 if (enqueueUpcomingBtn) {
                     const id = enqueueUpcomingBtn.dataset.id;
-                    const track = allTracks.find(t => (t.id && t.id == id) || (t.tid && t.tid == id) || t.filename == id);
+                    const track = s.allTracks.find(t => (t.id && t.id == id) || (t.tid && t.tid == id) || t.filename == id);
                     if (track) addToQueue(track, false);
                     return;
                 }
@@ -988,8 +1089,8 @@ if (typeof window !== 'undefined') {
         const bannerPlayAllBtn = document.getElementById('bannerPlayAllBtn');
         if (bannerPlayAllBtn) {
             bannerPlayAllBtn.addEventListener('click', () => {
-                if (currentPlaylistId) {
-                    playPlaylistDirectly(currentPlaylistId, currentPlaylistName, false);
+                if (store.state.currentPlaylistId) {
+                    playPlaylistDirectly(store.state.currentPlaylistId, store.state.currentPlaylistName, false);
                 }
             });
         }
@@ -997,8 +1098,8 @@ if (typeof window !== 'undefined') {
         const bannerShuffleBtn = document.getElementById('bannerShuffleBtn');
         if (bannerShuffleBtn) {
             bannerShuffleBtn.addEventListener('click', () => {
-                if (currentPlaylistId) {
-                    playPlaylistDirectly(currentPlaylistId, currentPlaylistName, true);
+                if (store.state.currentPlaylistId) {
+                    playPlaylistDirectly(store.state.currentPlaylistId, store.state.currentPlaylistName, true);
                 }
             });
         }
@@ -1039,7 +1140,7 @@ if (typeof window !== 'undefined') {
         const topSettingsBtn = document.getElementById('topSettingsBtn');
         if (topSettingsBtn) {
             bindFastAction(topSettingsBtn, () => {
-                switchWorkspace(currentWorkspace === 'settings' ? 'player' : 'settings');
+                switchWorkspace(store.state.currentWorkspace === 'settings' ? 'player' : 'settings');
             });
         }
 
@@ -1145,9 +1246,9 @@ if (typeof window !== 'undefined') {
         const settingsTabPwaInstallBtn = document.getElementById('settingsTabPwaInstallBtn');
         if (settingsTabPwaInstallBtn) {
             settingsTabPwaInstallBtn.addEventListener('click', () => {
-                if (deferredInstallPrompt) {
-                    deferredInstallPrompt.prompt();
-                    deferredInstallPrompt.userChoice.then(() => { deferredInstallPrompt = null; });
+                if (store.state.deferredInstallPrompt) {
+                    store.state.deferredInstallPrompt.prompt();
+                    store.state.deferredInstallPrompt.userChoice.then(() => { store.state.deferredInstallPrompt = null; });
                 } else {
                     switchWorkspace('download');
                 }
@@ -1156,26 +1257,15 @@ if (typeof window !== 'undefined') {
 
         // Theme Modal: All 3 categories are displayed side-by-side in multi-column layout
 
-        deleteCurrentPlaylistBtn.addEventListener('click', async () => {
-            if (!currentPlaylistId) return;
-            if (!confirm(`Delete playlist "${currentPlaylistName}"?`)) return;
-
-            try {
-                const res = await fetch('php/api/playlists.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'delete', plid: currentPlaylistId })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    playlists = playlists.filter(p => p.plid != currentPlaylistId);
-                    backToPlaylistsView();
-                    renderPlaylistsView();
-                }
-            } catch (e) {
-                console.warn('Delete playlist API error:', e);
-            }
-        });
+        if (deleteCurrentPlaylistBtn) {
+            deleteCurrentPlaylistBtn.addEventListener('click', async () => {
+                const plid = store.state.currentPlaylistId;
+                const plName = store.state.currentPlaylistName;
+                if (!plid) return;
+                if (!confirm(`Delete playlist "${plName}"?`)) return;
+                await deletePlaylistById(plid);
+            });
+        }
 
         // Folder Scan Tray Toggle
         if (toggleFolderBtn) {
@@ -1229,9 +1319,9 @@ if (typeof window !== 'undefined') {
             });
         }
 
-        // Native Android Bridge progress, cancellation & discovery receivers
-        window.onAndroidScanProgress = function(count, total, folderName, etaSec) {
-            if (isTrackLoadingCancelled) return;
+        // Native Android Bridge progress, cancellation & discovery receivers (registered on window.__cachyMusic.android)
+        function handleAndroidScanProgress(count, total, folderName, etaSec) {
+            if (store.state.isTrackLoadingCancelled) return;
             const pct = total > 0 ? Math.min(98, Math.round((count / total) * 100)) : 50;
             const etaText = (typeof etaSec === 'number' && etaSec > 0)
                 ? ` • ETA: ~${etaSec}s`
@@ -1241,21 +1331,21 @@ if (typeof window !== 'undefined') {
                 `Scanning "${folderName || 'Device Storage'}" — ${count}${total > 0 ? ' / ' + total : ''} tracks indexed${etaText}`,
                 pct
             );
-        };
+        }
 
-        window.onAndroidScanCancelled = function() {
+        function handleAndroidScanCancelled() {
             hideTrackLoadingOverlay();
             setScanStatus('Directory scan cancelled.', false);
             updateEmptyPlayerState();
-        };
+        }
 
-        window.onAndroidTracksDiscovered = function(tracks, folderName) {
+        function handleAndroidTracksDiscovered(tracks, folderName) {
             hideTrackLoadingOverlay();
-            if (isTrackLoadingCancelled) return;
+            if (store.state.isTrackLoadingCancelled) return;
 
             if (!Array.isArray(tracks) || tracks.length === 0) {
                 const errStr = `No supported audio tracks found in "${folderName || 'Selected Folder'}".`;
-                setScanStatus(`${errStr} Please configure your directory manually in Settings → Library & Folders.`, true);
+                setScanStatus(`${errStr} Please configure your directory manually in Settings -> Library & Folders.`, true);
                 updateEmptyPlayerState(errStr);
                 return;
             }
@@ -1265,7 +1355,7 @@ if (typeof window !== 'undefined') {
             const sInput = document.getElementById('settingsTabFolderPathInput');
             if (sInput) sInput.value = folderName;
 
-            allTracks = tracks;
+            store.state.allTracks = tracks;
             try {
                 const cacheData = tracks.map(t => ({
                     id: t.id,
@@ -1293,14 +1383,23 @@ if (typeof window !== 'undefined') {
 
             updateEmptyPlayerState();
             applySearchAndSort();
-            if (allTracks.length > 0 && !isPlaying) {
+            if (store.state.allTracks.length > 0 && !store.state.isPlaying) {
                 loadTrack(0, false);
             }
-        };
+        }
 
-        // Folder Browse Action (Native Android SAF -> Native OS Dialog -> Web Folder Picker Fallback)
+        if (typeof window !== 'undefined' && window.__cachyMusic) {
+            window.__cachyMusic.android = {
+                onScanProgress: handleAndroidScanProgress,
+                onScanCancelled: handleAndroidScanCancelled,
+                onTracksDiscovered: handleAndroidTracksDiscovered
+            };
+        }
+
+        // Folder Browse Action (Native Android SAF -> File System Access API -> Native OS Dialog -> HTML5 File/Folder Picker)
         async function openFolderBrowser() {
-            if (window.AndroidBridge && typeof window.AndroidBridge.openFolderPicker === 'function') {
+            const rt = getRuntime();
+            if (rt.isAndroidNative && window.AndroidBridge && typeof window.AndroidBridge.openFolderPicker === 'function') {
                 setScanStatus('Opening system folder directory picker...', false);
                 try {
                     window.AndroidBridge.openFolderPicker();
@@ -1310,35 +1409,47 @@ if (typeof window !== 'undefined') {
                 }
             }
 
-            setScanStatus('Opening folder selection dialog...', false);
-            const curPath = (folderPathInput ? folderPathInput.value.trim() : '') || (safeStorage.getItem('cachymusic_last_directory') || '');
+            if (rt.hasPhpBackend) {
+                setScanStatus('Opening folder selection dialog...', false);
+                const curPath = (folderPathInput ? folderPathInput.value.trim() : '') || (safeStorage.getItem('cachymusic_last_directory') || '');
 
-            try {
-                const res = await fetch('php/api/browse_folder.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ initialDir: curPath })
-                });
+                try {
+                    const res = await fetch('php/api/browse_folder.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ initialDir: curPath })
+                    });
 
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.success && data.directory) {
-                        if (folderPathInput) folderPathInput.value = data.directory;
-                        const sInput = document.getElementById('settingsTabFolderPathInput');
-                        if (sInput) sInput.value = data.directory;
-                        setScanStatus(`Selected directory: ${data.directory}. Scanning library...`, false);
-                        await scanDirectory(data.directory, true);
-                        return;
-                    } else if (data.cancelled) {
-                        setScanStatus('Folder selection cancelled.', false);
-                        return;
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.success && data.directory) {
+                            if (folderPathInput) folderPathInput.value = data.directory;
+                            const sInput = document.getElementById('settingsTabFolderPathInput');
+                            if (sInput) sInput.value = data.directory;
+                            setScanStatus(`Selected directory: ${data.directory}. Scanning library...`, false);
+                            await scanDirectory(data.directory, true);
+                            return;
+                        } else if (data.cancelled) {
+                            setScanStatus('Folder selection cancelled.', false);
+                            return;
+                        }
                     }
+                } catch (err) {
+                    console.warn('Native folder chooser error:', err);
                 }
-            } catch (err) {
-                console.warn('Native folder chooser error:', err);
+            } else if (rt.hasDirectoryPicker) {
+                setScanStatus('Opening local music folder picker...', false);
+                const tracks = await promptLocalDirectoryOrFiles();
+                if (tracks && tracks.length > 0) return;
             }
 
-            // Fallback: trigger HTML5 directory picker input
+            const mobileInput = document.getElementById('mobileAudioFilesInput');
+            if ((rt.isIOS || !folderPickerInput) && (mobileInput || localFileInput)) {
+                setScanStatus('Select local audio files to build offline library...', false);
+                (mobileInput || localFileInput).click();
+                return;
+            }
+
             if (folderPickerInput) {
                 setScanStatus('Select folder in directory picker...', false);
                 folderPickerInput.click();
@@ -1362,13 +1473,31 @@ if (typeof window !== 'undefined') {
         const settingsScanDeviceMusicBtn = document.getElementById('settingsScanDeviceMusicBtn');
         if (settingsScanDeviceMusicBtn) {
             settingsScanDeviceMusicBtn.addEventListener('click', () => {
-                if (window.AndroidBridge && typeof window.AndroidBridge.scanDeviceMusic === 'function') {
+                const rt = getRuntime();
+                if (rt.isAndroidNative && window.AndroidBridge && typeof window.AndroidBridge.scanDeviceMusic === 'function') {
                     setScanStatus('Scanning device music library...', false);
                     showTrackLoadingOverlay('SCANNING DEVICE MUSIC...', 'Searching audio files across device storage...', 15);
                     window.AndroidBridge.scanDeviceMusic();
                 } else {
-                    setScanStatus('Native device scanner available on Android APK. Please choose a folder or configure path manually.', true);
+                    const mobileInput = document.getElementById('mobileAudioFilesInput');
+                    if (mobileInput) {
+                        mobileInput.click();
+                    } else if (localFileInput) {
+                        localFileInput.click();
+                    } else {
+                        openFolderBrowser();
+                    }
                 }
+            });
+        }
+
+        const mobileAudioFilesInput = document.getElementById('mobileAudioFilesInput');
+        if (mobileAudioFilesInput) {
+            mobileAudioFilesInput.addEventListener('change', async (e) => {
+                const files = Array.from(e.target.files || []);
+                if (files.length === 0) return;
+                await importLocalAudioFiles(files, 'Imported Audio Files');
+                mobileAudioFilesInput.value = '';
             });
         }
 
@@ -1379,125 +1508,78 @@ if (typeof window !== 'undefined') {
 
                 const firstRel = files[0].webkitRelativePath || '';
                 const folderName = firstRel ? firstRel.split('/')[0] : 'Selected Folder';
-                
+
                 const audioFiles = files.filter(f => /\.(mp3|flac|wav|ogg|m4a|aac|opus|webm|alac|aiff)$/i.test(f.name));
                 if (audioFiles.length === 0) {
                     const msg = `No supported audio files found in "${folderName}".`;
-                    setScanStatus(`${msg} Please choose another folder or configure path manually in Settings.`, true);
+                    setScanStatus(`${msg} Please choose another folder or import audio files directly.`, true);
                     updateEmptyPlayerState(msg);
                     folderPickerInput.value = '';
                     return;
                 }
 
-                showTrackLoadingOverlay(
-                    'LOADING MUSIC LIBRARY...',
-                    `Scanning ${audioFiles.length} audio files from "${folderName}"...`,
-                    10
-                );
-                setScanStatus(`Reading ${audioFiles.length} audio files from "${folderName}"...`, false);
-
-                // Check candidate server paths matching the selected folder name
-                const candidatePaths = [
-                    folderPathInput ? folderPathInput.value.trim() : '',
-                    `~/Music/${folderName}`,
-                    `~/Downloads/${folderName}`,
-                    `~/${folderName}`,
-                    folderName
-                ].filter(Boolean);
-
+                const rt = getRuntime();
                 let serverScanned = false;
-                for (const cand of candidatePaths) {
-                    if (isTrackLoadingCancelled) break;
-                    try {
-                        activeScanAbortController = new AbortController();
-                        const res = await fetch(`php/api/scan.php?directory=${encodeURIComponent(cand)}`, {
-                            signal: activeScanAbortController.signal
-                        });
-                        if (res.ok) {
-                            const data = await res.json();
-                            if (data.success && Array.isArray(data.tracks) && data.tracks.length > 0) {
-                                const resolvedDir = data.directory || cand;
-                                if (folderPathInput) folderPathInput.value = resolvedDir;
-                                const sInput = document.getElementById('settingsTabFolderPathInput');
-                                if (sInput) sInput.value = resolvedDir;
-                                try {
-                                    safeStorage.setItem('cachymusic_last_directory', resolvedDir);
-                                    safeStorage.setItem('cachymusic_directory_mode', 'server');
-                                } catch (_) {}
-                                if (dismissedTracksMap.size > 0) {
-                                    allTracks = data.tracks.filter(t => !dismissedTracksMap.has(t.fullPath || t.filename || t.id));
-                                } else {
-                                    allTracks = data.tracks;
+
+                if (rt.hasPhpBackend) {
+                    showTrackLoadingOverlay(
+                        'LOADING MUSIC LIBRARY...',
+                        `Scanning ${audioFiles.length} audio files from "${folderName}"...`,
+                        10
+                    );
+                    setScanStatus(`Reading ${audioFiles.length} audio files from "${folderName}"...`, false);
+
+                    const candidatePaths = [
+                        folderPathInput ? folderPathInput.value.trim() : '',
+                        `~/Music/${folderName}`,
+                        `~/Downloads/${folderName}`,
+                        `~/${folderName}`,
+                        folderName
+                    ].filter(Boolean);
+
+                    for (const cand of candidatePaths) {
+                        if (store.state.isTrackLoadingCancelled) break;
+                        try {
+                            store.state.activeScanAbortController = new AbortController();
+                            const res = await fetch(`php/api/scan.php?directory=${encodeURIComponent(cand)}`, {
+                                signal: store.state.activeScanAbortController.signal
+                            });
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (data.success && Array.isArray(data.tracks) && data.tracks.length > 0) {
+                                    const resolvedDir = data.directory || cand;
+                                    if (folderPathInput) folderPathInput.value = resolvedDir;
+                                    const sInput = document.getElementById('settingsTabFolderPathInput');
+                                    if (sInput) sInput.value = resolvedDir;
+                                    try {
+                                        safeStorage.setItem('cachymusic_last_directory', resolvedDir);
+                                        safeStorage.setItem('cachymusic_directory_mode', 'server');
+                                    } catch (_) {}
+                                    if (store.state.dismissedTracksMap.size > 0) {
+                                        store.state.allTracks = data.tracks.filter(t => !store.state.dismissedTracksMap.has(t.fullPath || t.filename || t.id));
+                                    } else {
+                                        store.state.allTracks = data.tracks;
+                                    }
+                                    saveLibraryToIndexedDB(store.state.allTracks, resolvedDir);
+                                    setScanStatus(`Scanned ${data.count} audio tracks from ${resolvedDir}`, false);
+                                    hideTrackLoadingOverlay();
+                                    updateEmptyPlayerState();
+                                    applySearchAndSort();
+                                    loadTrack(0, false);
+                                    serverScanned = true;
+                                    break;
                                 }
-                                saveLibraryToIndexedDB(allTracks, resolvedDir);
-                                setScanStatus(`Scanned ${data.count} audio tracks from ${resolvedDir}`, false);
-                                hideTrackLoadingOverlay();
-                                updateEmptyPlayerState();
-                                applySearchAndSort();
-                                loadTrack(0, false);
-                                serverScanned = true;
-                                break;
                             }
+                        } catch (err) {
+                            if (err && err.name === 'AbortError') break;
+                        } finally {
+                            store.state.activeScanAbortController = null;
                         }
-                    } catch (err) {
-                        if (err && err.name === 'AbortError') break;
-                    } finally {
-                        activeScanAbortController = null;
                     }
                 }
 
-                // If not available on server path, load files directly in browser with ID3 metadata parser
-                if (!serverScanned && !isTrackLoadingCancelled) {
-                    if (folderPathInput) folderPathInput.value = folderName;
-                    const sInput = document.getElementById('settingsTabFolderPathInput');
-                    if (sInput) sInput.value = folderName;
-                    const importedTracks = [];
-                    for (let i = 0; i < audioFiles.length; i++) {
-                        if (isTrackLoadingCancelled) break;
-                        const file = audioFiles[i];
-                        const pct = Math.min(98, Math.round(((i + 1) / audioFiles.length) * 100));
-                        updateTrackLoadingOverlay(
-                            `Reading track metadata (${i + 1} / ${audioFiles.length}): ${file.name}`,
-                            pct
-                        );
-                        const url = URL.createObjectURL(file);
-                        const parsed = await parseAudioFileMetadata(file);
-                        importedTracks.push({
-                            id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                            tid: null,
-                            filename: file.name,
-                            fullPath: file.webkitRelativePath || file.name,
-                            title: parsed.title,
-                            artist: parsed.artist,
-                            album: parsed.album,
-                            genre: parsed.genre,
-                            year: parsed.year,
-                            track: parsed.track,
-                            duration: parsed.duration || 0,
-                            bitrate: parsed.bitrate,
-                            sampleRate: parsed.sampleRate,
-                            bitDepth: parsed.bitDepth,
-                            channels: parsed.channels,
-                            format: parsed.format,
-                            size: parsed.size,
-                            cover: parsed.cover,
-                            src: url,
-                            _fileBlob: file
-                        });
-                    }
-                    hideTrackLoadingOverlay();
-                    if (!isTrackLoadingCancelled && importedTracks.length > 0) {
-                        allTracks = importedTracks;
-                        try {
-                            safeStorage.setItem('cachymusic_last_directory', folderName);
-                            safeStorage.setItem('cachymusic_directory_mode', 'browser_idb');
-                        } catch (_) {}
-                        saveLibraryToIndexedDB(allTracks, folderName);
-                        updateEmptyPlayerState();
-                        applySearchAndSort();
-                        loadTrack(0, false);
-                        setScanStatus(`Loaded ${importedTracks.length} track(s) from "${folderName}".`, false);
-                    }
+                if (!serverScanned && !store.state.isTrackLoadingCancelled) {
+                    await importLocalAudioFiles(audioFiles, folderName);
                 } else {
                     hideTrackLoadingOverlay();
                 }
@@ -1505,40 +1587,19 @@ if (typeof window !== 'undefined') {
             });
         }
 
-        // Create Playlist in Tab
+        // Create Playlist in Tab (Dual Standalone IDB + PHP Backend via library.js)
         createPlaylistBtn.addEventListener('click', async () => {
             const name = newPlaylistInput.value.trim();
             if (!name) {
                 newPlaylistInput.focus();
                 return;
             }
-
-            try {
-                const res = await fetch('php/api/playlists.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'create', name })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    playlists.push({ plid: data.plid, name: data.name, track_count: 0 });
-                    try { safeStorage.setItem('cachymusic_cached_playlists', JSON.stringify(playlists)); } catch (err) {}
-                    newPlaylistInput.value = '';
-                    renderPlaylistsView();
-                    showToast(`Playlist "${data.name}" created!`, 'OPEN', () => {
-                        openPlaylist(data.plid, data.name);
-                    });
-                    return;
-                }
-            } catch (e) {
-                console.warn('Create playlist API error, saving locally:', e);
-                const localId = Date.now();
-                playlists.push({ plid: localId, name, track_count: 0 });
-                try { safeStorage.setItem('cachymusic_cached_playlists', JSON.stringify(playlists)); } catch (err) {}
+            const created = await createPlaylist(name);
+            if (created) {
                 newPlaylistInput.value = '';
                 renderPlaylistsView();
-                showToast(`Playlist "${name}" created offline!`, 'OPEN', () => {
-                    openPlaylist(localId, name);
+                showToast(`Playlist "${created.name}" created!`, 'OPEN', () => {
+                    openPlaylist(created.plid, created.name);
                 });
             }
         });
@@ -1557,26 +1618,16 @@ if (typeof window !== 'undefined') {
 
         modalCreateAndAddBtn.addEventListener('click', async () => {
             const name = modalNewPlaylistName.value.trim();
-            if (!name || !selectedTrackForPlaylist) {
+            const targetTrack = store.state.selectedTrackForPlaylist;
+            if (!name || !targetTrack) {
                 if (modalNewPlaylistName) modalNewPlaylistName.focus();
                 return;
             }
 
-            try {
-                const res = await fetch('php/api/playlists.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'create', name })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    const newPl = { plid: data.plid, name: data.name, track_count: 0 };
-                    playlists.push(newPl);
-                    await addTrackToPlaylist(data.plid, selectedTrackForPlaylist.tid || selectedTrackForPlaylist.id, selectedTrackForPlaylist);
-                    closePlaylistModal();
-                }
-            } catch (e) {
-                console.warn('Create and add playlist error:', e);
+            const created = await createPlaylist(name);
+            if (created) {
+                await addTrackToPlaylist(created.plid, targetTrack.tid || targetTrack.id, targetTrack);
+                closePlaylistModal();
             }
         });
 
@@ -1606,8 +1657,8 @@ if (typeof window !== 'undefined') {
 
             if (playNextBtn) {
                 playNextBtn.addEventListener('click', () => {
-                    if (!selectedTrackForMenu) return;
-                    const track = selectedTrackForMenu;
+                    const track = store.state.selectedTrackForMenu;
+                    if (!track) return;
                     addToQueue(track, true);
                     closeTrackActionMenu();
                     showToast(`Added to Play Next: "${track.title || track.filename}"`);
@@ -1616,8 +1667,8 @@ if (typeof window !== 'undefined') {
 
             if (enqueueBtn) {
                 enqueueBtn.addEventListener('click', () => {
-                    if (!selectedTrackForMenu) return;
-                    const track = selectedTrackForMenu;
+                    const track = store.state.selectedTrackForMenu;
+                    if (!track) return;
                     addToQueue(track, false);
                     closeTrackActionMenu();
                     showToast(`Added to Up Next Queue: "${track.title || track.filename}"`);
@@ -1626,8 +1677,8 @@ if (typeof window !== 'undefined') {
 
             if (addToPlaylistBtn) {
                 addToPlaylistBtn.addEventListener('click', () => {
-                    if (!selectedTrackForMenu) return;
-                    const track = selectedTrackForMenu;
+                    const track = store.state.selectedTrackForMenu;
+                    if (!track) return;
                     closeTrackActionMenu();
                     openAddToPlaylistModal(track);
                 });
@@ -1635,12 +1686,10 @@ if (typeof window !== 'undefined') {
 
             if (viewInfoBtn) {
                 viewInfoBtn.addEventListener('click', () => {
-                    if (!selectedTrackForMenu) return;
-                    const track = selectedTrackForMenu;
+                    const track = store.state.selectedTrackForMenu;
+                    if (!track) return;
                     closeTrackActionMenu();
-                    if (typeof updateTrackMetadataDisplay === 'function') {
-                        updateTrackMetadataDisplay(track);
-                    }
+                    updateTrackMetadataDisplay(track);
                     if (window.innerWidth <= 768) {
                         switchWorkspace('player', 'settingsPanel');
                     } else {
@@ -1652,10 +1701,10 @@ if (typeof window !== 'undefined') {
 
             if (removeBtn) {
                 removeBtn.addEventListener('click', () => {
-                    if (!selectedTrackForMenu) return;
-                    const track = selectedTrackForMenu;
+                    const track = store.state.selectedTrackForMenu;
+                    if (!track) return;
                     closeTrackActionMenu();
-                    if (currentPlaylistId !== null) {
+                    if (store.state.currentPlaylistId !== null) {
                         removeTrackFromCurrentPlaylist(track);
                     } else {
                         removeTrackFromMainList(track);
@@ -1685,6 +1734,11 @@ if (typeof window !== 'undefined') {
             const onlineSearchSubmitBtn = document.getElementById('metaEditorOnlineSearchSubmitBtn');
             const applyCoverBtn = document.getElementById('metaEditorApplyCoverBtn');
 
+            const getActiveEditingTrack = () => {
+                const s = store.state;
+                return s.currentEditingTrack || (Array.isArray(s.allTracks) && s.allTracks[s.currentTrackIndex]) || null;
+            };
+
             if (uploadOverlayBtn && coverFileInput) {
                 uploadOverlayBtn.addEventListener('click', () => coverFileInput.click());
             }
@@ -1693,7 +1747,7 @@ if (typeof window !== 'undefined') {
             }
             if (coverFileInput) {
                 coverFileInput.addEventListener('change', function() {
-                    if (this.files && this.files[0] && typeof handleCoverFileSelect === 'function') {
+                    if (this.files && this.files[0]) {
                         handleCoverFileSelect(this.files[0]);
                     }
                 });
@@ -1704,44 +1758,38 @@ if (typeof window !== 'undefined') {
                     if (onlineCard) {
                         const isHidden = window.getComputedStyle(onlineCard).display === 'none';
                         if (isHidden) {
-                            onlineCard.style.setProperty('display', 'flex', 'important');
-                            const track = window.currentEditingTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
-                            if (typeof autoFindCoverOnline === 'function' && track) {
+                            onlineCard.style.display = 'flex';
+                            const track = getActiveEditingTrack();
+                            if (track) {
                                 autoFindCoverOnline(track, true);
                             }
                         } else {
-                            onlineCard.style.setProperty('display', 'none', 'important');
+                            onlineCard.style.display = 'none';
                         }
                     }
                 });
             }
             if (revertCoverBtn) {
                 revertCoverBtn.addEventListener('click', () => {
-                    if (typeof revertCover === 'function') revertCover();
+                    revertCover();
                 });
             }
             if (onlineCloseBtn) {
                 onlineCloseBtn.addEventListener('click', () => {
                     const onlineCard = document.getElementById('metaEditorOnlineCard');
-                    if (onlineCard) onlineCard.style.setProperty('display', 'none', 'important');
+                    if (onlineCard) onlineCard.style.display = 'none';
                 });
             }
             if (onlineSearchSubmitBtn && onlineSearchInput) {
                 onlineSearchSubmitBtn.addEventListener('click', () => {
                     const q = onlineSearchInput.value.trim();
-                    const track = window.currentEditingTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
-                    if (typeof autoFindCoverOnline === 'function') {
-                        autoFindCoverOnline(track, true, q);
-                    }
+                    autoFindCoverOnline(getActiveEditingTrack(), true, q);
                 });
                 onlineSearchInput.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         const q = onlineSearchInput.value.trim();
-                        const track = window.currentEditingTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
-                        if (typeof autoFindCoverOnline === 'function') {
-                            autoFindCoverOnline(track, true, q);
-                        }
+                        autoFindCoverOnline(getActiveEditingTrack(), true, q);
                     }
                 });
             }
@@ -1750,7 +1798,7 @@ if (typeof window !== 'undefined') {
                     const preview = document.getElementById('metaEditorOnlinePreview');
                     const title = document.getElementById('metaEditorOnlineTitle');
                     const artist = document.getElementById('metaEditorOnlineArtist');
-                    if (preview && preview.src && typeof applyFoundCover === 'function') {
+                    if (preview && preview.src) {
                         applyFoundCover({
                             source: 'iTunes Store HD',
                             artworkUrl: preview.src,
@@ -1758,50 +1806,36 @@ if (typeof window !== 'undefined') {
                             artist: artist ? artist.textContent : ''
                         });
                         const onlineCard = document.getElementById('metaEditorOnlineCard');
-                        if (onlineCard) onlineCard.style.setProperty('display', 'none', 'important');
+                        if (onlineCard) onlineCard.style.display = 'none';
                     }
                 });
             }
 
             if (closeBtn) {
-                closeBtn.addEventListener('click', () => {
-                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
-                });
+                closeBtn.addEventListener('click', () => closeMetadataEditor());
             }
             if (cancelBtn) {
-                cancelBtn.addEventListener('click', () => {
-                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
-                });
+                cancelBtn.addEventListener('click', () => closeMetadataEditor());
             }
             if (saveBtn) {
                 saveBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     if (typeof requestSaveMetadataConfirmation === 'function') {
                         requestSaveMetadataConfirmation(e);
-                    } else if (typeof saveMetadata === 'function') {
+                    } else {
                         saveMetadata(e);
                     }
                 });
             }
             if (confirmCancelBtn) {
-                confirmCancelBtn.addEventListener('click', () => {
-                    if (typeof cancelMetadataConfirmation === 'function') {
-                        cancelMetadataConfirmation();
-                    }
-                });
+                confirmCancelBtn.addEventListener('click', () => cancelMetadataConfirmation());
             }
             if (confirmProceedBtn) {
-                confirmProceedBtn.addEventListener('click', () => {
-                    if (typeof executeSaveMetadata === 'function') {
-                        executeSaveMetadata();
-                    }
-                });
+                confirmProceedBtn.addEventListener('click', () => executeSaveMetadata());
             }
             if (modal) {
                 modal.addEventListener('click', (e) => {
-                    if (e.target === modal) {
-                        if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
-                    }
+                    if (e.target === modal) closeMetadataEditor();
                 });
             }
             if (form) {
@@ -1809,16 +1843,17 @@ if (typeof window !== 'undefined') {
                     e.preventDefault();
                     if (typeof requestSaveMetadataConfirmation === 'function') {
                         requestSaveMetadataConfirmation(e);
-                    } else if (typeof saveMetadata === 'function') {
+                    } else {
                         saveMetadata(e);
                     }
                 });
             }
             if (infoEditBtn) {
                 infoEditBtn.addEventListener('click', () => {
-                    const track = window.currentInspectedTrack || (Array.isArray(allTracks) && allTracks[currentTrackIndex]) || null;
+                    const s = store.state;
+                    const track = s.currentInspectedTrack || (Array.isArray(s.allTracks) && s.allTracks[s.currentTrackIndex]) || null;
                     if (track) {
-                        if (typeof openMetadataEditor === 'function') openMetadataEditor(track);
+                        openMetadataEditor(track);
                     } else {
                         showToast('No active track loaded to edit metadata');
                     }
@@ -1828,6 +1863,7 @@ if (typeof window !== 'undefined') {
         setupMetadataEditorModal();
 
         async function handleOpenStandaloneAudioFiles(files) {
+            const s = store.state;
             const rawFiles = Array.from(files || []);
             const audioFiles = rawFiles.filter(f => {
                 const name = (f.name || '').toLowerCase();
@@ -1844,7 +1880,7 @@ if (typeof window !== 'undefined') {
             const openedTracks = [];
 
             for (let i = 0; i < audioFiles.length; i++) {
-                if (isTrackLoadingCancelled) break;
+                if (s.isTrackLoadingCancelled) break;
                 const file = audioFiles[i];
                 const pct = Math.min(98, Math.round(((i + 1) / audioFiles.length) * 100));
                 updateTrackLoadingOverlay(`Reading metadata (${i + 1}/${audioFiles.length}): ${file.name}`, pct);
@@ -1886,15 +1922,14 @@ if (typeof window !== 'undefined') {
             }
 
             hideTrackLoadingOverlay();
-            if (!isTrackLoadingCancelled && openedTracks.length > 0) {
+            if (!s.isTrackLoadingCancelled && openedTracks.length > 0) {
                 setScanStatus(`Loaded ${openedTracks.length} standalone file(s).`, false);
-                standaloneTrackList = openedTracks;
-                standaloneTrackIndex = 0;
-                isStandalonePlayback = true;
+                s.standaloneTrackList = openedTracks;
+                s.standaloneTrackIndex = 0;
+                s.isStandalonePlayback = true;
                 await loadStandaloneTrack(0, true);
             }
         }
-        window.handleOpenStandaloneAudioFiles = handleOpenStandaloneAudioFiles;
 
         localFileInput.addEventListener('change', async (e) => {
             const files = Array.from(e.target.files || []);
@@ -1950,21 +1985,22 @@ if (typeof window !== 'undefined') {
 
         speedBtns.forEach(btn => {
             btn.addEventListener('click', () => {
+                const s = store.state;
                 speedBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 const speed = parseFloat(btn.dataset.speed);
-                currentPlaybackSpeed = speed;
-                audio.playbackRate = speed;
-                try {
-                    audio.preservesPitch = isPitchLockTempo;
-                    audio.mozPreservesPitch = isPitchLockTempo;
-                    audio.webkitPreservesPitch = isPitchLockTempo;
-                } catch (_) {}
+                s.currentPlaybackSpeed = speed;
+                if (s.audio) {
+                    s.audio.playbackRate = speed;
+                    try {
+                        s.audio.preservesPitch = s.isPitchLockTempo;
+                        s.audio.mozPreservesPitch = s.isPitchLockTempo;
+                        s.audio.webkitPreservesPitch = s.isPitchLockTempo;
+                    } catch (_) {}
+                }
 
-                if (speed === 1) {
-                    vinylTurntable.style.animationDuration = '2.2s';
-                } else {
-                    vinylTurntable.style.animationDuration = `${2.2 / speed}s`;
+                if (vinylTurntable) {
+                    vinylTurntable.style.animationDuration = speed === 1 ? '2.2s' : `${2.2 / speed}s`;
                 }
             });
         });
@@ -2037,6 +2073,7 @@ if (typeof window !== 'undefined') {
         // Mini Player & Soulseek Studio Listeners
         function seekMiniAudio(e) {
             if (!miniProgressCon) return;
+            const s = store.state;
             const rect = miniProgressCon.getBoundingClientRect();
             if (!rect || rect.width <= 0) return;
             const clientX = getClientX(e);
@@ -2045,27 +2082,15 @@ if (typeof window !== 'undefined') {
             if (isNaN(pct) || !isFinite(pct)) return;
             if (miniProgressBar) miniProgressBar.style.width = `${pct * 100}%`;
             if (progressBar) progressBar.style.width = `${pct * 100}%`;
-            if (isSoftwareDecoding) {
-                const totalDur = activeDecodedBuffer ? activeDecodedBuffer.duration : ((allTracks[currentTrackIndex] && allTracks[currentTrackIndex].duration) || 0);
-                if (totalDur > 0) {
-                    seekSoftwarePlayback(pct * totalDur);
-                }
-                return;
-            }
-            if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
-                const targetSec = Math.max(0, Math.min(audio.duration, pct * audio.duration));
-                if (!isNaN(targetSec) && isFinite(targetSec)) {
-                    audio.currentTime = targetSec;
-                    if (miniCurrentTime) miniCurrentTime.textContent = formatTime(audio.currentTime);
-                    currentTimeEl.textContent = formatTime(audio.currentTime);
-                    try {
-                        const cur = audio.currentTime;
-                        const dur = audio.duration;
-                        if (cur > 0 && cur < dur - 1) {
-                            safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
-                        }
-                    } catch (_) {}
-                }
+            const activeAudio = s.audio;
+            const totalDur = s.isSoftwareDecoding
+                ? (s.activeDecodedBuffer ? s.activeDecodedBuffer.duration : ((s.allTracks[s.currentTrackIndex] && s.allTracks[s.currentTrackIndex].duration) || 0))
+                : ((activeAudio && activeAudio.duration && !isNaN(activeAudio.duration) && isFinite(activeAudio.duration)) ? activeAudio.duration : 0);
+            if (totalDur > 0) {
+                const targetSec = Math.max(0, Math.min(totalDur, pct * totalDur));
+                seekAudio(targetSec);
+                if (miniCurrentTime) miniCurrentTime.textContent = formatTime(targetSec);
+                currentTimeEl.textContent = formatTime(targetSec);
             }
         }
 
@@ -2092,13 +2117,15 @@ if (typeof window !== 'undefined') {
         }
         if (miniMuteBtn) {
             miniMuteBtn.addEventListener('click', () => {
-                audio.muted = !audio.muted;
-                if (audio.muted) {
+                const s = store.state;
+                if (!s.audio) return;
+                s.audio.muted = !s.audio.muted;
+                if (s.audio.muted) {
                     volumeLevel.textContent = '0%';
                     updateVolumeIcon(0);
-                    if (isHardwareGain) dispatchHardwareVolume(0);
+                    if (s.isHardwareGain) dispatchHardwareVolume(0);
                 } else {
-                    setVolume(currentVolumeValue, true);
+                    setVolume(s.currentVolumeValue, true);
                 }
             });
         }
@@ -2115,17 +2142,17 @@ if (typeof window !== 'undefined') {
         // Soulseek / P2P toolbar power triggers (loads P2P module on demand)
         if (slskPowerBtn) {
             slskPowerBtn.addEventListener('click', () => {
-                getP2pModule().then(m => m.soulseekController && m.soulseekController.togglePower());
+                getP2pModule().then(m => m && m.soulseekController && m.soulseekController.togglePower());
             });
         }
         if (slskModalPowerBtn) {
             slskModalPowerBtn.addEventListener('click', () => {
-                getP2pModule().then(m => m.soulseekController && m.soulseekController.togglePower());
+                getP2pModule().then(m => m && m.soulseekController && m.soulseekController.togglePower());
             });
         }
         if (slskAccountBtn) {
             slskAccountBtn.addEventListener('click', () => {
-                getP2pModule().then(() => openSlskAccountModal());
+                getP2pModule();
             });
         }
 
@@ -2146,12 +2173,12 @@ if (typeof window !== 'undefined') {
             toggleLyricsView(true);
         }
         if (urlParams.get('vis')) {
-            setVisualizerMode(urlParams.get('vis'));
+            getVisualizerModule().then(m => m && m.setVisualizerMode && m.setVisualizerMode(urlParams.get('vis')));
         }
         if (urlParams.get('theme')) {
             applyTheme(urlParams.get('theme'), false);
         } else {
-            applyTheme(activeTheme, false);
+            applyTheme(store.state.activeTheme, false);
         }
         if (urlParams.get('modal') === 'theme' || window.location.hash === '#theme') {
             openThemeModal();
@@ -2161,10 +2188,11 @@ if (typeof window !== 'undefined') {
             }
         }
         if (urlParams.get('modal') === 'playlist') {
-            const dummyTrack = (allTracks && allTracks.length > 0) ? allTracks[0] : { title: 'Solar Echoes', artist: 'Antigravity Sound', filename: 'solar_echoes.flac' };
-            openAddToPlaylistModal(dummyTrack);
+            const targetTrack = (store.state.allTracks && store.state.allTracks.length > 0) ? store.state.allTracks[0] : null;
+            if (targetTrack) openAddToPlaylistModal(targetTrack);
         }
         if (urlParams.get('modal') === 'slsk' || urlParams.get('modal') === 'soulseek') {
+            getP2pModule();
             openSlskAccountModal();
         }
         if (urlParams.get('modal') === 'signal' || window.location.hash === '#signal') {
@@ -2172,7 +2200,9 @@ if (typeof window !== 'undefined') {
         }
         if (urlParams.get('modal') === 'peq' || urlParams.get('modal') === 'eq' || window.location.hash === '#peq') {
             setTimeout(() => {
-                if (playerEqBtn) playerEqBtn.click();
+                const peqBtn = document.getElementById('playerPeqBtn');
+                if (peqBtn) peqBtn.click();
+                else openPeqModal();
             }, 80);
         }
         if (urlParams.get('play') === '1') {
@@ -2247,17 +2277,17 @@ if (typeof window !== 'undefined') {
             // Workspace Hotkeys (Alt+S for Soulseek, Alt+P for Player, Alt+D for Download)
             if (e.altKey && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
                 e.preventDefault();
-                switchWorkspace(currentWorkspace === 'soulseek' ? 'player' : 'soulseek');
+                switchWorkspace(store.state.currentWorkspace === 'soulseek' ? 'player' : 'soulseek');
                 return;
             }
             if (e.altKey && (e.code === 'KeyD' || e.key === 'd' || e.key === 'D')) {
                 e.preventDefault();
-                switchWorkspace(currentWorkspace === 'download' ? 'player' : 'download');
+                switchWorkspace(store.state.currentWorkspace === 'download' ? 'player' : 'download');
                 return;
             }
             if (e.altKey && (e.code === 'KeyO' || e.key === 'o' || e.key === 'O')) {
                 e.preventDefault();
-                switchWorkspace(currentWorkspace === 'settings' ? 'player' : 'settings');
+                switchWorkspace(store.state.currentWorkspace === 'settings' ? 'player' : 'settings');
                 return;
             }
             if (e.altKey && (e.code === 'KeyP' || e.key === 'p' || e.key === 'P')) {
@@ -2308,17 +2338,25 @@ if (typeof window !== 'undefined') {
             } else if (e.code === 'ArrowRight') {
                 e.preventDefault();
                 if (e.shiftKey) nextTrack();
-                else audio.currentTime = Math.min(audio.currentTime + 5, audio.duration || 0);
+                else {
+                    const s = store.state;
+                    const curTime = s.isSoftwareDecoding ? (s.softwarePlaybackOffset || 0) : (s.audio ? s.audio.currentTime : 0);
+                    seekAudio(curTime + 5);
+                }
             } else if (e.code === 'ArrowLeft') {
                 e.preventDefault();
                 if (e.shiftKey) prevTrack();
-                else audio.currentTime = Math.max(audio.currentTime - 5, 0);
+                else {
+                    const s = store.state;
+                    const curTime = s.isSoftwareDecoding ? (s.softwarePlaybackOffset || 0) : (s.audio ? s.audio.currentTime : 0);
+                    seekAudio(Math.max(0, curTime - 5));
+                }
             } else if (e.code === 'ArrowUp') {
                 e.preventDefault();
-                setVolume(currentVolumeValue + 0.05, true);
+                setVolume(store.state.currentVolumeValue + 0.05, true);
             } else if (e.code === 'ArrowDown') {
                 e.preventDefault();
-                setVolume(currentVolumeValue - 0.05, true);
+                setVolume(store.state.currentVolumeValue - 0.05, true);
             } else if (e.code === 'KeyM') {
                 e.preventDefault();
                 muteBtn.click();
@@ -2347,30 +2385,29 @@ if (typeof window !== 'undefined') {
         setupDownloadWorkspace();
     }
 
-
-    window.CachyMusicApp = {
-        init,
-        getAllTracks: () => allTracks,
-        getAudioContext: () => audioContext,
-        loadTrack,
-        playAudio,
-        pauseAudio,
-        nextTrack,
-        prevTrack,
-        scanDirectory,
-        setDspBoost,
-        toggleReplayGain,
-        playWithSoftwareDecoder,
-        isSoftwareDecoding: () => isSoftwareDecoding,
-        peq: {
-            frequencies: PEQ_FREQS,
-            getGains: () => [...peqGains],
-            setGain: setPeqBandGain,
-            setPreset: setPeqPreset,
-            importProfile: importAutoEqProfile
-        },
-        updateDacStatusUi
-    };
+    // Single Coordinator Namespace (Zero loose window.* property pollution)
+    if (typeof window !== 'undefined') {
+        window.__cachyMusic = {
+            store,
+            player: playerCoreModule,
+            engine: audioEngineModule,
+            library: libraryModule,
+            p2p: loadedP2pModule,
+            runtime: getRuntime(),
+            android: {
+                onTracksDiscovered: null,
+                onScanProgress: null,
+                onScanCancelled: null
+            },
+            peq: {
+                frequencies: PEQ_FREQS,
+                getGains: () => [...store.state.peqGains],
+                setGain: audioEngineModule.setPeqBandGain,
+                setPreset: audioEngineModule.setPeqPreset,
+                importProfile: audioEngineModule.importAutoEqProfile
+            }
+        };
+    }
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

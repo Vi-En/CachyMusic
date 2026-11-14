@@ -13,14 +13,15 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once(__DIR__ . '/../platform.php');
 header('Content-Type: application/json; charset=utf-8');
-require_once(__DIR__ . '/../database.php');
-
-if (!isset($connection) || !$connection) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database connection failed.']);
+cachy_send_local_cors('POST, OPTIONS');
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
     exit;
 }
+
+require_once(__DIR__ . '/../database.php');
 
 $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true);
@@ -41,7 +42,8 @@ if (empty($username) || empty($password)) {
     exit;
 }
 
-if (mb_strlen($username, 'UTF-8') < 3 || mb_strlen($username, 'UTF-8') > 30) {
+$uLen = function_exists('mb_strlen') ? mb_strlen($username, 'UTF-8') : strlen($username);
+if ($uLen < 3 || $uLen > 30) {
     http_response_code(400);
     echo json_encode(['success' => false, 'message' => 'Username must be between 3 and 30 characters.']);
     exit;
@@ -59,18 +61,7 @@ if ($confirmPassword !== null && $password !== $confirmPassword) {
     exit;
 }
 
-$checkStmt = $connection->prepare("SELECT id FROM Accounts WHERE username = ? LIMIT 1");
-if (!$checkStmt) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database error preparing statement.']);
-    exit;
-}
-
-$checkStmt->bind_param('s', $username);
-$checkStmt->execute();
-$result = $checkStmt->get_result();
-
-if ($result && $result->num_rows > 0) {
+if (Storage::getAccountByUsername($username) !== null) {
     http_response_code(409);
     echo json_encode(['success' => false, 'message' => 'Username is already taken.']);
     exit;
@@ -79,23 +70,15 @@ if ($result && $result->num_rows > 0) {
 $algo = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT;
 $hash = password_hash($password, $algo);
 
-$insertStmt = $connection->prepare("INSERT INTO Accounts (username, password) VALUES (?, ?)");
-if (!$insertStmt) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database error preparing insert.']);
-    exit;
-}
-
-$insertStmt->bind_param('ss', $username, $hash);
-
-if ($insertStmt->execute()) {
+$userId = Storage::createAccount($username, $hash);
+if ($userId !== false) {
     session_regenerate_id(true);
-    $_SESSION['user_id'] = $connection->insert_id;
+    $_SESSION['user_id'] = (int)$userId;
     $_SESSION['username'] = $username;
     echo json_encode(['success' => true, 'message' => 'Account created successfully!']);
     exit;
-} else {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Registration failed. Please try again.']);
-    exit;
 }
+
+http_response_code(500);
+echo json_encode(['success' => false, 'message' => 'Registration failed. Please try again.']);
+exit;

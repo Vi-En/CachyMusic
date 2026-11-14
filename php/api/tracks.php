@@ -4,23 +4,10 @@ if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (!empty($origin)) {
-    $parsed = parse_url($origin);
-    $host = $parsed['host'] ?? '';
-    $serverHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), PHP_URL_HOST);
-    if (in_array($host, ['localhost', '127.0.0.1', '::1'], true) || $host === $serverHost) {
-        header("Access-Control-Allow-Origin: $origin");
-        header("Access-Control-Allow-Credentials: true");
-    }
-} else {
-    header("Access-Control-Allow-Origin: *");
-}
+require_once(__DIR__ . '/../platform.php');
+cachy_send_local_cors('GET, POST, OPTIONS');
 
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, If-None-Match, If-Modified-Since");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     http_response_code(200);
     exit;
 }

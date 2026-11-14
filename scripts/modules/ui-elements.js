@@ -1,7 +1,13 @@
 // CachyMusic - UI Elements & Workspace Shell
-    // DOM Elements - Player & Audio
-    let audio = document.getElementById('audioPlayer');
-    if (audio) audio.crossOrigin = 'anonymous';
+import { formatTime, safeStorage, setScanStatus, showToast } from './utils.js';
+import { store } from './state.js';
+
+    // DOM Elements - Player & Audio (live reference stored on store.state.audio)
+    const audioPlayerEl = store.state.audio || document.getElementById('audioPlayer');
+    if (audioPlayerEl) {
+        audioPlayerEl.crossOrigin = 'anonymous';
+        store.state.audio = audioPlayerEl;
+    }
 
     const vinylTurntable = document.getElementById('vinylTurntable');
     const toneArm = document.getElementById('toneArm');
@@ -95,8 +101,6 @@
     const queueCountBadge = document.getElementById('queueCountBadge');
     const queueCountSummary = document.getElementById('queueCountSummary');
     const clearQueueBtn = document.getElementById('clearQueueBtn');
-    let playQueue = [];
-    let currentFormatFilter = 'all';
 
     // DOM Elements - Audiophile Sleep Timer
     const sleepTimerBtn = document.getElementById('sleepTimerBtn');
@@ -108,10 +112,6 @@
     const cancelSleepTimerBtn = document.getElementById('cancelSleepTimerBtn');
     const customSleepInput = document.getElementById('customSleepInput');
     const setCustomSleepBtn = document.getElementById('setCustomSleepBtn');
-    let sleepTimerInterval = null;
-    let sleepTimerRemainingSec = 0;
-    let sleepTimerMode = null;
-    let sleepTimerOriginalVolume = null;
 
     // DOM Elements - Signal Path Inspector & Audio Audit
     const signalPathBadgeBtn = document.getElementById('signalPathBadgeBtn');
@@ -127,9 +127,6 @@
     const auditMetricLatency = document.getElementById('auditMetricLatency');
     const statDynamicRange = document.getElementById('statDynamicRange');
     const statPeakLevel = document.getElementById('statPeakLevel');
-
-    let openPeqModal = null;
-    let closePeqModal = null;
 
     const libraryControls = document.getElementById('libraryControls');
     const playlistBanner = document.getElementById('playlistBanner');
@@ -154,7 +151,6 @@
     const quickNewPlaylistBtn = document.getElementById('quickNewPlaylistBtn');
     const bannerAddTracksBtn = document.getElementById('bannerAddTracksBtn');
     const localFileInput = document.getElementById('localFileInput');
-    const dismissedTracksMap = new Map();
 
     // DOM Elements - Folder Tray
     const toggleFolderBtn = document.getElementById('toggleFolderBtn');
@@ -218,27 +214,12 @@
     const trackMenuEditMetaBtn = document.getElementById('trackMenuEditMetaBtn');
 
     // DOM Elements - Theme Overhaul
-    const validThemeIds = [
-        'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
-        'abyssal-void', 'dissonance', 'sentinel',
-        'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian',
-        'brutalist-light', 'brutalist-dark'
-    ];
-    let activeTheme = safeStorage.getItem('cachymusic_active_theme') || (document.documentElement && document.documentElement.getAttribute('data-theme')) || 'default';
-    if (activeTheme === 'brutalist-minimalism-light' || activeTheme === 'brutalist-light') activeTheme = 'minimalist-light';
-    if (activeTheme === 'brutalist-minimalism-dark' || activeTheme === 'brutalist-dark') activeTheme = 'minimalist-dark';
-    if (!validThemeIds.includes(activeTheme)) {
-        activeTheme = (activeTheme === 'atlas' || activeTheme === 'spotify' || activeTheme === 'apple') ? 'nms' : 'default';
-    }
     function getActiveTheme() {
         if (typeof document !== 'undefined' && document.documentElement) {
             const dt = document.documentElement.getAttribute('data-theme');
             if (dt) return dt;
         }
-        if (typeof window !== 'undefined' && window.activeTheme) {
-            return window.activeTheme;
-        }
-        return activeTheme || (typeof safeStorage !== 'undefined' ? safeStorage.getItem('cachymusic_active_theme') : null) || 'default';
+        return store.state.activeTheme || safeStorage.getItem('cachymusic_active_theme') || 'default';
     }
     function isAtlasThemeActive() {
         return getActiveTheme() === 'nms';
@@ -255,7 +236,6 @@
     const visModeBtns = document.querySelectorAll('.visModeBtn');
 
     // Workspace Switcher, Soulseek Studio, Download Hub & Settings Workspace Elements
-    let currentWorkspace = 'player'; // 'player' | 'soulseek' | 'download' | 'settings'
     const wsPlayerBtn = document.getElementById('wsPlayerBtn');
     const wsSoulseekBtn = document.getElementById('wsSoulseekBtn');
     const wsSoulseekBadge = document.getElementById('wsSoulseekBadge');
@@ -269,7 +249,6 @@
     const settingsWorkspace = document.getElementById('settingsWorkspace');
     const settingsReturnBtn = document.getElementById('settingsReturnBtn');
     const persistentMiniPlayer = document.getElementById('persistentMiniPlayer');
-    let deferredInstallPrompt = null;
 
     // Persistent Mini-Player Elements
     const miniArtPreview = document.getElementById('miniArtPreview');
@@ -365,11 +344,10 @@
         setMobileSearchPanelCollapsed(!isCollapsed);
     }
 
-    let lastRenderedMiniTrack = null;
     function updateMiniPlayerInfo(track) {
         if (!track) return;
-        if (lastRenderedMiniTrack === track) return;
-        lastRenderedMiniTrack = track;
+        if (store.state.lastRenderedMiniTrack === track) return;
+        store.state.lastRenderedMiniTrack = track;
         if (miniTitle) miniTitle.textContent = track.title || track.filename || 'Unknown Track';
         if (miniArtist) miniArtist.textContent = track.artist || 'Unknown Artist';
         if (miniArtPreview) {
@@ -390,6 +368,7 @@
     }
 
     function syncSettingsTabValues() {
+        const s = store.state;
         const settingsTabFolderPathInput = document.getElementById('settingsTabFolderPathInput');
         if (settingsTabFolderPathInput) {
             const currentPath = (folderPathInput && folderPathInput.value) || safeStorage.getItem('cachymusic_last_directory') || '';
@@ -398,8 +377,8 @@
 
         const settingsTabScanStatus = document.getElementById('settingsTabScanStatus');
         if (settingsTabScanStatus) {
-            if (allTracks && allTracks.length > 0) {
-                settingsTabScanStatus.textContent = `● ${allTracks.length} tracks currently loaded in library.`;
+            if (s.allTracks && s.allTracks.length > 0) {
+                settingsTabScanStatus.textContent = `● ${s.allTracks.length} tracks currently loaded in library.`;
                 settingsTabScanStatus.style.color = 'var(--accent-color, #00f0ff)';
             } else {
                 settingsTabScanStatus.textContent = '● Ready to scan local music library.';
@@ -408,7 +387,7 @@
         }
 
         const settingsTabCurrentThemeBadge = document.getElementById('settingsTabCurrentThemeBadge');
-        if (settingsTabCurrentThemeBadge && typeof activeTheme !== 'undefined') {
+        if (settingsTabCurrentThemeBadge && s.activeTheme) {
             const labels = {
                 default: 'DEFAULT STUDIO HI-FI',
                 nms: 'THE ATLAS',
@@ -425,18 +404,18 @@
                 'brutalist-light': 'MINIMALIST (LIGHT)',
                 'brutalist-dark': 'MINIMALIST (DARK)'
             };
-            settingsTabCurrentThemeBadge.textContent = labels[activeTheme] || activeTheme.toUpperCase();
+            settingsTabCurrentThemeBadge.textContent = labels[s.activeTheme] || s.activeTheme.toUpperCase();
         }
 
         const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
         if (settingsTabSleepStatusBadge) {
-            if (sleepTimerMode === 'end') {
+            if (s.sleepTimerMode === 'end') {
                 settingsTabSleepStatusBadge.textContent = 'PAUSE AT END OF TRACK';
                 settingsTabSleepStatusBadge.classList.add('active');
-            } else if (sleepTimerInterval && sleepTimerRemainingSec > 0) {
-                const m = Math.floor(sleepTimerRemainingSec / 60);
-                const s = sleepTimerRemainingSec % 60;
-                settingsTabSleepStatusBadge.textContent = `${m}:${s < 10 ? '0' : ''}${s} REMAINING`;
+            } else if (s.sleepTimerInterval && s.sleepTimerRemainingSec > 0) {
+                const m = Math.floor(s.sleepTimerRemainingSec / 60);
+                const remSec = s.sleepTimerRemainingSec % 60;
+                settingsTabSleepStatusBadge.textContent = `${m}:${remSec < 10 ? '0' : ''}${remSec} REMAINING`;
                 settingsTabSleepStatusBadge.classList.add('active');
             } else {
                 settingsTabSleepStatusBadge.textContent = 'INACTIVE';
@@ -450,11 +429,11 @@
         if (precisionBtns.length > 0) {
             precisionBtns.forEach(b => {
                 const is64 = b.getAttribute('data-precision') === '64';
-                b.classList.toggle('active', is64 === isPrecision64);
+                b.classList.toggle('active', is64 === s.isPrecision64);
             });
         }
         if (precisionPill) {
-            precisionPill.textContent = isPrecision64 ? '64-BIT DOUBLE FLOAT' : '32-BIT FAST FLOAT';
+            precisionPill.textContent = s.isPrecision64 ? '64-BIT DOUBLE FLOAT' : '32-BIT FAST FLOAT';
         }
 
         // 2. Hardware Analog Gain (PipeWire / ALSA Bridge)
@@ -462,13 +441,13 @@
         const hwGainDot = document.getElementById('settingsHwGainDot');
         const hwGainText = document.getElementById('settingsHwGainText');
         const hwGainPill = document.getElementById('settingsHardwareGainPill');
-        if (hwGainBtn) hwGainBtn.classList.toggle('active', isHardwareGain);
-        if (hwGainDot) hwGainDot.classList.toggle('active', isHardwareGain);
+        if (hwGainBtn) hwGainBtn.classList.toggle('active', s.isHardwareGain);
+        if (hwGainDot) hwGainDot.classList.toggle('active', s.isHardwareGain);
         if (hwGainText) {
-            hwGainText.textContent = isHardwareGain ? `HARDWARE GAIN: ON (${hwVolumeBackend.toUpperCase()})` : 'HARDWARE GAIN: OFF';
+            hwGainText.textContent = s.isHardwareGain ? `HARDWARE GAIN: ON (${s.hwVolumeBackend.toUpperCase()})` : 'HARDWARE GAIN: OFF';
         }
-        if (hwGainPill && hwVolumeBackend !== 'none') {
-            hwGainPill.textContent = `READY (${hwVolumeBackend.toUpperCase()})`;
+        if (hwGainPill && s.hwVolumeBackend !== 'none') {
+            hwGainPill.textContent = `READY (${s.hwVolumeBackend.toUpperCase()})`;
         }
 
         // 3. Ultrasonic IMD Filter
@@ -477,16 +456,16 @@
         const ultrasonicText = document.getElementById('settingsUltrasonicText');
         const ultrasonicSelect = document.getElementById('settingsUltrasonicCutoffSelect');
         const ultrasonicPill = document.getElementById('settingsUltrasonicPill');
-        if (ultrasonicBtn) ultrasonicBtn.classList.toggle('active', isUltrasonic);
-        if (ultrasonicDot) ultrasonicDot.classList.toggle('active', isUltrasonic);
+        if (ultrasonicBtn) ultrasonicBtn.classList.toggle('active', s.isUltrasonic);
+        if (ultrasonicDot) ultrasonicDot.classList.toggle('active', s.isUltrasonic);
         if (ultrasonicText) {
-            ultrasonicText.textContent = isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
+            ultrasonicText.textContent = s.isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
         }
         if (ultrasonicPill) {
-            ultrasonicPill.textContent = isUltrasonic ? `ACTIVE (${Math.round(ultrasonicCutoff / 1000)} kHz)` : 'BYPASS';
+            ultrasonicPill.textContent = s.isUltrasonic ? `ACTIVE (${Math.round(s.ultrasonicCutoff / 1000)} kHz)` : 'BYPASS';
         }
         if (ultrasonicSelect) {
-            ultrasonicSelect.value = ultrasonicCutoff.toString();
+            ultrasonicSelect.value = s.ultrasonicCutoff.toString();
         }
 
         // 4. Dithering & Noise Shaping
@@ -495,11 +474,11 @@
         if (ditherBtns.length > 0) {
             ditherBtns.forEach(b => {
                 const mode = b.getAttribute('data-dither');
-                b.classList.toggle('active', mode === ditherMode);
+                b.classList.toggle('active', mode === s.ditherMode);
             });
         }
         if (ditherPill) {
-            ditherPill.textContent = ditherMode === 'shaped' ? 'SHAPED (>18 kHz)' : (ditherMode === 'tpdf' ? 'TPDF FLAT' : 'OFF (TRUNCATE)');
+            ditherPill.textContent = s.ditherMode === 'shaped' ? 'SHAPED (>18 kHz)' : (s.ditherMode === 'tpdf' ? 'TPDF FLAT' : 'OFF (TRUNCATE)');
         }
 
         // 5. Speaker Ambiophonics R.A.C.E.
@@ -507,13 +486,13 @@
         const ambiDot = document.getElementById('settingsAmbiDot');
         const ambiText = document.getElementById('settingsAmbiText');
         const ambiPill = document.getElementById('settingsAmbiPill');
-        if (ambiBtn) ambiBtn.classList.toggle('active', isAmbiophonics);
-        if (ambiDot) ambiDot.classList.toggle('active', isAmbiophonics);
+        if (ambiBtn) ambiBtn.classList.toggle('active', s.isAmbiophonics);
+        if (ambiDot) ambiDot.classList.toggle('active', s.isAmbiophonics);
         if (ambiText) {
-            ambiText.textContent = isAmbiophonics ? 'AMBIOPHONICS: ON (R.A.C.E.)' : 'AMBIOPHONICS: OFF (SPEAKERS ONLY)';
+            ambiText.textContent = s.isAmbiophonics ? 'AMBIOPHONICS: ON (R.A.C.E.)' : 'AMBIOPHONICS: OFF (SPEAKERS ONLY)';
         }
         if (ambiPill) {
-            ambiPill.textContent = isAmbiophonics ? 'ACTIVE (R.A.C.E.)' : 'BYPASS';
+            ambiPill.textContent = s.isAmbiophonics ? 'ACTIVE (R.A.C.E.)' : 'BYPASS';
         }
 
         // 6. Audio Buffer & Latency Tuning
@@ -522,33 +501,38 @@
         if (bufferBtns.length > 0) {
             bufferBtns.forEach(b => {
                 const latency = b.getAttribute('data-latency');
-                b.classList.toggle('active', latency === bufferLatencyTarget);
+                b.classList.toggle('active', latency === s.bufferLatencyTarget);
             });
         }
         if (bufferPill) {
-            bufferPill.textContent = bufferLatencyTarget === 'interactive' ? 'STUDIO LOW-LATENCY (~15ms)' : 'PLAYBACK (~100ms)';
+            bufferPill.textContent = s.bufferLatencyTarget === 'interactive' ? 'STUDIO LOW-LATENCY (~15ms)' : 'PLAYBACK (~100ms)';
         }
 
-        // 7. Spectrum Visualizer Mode
-        const visModeBtns = document.querySelectorAll('.visModeBtn');
-        if (visModeBtns.length > 0 && typeof activeVisualizerMode !== 'undefined') {
-            visModeBtns.forEach(b => {
+        // 7. Background Web Notification toggle (Opt-In)
+        const bgNotifToggle = document.getElementById('settingsBgNotificationsToggle');
+        if (bgNotifToggle) {
+            bgNotifToggle.checked = !!s.backgroundNotificationsEnabled;
+        }
+
+        // 8. Spectrum Visualizer Mode
+        const visModeBtnsEl = document.querySelectorAll('.visModeBtn');
+        if (visModeBtnsEl.length > 0 && s.activeVisualizerMode) {
+            visModeBtnsEl.forEach(b => {
                 const m = b.dataset.mode;
-                const matches = (m === activeVisualizerMode) || (activeVisualizerMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
+                const matches = (m === s.activeVisualizerMode) || (s.activeVisualizerMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
                 b.classList.toggle('active', matches);
             });
         }
 
-        if (typeof updateSignalPathUi === 'function') {
-            updateSignalPathUi();
-        }
+        store.emit('ui:sync-signal-path');
     }
 
     function switchWorkspace(viewName, targetMobilePanel = null) {
-        currentWorkspace = viewName;
+        const s = store.state;
+        s.currentWorkspace = viewName;
+        const currentTrack = s.allTracks[s.currentTrackIndex];
 
         if (viewName === 'soulseek') {
-            if (typeof window.getP2pModule === 'function') window.getP2pModule();
             document.body.classList.remove('view-player', 'view-download', 'view-settings');
             document.body.classList.add('view-soulseek');
 
@@ -569,20 +553,9 @@
             setMobileTabActive('soulseekWorkspace');
             document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
 
-            if (allTracks[currentTrackIndex]) {
-                updateMiniPlayerInfo(allTracks[currentTrackIndex]);
-            }
-            updateMiniPlayerPlayState(isPlaying);
-
-            if (typeof soulseekController !== 'undefined') {
-                if (typeof soulseekController.setSubView === 'function') {
-                    soulseekController.setSubView('results');
-                }
-                soulseekController.checkStatus();
-                soulseekController.startTransfersPolling();
-            }
+            if (currentTrack) updateMiniPlayerInfo(currentTrack);
+            updateMiniPlayerPlayState(s.isPlaying);
         } else if (viewName === 'download') {
-            if (typeof window.getP2pModule === 'function') window.getP2pModule();
             document.body.classList.remove('view-player', 'view-soulseek', 'view-settings');
             document.body.classList.add('view-download');
 
@@ -603,20 +576,9 @@
             setMobileTabActive('downloadWorkspace');
             document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
 
-            if (allTracks[currentTrackIndex]) {
-                updateMiniPlayerInfo(allTracks[currentTrackIndex]);
-            }
-            updateMiniPlayerPlayState(isPlaying);
-
-            if (typeof soulseekController !== 'undefined') {
-                soulseekController.stopTransfersPolling();
-            }
-
-            if (typeof fetchLanStreamingUrl === 'function') {
-                fetchLanStreamingUrl();
-            }
+            if (currentTrack) updateMiniPlayerInfo(currentTrack);
+            updateMiniPlayerPlayState(s.isPlaying);
         } else if (viewName === 'settings') {
-            if (typeof window.getSettingsModule === 'function') window.getSettingsModule();
             document.body.classList.remove('view-player', 'view-soulseek', 'view-download');
             document.body.classList.add('view-settings');
 
@@ -637,15 +599,8 @@
             setMobileTabActive('settingsWorkspace');
             document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
 
-            if (allTracks[currentTrackIndex]) {
-                updateMiniPlayerInfo(allTracks[currentTrackIndex]);
-            }
-            updateMiniPlayerPlayState(isPlaying);
-
-            if (typeof soulseekController !== 'undefined') {
-                soulseekController.stopTransfersPolling();
-            }
-
+            if (currentTrack) updateMiniPlayerInfo(currentTrack);
+            updateMiniPlayerPlayState(s.isPlaying);
             syncSettingsTabValues();
         } else {
             document.body.classList.remove('view-soulseek', 'view-download', 'view-settings');
@@ -663,10 +618,6 @@
             if (downloadWorkspace) downloadWorkspace.style.display = 'none';
             if (settingsWorkspace) settingsWorkspace.style.display = 'none';
             if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'none';
-
-            if (typeof soulseekController !== 'undefined') {
-                soulseekController.stopTransfersPolling();
-            }
 
             if (targetMobilePanel || window.innerWidth <= 768) {
                 const activeTarget = targetMobilePanel || 'playerDeck';
@@ -693,18 +644,15 @@
                     document.body.classList.add('mobile-tab-tracks');
                     if (persistentMiniPlayer) {
                         persistentMiniPlayer.style.display = 'flex';
-                        if (allTracks && allTracks[currentTrackIndex]) updateMiniPlayerInfo(allTracks[currentTrackIndex]);
-                        updateMiniPlayerPlayState(isPlaying);
-                    }
-                    if (typeof renderVirtualTrackWindow === 'function') {
-                        renderVirtualTrackWindow(true);
+                        if (currentTrack) updateMiniPlayerInfo(currentTrack);
+                        updateMiniPlayerPlayState(s.isPlaying);
                     }
                 } else if (activeTarget === 'settingsPanel') {
                     document.body.classList.add('mobile-tab-info');
                     if (persistentMiniPlayer) {
                         persistentMiniPlayer.style.display = 'flex';
-                        if (allTracks && allTracks[currentTrackIndex]) updateMiniPlayerInfo(allTracks[currentTrackIndex]);
-                        updateMiniPlayerPlayState(isPlaying);
+                        if (currentTrack) updateMiniPlayerInfo(currentTrack);
+                        updateMiniPlayerPlayState(s.isPlaying);
                     }
                 }
                 if (metadataToggleBtn) {
@@ -724,15 +672,9 @@
                     metadataToggleBtn.setAttribute('aria-pressed', String(!isCol));
                 }
             }
-
-            if (typeof resumeVisualizerLoop === 'function') {
-                resumeVisualizerLoop();
-            }
-
-            if (typeof resizeVisualizerCanvas === 'function') {
-                resizeVisualizerCanvas();
-            }
         }
+
+        store.emit('workspace:change', { viewName, targetMobilePanel });
     }
 
     // No sample placeholder tracks — user chooses music directory first
@@ -742,11 +684,8 @@
 
     // Blocking Track Loading Overlay & IndexedDB Library Persistence
     // =========================================================================
-    let isTrackLoadingCancelled = false;
-    let activeScanAbortController = null;
-
     function showTrackLoadingOverlay(title = 'LOADING MUSIC LIBRARY...', statusText = 'Indexing audio files and metadata. Please wait...', progressPct = null) {
-        isTrackLoadingCancelled = false;
+        store.state.isTrackLoadingCancelled = false;
         const overlay = document.getElementById('trackLoadingOverlay');
         const titleEl = document.getElementById('trackLoadingTitle');
         const statusEl = document.getElementById('trackLoadingStatusText');
@@ -782,16 +721,16 @@
         if (overlay) {
             overlay.style.display = 'none';
         }
-        activeScanAbortController = null;
+        store.state.activeScanAbortController = null;
     }
 
     function cancelActiveTrackLoading() {
-        isTrackLoadingCancelled = true;
-        if (activeScanAbortController) {
-            try { activeScanAbortController.abort(); } catch (_) {}
-            activeScanAbortController = null;
+        store.state.isTrackLoadingCancelled = true;
+        if (store.state.activeScanAbortController) {
+            try { store.state.activeScanAbortController.abort(); } catch (_) {}
+            store.state.activeScanAbortController = null;
         }
-        if (window.AndroidBridge && typeof window.AndroidBridge.cancelScan === 'function') {
+        if (typeof window !== 'undefined' && window.AndroidBridge && typeof window.AndroidBridge.cancelScan === 'function') {
             try { window.AndroidBridge.cancelScan(); } catch (_) {}
         }
         hideTrackLoadingOverlay();
@@ -803,7 +742,7 @@
     function updateEmptyPlayerState(errorMsg = '') {
         const promptEl = document.getElementById('playerEmptyPrompt');
         const errorHintEl = document.getElementById('playerEmptyErrorHint');
-        const hasTracks = Array.isArray(allTracks) && allTracks.length > 0;
+        const hasTracks = Array.isArray(store.state.allTracks) && store.state.allTracks.length > 0;
 
         if (promptEl) {
             promptEl.style.display = hasTracks ? 'none' : 'flex';
@@ -825,328 +764,14 @@
             if (miniTitle) miniTitle.textContent = 'No Track Loaded';
             if (miniArtist) miniArtist.textContent = 'Choose directory';
         }
-        updateSignalPathUi();
+        store.emit('ui:sync-signal-path');
     }
 
-
-    // Attach top-level UI elements and helpers to window for cross-module accessibility
-    if (typeof window !== "undefined") {
-        try { window.activeListLabel = activeListLabel; } catch (_) {}
-        try { window.activeScanAbortController = activeScanAbortController; } catch (_) {}
-        try { window.activeTheme = activeTheme; } catch (_) {}
-        try { window.albumName = albumName; } catch (_) {}
-        try { window.artistName = artistName; } catch (_) {}
-        try { window.audio = audio; } catch (_) {}
-        try { window.auditMetricHeadroom = auditMetricHeadroom; } catch (_) {}
-        try { window.auditMetricLatency = auditMetricLatency; } catch (_) {}
-        try { window.auditQualityBadge = auditQualityBadge; } catch (_) {}
-        try { window.auditQualityDesc = auditQualityDesc; } catch (_) {}
-        try { window.auditQualityDot = auditQualityDot; } catch (_) {}
-        try { window.backToLibraryBtn = backToLibraryBtn; } catch (_) {}
-        try { window.bannerAddTracksBtn = bannerAddTracksBtn; } catch (_) {}
-        try { window.bgDisc = bgDisc; } catch (_) {}
-        try { window.bindFastAction = bindFastAction; } catch (_) {}
-        try { window.browseFolderBtn = browseFolderBtn; } catch (_) {}
-        try { window.cachedAllPanelsList = cachedAllPanelsList; } catch (_) {}
-        try { window.cachedMobileTabBtns = cachedMobileTabBtns; } catch (_) {}
-        try { window.cancelActiveTrackLoading = cancelActiveTrackLoading; } catch (_) {}
-        try { window.cancelSleepTimerBtn = cancelSleepTimerBtn; } catch (_) {}
-        try { window.clearQueueBtn = clearQueueBtn; } catch (_) {}
-        try { window.closeFolderTrayBtn = closeFolderTrayBtn; } catch (_) {}
-        try { window.closeModalBtn = closeModalBtn; } catch (_) {}
-        try { window.closePeqModal = closePeqModal; } catch (_) {}
-        try { window.closeSignalPathModalBtn = closeSignalPathModalBtn; } catch (_) {}
-        try { window.closeSleepTimerModalBtn = closeSleepTimerModalBtn; } catch (_) {}
-        try { window.closeThemeModalBtn = closeThemeModalBtn; } catch (_) {}
-        try { window.coverArtPreview = coverArtPreview; } catch (_) {}
-        try { window.coverBadge = coverBadge; } catch (_) {}
-        try { window.createPlaylistBtn = createPlaylistBtn; } catch (_) {}
-        try { window.ctx = ctx; } catch (_) {}
-        try { window.currentFormatFilter = currentFormatFilter; } catch (_) {}
-        try { window.currentPlaylistTitle = currentPlaylistTitle; } catch (_) {}
-        try { window.currentTimeEl = currentTimeEl; } catch (_) {}
-        try { window.currentWorkspace = currentWorkspace; } catch (_) {}
-        try { window.customSleepInput = customSleepInput; } catch (_) {}
-        try { window.deckArtworkAmbient = deckArtworkAmbient; } catch (_) {}
-        try { window.deckArtworkBackdrop = deckArtworkBackdrop; } catch (_) {}
-        try { window.deckSignalDot = deckSignalDot; } catch (_) {}
-        try { window.deferredInstallPrompt = deferredInstallPrompt; } catch (_) {}
-        try { window.deleteCurrentPlaylistBtn = deleteCurrentPlaylistBtn; } catch (_) {}
-        try { window.dismissedTracksMap = dismissedTracksMap; } catch (_) {}
-        try { window.downloadWorkspace = downloadWorkspace; } catch (_) {}
-        try { window.fallbackTracks = fallbackTracks; } catch (_) {}
-        try { window.folderPathInput = folderPathInput; } catch (_) {}
-        try { window.folderPickerInput = folderPickerInput; } catch (_) {}
-        try { window.folderTray = folderTray; } catch (_) {}
-        try { window.getActiveTheme = getActiveTheme; } catch (_) {}
-        try { window.gridContainer = gridContainer; } catch (_) {}
-        try { window.hideTrackLoadingOverlay = hideTrackLoadingOverlay; } catch (_) {}
-        try { window.infoPanelEl = infoPanelEl; } catch (_) {}
-        try { window.installAppBtn = installAppBtn; } catch (_) {}
-        try { window.isAtlasThemeActive = isAtlasThemeActive; } catch (_) {}
-        try { window.isTrackLoadingCancelled = isTrackLoadingCancelled; } catch (_) {}
-        try { window.lastRenderedMiniTrack = lastRenderedMiniTrack; } catch (_) {}
-        try { window.libraryControls = libraryControls; } catch (_) {}
-        try { window.localFileInput = localFileInput; } catch (_) {}
-        try { window.lyricsArtistName = lyricsArtistName; } catch (_) {}
-        try { window.lyricsCon = lyricsCon; } catch (_) {}
-        try { window.lyricsContent = lyricsContent; } catch (_) {}
-        try { window.lyricsScrollArea = lyricsScrollArea; } catch (_) {}
-        try { window.lyricsToggleBtn = lyricsToggleBtn; } catch (_) {}
-        try { window.lyricsTrackName = lyricsTrackName; } catch (_) {}
-        try { window.metadataToggleBtn = metadataToggleBtn; } catch (_) {}
-        try { window.metadataEditorModal = metadataEditorModal; } catch (_) {}
-        try { window.closeMetaEditorModalBtn = closeMetaEditorModalBtn; } catch (_) {}
-        try { window.metaEditCancelBtn = metaEditCancelBtn; } catch (_) {}
-        try { window.metaEditorForm = metaEditorForm; } catch (_) {}
-        try { window.metaEditSaveBtn = metaEditSaveBtn; } catch (_) {}
-        try { window.metaEditTitle = metaEditTitle; } catch (_) {}
-        try { window.metaEditArtist = metaEditArtist; } catch (_) {}
-        try { window.metaEditAlbum = metaEditAlbum; } catch (_) {}
-        try { window.metaEditGenre = metaEditGenre; } catch (_) {}
-        try { window.metaEditYear = metaEditYear; } catch (_) {}
-        try { window.metaEditTrackNum = metaEditTrackNum; } catch (_) {}
-        try { window.metaEditComment = metaEditComment; } catch (_) {}
-        try { window.metaEditorThumb = metaEditorThumb; } catch (_) {}
-        try { window.metaEditorFileTitle = metaEditorFileTitle; } catch (_) {}
-        try { window.metaEditorFilePath = metaEditorFilePath; } catch (_) {}
-        try { window.metaEditorStatus = metaEditorStatus; } catch (_) {}
-        try { window.metaEditorFormatPill = metaEditorFormatPill; } catch (_) {}
-        try { window.metaEditorBitratePill = metaEditorBitratePill; } catch (_) {}
-        try { window.metaEditorSampleRatePill = metaEditorSampleRatePill; } catch (_) {}
-        try { window.metaEditorBitDepthPill = metaEditorBitDepthPill; } catch (_) {}
-        try { window.infoPanelEditMetaBtn = infoPanelEditMetaBtn; } catch (_) {}
-        try { window.trackMenuEditMetaBtn = trackMenuEditMetaBtn; } catch (_) {}
-        try { window.miniArtPreview = miniArtPreview; } catch (_) {}
-        try { window.miniArtist = miniArtist; } catch (_) {}
-        try { window.miniCurrentTime = miniCurrentTime; } catch (_) {}
-        try { window.miniDeckReturnBtn = miniDeckReturnBtn; } catch (_) {}
-        try { window.miniMuteBtn = miniMuteBtn; } catch (_) {}
-        try { window.miniNextBtn = miniNextBtn; } catch (_) {}
-        try { window.miniPlayBtn = miniPlayBtn; } catch (_) {}
-        try { window.miniPlayImg = miniPlayImg; } catch (_) {}
-        try { window.miniPrevBtn = miniPrevBtn; } catch (_) {}
-        try { window.miniProgressBar = miniProgressBar; } catch (_) {}
-        try { window.miniProgressCon = miniProgressCon; } catch (_) {}
-        try { window.miniTitle = miniTitle; } catch (_) {}
-        try { window.miniTotalDuration = miniTotalDuration; } catch (_) {}
-        try { window.miniTurntableThumb = miniTurntableThumb; } catch (_) {}
-        try { window.miniVolumeSlider = miniVolumeSlider; } catch (_) {}
-        try { window.modalCreateAndAddBtn = modalCreateAndAddBtn; } catch (_) {}
-        try { window.modalNewPlaylistName = modalNewPlaylistName; } catch (_) {}
-        try { window.modalPlaylistList = modalPlaylistList; } catch (_) {}
-        try { window.modalTrackTitle = modalTrackTitle; } catch (_) {}
-        try { window.muteBtn = muteBtn; } catch (_) {}
-        try { window.newPlaylistInput = newPlaylistInput; } catch (_) {}
-        try { window.nextBtn = nextBtn; } catch (_) {}
-        try { window.openPeqModal = openPeqModal; } catch (_) {}
-        try { window.openSignalAuditBtn = openSignalAuditBtn; } catch (_) {}
-        try { window.persistentMiniPlayer = persistentMiniPlayer; } catch (_) {}
-        try { window.playPauseBtn = playPauseBtn; } catch (_) {}
-        try { window.playPauseImg = playPauseImg; } catch (_) {}
-        try { window.playQueue = playQueue; } catch (_) {}
-        try { window.playerDeckEl = playerDeckEl; } catch (_) {}
-        try { window.playlistBanner = playlistBanner; } catch (_) {}
-        try { window.playlistList = playlistList; } catch (_) {}
-        try { window.playlistModal = playlistModal; } catch (_) {}
-        try { window.playlistsView = playlistsView; } catch (_) {}
-        try { window.presetPathBtns = presetPathBtns; } catch (_) {}
-        try { window.prevBtn = prevBtn; } catch (_) {}
-        try { window.progressBar = progressBar; } catch (_) {}
-        try { window.progressCon = progressCon; } catch (_) {}
-        try { window.progressHover = progressHover; } catch (_) {}
-        try { window.queueCountBadge = queueCountBadge; } catch (_) {}
-        try { window.queueCountSummary = queueCountSummary; } catch (_) {}
-        try { window.queueList = queueList; } catch (_) {}
-        try { window.queueView = queueView; } catch (_) {}
-        try { window.quickNewPlaylistBtn = quickNewPlaylistBtn; } catch (_) {}
-        try { window.refreshTracksBtn = refreshTracksBtn; } catch (_) {}
-        try { window.repeatBtn = repeatBtn; } catch (_) {}
-        try { window.restoreTracksBtn = restoreTracksBtn; } catch (_) {}
-        try { window.scanFolderBtn = scanFolderBtn; } catch (_) {}
-        try { window.scanStatus = scanStatus; } catch (_) {}
-        try { window.setCustomSleepBtn = setCustomSleepBtn; } catch (_) {}
-        try { window.setMobilePanelsInactive = setMobilePanelsInactive; } catch (_) {}
-        try { window.setMobileSearchPanelCollapsed = setMobileSearchPanelCollapsed; } catch (_) {}
-        try { window.setMobileTabActive = setMobileTabActive; } catch (_) {}
-        try { window.settingsPanelEl = settingsPanelEl; } catch (_) {}
-        try { window.settingsReturnBtn = settingsReturnBtn; } catch (_) {}
-        try { window.settingsWorkspace = settingsWorkspace; } catch (_) {}
-        try { window.showTrackLoadingOverlay = showTrackLoadingOverlay; } catch (_) {}
-        try { window.shuffleBtn = shuffleBtn; } catch (_) {}
-        try { window.shufflePlayBtn = shufflePlayBtn; } catch (_) {}
-        try { window.signalPathBadgeBtn = signalPathBadgeBtn; } catch (_) {}
-        try { window.signalPathLabel = signalPathLabel; } catch (_) {}
-        try { window.signalPathModal = signalPathModal; } catch (_) {}
-        try { window.sleepStatusCard = sleepStatusCard; } catch (_) {}
-        try { window.sleepStatusRemaining = sleepStatusRemaining; } catch (_) {}
-        try { window.sleepTimerBtn = sleepTimerBtn; } catch (_) {}
-        try { window.sleepTimerInterval = sleepTimerInterval; } catch (_) {}
-        try { window.sleepTimerLabel = sleepTimerLabel; } catch (_) {}
-        try { window.sleepTimerModal = sleepTimerModal; } catch (_) {}
-        try { window.sleepTimerMode = sleepTimerMode; } catch (_) {}
-        try { window.sleepTimerOriginalVolume = sleepTimerOriginalVolume; } catch (_) {}
-        try { window.sleepTimerRemainingSec = sleepTimerRemainingSec; } catch (_) {}
-        try { window.standaloneBanner = standaloneBanner; } catch (_) {}
-        try { window.standaloneBannerTitle = standaloneBannerTitle; } catch (_) {}
-        try { window.standaloneResumeLibraryBtn = standaloneResumeLibraryBtn; } catch (_) {}
-        try { window.standaloneCloseBtn = standaloneCloseBtn; } catch (_) {}
-        try { window.slskAccountAlert = slskAccountAlert; } catch (_) {}
-        try { window.slskAccountBtn = slskAccountBtn; } catch (_) {}
-        try { window.slskAccountModal = slskAccountModal; } catch (_) {}
-        try { window.slskActiveSearchMeta = slskActiveSearchMeta; } catch (_) {}
-        try { window.slskChangeDirBtn = slskChangeDirBtn; } catch (_) {}
-        try { window.slskChangeSharedDirBtn = slskChangeSharedDirBtn; } catch (_) {}
-        try { window.slskClearSubFilterBtn = slskClearSubFilterBtn; } catch (_) {}
-        try { window.slskCloseAccountModalBtn = slskCloseAccountModalBtn; } catch (_) {}
-        try { window.slskCloseDrawerBtn = slskCloseDrawerBtn; } catch (_) {}
-        try { window.slskControlsPanel = slskControlsPanel; } catch (_) {}
-        try { window.slskDownloadsPathText = slskDownloadsPathText; } catch (_) {}
-        try { window.slskExcludeFilterClearBtn = slskExcludeFilterClearBtn; } catch (_) {}
-        try { window.slskExcludeFilterInput = slskExcludeFilterInput; } catch (_) {}
-        try { window.slskFilterChips = slskFilterChips; } catch (_) {}
-        try { window.slskInResultFilterClearBtn = slskInResultFilterClearBtn; } catch (_) {}
-        try { window.slskInResultFilterInput = slskInResultFilterInput; } catch (_) {}
-        try { window.slskIncludeFilterClearBtn = slskIncludeFilterClearBtn; } catch (_) {}
-        try { window.slskIncludeFilterInput = slskIncludeFilterInput; } catch (_) {}
-        try { window.slskLogoutBtn = slskLogoutBtn; } catch (_) {}
-        try { window.slskMobileActiveFilter = slskMobileActiveFilter; } catch (_) {}
-        try { window.slskMobileTransferCount = slskMobileTransferCount; } catch (_) {}
-        try { window.slskMobileTransfersBtn = slskMobileTransfersBtn; } catch (_) {}
-        try { window.slskModalDownloadDir = slskModalDownloadDir; } catch (_) {}
-        try { window.slskModalPassword = slskModalPassword; } catch (_) {}
-        try { window.slskModalPowerBtn = slskModalPowerBtn; } catch (_) {}
-        try { window.slskModalSharedDir = slskModalSharedDir; } catch (_) {}
-        try { window.slskModalSyncPlayerDirBtn = slskModalSyncPlayerDirBtn; } catch (_) {}
-        try { window.slskModalSyncSharePlayerDirBtn = slskModalSyncSharePlayerDirBtn; } catch (_) {}
-        try { window.slskModalUsername = slskModalUsername; } catch (_) {}
-        try { window.slskPanelToggleBar = slskPanelToggleBar; } catch (_) {}
-        try { window.slskPanelToggleChevron = slskPanelToggleChevron; } catch (_) {}
-        try { window.slskPlaceholder = slskPlaceholder; } catch (_) {}
-        try { window.slskPowerBtn = slskPowerBtn; } catch (_) {}
-        try { window.slskPowerBtnText = slskPowerBtnText; } catch (_) {}
-        try { window.slskRefreshStatusBtn = slskRefreshStatusBtn; } catch (_) {}
-        try { window.slskResultCount = slskResultCount; } catch (_) {}
-        try { window.slskResultsList = slskResultsList; } catch (_) {}
-        try { window.slskSaveAccountBtn = slskSaveAccountBtn; } catch (_) {}
-        try { window.slskScanDownloadsBtn = slskScanDownloadsBtn; } catch (_) {}
-        try { window.slskSearchClearBtn = slskSearchClearBtn; } catch (_) {}
-        try { window.slskSearchInput = slskSearchInput; } catch (_) {}
-        try { window.slskSearchSubmitBtn = slskSearchSubmitBtn; } catch (_) {}
-        try { window.slskSearchingState = slskSearchingState; } catch (_) {}
-        try { window.slskSearchingTitle = slskSearchingTitle; } catch (_) {}
-        try { window.slskSharedPathText = slskSharedPathText; } catch (_) {}
-        try { window.slskSortSelect = slskSortSelect; } catch (_) {}
-        try { window.slskStartDaemonBtn = slskStartDaemonBtn; } catch (_) {}
-        try { window.slskStatusDot = slskStatusDot; } catch (_) {}
-        try { window.slskStatusPill = slskStatusPill; } catch (_) {}
-        try { window.slskStatusText = slskStatusText; } catch (_) {}
-        try { window.slskSuggestedChips = slskSuggestedChips; } catch (_) {}
-        try { window.slskSuggestedRow = slskSuggestedRow; } catch (_) {}
-        try { window.slskSyncCurrentDirBtn = slskSyncCurrentDirBtn; } catch (_) {}
-        try { window.slskToggleTransfersBtn = slskToggleTransfersBtn; } catch (_) {}
-        try { window.slskTransferCount = slskTransferCount; } catch (_) {}
-        try { window.slskTransfersDrawer = slskTransfersDrawer; } catch (_) {}
-        try { window.slskTransfersHeader = slskTransfersHeader; } catch (_) {}
-        try { window.slskTransfersList = slskTransfersList; } catch (_) {}
-        try { window.slskTransfersSummary = slskTransfersSummary; } catch (_) {}
-        try { window.slskUsername = slskUsername; } catch (_) {}
-        try { window.sortSelect = sortSelect; } catch (_) {}
-        try { window.soulseekWorkspace = soulseekWorkspace; } catch (_) {}
-        try { window.speedBtns = speedBtns; } catch (_) {}
-        try { window.statAlbum = statAlbum; } catch (_) {}
-        try { window.statArtist = statArtist; } catch (_) {}
-        try { window.statBitDepth = statBitDepth; } catch (_) {}
-        try { window.statBitrate = statBitrate; } catch (_) {}
-        try { window.statChannels = statChannels; } catch (_) {}
-        try { window.statDacStream = statDacStream; } catch (_) {}
-        try { window.statDynamicRange = statDynamicRange; } catch (_) {}
-        try { window.statFormat = statFormat; } catch (_) {}
-        try { window.statGenre = statGenre; } catch (_) {}
-        try { window.statPath = statPath; } catch (_) {}
-        try { window.statPeakLevel = statPeakLevel; } catch (_) {}
-        try { window.statSampleRate = statSampleRate; } catch (_) {}
-        try { window.statSize = statSize; } catch (_) {}
-        try { window.statTitle = statTitle; } catch (_) {}
-        try { window.statTrack = statTrack; } catch (_) {}
-        try { window.statYear = statYear; } catch (_) {}
-        try { window.switchWorkspace = switchWorkspace; } catch (_) {}
-        try { window.syncSettingsTabValues = syncSettingsTabValues; } catch (_) {}
-        try { window.tabLibrary = tabLibrary; } catch (_) {}
-        try { window.tabPlaylists = tabPlaylists; } catch (_) {}
-        try { window.tabQueue = tabQueue; } catch (_) {}
-        try { window.themeModal = themeModal; } catch (_) {}
-        try { window.themeModalBtn = themeModalBtn; } catch (_) {}
-        try { window.themeQuickBtns = themeQuickBtns; } catch (_) {}
-        try { window.themeSelectCards = themeSelectCards; } catch (_) {}
-        try { window.toggleFolderBtn = toggleFolderBtn; } catch (_) {}
-        try { window.toggleMobileSearchPanel = toggleMobileSearchPanel; } catch (_) {}
-        try { window.toneArm = toneArm; } catch (_) {}
-        try { window.topSettingsBtn = topSettingsBtn; } catch (_) {}
-        try { window.topThemeLabel = topThemeLabel; } catch (_) {}
-        try { window.totalDurationEl = totalDurationEl; } catch (_) {}
-        try { window.trackBadge = trackBadge; } catch (_) {}
-        try { window.trackCount = trackCount; } catch (_) {}
-        try { window.trackList = trackList; } catch (_) {}
-        try { window.trackListPanelEl = trackListPanelEl; } catch (_) {}
-        try { window.trackName = trackName; } catch (_) {}
-        try { window.trackSearch = trackSearch; } catch (_) {}
-        try { window.turntableCenterCanvas = turntableCenterCanvas; } catch (_) {}
-        try { window.turntableCenterCtx = turntableCenterCtx; } catch (_) {}
-        try { window.turntableCenterVis = turntableCenterVis; } catch (_) {}
-        try { window.turntableCon = turntableCon; } catch (_) {}
-        try { window.upcomingLibraryList = upcomingLibraryList; } catch (_) {}
-        try { window.updateEmptyPlayerState = updateEmptyPlayerState; } catch (_) {}
-        try { window.updateMiniPlayerInfo = updateMiniPlayerInfo; } catch (_) {}
-        try { window.updateMiniPlayerPlayState = updateMiniPlayerPlayState; } catch (_) {}
-        try { window.updateTrackLoadingOverlay = updateTrackLoadingOverlay; } catch (_) {}
-        try { window.validThemeIds = validThemeIds; } catch (_) {}
-        try { window.vinylArt = vinylArt; } catch (_) {}
-        try { window.vinylLabel = vinylLabel; } catch (_) {}
-        try { window.vinylTurntable = vinylTurntable; } catch (_) {}
-        try { window.visModeBtns = visModeBtns; } catch (_) {}
-        try { window.visPillBtns = visPillBtns; } catch (_) {}
-        try { window.visualizerCanvas = visualizerCanvas; } catch (_) {}
-        try { window.visualizerDock = visualizerDock; } catch (_) {}
-        try { window.volumeIcon = volumeIcon; } catch (_) {}
-        try { window.volumeLevel = volumeLevel; } catch (_) {}
-        try { window.volumeSlider = volumeSlider; } catch (_) {}
-        try { window.wsDownloadBtn = wsDownloadBtn; } catch (_) {}
-        try { window.wsPlayerBtn = wsPlayerBtn; } catch (_) {}
-        try { window.wsSettingsBtn = wsSettingsBtn; } catch (_) {}
-        try { window.wsSoulseekBadge = wsSoulseekBadge; } catch (_) {}
-        try { window.wsSoulseekBtn = wsSoulseekBtn; } catch (_) {}
-        try { window.metadataEditorModal = metadataEditorModal; } catch (_) {}
-        try { window.closeMetaEditorModalBtn = closeMetaEditorModalBtn; } catch (_) {}
-        try { window.metaEditCancelBtn = metaEditCancelBtn; } catch (_) {}
-        try { window.metaEditorForm = metaEditorForm; } catch (_) {}
-        try { window.metaEditSaveBtn = metaEditSaveBtn; } catch (_) {}
-        try { window.metaEditTitle = metaEditTitle; } catch (_) {}
-        try { window.metaEditArtist = metaEditArtist; } catch (_) {}
-        try { window.metaEditAlbum = metaEditAlbum; } catch (_) {}
-        try { window.metaEditGenre = metaEditGenre; } catch (_) {}
-        try { window.metaEditYear = metaEditYear; } catch (_) {}
-        try { window.metaEditTrackNum = metaEditTrackNum; } catch (_) {}
-        try { window.metaEditComment = metaEditComment; } catch (_) {}
-        try { window.metaEditorThumb = metaEditorThumb; } catch (_) {}
-        try { window.metaEditorFileTitle = metaEditorFileTitle; } catch (_) {}
-        try { window.metaEditorFilePath = metaEditorFilePath; } catch (_) {}
-        try { window.metaEditorStatus = metaEditorStatus; } catch (_) {}
-        try { window.metaEditorFormatPill = metaEditorFormatPill; } catch (_) {}
-        try { window.metaEditorBitratePill = metaEditorBitratePill; } catch (_) {}
-        try { window.metaEditorSampleRatePill = metaEditorSampleRatePill; } catch (_) {}
-        try { window.metaEditorBitDepthPill = metaEditorBitDepthPill; } catch (_) {}
-        try { window.infoPanelEditMetaBtn = infoPanelEditMetaBtn; } catch (_) {}
-        try { window.trackMenuEditMetaBtn = trackMenuEditMetaBtn; } catch (_) {}
-    }
 
     export {
         activeListLabel,
-        activeScanAbortController,
-        activeTheme,
         albumName,
         artistName,
-        audio,
         auditMetricHeadroom,
         auditMetricLatency,
         auditQualityBadge,
@@ -1165,7 +790,6 @@
         closeFolderTrayBtn,
         closeModalBtn,
         closeMetaEditorModalBtn,
-        closePeqModal,
         closeSignalPathModalBtn,
         closeSleepTimerModalBtn,
         closeThemeModalBtn,
@@ -1173,17 +797,13 @@
         coverBadge,
         createPlaylistBtn,
         ctx,
-        currentFormatFilter,
         currentPlaylistTitle,
         currentTimeEl,
-        currentWorkspace,
         customSleepInput,
         deckArtworkAmbient,
         deckArtworkBackdrop,
         deckSignalDot,
-        deferredInstallPrompt,
         deleteCurrentPlaylistBtn,
-        dismissedTracksMap,
         downloadWorkspace,
         fallbackTracks,
         folderPathInput,
@@ -1196,8 +816,6 @@
         infoPanelEl,
         installAppBtn,
         isAtlasThemeActive,
-        isTrackLoadingCancelled,
-        lastRenderedMiniTrack,
         libraryControls,
         localFileInput,
         lyricsArtistName,
@@ -1248,12 +866,10 @@
         muteBtn,
         newPlaylistInput,
         nextBtn,
-        openPeqModal,
         openSignalAuditBtn,
         persistentMiniPlayer,
         playPauseBtn,
         playPauseImg,
-        playQueue,
         playerDeckEl,
         playlistBanner,
         playlistList,
@@ -1290,12 +906,8 @@
         sleepStatusCard,
         sleepStatusRemaining,
         sleepTimerBtn,
-        sleepTimerInterval,
         sleepTimerLabel,
         sleepTimerModal,
-        sleepTimerMode,
-        sleepTimerOriginalVolume,
-        sleepTimerRemainingSec,
         standaloneBanner,
         standaloneBannerTitle,
         standaloneResumeLibraryBtn,
@@ -1410,7 +1022,6 @@
         updateMiniPlayerInfo,
         updateMiniPlayerPlayState,
         updateTrackLoadingOverlay,
-        validThemeIds,
         vinylArt,
         vinylLabel,
         vinylTurntable,

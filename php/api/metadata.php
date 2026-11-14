@@ -96,16 +96,9 @@ if ($method === 'POST') {
     }
 
     if ($rawBinary !== null) {
-        $cacheDir = __DIR__ . '/../../data/covers';
+        $cacheDir = cachy_cache_dir() . DIRECTORY_SEPARATOR . 'covers';
         if (!is_dir($cacheDir)) {
             @mkdir($cacheDir, 0775, true);
-        }
-        if (!is_writable($cacheDir)) {
-            $xdg = getenv('XDG_CACHE_HOME') ?: (getenv('HOME') ? (getenv('HOME') . '/.cache') : sys_get_temp_dir());
-            $cacheDir = $xdg . '/cachymusic_covers';
-            if (!is_dir($cacheDir)) {
-                @mkdir($cacheDir, 0775, true);
-            }
         }
 
         $fullImgPath = $cacheDir . '/tid_' . $tid . '.img';
@@ -117,11 +110,12 @@ if ($method === 'POST') {
 
         // Generate thumbnail via ffmpeg if available or write raw
         $thumbSaved = false;
-        if (is_executable('/usr/bin/ffmpeg')) {
+        $ffmpegBin = cachy_find_binary('ffmpeg');
+        if ($ffmpegBin !== null) {
             $tmpIn = tempnam(sys_get_temp_dir(), 'cm_raw_');
             file_put_contents($tmpIn, $rawBinary);
             $tmpThumb = tempnam(sys_get_temp_dir(), 'cm_thm_') . '.jpg';
-            $tCmd = "/usr/bin/ffmpeg -y -v quiet -i " . escapeshellarg($tmpIn) . " -vf \"scale=200:200:force_original_aspect_ratio=decrease\" " . escapeshellarg($tmpThumb) . " 2>&1";
+            $tCmd = escapeshellarg($ffmpegBin) . " -y -v quiet -i " . escapeshellarg($tmpIn) . " -vf \"scale=200:200:force_original_aspect_ratio=decrease\" " . escapeshellarg($tmpThumb) . " 2>&1";
             exec($tCmd, $tOut, $tRet);
             if ($tRet === 0 && file_exists($tmpThumb) && filesize($tmpThumb) > 100) {
                 rename($tmpThumb, $thumbPath);
@@ -185,11 +179,12 @@ if ($method === 'POST') {
                 if ($rawBinary !== null) {
                     $tmpCover = tempnam(sys_get_temp_dir(), 'cm_cov_') . ($coverMime === 'image/png' ? '.png' : '.jpg');
                     file_put_contents($tmpCover, $rawBinary);
-                    $covCmd = "/usr/bin/metaflac --remove --block-type=PICTURE --import-picture-from=" . escapeshellarg($tmpCover) . " " . $escapedPath . " 2>&1";
+                    $metaflacBin = cachy_find_binary('metaflac') ?: 'metaflac';
+                    $covCmd = escapeshellarg($metaflacBin) . " --remove --block-type=PICTURE --import-picture-from=" . escapeshellarg($tmpCover) . " " . $escapedPath . " 2>&1";
                     exec($covCmd, $cOut, $cRet);
                     @unlink($tmpCover);
                 }
-            } elseif (is_executable('/usr/bin/ffmpeg')) {
+            } elseif (($ffmpegBin = cachy_find_binary('ffmpeg')) !== null) {
                 $tagWriteAttempted = true;
                 $tmpFile = tempnam(sys_get_temp_dir(), 'cm_tag_') . '.' . $ext;
                 $covParam = "";
@@ -202,7 +197,7 @@ if ($method === 'POST') {
                     $covParam = "-map 0 ";
                 }
 
-                $cmd = "/usr/bin/ffmpeg -y -v quiet -i {$escapedPath} {$covParam}" .
+                $cmd = escapeshellarg($ffmpegBin) . " -y -v quiet -i {$escapedPath} {$covParam}" .
                        "-metadata " . escapeshellarg("title=" . $title) . " " .
                        "-metadata " . escapeshellarg("artist=" . $artist) . " " .
                        "-metadata " . escapeshellarg("album=" . $album) . " " .

@@ -1,6 +1,6 @@
 {
   "name": "cachymusic",
-  "version": "1.0.0-beta",
+  "version": "2.0.0",
   "description": "A self-contained audio player and workstation with a turntable deck and studio DSP.",
   "main": "server/soulseek-service.js",
   "scripts": {

@@ -6,28 +6,17 @@ if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (!empty($origin)) {
-    $parsed = parse_url($origin);
-    $host = $parsed['host'] ?? '';
-    $serverHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), PHP_URL_HOST);
-    if (in_array($host, ['localhost', '127.0.0.1', '::1'], true) || $host === $serverHost) {
-        header("Access-Control-Allow-Origin: $origin");
-        header("Access-Control-Allow-Credentials: true");
-    }
+require_once(__DIR__ . '/../platform.php');
+cachy_send_local_cors('GET, OPTIONS');
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
 }
 
-// Persistent cache directory (survives reboots)
-$cacheDir = __DIR__ . '/../../data/covers';
+// Persistent OS user-writable cache directory (survives reboots & readonly installs)
+$cacheDir = cachy_cache_dir() . DIRECTORY_SEPARATOR . 'covers';
 if (!is_dir($cacheDir)) {
     @mkdir($cacheDir, 0775, true);
-}
-if (!is_writable($cacheDir)) {
-    $xdg = getenv('XDG_CACHE_HOME') ?: (getenv('HOME') ? (getenv('HOME') . '/.cache') : sys_get_temp_dir());
-    $cacheDir = $xdg . '/cachymusic_covers';
-    if (!is_dir($cacheDir)) {
-        @mkdir($cacheDir, 0775, true);
-    }
 }
 
 $tid = isset($_GET['tid']) ? (int)$_GET['tid'] : 0;
@@ -93,7 +82,6 @@ if (empty($fullPath) && !empty($path)) {
 // Security: Sandbox boundary check
 $projectRoot = realpath(__DIR__ . '/../../');
 $allowedRoots = [
-    realpath($projectRoot . '/resources/audio'),
     realpath($projectRoot . '/downloads'),
 ];
 
@@ -198,8 +186,65 @@ if (file_exists($cacheFull) && filesize($cacheFull) > 0) {
 }
 
 // Extract embedded artwork via ffmpeg
-$cmd = "ffmpeg -v quiet -i " . escapeshellarg($fullPath) . " -an -c:v copy -f image2 - 2>/dev/null";
-$imgBytes = @shell_exec($cmd);
+function extract_php_embedded_cover($audioPath) {
+    $ext = strtolower(pathinfo($audioPath, PATHINFO_EXTENSION));
+    $fh = @fopen($audioPath, 'rb');
+    if (!$fh) return null;
+    $head = fread($fh, 2097152); // Max 2MB tag scan for speed
+    fclose($fh);
+    if (strlen($head) < 32) return null;
+
+    if ($ext === 'flac' && substr($head, 0, 4) === 'fLaC') {
+        $pos = 4;
+        $len = strlen($head);
+        while ($pos + 4 <= $len) {
+            $b0 = ord($head[$pos]);
+            $last = ($b0 & 0x80) !== 0;
+            $type = $b0 & 0x7F;
+            $bLen = (ord($head[$pos + 1]) << 16) | (ord($head[$pos + 2]) << 8) | ord($head[$pos + 3]);
+            $pos += 4;
+            if ($bLen <= 0 || $pos + $bLen > $len) break;
+            if ($type === 6 && $bLen > 32) {
+                $blk = substr($head, $pos, $bLen);
+                $mimeLen = unpack('N', substr($blk, 4, 4))[1];
+                $p = 8 + $mimeLen;
+                if ($p + 4 <= $bLen) {
+                    $descLen = unpack('N', substr($blk, $p, 4))[1];
+                    $p += 4 + $descLen + 16;
+                    if ($p + 4 <= $bLen) {
+                        $picLen = unpack('N', substr($blk, $p, 4))[1];
+                        $p += 4;
+                        if ($picLen > 64 && $p + $picLen <= $bLen) return substr($blk, $p, $picLen);
+                    }
+                }
+            }
+            $pos += $bLen;
+            if ($last) break;
+        }
+    } elseif ($ext === 'mp3' && substr($head, 0, 3) === 'ID3') {
+        if (($apicPos = strpos($head, 'APIC')) !== false && $apicPos >= 0) {
+            foreach (["\xff\xd8\xff", "\x89PNG\x0d\x0a\x1a\x0a"] as $magic) {
+                if (($mPos = strpos($head, $magic, $apicPos)) !== false) {
+                    return substr($head, $mPos, min(strlen($head) - $mPos, 1500000));
+                }
+            }
+        }
+    } elseif (($ext === 'm4a' || $ext === 'mp4') && ($covrPos = strpos($head, 'covr')) !== false) {
+        foreach (["\xff\xd8\xff", "\x89PNG\x0d\x0a\x1a\x0a"] as $magic) {
+            if (($mPos = strpos($head, $magic, $covrPos)) !== false) {
+                return substr($head, $mPos, min(strlen($head) - $mPos, 1500000));
+            }
+        }
+    }
+    return null;
+}
+
+// 1. Try ffmpeg extraction when present, else pure-PHP binary artwork fallback
+$ffmpegBin = cachy_find_binary('ffmpeg');
+$imgBytes = $ffmpegBin ? @shell_exec(escapeshellarg($ffmpegBin) . " -v quiet -i " . escapeshellarg($fullPath) . " -an -c:v copy -f image2 - 2>/dev/null") : null;
+if (!$imgBytes || strlen($imgBytes) <= 100) {
+    $imgBytes = extract_php_embedded_cover($fullPath);
+}
 
 if ($imgBytes && strlen($imgBytes) > 100) {
     $mime = 'image/jpeg';
@@ -210,9 +255,11 @@ if ($imgBytes && strlen($imgBytes) > 100) {
     @file_put_contents($cacheFull, $imgBytes);
     @file_put_contents($cacheMime, $mime);
 
-    // Generate lightweight 128x128 thumbnail
-    $thumbCmd = "ffmpeg -y -v quiet -i " . escapeshellarg($cacheFull) . " -vf \"scale=128:128:force_original_aspect_ratio=decrease\" -q:v 3 -f image2 " . escapeshellarg($cacheThumb) . " 2>/dev/null";
-    @exec($thumbCmd);
+    // Generate lightweight 128x128 thumbnail if ffmpeg is present
+    if ($ffmpegBin) {
+        $thumbCmd = escapeshellarg($ffmpegBin) . " -y -v quiet -i " . escapeshellarg($cacheFull) . " -vf \"scale=128:128:force_original_aspect_ratio=decrease\" -q:v 3 -f image2 " . escapeshellarg($cacheThumb) . " 2>/dev/null";
+        @exec($thumbCmd);
+    }
 
     // Link by tid for fast-path
     if ($tid > 0) {
@@ -250,9 +297,11 @@ foreach ($commonCovers as $cc) {
         @copy($candidate, $cacheFull);
         @file_put_contents($cacheMime, $cMime);
 
-        // Generate thumbnail
-        $thumbCmd = "ffmpeg -y -v quiet -i " . escapeshellarg($cacheFull) . " -vf \"scale=128:128:force_original_aspect_ratio=decrease\" -q:v 3 -f image2 " . escapeshellarg($cacheThumb) . " 2>/dev/null";
-        @exec($thumbCmd);
+        // Generate thumbnail if ffmpeg is present
+        if ($ffmpegBin) {
+            $thumbCmd = escapeshellarg($ffmpegBin) . " -y -v quiet -i " . escapeshellarg($cacheFull) . " -vf \"scale=128:128:force_original_aspect_ratio=decrease\" -q:v 3 -f image2 " . escapeshellarg($cacheThumb) . " 2>/dev/null";
+            @exec($thumbCmd);
+        }
 
         if ($tid > 0) {
             @copy($cacheFull, $cacheDir . '/tid_' . $tid . '.img');

@@ -216,7 +216,7 @@ launch_ui() {
     if [ -n "$browser" ]; then
         # Standalone native window mode with segregated user profile and WM class
         echo "Launching CachyMusic desktop window ($browser)..."
-        "$browser" --app="$url" --user-data-dir="$HOME/.config/cachymusic" --class="cachymusic" "$@" >/dev/null 2>&1 &
+        "$browser" --app="$url" --user-data-dir="$HOME/.config/cachymusic" --class="cachymusic" --disable-features=HardwareMediaKeyHandling,MediaSessionService "$@" >/dev/null 2>&1 &
         browser_pid=$!
         wait "$browser_pid" 2>/dev/null || true
     elif command -v xdg-open >/dev/null 2>&1; then

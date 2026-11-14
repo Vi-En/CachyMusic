@@ -42,7 +42,6 @@ if (empty($filePath) && empty($trackId)) {
 // 1. Establish authorized library root directories
 $projectRoot = realpath(__DIR__ . '/../../');
 $allowedRoots = [
-    realpath($projectRoot . '/resources/audio'),
     realpath($projectRoot . '/downloads'),
 ];
 
@@ -63,7 +62,7 @@ if (!empty($slskAcc['shared_dir'])) {
     if ($slskShare && is_dir($slskShare)) $allowedRoots[] = $slskShare;
 }
 
-$userHome = getenv('HOME') ?: ($_SERVER['HOME'] ?? (getenv('USER') ? '/home/' . getenv('USER') : ''));
+$userHome = cachy_home_dir();
 if ($userHome) {
     if (is_dir($userHome . '/Music/Main')) {
         $mainMusic = realpath($userHome . '/Music/Main');
@@ -194,8 +193,8 @@ $size = (int)filesize($realPath);
 
 // Optional on-the-fly FFmpeg transcode fallback for non-standard codecs (e.g. AC3/DTS/WMA wrapped in .flac/.m4a)
 if (isset($_GET['transcode']) && $_GET['transcode'] === '1') {
-    $ffmpegBin = trim((string)@shell_exec('command -v ffmpeg 2>/dev/null'));
-    if ($ffmpegBin !== '') {
+    $ffmpegBin = cachy_find_binary('ffmpeg');
+    if ($ffmpegBin !== null) {
         header("Content-Type: audio/mpeg");
         header("Accept-Ranges: none");
         header("Cache-Control: no-store");
@@ -203,7 +202,7 @@ if (isset($_GET['transcode']) && $_GET['transcode'] === '1') {
         if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
             exit;
         }
-        $cmd = escapeshellcmd($ffmpegBin) . ' -v error -i ' . escapeshellarg($realPath) . ' -vn -acodec libmp3lame -b:a 320k -f mp3 pipe:1 2>/dev/null';
+        $cmd = escapeshellarg($ffmpegBin) . ' -v error -i ' . escapeshellarg($realPath) . ' -vn -acodec libmp3lame -b:a 320k -f mp3 pipe:1 2>/dev/null';
         $proc = @popen($cmd, 'r');
         if (is_resource($proc)) {
             while (!feof($proc)) {

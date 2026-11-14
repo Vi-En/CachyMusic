@@ -1,25 +1,7 @@
 <?php
+require_once(__DIR__ . '/../platform.php');
 header('Content-Type: application/json; charset=utf-8');
-
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (!empty($origin)) {
-    $parsed = parse_url($origin);
-    $host = $parsed['host'] ?? '';
-    $serverHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), PHP_URL_HOST);
-    $isLocalOrLan = in_array($host, ['localhost', '127.0.0.1', '::1', 'appassets.androidplatform.net'], true)
-        || $host === $serverHost
-        || preg_match('/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/', $host)
-        || strpos($origin, 'androidplatform.net') !== false;
-    if ($isLocalOrLan) {
-        header("Access-Control-Allow-Origin: $origin");
-        header("Access-Control-Allow-Credentials: true");
-    }
-} else {
-    header("Access-Control-Allow-Origin: *");
-}
-
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
+cachy_send_local_cors('GET, POST, OPTIONS', true);
 
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -32,9 +14,13 @@ $NICOTINE_BASE_URL = "http://$NICOTINE_HOST:$NICOTINE_PORT";
 
 function get_project_downloads_dir() {
     $projectDir = realpath(__DIR__ . '/../../');
-    $localDownloads = $projectDir . '/downloads';
-    if (!is_dir($localDownloads)) {
+    $localDownloads = $projectDir . DIRECTORY_SEPARATOR . 'downloads';
+    if (!is_dir($localDownloads) && is_writable($projectDir)) {
         @mkdir($localDownloads, 0750, true);
+    }
+    if (!is_dir($localDownloads) || !is_writable($localDownloads)) {
+        $localDownloads = cachy_data_dir() . DIRECTORY_SEPARATOR . 'downloads';
+        if (!is_dir($localDownloads)) @mkdir($localDownloads, 0750, true);
     }
     return $localDownloads;
 }
@@ -44,7 +30,7 @@ $DOWNLOADS_DIR = get_project_downloads_dir();
 @require_once(__DIR__ . '/../database.php');
 
 function get_soulseek_secret_key() {
-    $keyFile = __DIR__ . '/../../data/.auth_secret';
+    $keyFile = cachy_data_dir() . DIRECTORY_SEPARATOR . '.auth_secret';
     $read = function () use ($keyFile) {
         if (is_file($keyFile) && filesize($keyFile) >= 32) {
             $k = @file_get_contents($keyFile);
@@ -120,26 +106,43 @@ function sanitize_soulseek_directory($candidate, $fallback) {
 function encrypt_soulseek_secret($plainText) {
     if (empty($plainText)) return '';
     $key = get_soulseek_secret_key();
-    $iv = openssl_random_pseudo_bytes(16);
+    if (in_array('aes-256-gcm', openssl_get_cipher_methods(), true)) {
+        $iv = random_bytes(12);
+        $tag = '';
+        $cipherText = openssl_encrypt($plainText, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, '', 16);
+        if ($cipherText !== false && strlen($tag) === 16) {
+            return 'gcm:' . base64_encode($iv . $tag . $cipherText);
+        }
+    }
+    $iv = random_bytes(16);
     $cipherText = openssl_encrypt($plainText, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
     return base64_encode($iv . $cipherText);
 }
 
 function decrypt_soulseek_secret($encryptedBase64) {
     if (empty($encryptedBase64)) return '';
-    $raw = base64_decode($encryptedBase64);
-    if (strlen($raw) <= 16) return '';
+    $key = get_soulseek_secret_key();
+    if (str_starts_with($encryptedBase64, 'gcm:')) {
+        $raw = base64_decode(substr($encryptedBase64, 4), true);
+        if ($raw === false || strlen($raw) <= 28) return '';
+        $iv = substr($raw, 0, 12);
+        $tag = substr($raw, 12, 16);
+        $cipherText = substr($raw, 28);
+        $decrypted = openssl_decrypt($cipherText, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
+        return $decrypted !== false ? $decrypted : '';
+    }
+    $raw = base64_decode($encryptedBase64, true);
+    if ($raw === false || strlen($raw) <= 16) return '';
     $iv = substr($raw, 0, 16);
     $cipherText = substr($raw, 16);
-    
-    // 1. Try local machine secret key
-    $key = get_soulseek_secret_key();
+
+    // 1. Try local machine secret key (legacy AES-256-CBC migration)
     $decrypted = openssl_decrypt($cipherText, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
     if ($decrypted !== false && !empty($decrypted)) {
         return $decrypted;
     }
-    
-    // 2. Legacy salt fallback for existing saved credentials
+
+    // 2. Legacy salt fallback for older saved credentials
     $legacyKey = hash('sha256', 'CachyMusic-Soulseek-Secret-Salt-9942', true);
     $legacyDecrypted = openssl_decrypt($cipherText, 'aes-256-cbc', $legacyKey, OPENSSL_RAW_DATA, $iv);
     return $legacyDecrypted ?: '';
@@ -152,16 +155,16 @@ function get_db_soulseek_account() {
 $action = $_GET['action'] ?? $_POST['action'] ?? 'status';
 
 function ensure_standalone_service_running() {
-    global $NICOTINE_BASE_URL;
     $health = @call_nicotine_api('GET', '/health', null, 1);
     if ($health['ok']) return true;
 
-    // 1. Standardize on Nicotine+ headless daemon
-    $hasNicotine = !empty(shell_exec('which nicotine 2>/dev/null'));
-    if ($hasNicotine) {
-        // Ensure Nicotine client is disconnected by default on startup
-        $userHome = getenv('HOME') ?: (isset($_SERVER['HOME']) ? $_SERVER['HOME'] : (function_exists('posix_getpwuid') ? (posix_getpwuid(posix_getuid())['dir'] ?? '') : ''));
-        $nicoCfg = ($userHome ? $userHome : sys_get_temp_dir()) . '/.config/nicotine/config';
+    $logDir = cachy_cache_dir();
+
+    // 1. Standardize on Nicotine+ headless daemon (cross-platform binary discovery)
+    $nicotineBin = cachy_find_binary('nicotine');
+    if ($nicotineBin !== null) {
+        $userHome = cachy_home_dir();
+        $nicoCfg = $userHome . DIRECTORY_SEPARATOR . '.config' . DIRECTORY_SEPARATOR . 'nicotine' . DIRECTORY_SEPARATOR . 'config';
         if (file_exists($nicoCfg)) {
             $cfgContent = @file_get_contents($nicoCfg);
             if ($cfgContent !== false && strpos($cfgContent, 'auto_connect_startup = True') !== false) {
@@ -169,7 +172,7 @@ function ensure_standalone_service_running() {
                 @file_put_contents($nicoCfg, $cfgContent);
             }
         }
-        @shell_exec("setsid -f nicotine -n < /dev/null > /tmp/nicotine-daemon.log 2>&1 &");
+        cachy_spawn_detached($nicotineBin, ['-n'], $logDir . DIRECTORY_SEPARATOR . 'nicotine-daemon.log');
         for ($i = 0; $i < 15; $i++) {
             usleep(200000);
             $check = @call_nicotine_api('GET', '/health', null, 1);
@@ -177,11 +180,12 @@ function ensure_standalone_service_running() {
         }
     }
 
-    // 2. Fallback to legacy Node.js Soulseek microservice if nicotine binary is absent
+    // 2. Fallback to standalone Node.js Soulseek microservice
     $projectDir = realpath(__DIR__ . '/../../');
-    $serviceScript = $projectDir . '/server/soulseek-service.js';
-    if (file_exists($serviceScript)) {
-        @shell_exec("setsid -f node " . escapeshellarg($serviceScript) . " < /dev/null > /tmp/soulseek-node.log 2>&1 &");
+    $serviceScript = $projectDir . DIRECTORY_SEPARATOR . 'server' . DIRECTORY_SEPARATOR . 'soulseek-service.js';
+    $nodeBin = cachy_find_binary('node');
+    if (file_exists($serviceScript) && $nodeBin !== null) {
+        cachy_spawn_detached($nodeBin, [$serviceScript], $logDir . DIRECTORY_SEPARATOR . 'soulseek-node.log');
         for ($i = 0; $i < 12; $i++) {
             usleep(250000);
             $check = @call_nicotine_api('GET', '/health', null, 1);
@@ -882,35 +886,44 @@ switch ($action) {
             $fileExists = file_exists($targetLocalFile);
             $isFin = ($status === 'Finished') || ($progress >= 100 && $fileExists && !in_array($status, ['Paused', 'Cancelled']));
 
-            // Instant Auto-Indexing: automatically index completed single audio download into library in <20ms
+            // Instant Auto-Indexing (deduplicated against cached mtime & size to prevent re-index storms on polling)
             if ($isFin && $fileExists) {
                 $ext = strtolower(pathinfo($targetLocalFile, PATHINFO_EXTENSION));
                 if (in_array($ext, ['mp3', 'flac', 'm4a', 'wav', 'ogg', 'aac', 'opus'])) {
-                    @require_once(__DIR__ . '/scan.php');
-                    if (function_exists('extract_actual_audio_metadata')) {
-                        $meta = extract_actual_audio_metadata($targetLocalFile, $ext, filesize($targetLocalFile));
-                        Storage::upsertTrack([
-                            'file_path' => $fn,
-                            'full_path' => $targetLocalFile,
-                            'title' => $meta['title'] ?: pathinfo($targetLocalFile, PATHINFO_FILENAME),
-                            'artist' => $meta['artist'] ?: 'Soulseek Download',
-                            'album' => $meta['album'] ?: 'Downloads',
-                            'genre' => $meta['genre'] ?: 'Audio',
-                            'year' => $meta['year'] ?: null,
-                            'track_num' => $meta['track'] ?: null,
-                            'duration' => $meta['duration'] ?: 0,
-                            'bitrate' => $meta['bitrate'] ?: null,
-                            'sample_rate' => $meta['sampleRate'] ?: 44100,
-                            'channels' => $meta['channels'] ?: 2,
-                            'bit_depth' => $meta['bitDepth'] ?? 16,
-                            'format' => strtoupper($ext),
-                            'file_size' => filesize($targetLocalFile),
-                            'mtime' => filemtime($targetLocalFile),
-                            'has_cover' => !empty($meta['hasCover']),
-                            'lyrics' => $meta['lyrics'] ?? null,
-                            'replay_gain' => $meta['replayGain'] ?? null,
-                            'replay_peak' => $meta['replayPeak'] ?? null
-                        ]);
+                    $fileMtime = @filemtime($targetLocalFile) ?: 0;
+                    $fileSize = @filesize($targetLocalFile) ?: 0;
+                    $cachedTrack = Storage::getTrackByPath($targetLocalFile);
+                    $alreadyIndexed = is_array($cachedTrack)
+                        && (int)($cachedTrack['mtime'] ?? -1) === (int)$fileMtime
+                        && (int)($cachedTrack['file_size'] ?? -1) === (int)$fileSize
+                        && !empty($cachedTrack['title']);
+                    if (!$alreadyIndexed) {
+                        @require_once(__DIR__ . '/scan.php');
+                        if (function_exists('extract_actual_audio_metadata')) {
+                            $meta = extract_actual_audio_metadata($targetLocalFile, $ext, $fileSize);
+                            Storage::upsertTrack([
+                                'file_path' => $fn,
+                                'full_path' => $targetLocalFile,
+                                'title' => $meta['title'] ?: pathinfo($targetLocalFile, PATHINFO_FILENAME),
+                                'artist' => $meta['artist'] ?: 'Soulseek Download',
+                                'album' => $meta['album'] ?: 'Downloads',
+                                'genre' => $meta['genre'] ?: 'Audio',
+                                'year' => $meta['year'] ?: null,
+                                'track_num' => $meta['track'] ?: null,
+                                'duration' => $meta['duration'] ?: 0,
+                                'bitrate' => $meta['bitrate'] ?: null,
+                                'sample_rate' => $meta['sampleRate'] ?: 44100,
+                                'channels' => $meta['channels'] ?: 2,
+                                'bit_depth' => $meta['bitDepth'] ?? 16,
+                                'format' => strtoupper($ext),
+                                'file_size' => $fileSize,
+                                'mtime' => $fileMtime,
+                                'has_cover' => !empty($meta['hasCover']),
+                                'lyrics' => $meta['lyrics'] ?? null,
+                                'replay_gain' => $meta['replayGain'] ?? null,
+                                'replay_peak' => $meta['replayPeak'] ?? null
+                            ]);
+                        }
                     }
                 }
             }

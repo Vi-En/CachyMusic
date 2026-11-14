@@ -112,19 +112,6 @@
         return (str || '').toString().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
-    // App Initialization
-    window.__cachyMusic = {
-        getAudioContext: () => audioContext,
-        getAudio: () => audio,
-        hasActiveDsp: () => hasActiveDsp(),
-        getAllTracks: () => allTracks,
-        loadTrack: (idx, autoPlay, initialTime) => loadTrack(idx, autoPlay, initialTime)
-    };
-
-    // =========================================================================
-    // Linux MPRIS2 D-Bus & Desktop Media Control Bridge
-    // =========================================================================
-
     function formatFileSize(bytes) {
         if (!bytes) return 'N/A';
         if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
@@ -176,17 +163,46 @@
         }, duration);
     }
 
-    if (typeof window !== 'undefined') {
-        Object.assign(window, {
-            isFirefox,
-            isMobileDevice,
-            safeStorage,
-            escapeHtml,
-            escapeRegex,
-            formatTime,
-            formatFileSize,
-            showToast
-        });
+    function showCachyToast(title, message = '', _level = 'info') {
+        const text = message ? `${title}: ${message}` : String(title || '');
+        showToast(text);
+    }
+
+    function setScanStatus(msg, isError = false) {
+        if (typeof document === 'undefined') return;
+        const scanStatusEl = document.getElementById('scanStatus');
+        if (scanStatusEl) {
+            scanStatusEl.textContent = msg;
+            scanStatusEl.style.color = isError ? '#ff4d4d' : 'var(--text-secondary, #888888)';
+        }
+        const settingsTabScanStatus = document.getElementById('settingsTabScanStatus');
+        if (settingsTabScanStatus) {
+            settingsTabScanStatus.textContent = msg;
+            settingsTabScanStatus.style.color = isError ? '#ff4d4d' : 'var(--accent-color, #00f0ff)';
+        }
+    }
+
+    function pushModalState(modalId) {
+        try {
+            if (typeof history !== 'undefined' && typeof history.pushState === 'function') {
+                history.pushState({ cachyModal: modalId }, '');
+            }
+        } catch (_) {}
+    }
+
+    function popModalState(modalId) {
+        try {
+            if (typeof history !== 'undefined' && history.state && history.state.cachyModal === modalId) {
+                history.back();
+            }
+        } catch (_) {}
+    }
+
+    function getValidSampleRate(rate) {
+        const r = Number(rate);
+        const validRates = [44100, 48000, 88200, 96000, 176400, 192000];
+        if (validRates.includes(r)) return r;
+        return 44100;
     }
 
     export {
@@ -197,6 +213,11 @@
         escapeRegex,
         formatTime,
         formatFileSize,
-        showToast
+        showToast,
+        showCachyToast,
+        setScanStatus,
+        pushModalState,
+        popModalState,
+        getValidSampleRate
     };
 

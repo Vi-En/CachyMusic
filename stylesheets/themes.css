@@ -1,0 +1,401 @@
+/* CachyMusic v2.0.0 — Perceptual OKLCH Themes (WCAG 2.1 AAA + 60-30-10) */
+
+@layer themes {
+    /* 1. Default Studio Hi-Fi (Noir Teal & Laser Cyan) */
+    :root,
+    :root[data-theme="default"],
+    :root[data-theme="studio-dark"] {
+        color-scheme: dark;
+        --bg-canvas: oklch(0.14 0.015 245);
+        --bg-surface-1: oklch(0.18 0.020 242 / 0.94);
+        --bg-surface-2: oklch(0.23 0.026 240 / 0.94);
+        --bg-surface-3: oklch(0.28 0.032 238 / 0.96);
+        --bg-glass: oklch(0.14 0.015 245 / 0.88);
+
+        --border-subtle: oklch(1 0 0 / 0.11);
+        --border-medium: oklch(0.84 0.14 205 / 0.34);
+        --border-bold: oklch(0.84 0.15 205 / 0.72);
+        --border-focus: oklch(0.84 0.16 205);
+
+        --text-primary: oklch(0.97 0.008 240);
+        --text-secondary: oklch(0.83 0.055 245);
+        --text-muted: oklch(0.73 0.045 245);
+        --text-disabled: oklch(0.49 0.03 245);
+        --text-accent: oklch(0.85 0.15 205);
+        --text-on-accent: oklch(0.13 0.02 225);
+
+        --accent-color: oklch(0.84 0.15 205);
+        --accent-primary: oklch(0.84 0.15 205);
+        --accent-hover: oklch(0.89 0.13 205);
+        --accent-glow: oklch(0.84 0.15 205 / 0.42);
+        --accent-surface: oklch(0.84 0.15 205 / 0.14);
+        --ambient-aura-1: oklch(0.80 0.15 205 / 0.18);
+        --ambient-aura-2: oklch(0.72 0.12 220 / 0.05);
+    }
+
+    /* 2. The Atlas / NMS (Crimson Terminal) */
+    :root[data-theme="nms"],
+    :root[data-theme="atlas"] {
+        color-scheme: dark;
+        --bg-canvas: oklch(0.13 0.015 15);
+        --bg-surface-1: oklch(0.18 0.028 18 / 0.94);
+        --bg-surface-2: oklch(0.23 0.036 18 / 0.94);
+        --bg-surface-3: oklch(0.28 0.044 18 / 0.96);
+        --bg-glass: oklch(0.13 0.015 15 / 0.90);
+
+        --border-subtle: oklch(0.64 0.23 18 / 0.22);
+        --border-medium: oklch(0.64 0.23 18 / 0.48);
+        --border-bold: oklch(0.64 0.25 18);
+        --border-focus: oklch(0.70 0.22 18);
+
+        --text-primary: oklch(0.97 0.01 12);
+        --text-secondary: oklch(0.85 0.075 18);
+        --text-muted: oklch(0.75 0.06 18);
+        --text-disabled: oklch(0.48 0.04 18);
+        --text-accent: oklch(0.72 0.22 18);
+        --text-on-accent: oklch(0.99 0.004 0);
+
+        --accent-color: oklch(0.63 0.25 18);
+        --accent-primary: oklch(0.63 0.25 18);
+        --accent-hover: oklch(0.70 0.23 18);
+        --accent-glow: oklch(0.63 0.25 18 / 0.46);
+        --accent-surface: oklch(0.63 0.25 18 / 0.16);
+        --ambient-aura-1: oklch(0.63 0.24 18 / 0.20);
+        --ambient-aura-2: oklch(0.78 0.14 205 / 0.05);
+    }
+
+    /* 3. Planetary Warp / Solar Eclipse / Cyberpunk */
+    :root[data-theme="solar-eclipse"],
+    :root[data-theme="cyberpunk"],
+    :root[data-theme="neon-night"] {
+        color-scheme: dark;
+        --bg-canvas: oklch(0.14 0.028 272);
+        --bg-surface-1: oklch(0.18 0.042 272 / 0.94);
+        --bg-surface-2: oklch(0.24 0.052 272 / 0.94);
+        --bg-surface-3: oklch(0.30 0.062 272 / 0.96);
+        --bg-glass: oklch(0.14 0.028 272 / 0.90);
+
+        --border-subtle: oklch(0.85 0.14 202 / 0.22);
+        --border-medium: oklch(0.85 0.14 202 / 0.48);
+        --border-bold: oklch(0.86 0.15 202);
+        --border-focus: oklch(0.86 0.15 202);
+
+        --text-primary: oklch(0.97 0.01 245);
+        --text-secondary: oklch(0.84 0.08 250);
+        --text-muted: oklch(0.74 0.055 255);
+        --text-disabled: oklch(0.50 0.04 260);
+        --text-accent: oklch(0.86 0.15 202);
+        --text-on-accent: oklch(0.12 0.03 265);
+
+        --accent-color: oklch(0.86 0.15 202);
+        --accent-primary: oklch(0.86 0.15 202);
+        --accent-hover: oklch(0.91 0.12 202);
+        --accent-glow: oklch(0.86 0.15 202 / 0.46);
+        --accent-surface: oklch(0.86 0.15 202 / 0.15);
+        --ambient-aura-1: oklch(0.86 0.15 202 / 0.18);
+        --ambient-aura-2: oklch(0.65 0.26 350 / 0.09);
+    }
+
+    /* 4. Space Station / Euclid Horizon (Amber Gold + Orbital Teal) */
+    :root[data-theme="euclid-horizon"] {
+        color-scheme: dark;
+        --bg-canvas: oklch(0.14 0.014 70);
+        --bg-surface-1: oklch(0.19 0.024 68 / 0.94);
+        --bg-surface-2: oklch(0.24 0.032 68 / 0.94);
+        --bg-surface-3: oklch(0.30 0.040 68 / 0.96);
+        --bg-glass: oklch(0.14 0.014 70 / 0.90);
+
+        --border-subtle: oklch(0.83 0.16 82 / 0.22);
+        --border-medium: oklch(0.83 0.16 82 / 0.48);
+        --border-bold: oklch(0.84 0.17 82);
+        --border-focus: oklch(0.84 0.17 82);
+
+        --text-primary: oklch(0.98 0.012 92);
+        --text-secondary: oklch(0.89 0.08 88);
+        --text-muted: oklch(0.75 0.055 78);
+        --text-disabled: oklch(0.50 0.04 75);
+        --text-accent: oklch(0.84 0.16 82);
+        --text-on-accent: oklch(0.15 0.03 65);
+
+        --accent-color: oklch(0.84 0.16 82);
+        --accent-primary: oklch(0.84 0.16 82);
+        --accent-hover: oklch(0.89 0.14 85);
+        --accent-glow: oklch(0.84 0.16 82 / 0.44);
+        --accent-surface: oklch(0.84 0.16 82 / 0.16);
+        --ambient-aura-1: oklch(0.84 0.16 82 / 0.18);
+        --ambient-aura-2: oklch(0.73 0.13 185 / 0.06);
+    }
+
+    /* 5. Alien Paradise (Fuchsia Flora & Lagoon Turquoise) */
+    :root[data-theme="alien-paradise"] {
+        color-scheme: dark;
+        --bg-canvas: oklch(0.14 0.025 335);
+        --bg-surface-1: oklch(0.19 0.038 332 / 0.94);
+        --bg-surface-2: oklch(0.24 0.048 332 / 0.94);
+        --bg-surface-3: oklch(0.30 0.056 332 / 0.96);
+        --bg-glass: oklch(0.14 0.025 335 / 0.90);
+
+        --border-subtle: oklch(0.67 0.24 352 / 0.24);
+        --border-medium: oklch(0.67 0.24 352 / 0.50);
+        --border-bold: oklch(0.67 0.24 352);
+        --border-focus: oklch(0.72 0.22 352);
+
+        --text-primary: oklch(0.97 0.012 348);
+        --text-secondary: oklch(0.86 0.09 342);
+        --text-muted: oklch(0.76 0.065 340);
+        --text-disabled: oklch(0.50 0.045 340);
+        --text-accent: oklch(0.74 0.22 352);
+        --text-on-accent: oklch(0.99 0.005 0);
+
+        --accent-color: oklch(0.67 0.24 352);
+        --accent-primary: oklch(0.67 0.24 352);
+        --accent-hover: oklch(0.74 0.21 352);
+        --accent-glow: oklch(0.67 0.24 352 / 0.46);
+        --accent-surface: oklch(0.67 0.24 352 / 0.16);
+        --ambient-aura-1: oklch(0.67 0.24 352 / 0.20);
+        --ambient-aura-2: oklch(0.85 0.15 170 / 0.06);
+    }
+
+    /* 6. Emeril Drive / Abyssal Void (Emerald Plasma) */
+    :root[data-theme="abyssal-void"] {
+        color-scheme: dark;
+        --bg-canvas: oklch(0.14 0.018 168);
+        --bg-surface-1: oklch(0.18 0.032 168 / 0.94);
+        --bg-surface-2: oklch(0.23 0.042 168 / 0.94);
+        --bg-surface-3: oklch(0.28 0.052 168 / 0.96);
+        --bg-glass: oklch(0.14 0.018 168 / 0.90);
+
+        --border-subtle: oklch(0.87 0.19 158 / 0.22);
+        --border-medium: oklch(0.87 0.19 158 / 0.48);
+        --border-bold: oklch(0.87 0.20 158);
+        --border-focus: oklch(0.87 0.20 158);
+
+        --text-primary: oklch(0.97 0.012 162);
+        --text-secondary: oklch(0.87 0.10 162);
+        --text-muted: oklch(0.75 0.07 165);
+        --text-disabled: oklch(0.49 0.05 165);
+        --text-accent: oklch(0.87 0.19 158);
+        --text-on-accent: oklch(0.12 0.03 162);
+
+        --accent-color: oklch(0.87 0.19 158);
+        --accent-primary: oklch(0.87 0.19 158);
+        --accent-hover: oklch(0.91 0.16 158);
+        --accent-glow: oklch(0.87 0.19 158 / 0.44);
+        --accent-surface: oklch(0.87 0.19 158 / 0.16);
+        --ambient-aura-1: oklch(0.87 0.19 158 / 0.18);
+        --ambient-aura-2: oklch(0.80 0.14 175 / 0.05);
+    }
+
+    /* 7. Dissonance (Atlantideum Violet) */
+    :root[data-theme="dissonance"] {
+        color-scheme: dark;
+        --bg-canvas: oklch(0.14 0.025 305);
+        --bg-surface-1: oklch(0.19 0.042 305 / 0.94);
+        --bg-surface-2: oklch(0.24 0.055 305 / 0.94);
+        --bg-surface-3: oklch(0.30 0.068 305 / 0.96);
+        --bg-glass: oklch(0.14 0.025 305 / 0.90);
+
+        --border-subtle: oklch(0.71 0.24 322 / 0.24);
+        --border-medium: oklch(0.71 0.24 322 / 0.50);
+        --border-bold: oklch(0.72 0.25 322);
+        --border-focus: oklch(0.75 0.22 322);
+
+        --text-primary: oklch(0.97 0.012 310);
+        --text-secondary: oklch(0.87 0.07 308);
+        --text-muted: oklch(0.76 0.075 308);
+        --text-disabled: oklch(0.50 0.045 308);
+        --text-accent: oklch(0.78 0.21 322);
+        --text-on-accent: oklch(0.14 0.03 310);
+
+        --accent-color: oklch(0.72 0.24 322);
+        --accent-primary: oklch(0.72 0.24 322);
+        --accent-hover: oklch(0.79 0.20 322);
+        --accent-glow: oklch(0.72 0.24 322 / 0.45);
+        --accent-surface: oklch(0.72 0.24 322 / 0.16);
+        --ambient-aura-1: oklch(0.72 0.24 322 / 0.19);
+        --ambient-aura-2: oklch(0.64 0.24 295 / 0.06);
+    }
+
+    /* 8. Sentinel (Planetary Defense Ice HUD) */
+    :root[data-theme="sentinel"] {
+        color-scheme: dark;
+        --bg-canvas: oklch(0.14 0.02 238);
+        --bg-surface-1: oklch(0.19 0.032 238 / 0.94);
+        --bg-surface-2: oklch(0.24 0.042 238 / 0.94);
+        --bg-surface-3: oklch(0.30 0.052 238 / 0.96);
+        --bg-glass: oklch(0.14 0.02 238 / 0.90);
+
+        --border-subtle: oklch(0.84 0.14 205 / 0.24);
+        --border-medium: oklch(0.84 0.14 205 / 0.48);
+        --border-bold: oklch(0.85 0.15 205);
+        --border-focus: oklch(0.85 0.15 205);
+
+        --text-primary: oklch(0.98 0.008 210);
+        --text-secondary: oklch(0.84 0.085 228);
+        --text-muted: oklch(0.74 0.065 225);
+        --text-disabled: oklch(0.49 0.04 228);
+        --text-accent: oklch(0.85 0.15 205);
+        --text-on-accent: oklch(0.13 0.03 228);
+
+        --accent-color: oklch(0.85 0.15 205);
+        --accent-primary: oklch(0.85 0.15 205);
+        --accent-hover: oklch(0.90 0.13 205);
+        --accent-glow: oklch(0.85 0.15 205 / 0.46);
+        --accent-surface: oklch(0.85 0.15 205 / 0.16);
+        --ambient-aura-1: oklch(0.85 0.15 205 / 0.19);
+        --ambient-aura-2: oklch(0.65 0.22 32 / 0.07);
+    }
+
+    /* 9. Minimalist Light / Brutalist Light (High-Contrast Paper, AAA Ink) */
+    :root:is([data-theme="minimalist-light"], [data-theme="brutalist-light"]) {
+        color-scheme: light;
+        --bg-canvas: oklch(0.965 0.008 92);
+        --bg-surface-1: oklch(1 0 0);
+        --bg-surface-2: oklch(0.935 0.012 92);
+        --bg-surface-3: oklch(0.89 0.015 90);
+        --bg-glass: oklch(0.965 0.008 92 / 0.96);
+
+        --border-subtle: oklch(0.82 0.015 88);
+        --border-medium: oklch(0.15 0 0);
+        --border-bold: oklch(0 0 0);
+        --border-focus: oklch(0 0 0);
+
+        --text-primary: oklch(0 0 0);
+        --text-secondary: oklch(0.24 0 0);
+        --text-muted: oklch(0.39 0 0);
+        --text-disabled: oklch(0.60 0 0);
+        --text-accent: oklch(0.12 0 0);
+        --text-on-accent: oklch(1 0 0);
+
+        --accent-color: oklch(0.14 0 0);
+        --accent-primary: oklch(0.14 0 0);
+        --accent-hover: oklch(0.28 0 0);
+        --accent-glow: oklch(0 0 0 / 0.14);
+        --accent-surface: oklch(0 0 0 / 0.07);
+        --ambient-aura-1: oklch(0 0 0 / 0.05);
+        --ambient-aura-2: oklch(0 0 0 / 0.02);
+
+        --status-success: oklch(0.49 0.14 156);
+        --status-warning: oklch(0.55 0.15 62);
+        --status-danger: oklch(0.51 0.19 25);
+        --shadow-card: 0 4px 16px oklch(0 0 0 / 0.08);
+        --shadow-modal: 0 18px 44px oklch(0 0 0 / 0.18);
+        --surface-radius: var(--radius-xs);
+    }
+
+    /* 10. Minimalist Dark / Brutalist Dark (Stark Wireframe Obsidian) */
+    :root:is([data-theme="minimalist-dark"], [data-theme="brutalist-dark"]) {
+        color-scheme: dark;
+        --bg-canvas: oklch(0 0 0);
+        --bg-surface-1: oklch(0.13 0 0);
+        --bg-surface-2: oklch(0.19 0 0);
+        --bg-surface-3: oklch(0.26 0 0);
+        --bg-glass: oklch(0 0 0 / 0.94);
+
+        --border-subtle: oklch(0.32 0 0);
+        --border-medium: oklch(0.95 0 0 / 0.65);
+        --border-bold: oklch(1 0 0);
+        --border-focus: oklch(1 0 0);
+
+        --text-primary: oklch(1 0 0);
+        --text-secondary: oklch(0.87 0 0);
+        --text-muted: oklch(0.71 0 0);
+        --text-disabled: oklch(0.45 0 0);
+        --text-accent: oklch(1 0 0);
+        --text-on-accent: oklch(0 0 0);
+
+        --accent-color: oklch(1 0 0);
+        --accent-primary: oklch(1 0 0);
+        --accent-hover: oklch(0.90 0 0);
+        --accent-glow: oklch(1 0 0 / 0.25);
+        --accent-surface: oklch(1 0 0 / 0.13);
+        --ambient-aura-1: oklch(1 0 0 / 0.08);
+        --ambient-aura-2: oklch(1 0 0 / 0.02);
+        --surface-radius: var(--radius-xs);
+    }
+
+    /* 11. Minimalist Warm Paper (Alabaster Ivory & Terracotta Amber) */
+    :root[data-theme="minimalist-warm"] {
+        color-scheme: light;
+        --bg-canvas: oklch(0.98 0.008 84);
+        --bg-surface-1: oklch(1 0.004 84);
+        --bg-surface-2: oklch(0.955 0.012 82);
+        --bg-surface-3: oklch(0.92 0.016 80);
+        --bg-glass: oklch(0.98 0.008 84 / 0.96);
+
+        --border-subtle: oklch(0.88 0.014 80);
+        --border-medium: oklch(0.60 0.15 58);
+        --border-bold: oklch(0.52 0.15 52);
+        --border-focus: oklch(0.52 0.15 52);
+
+        --text-primary: oklch(0.18 0.01 60);
+        --text-secondary: oklch(0.32 0.012 60);
+        --text-muted: oklch(0.41 0.012 60);
+        --text-disabled: oklch(0.60 0.01 60);
+        --text-accent: oklch(0.50 0.15 50);
+        --text-on-accent: oklch(1 0 0);
+
+        --accent-color: oklch(0.52 0.15 52);
+        --accent-primary: oklch(0.52 0.15 52);
+        --accent-hover: oklch(0.45 0.15 50);
+        --accent-glow: oklch(0.60 0.15 58 / 0.28);
+        --accent-surface: oklch(0.60 0.15 58 / 0.11);
+        --ambient-aura-1: oklch(0.60 0.15 58 / 0.12);
+        --ambient-aura-2: oklch(0.60 0.15 58 / 0.03);
+
+        --status-success: oklch(0.49 0.14 156);
+        --status-warning: oklch(0.54 0.15 56);
+        --status-danger: oklch(0.52 0.20 25);
+        --shadow-card: 0 4px 18px oklch(0.2 0.02 60 / 0.08);
+        --shadow-modal: 0 20px 48px oklch(0.2 0.02 60 / 0.18);
+    }
+
+    /* 12. Minimalist Obsidian OLED / Midnight AMOLED */
+    :root:is([data-theme="minimalist-obsidian"], [data-theme="midnight-amoled"]) {
+        color-scheme: dark;
+        --bg-canvas: oklch(0 0 0);
+        --bg-surface-1: oklch(0.12 0.012 260);
+        --bg-surface-2: oklch(0.16 0.016 260);
+        --bg-surface-3: oklch(0.21 0.020 258);
+        --bg-glass: oklch(0 0 0 / 0.94);
+
+        --border-subtle: oklch(0.26 0.02 258);
+        --border-medium: oklch(0.77 0.14 232 / 0.55);
+        --border-bold: oklch(0.78 0.15 232);
+        --border-focus: oklch(0.78 0.15 232);
+
+        --text-primary: oklch(1 0 0);
+        --text-secondary: oklch(0.86 0.02 250);
+        --text-muted: oklch(0.73 0.025 250);
+        --text-disabled: oklch(0.46 0.02 250);
+        --text-accent: oklch(0.79 0.14 232);
+        --text-on-accent: oklch(0.10 0.02 245);
+
+        --accent-color: oklch(0.77 0.14 232);
+        --accent-primary: oklch(0.77 0.14 232);
+        --accent-hover: oklch(0.84 0.12 232);
+        --accent-glow: oklch(0.77 0.14 232 / 0.42);
+        --accent-surface: oklch(0.77 0.14 232 / 0.14);
+        --ambient-aura-1: oklch(0.77 0.14 232 / 0.17);
+        --ambient-aura-2: oklch(0.77 0.14 232 / 0.04);
+    }
+
+    /* Light-mode SVG icon polarity helpers */
+    :root:is([data-theme="minimalist-light"], [data-theme="brutalist-light"], [data-theme="minimalist-warm"]) .miniBtn img {
+        filter: invert(1);
+    }
+
+    /* Theme Selector Card Swatch Backgrounds */
+    .themePreviewNms { background: linear-gradient(135deg, #16090c, #310d16); }
+    .themePreviewEclipse { background: linear-gradient(135deg, #070b22, #181038); }
+    .themePreviewEuclid { background: linear-gradient(135deg, #1c1409, #102a2a); }
+    .themePreviewParadise { background: linear-gradient(135deg, #240924, #0a2a2d); }
+    .themePreviewAbyssal { background: linear-gradient(135deg, #031510, #0b2d22); }
+    .themePreviewDissonance { background: linear-gradient(135deg, #170826, #32124f); }
+    .themePreviewSentinel { background: linear-gradient(135deg, #091522, #152b3f); }
+    .themePreviewDefault { background: linear-gradient(135deg, #090e14, #142230); }
+    .themePreviewBrutalistLight { background: linear-gradient(135deg, #f4f3ef, #e2ded3); }
+    .themePreviewBrutalistDark { background: linear-gradient(135deg, #080808, #1c1c1c); }
+    .themePreviewMinimalistWarm { background: linear-gradient(135deg, #faf8f5, #efe7d8); }
+    .themePreviewMinimalistObsidian { background: linear-gradient(135deg, #000000, #0c1724); }
+}

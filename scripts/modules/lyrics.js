@@ -1,4 +1,16 @@
 // CachyMusic - Synchronized LRC Lyrics Engine
+import { escapeHtml, safeStorage } from './utils.js';
+import { store } from './state.js';
+import {
+    lyricsArtistName,
+    lyricsCon,
+    lyricsContent,
+    lyricsScrollArea,
+    lyricsToggleBtn,
+    lyricsTrackName,
+    turntableCon
+} from './ui-elements.js';
+
     // Parse Lyrics (supporting standard text and timestamped LRC format [mm:ss.xx])
     function parseLyrics(raw) {
         if (!raw || typeof raw !== 'string' || !raw.trim()) return null;
@@ -39,14 +51,15 @@
     function updateLyricsDisplay(track) {
         if (!lyricsTrackName || !lyricsArtistName || !lyricsContent) return;
 
-        activeLyricIndex = -1;
+        store.state.activeLyricIndex = -1;
         const title = track ? (track.title || track.filename || 'Select A Track') : '—';
         const artist = track ? (track.artist || 'Unknown Artist') : '—';
         lyricsTrackName.textContent = title;
         lyricsArtistName.textContent = artist;
 
         const lyricsRaw = track ? track.lyrics : null;
-        parsedLyrics = parseLyrics(lyricsRaw);
+        const parsedLyrics = parseLyrics(lyricsRaw);
+        store.state.parsedLyrics = parsedLyrics;
 
         if (!parsedLyrics || parsedLyrics.lines.length === 0) {
             lyricsContent.innerHTML = `
@@ -74,25 +87,27 @@
                 el.addEventListener('click', () => {
                     const t = parseFloat(el.dataset.time);
                     if (!isNaN(t)) {
-                        audio.currentTime = t;
                         try {
-                            const dur = audio.duration;
+                            const audioEl = store.state.audio;
+                            const dur = audioEl ? audioEl.duration : 0;
                             if (t > 0 && (!dur || isNaN(dur) || t < (dur - 1))) {
                                 safeStorage.setItem('cachymusic_last_track_time', t.toFixed(2));
                             }
                         } catch (_) {}
-                        playAudio();
+                        store.emit('playback:seek', { time: t, play: true });
                     }
                 });
             });
-            updateActiveLyric(audio.currentTime);
+            const audioEl = store.state.audio;
+            updateActiveLyric(audioEl ? audioEl.currentTime : 0);
         }
     }
 
     // Highlight and Scroll Active Lyric Line for Synced LRC
     function updateActiveLyric(currentTime) {
-        if (!isLyricsView || !parsedLyrics || !parsedLyrics.isSynced || !lyricsContent) return;
-        const lines = parsedLyrics.lines;
+        const s = store.state;
+        if (!s.isLyricsView || !s.parsedLyrics || !s.parsedLyrics.isSynced || !lyricsContent) return;
+        const lines = s.parsedLyrics.lines;
         let newIdx = -1;
         for (let i = 0; i < lines.length; i++) {
             if (lines[i].time <= currentTime + 0.15) {
@@ -102,11 +117,11 @@
             }
         }
 
-        if (newIdx !== activeLyricIndex) {
-            activeLyricIndex = newIdx;
+        if (newIdx !== s.activeLyricIndex) {
+            s.activeLyricIndex = newIdx;
             const allEls = lyricsContent.querySelectorAll('.lyricLine');
             allEls.forEach((el, i) => {
-                if (i === activeLyricIndex) {
+                if (i === s.activeLyricIndex) {
                     el.classList.add('active');
                     if (lyricsScrollArea) {
                         const elTop = el.offsetTop - lyricsScrollArea.offsetTop;
@@ -124,36 +139,29 @@
     function toggleLyricsView(forcedState) {
         if (!lyricsToggleBtn || !lyricsCon || !turntableCon) return;
 
-        isLyricsView = (forcedState !== undefined) ? !!forcedState : !isLyricsView;
+        const nextState = (forcedState !== undefined) ? !!forcedState : !store.state.isLyricsView;
+        store.setState({ isLyricsView: nextState }, ['lyrics:change']);
 
-        if (isLyricsView) {
+        if (nextState) {
             lyricsToggleBtn.classList.add('active');
             lyricsToggleBtn.setAttribute('title', 'Return to Turntable View (L)');
             const textSpan = lyricsToggleBtn.querySelector('span');
             if (textSpan) textSpan.textContent = 'TURNTABLE';
-            turntableCon.style.setProperty('display', 'none', 'important');
+            turntableCon.style.display = 'none';
             turntableCon.classList.add('lyricsActiveHidden');
             lyricsCon.classList.remove('lyricsActiveHidden');
-            lyricsCon.style.setProperty('display', 'flex', 'important');
-            updateLyricsDisplay(allTracks[currentTrackIndex]);
+            lyricsCon.style.display = 'flex';
+            updateLyricsDisplay(store.state.allTracks[store.state.currentTrackIndex]);
         } else {
             lyricsToggleBtn.classList.remove('active');
             lyricsToggleBtn.setAttribute('title', 'Toggle Lyrics View (L)');
             const textSpan = lyricsToggleBtn.querySelector('span');
             if (textSpan) textSpan.textContent = 'LYRICS';
             turntableCon.classList.remove('lyricsActiveHidden');
-            turntableCon.style.removeProperty('display');
+            turntableCon.style.display = '';
             lyricsCon.classList.add('lyricsActiveHidden');
-            lyricsCon.style.setProperty('display', 'none', 'important');
+            lyricsCon.style.display = 'none';
         }
-    }
-
-    // Attach lyrics functions to window
-    if (typeof window !== "undefined") {
-        try { window.parseLyrics = parseLyrics; } catch (_) {}
-        try { window.updateLyricsDisplay = updateLyricsDisplay; } catch (_) {}
-        try { window.updateActiveLyric = updateActiveLyric; } catch (_) {}
-        try { window.toggleLyricsView = toggleLyricsView; } catch (_) {}
     }
 
     export {

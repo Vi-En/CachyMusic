@@ -44,6 +44,16 @@ class MprisPlayer(dbus.service.Object):
         self.is_shuffle = False
         self.loop_status = "None"
         self.last_update_ts = 0
+        self.last_poll_wall_ts = time.monotonic()
+
+    @staticmethod
+    def map_loop_status(repeat_mode):
+        val = (repeat_mode or "off").lower()
+        if val == "one":
+            return "Track"
+        if val == "all":
+            return "Playlist"
+        return "None"
 
     def send_player_command(self, cmd, extra=None):
         payload = {"command": cmd}
@@ -65,37 +75,58 @@ class MprisPlayer(dbus.service.Object):
             req = urllib.request.Request(f"{self.base_url}/php/api/mpris_state.php?action=get_state")
             with urllib.request.urlopen(req, timeout=0.8) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                
+
                 new_status = data.get("status", "Stopped")
                 new_title = data.get("title", "") or "CachyMusic"
                 new_artist = data.get("artist", "") or "CachyOS"
                 new_album = data.get("album", "") or ""
-                new_art = data.get("artUrl", "") or ""
+                new_art = data.get("artFileUrl") or data.get("artUrl") or ""
                 new_pos = float(data.get("position", 0.0))
                 new_dur = float(data.get("duration", 0.0))
                 new_vol = float(data.get("volume", 0.8))
-                
+                new_shuffle = bool(data.get("shuffle", False))
+                new_loop = self.map_loop_status(data.get("loopStatus") or data.get("repeat"))
+
+                now_wall = time.monotonic()
+                dt_wall = max(0.0, now_wall - self.last_poll_wall_ts)
+                self.last_poll_wall_ts = now_wall
+
                 changed_props = {}
-                
+                track_changed = (
+                    new_title != self.title or new_artist != self.artist or
+                    new_album != self.album or new_art != self.art_url or abs(new_dur - self.duration_sec) > 1.0
+                )
+
                 if new_status != self.status:
                     self.status = new_status
                     changed_props["PlaybackStatus"] = dbus.String(self.status)
-                    
-                if (new_title != self.title or new_artist != self.artist or 
-                    new_album != self.album or new_art != self.art_url or abs(new_dur - self.duration_sec) > 1):
+
+                if track_changed:
                     self.title = new_title
                     self.artist = new_artist
                     self.album = new_album
                     self.art_url = new_art
                     self.duration_sec = new_dur
                     changed_props["Metadata"] = self.Get("org.mpris.MediaPlayer2.Player", "Metadata")
-                
+
                 if abs(new_vol - self.volume_level) > 0.02:
                     self.volume_level = new_vol
                     changed_props["Volume"] = dbus.Double(self.volume_level)
-                    
+
+                if new_shuffle != self.is_shuffle:
+                    self.is_shuffle = new_shuffle
+                    changed_props["Shuffle"] = dbus.Boolean(self.is_shuffle)
+
+                if new_loop != self.loop_status:
+                    self.loop_status = new_loop
+                    changed_props["LoopStatus"] = dbus.String(self.loop_status)
+
+                expected_pos = self.position_sec + (dt_wall if self.status == "Playing" else 0.0)
+                if not track_changed and abs(new_pos - expected_pos) > 1.5:
+                    self.Seeked(dbus.Int64(max(0, int(new_pos * 1000000))))
+
                 self.position_sec = new_pos
-                
+
                 if changed_props:
                     self.PropertiesChanged("org.mpris.MediaPlayer2.Player", changed_props, [])
         except Exception:
@@ -215,7 +246,13 @@ class MprisPlayer(dbus.service.Object):
                 self.volume_level = float(value)
                 self.send_player_command("SetVolume", {"volume": self.volume_level})
             elif prop == "Shuffle":
-                self.send_player_command("ToggleShuffle")
+                self.is_shuffle = bool(value)
+                self.send_player_command("SetShuffle", {"shuffle": self.is_shuffle})
+            elif prop == "LoopStatus":
+                loop_str = str(value)
+                if loop_str in ("None", "Track", "Playlist"):
+                    self.loop_status = loop_str
+                    self.send_player_command("SetLoopStatus", {"loopStatus": loop_str})
 
     @dbus.service.signal(dbus.PROPERTIES_IFACE, signature="sa{sv}as")
     def PropertiesChanged(self, interface, changed_properties, invalidated_properties):

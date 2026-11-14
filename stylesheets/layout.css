@@ -1,0 +1,422 @@
+/* CachyMusic v2.0.0 — Workstation Shell, Responsive Grids & Workspace Cascade */
+
+@layer layout {
+    /* Ambient Layers */
+    .ambientAtmosphere,
+    .ambientAuraGlow,
+    .bgDisc,
+    .bgWatermark {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: var(--z-ambient);
+    }
+
+    .visualizerDock {
+        position: fixed;
+        inset: auto 0 0 0;
+        height: clamp(5rem, 13dvh, 9.5rem);
+        pointer-events: none;
+        z-index: var(--z-visualizer);
+        contain: layout paint;
+        opacity: 0.72;
+    }
+
+    .visualizerCanvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+
+    /* Top Header Navigation Bar */
+    .topBar {
+        position: relative;
+        z-index: var(--z-header);
+        flex: 0 0 auto;
+        min-height: var(--topbar-height);
+        padding: var(--safe-top) max(var(--space-md), var(--safe-right)) var(--space-xs) max(var(--space-md), var(--safe-left));
+        display: grid;
+        grid-template-columns: auto auto minmax(180px, 1fr) auto;
+        align-items: center;
+        gap: var(--space-sm);
+        background: var(--bg-glass);
+        backdrop-filter: blur(16px);
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    body.wco-active .topBar {
+        padding-left: max(env(titlebar-area-x, 0px), var(--space-md));
+        padding-right: max(calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)), var(--space-md));
+        -webkit-app-region: drag;
+    }
+
+    body.wco-active .topBar :is(button, input, select, a) {
+        -webkit-app-region: no-drag;
+    }
+
+    .brand {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+        min-width: 0;
+    }
+
+    .workspaceSwitcher {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-3xs);
+        padding: 3px;
+        border-radius: var(--radius-full);
+        background: var(--bg-surface-2);
+        border: 1px solid var(--border-subtle);
+    }
+
+    .searchContainer {
+        position: relative;
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        max-width: 34rem;
+        justify-self: center;
+        width: 100%;
+    }
+
+    .topActions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+    }
+
+    /* Collapsible Folder Tray */
+    .folderTray {
+        position: relative;
+        z-index: var(--z-tray);
+        display: none;
+        flex-direction: column;
+        gap: var(--space-xs);
+        padding: var(--space-sm) var(--space-md);
+        background: var(--bg-surface-1);
+        border-bottom: 1px solid var(--border-medium);
+        box-shadow: var(--shadow-card);
+    }
+
+    .folderTray.open {
+        display: flex;
+    }
+
+    .folderTrayHeader {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-sm);
+    }
+
+    .folderTrayLabel {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: var(--font-xs);
+        font-weight: 700;
+        color: var(--text-accent);
+        letter-spacing: 0.06em;
+    }
+
+    .folderTrayHelp {
+        font-weight: 400;
+        color: var(--text-muted);
+    }
+
+    .folderTrayControls {
+        flex: 1 1 260px;
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+    }
+
+    .folderInputWrapper {
+        flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        gap: var(--space-2xs);
+        min-width: 0;
+    }
+
+    /* Main 3-Column Player Workstation Grid */
+    .gridContainer {
+        position: relative;
+        z-index: var(--z-content);
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(250px, 21.5rem) minmax(340px, 1fr) minmax(280px, 24.5rem);
+        gap: var(--space-sm);
+        padding: var(--space-sm) max(var(--space-sm), var(--safe-right)) var(--space-sm) max(var(--space-sm), var(--safe-left));
+        transition: grid-template-columns var(--transition-base);
+    }
+
+    body.metadata-collapsed .gridContainer {
+        grid-template-columns: 0px minmax(340px, 1fr) minmax(280px, 24.5rem);
+    }
+
+    body.tracklist-collapsed .gridContainer {
+        grid-template-columns: minmax(250px, 21.5rem) minmax(340px, 1fr) 0px;
+    }
+
+    body.metadata-collapsed.tracklist-collapsed .gridContainer {
+        grid-template-columns: 0px 1fr 0px;
+    }
+
+    .panel {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-surface-1);
+        border: var(--panel-border-width) solid var(--border-subtle);
+        border-radius: var(--surface-radius);
+        box-shadow: var(--shadow-card);
+        overflow: hidden;
+        transition: opacity var(--transition-fast), border-color var(--transition-fast);
+    }
+
+    body.metadata-collapsed #infoPanel {
+        opacity: 0;
+        pointer-events: none;
+        border-color: transparent;
+    }
+
+    body.tracklist-collapsed .trackListPanel {
+        opacity: 0;
+        pointer-events: none;
+        border-color: transparent;
+    }
+
+    /* Multi-Workspace Routing (Player / Soulseek / Settings) */
+    .soulseekWorkspace,
+    .settingsWorkspace {
+        position: relative;
+        z-index: var(--z-content);
+        flex: 1 1 auto;
+        min-height: 0;
+        display: none;
+        flex-direction: column;
+        padding: var(--space-md) max(var(--space-md), var(--safe-right)) var(--space-md) max(var(--space-md), var(--safe-left));
+        overflow-y: auto;
+        gap: var(--space-md);
+    }
+
+    body.view-soulseek .gridContainer,
+    body.view-settings .gridContainer {
+        display: none;
+    }
+
+    body.view-soulseek .soulseekWorkspace {
+        display: flex;
+    }
+
+    body.view-settings .settingsWorkspace {
+        display: flex;
+    }
+
+    /* Soulseek Subview Switching */
+    .soulseekWorkspace[data-slsk-subview="transfers"] .slskControlsPanel,
+    .soulseekWorkspace[data-slsk-subview="transfers"] .slskResultsPanel {
+        display: none;
+    }
+
+    .soulseekWorkspace[data-slsk-subview="results"] .slskTransfersDrawer {
+        display: none;
+    }
+
+    .soulseekWorkspace[data-slsk-subview="transfers"] .slskTransfersDrawer {
+        display: flex;
+    }
+
+    /* Persistent Mini-Player Dock (Active Outside Player Workspace) */
+    .persistentMiniPlayer {
+        position: relative;
+        flex: 0 0 auto;
+        margin: 0 max(var(--space-md), var(--safe-right)) var(--safe-bottom) max(var(--space-md), var(--safe-left));
+        z-index: var(--z-mini-player);
+        display: none;
+        grid-template-columns: minmax(160px, 1fr) minmax(240px, 1.4fr) auto;
+        align-items: center;
+        gap: var(--space-md);
+        padding: var(--space-xs) var(--space-md);
+        background: var(--bg-glass);
+        backdrop-filter: blur(18px);
+        border: 1px solid var(--border-medium);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-modal);
+    }
+
+    /* Capability-Aware Runtime Adaptations */
+    :root:is([data-runtime="standalone-pwa"], [data-runtime="android-apk"]) [data-host-only="php"] {
+        display: none;
+    }
+
+    :root:not([data-runtime="php-desktop"]) #settingsRowHwGain,
+    :root:not([data-os="linux"]) #settingsRowHwGain {
+        display: none;
+    }
+
+    :root[data-runtime="standalone-pwa"] #slskSyncCurrentDirBtn {
+        display: none;
+    }
+
+    /* Mobile Navigation Bar (Hidden on Desktop) */
+    .mobileTabBar {
+        display: none;
+    }
+
+    .mobileOnly {
+        display: none;
+    }
+
+    /* Responsive Tablet Breakpoint (<= 1120px) */
+    @media (max-width: 1120px) {
+        .gridContainer {
+            grid-template-columns: 0px minmax(300px, 1fr) minmax(260px, 21rem);
+        }
+
+        body:not(.metadata-collapsed) .gridContainer {
+            grid-template-columns: minmax(240px, 19rem) minmax(280px, 1fr) minmax(250px, 20rem);
+        }
+
+        .topBar {
+            grid-template-columns: auto auto minmax(140px, 1fr) auto;
+            gap: var(--space-xs);
+        }
+    }
+
+    /* Responsive Mobile Breakpoint (<= 768px) */
+    @media (max-width: 768px) {
+        .desktopOnly {
+            display: none;
+        }
+
+        .mobileOnly {
+            display: inline;
+        }
+
+        .topBar {
+            grid-template-columns: auto minmax(100px, 1fr) auto;
+            padding-inline: max(var(--space-sm), var(--safe-left));
+        }
+
+        .workspaceSwitcher {
+            display: none;
+        }
+
+        .gridContainer {
+            display: flex;
+            flex-direction: column;
+            padding: var(--space-xs) max(var(--space-xs), var(--safe-right)) calc(var(--mobile-tabbar-height) + 0.25rem) max(var(--space-xs), var(--safe-left));
+        }
+
+        body.metadata-collapsed .gridContainer,
+        body.tracklist-collapsed .gridContainer,
+        body.metadata-collapsed.tracklist-collapsed .gridContainer {
+            display: flex;
+        }
+
+        .panel {
+            display: none;
+            flex: 1 1 auto;
+            width: 100%;
+            opacity: 1;
+            pointer-events: auto;
+            border-color: var(--border-subtle);
+        }
+
+        .panel.mobileActive {
+            display: flex;
+        }
+
+        body.view-soulseek .soulseekWorkspace,
+        body.view-settings .settingsWorkspace {
+            padding: var(--space-sm) max(var(--space-sm), var(--safe-right)) calc(var(--mobile-tabbar-height) + var(--space-sm)) max(var(--space-sm), var(--safe-left));
+        }
+
+        .persistentMiniPlayer {
+            margin: 0 var(--space-xs) calc(var(--mobile-tabbar-height) + 0.35rem) var(--space-xs);
+            grid-template-columns: 1fr auto;
+            gap: var(--space-xs);
+            padding: var(--space-xs) var(--space-sm);
+        }
+
+        .miniPlayerCenter {
+            grid-column: 1 / -1;
+        }
+
+        .miniPlayerRight {
+            display: flex;
+            align-items: center;
+        }
+
+        .miniVolumeCon {
+            display: none;
+        }
+
+        .mobileTabBar {
+            position: fixed;
+            inset: auto 0 0 0;
+            z-index: var(--z-mobile-nav);
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            min-height: var(--mobile-tabbar-height);
+            padding: 0.25rem var(--safe-right) var(--safe-bottom) var(--safe-left);
+            background: var(--bg-glass);
+            backdrop-filter: blur(18px);
+            border-top: 1px solid var(--border-medium);
+        }
+
+        .mobileTabBtn {
+            min-height: var(--touch-min);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            color: var(--text-muted);
+            font-size: var(--font-3xs);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            border-radius: var(--radius-sm);
+            transition: color var(--transition-fast), background-color var(--transition-fast);
+        }
+
+        .mobileTabBtn.active {
+            color: var(--text-accent);
+            background: var(--accent-surface);
+        }
+
+        .libraryControls.mobileCollapsed {
+            display: none;
+        }
+    }
+
+    @media (max-width: 520px) {
+        .brandLiveMeter,
+        .searchKbdShortcut,
+        #topSettingsBtn span {
+            display: none;
+        }
+        .searchContainer input {
+            padding-right: 0.55rem;
+        }
+        .brandLogo {
+            font-size: var(--font-xs);
+            letter-spacing: 0.04em;
+        }
+        .topBar {
+            grid-template-columns: auto minmax(90px, 1fr) auto;
+            gap: var(--space-2xs);
+            padding-inline: var(--space-xs);
+        }
+        .topBtn {
+            padding: 0.35rem 0.5rem;
+            font-size: var(--font-3xs);
+        }
+    }
+}

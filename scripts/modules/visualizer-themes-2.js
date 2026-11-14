@@ -1,7 +1,12 @@
 // CachyMusic - Turntable Center Visualizers (Abyssal Void, Dissonance, Sentinel, Heart, Brutalist, Touhou)
+import { isFirefox } from './utils.js';
+import { emitShockwave, emitTurntableShockwave, store } from './state.js';
+import { getActiveTheme, isAtlasThemeActive } from './ui-elements.js';
+
     let abyssalTime = 0;
     function drawTurntableCenterAbyssalVoid(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0) {
         if (!ctx || width === 0 || height === 0) return;
+        const turntableShockwaves = store.state.turntableShockwaves;
         const centerX = width / 2;
         const centerY = height / 2;
         const maxRadius = Math.min(width, height) * 0.48;
@@ -248,6 +253,7 @@
     let dissonanceTime = 0;
     function drawTurntableCenterDissonance(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0, bands = null) {
         if (!ctx || width === 0 || height === 0) return;
+        const turntableShockwaves = store.state.turntableShockwaves;
         const centerX = width / 2;
         const centerY = height / 2;
         const maxRadius = Math.min(width, height) * 0.48;
@@ -681,6 +687,7 @@
     let sentinelTime = 0;
     function drawTurntableCenterSentinel(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0, bands = null) {
         if (!ctx || width === 0 || height === 0) return;
+        const turntableShockwaves = store.state.turntableShockwaves;
         const centerX = width / 2;
         const centerY = height / 2;
         const maxRadius = Math.min(width, height) * 0.48;
@@ -1451,6 +1458,8 @@
     // -------------------------------------------------------------------------
     function drawTurntableCenterHeart(ctx, width, height, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity = 1.0) {
         if (!ctx || width === 0 || height === 0) return;
+        const st = store.state;
+        const turntableShockwaves = st.turntableShockwaves;
 
         const centerX = width / 2;
         const centerY = height / 2;
@@ -1459,15 +1468,17 @@
         // Hub radius: anchor center record label (~40% of turntable diameter)
         const hubRadius = Math.min(width, height) * 0.20;
         const s = hubRadius / 54;
-        const heartPulse = smoothHeartPulse;
+        const heartPulse = st.smoothHeartPulse;
 
         if (playing) {
-            runeRingAngle += dt * (1.2 + smoothTreble * 2.2 + beatPulse * 1.4);
-            yinYangAngle += dt * (1.2 + smoothBass * 1.8 + smoothTreble * 2.0);
+            st.runeRingAngle += dt * (1.2 + smoothTreble * 2.2 + beatPulse * 1.4);
+            st.yinYangAngle += dt * (1.2 + smoothBass * 1.8 + smoothTreble * 2.0);
         } else {
-            runeRingAngle += dt * 0.45;
-            yinYangAngle += dt * 0.45;
+            st.runeRingAngle += dt * 0.45;
+            st.yinYangAngle += dt * 0.45;
         }
+        const runeRingAngle = st.runeRingAngle;
+        const yinYangAngle = st.yinYangAngle;
 
         // 1. Acoustic Shockwaves: Concentric soundwaves expanding across vinyl (high fidelity)
         if (playing && beatPulse > 0.40 && Math.random() < 0.36 && fidelity > 0.15) {
@@ -2230,6 +2241,8 @@
 
     // 2. Default: Touhou Spirit Core & Floating Yin-Yang Medallion
     function drawThematicDefaultCore(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble) {
+        const runeRingAngle = store.state.runeRingAngle;
+        const yinYangAngle = store.state.yinYangAngle;
         ctx.save();
         ctx.translate(cx, cy);
 
@@ -3195,6 +3208,7 @@
     // Sinuous ink wings, dynamic mist, crest luminescence & spirit danmaku
     // -------------------------------------------------------------------------
     function drawThematicWave(ctx, width, height, bands, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble) {
+        const st = store.state;
         const centerX = width / 2;
         const centerY = height / 2;
 
@@ -3202,15 +3216,15 @@
         const targetHeartPulse = playing
             ? (1.0 + smoothBass * 0.28 + beatPulse * 0.36)
             : (1.0 + Math.sin(now * 0.002) * 0.03);
-        smoothHeartPulse += (targetHeartPulse - smoothHeartPulse) * (1.0 - Math.exp(-22 * dt));
-        const heartPulse = smoothHeartPulse;
+        st.smoothHeartPulse += (targetHeartPulse - st.smoothHeartPulse) * (1.0 - Math.exp(-22 * dt));
+        const heartPulse = st.smoothHeartPulse;
 
         // Continuous delta-time rotation integration: smooth acceleration without angle jumping
         const runeSpeed = playing ? (1.2 + smoothTreble * 2.2 + beatPulse * 1.4) : 0.6;
-        runeRingAngle += dt * runeSpeed * 1.0;
+        st.runeRingAngle += dt * runeSpeed * 1.0;
 
         const yinYangSpeed = playing ? (1.2 + smoothBass * 1.8 + smoothTreble * 2.0) : 0.7;
-        yinYangAngle += dt * yinYangSpeed * 1.3;
+        st.yinYangAngle += dt * yinYangSpeed * 1.3;
 
         // Trigger expanding concentric ripple soundwaves on heavy kicks
         if (playing && beatPulse > 0.55 && Math.random() < 0.25) {
@@ -3523,6 +3537,7 @@
         if (currentTheme !== 'default') {
             return;
         }
+        const particles = store.state.particles;
 
         ctx.save();
         for (let i = 0; i < particles.length; i++) {
@@ -3572,33 +3587,6 @@
         ctx.restore();
     }
 
-
-    // Attach visualizer theme drawing routines to window
-    if (typeof window !== "undefined") {
-        try { window.abyssalTime = abyssalTime; } catch (_) {}
-        try { window.dissonanceTime = dissonanceTime; } catch (_) {}
-        try { window.drawBadAppleTouhou = drawBadAppleTouhou; } catch (_) {}
-        try { window.drawThematicAlienBioManta = drawThematicAlienBioManta; } catch (_) {}
-        try { window.drawThematicAtlasPlatform = drawThematicAtlasPlatform; } catch (_) {}
-        try { window.drawThematicBrutalistCore = drawThematicBrutalistCore; } catch (_) {}
-        try { window.drawThematicCenterpiece = drawThematicCenterpiece; } catch (_) {}
-        try { window.drawThematicDefaultCore = drawThematicDefaultCore; } catch (_) {}
-        try { window.drawThematicEmerilWarpTunnel = drawThematicEmerilWarpTunnel; } catch (_) {}
-        try { window.drawThematicHarmonicMonolith = drawThematicHarmonicMonolith; } catch (_) {}
-        try { window.drawThematicMinimalistObsidianCore = drawThematicMinimalistObsidianCore; } catch (_) {}
-        try { window.drawThematicMinimalistWarmCore = drawThematicMinimalistWarmCore; } catch (_) {}
-        try { window.drawThematicSentinelDrone = drawThematicSentinelDrone; } catch (_) {}
-        try { window.drawThematicSolarCruiser = drawThematicSolarCruiser; } catch (_) {}
-        try { window.drawThematicSpaceStation = drawThematicSpaceStation; } catch (_) {}
-        try { window.drawThematicWave = drawThematicWave; } catch (_) {}
-        try { window.drawTurntableCenterAbyssalVoid = drawTurntableCenterAbyssalVoid; } catch (_) {}
-        try { window.drawTurntableCenterBrutalist = drawTurntableCenterBrutalist; } catch (_) {}
-        try { window.drawTurntableCenterDissonance = drawTurntableCenterDissonance; } catch (_) {}
-        try { window.drawTurntableCenterHeart = drawTurntableCenterHeart; } catch (_) {}
-        try { window.drawTurntableCenterSentinel = drawTurntableCenterSentinel; } catch (_) {}
-        try { window.sentinelTime = sentinelTime; } catch (_) {}
-        try { window.updateAndDrawParticles = updateAndDrawParticles; } catch (_) {}
-    }
 
     export {
         abyssalTime,

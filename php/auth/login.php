@@ -13,14 +13,15 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once(__DIR__ . '/../platform.php');
 header('Content-Type: application/json; charset=utf-8');
-require_once(__DIR__ . '/../database.php');
-
-if (!isset($connection) || !$connection) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Database connection failed.']);
+cachy_send_local_cors('POST, OPTIONS');
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
     exit;
 }
+
+require_once(__DIR__ . '/../database.php');
 
 $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true);
@@ -40,29 +41,17 @@ if (empty($username) || empty($password)) {
     exit;
 }
 
-$stmt = $connection->prepare("SELECT id, password FROM Accounts WHERE username = ? LIMIT 1");
-if (!$stmt) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Query preparation error.']);
+$account = Storage::getAccountByUsername($username);
+if ($account && isset($account['password']) && password_verify($password, $account['password'])) {
+    session_regenerate_id(true);
+    $_SESSION['user_id'] = (int)($account['id'] ?? 1);
+    $_SESSION['username'] = $account['username'] ?? $username;
+    echo json_encode([
+        'success'  => true,
+        'username' => $_SESSION['username'],
+        'message'  => 'Login successful.'
+    ]);
     exit;
-}
-
-$stmt->bind_param('s', $username);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($result && $row = $result->fetch_assoc()) {
-    if (password_verify($password, $row['password'])) {
-        session_regenerate_id(true);
-        $_SESSION['user_id'] = (int)$row['id'];
-        $_SESSION['username'] = $username;
-        echo json_encode([
-            'success'  => true,
-            'username' => $username,
-            'message'  => 'Login successful.'
-        ]);
-        exit;
-    }
 }
 
 http_response_code(401);

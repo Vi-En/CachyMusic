@@ -3,7 +3,9 @@
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
+require_once(__DIR__ . '/../platform.php');
 header('Content-Type: application/json; charset=utf-8');
+cachy_send_local_cors('GET, POST, OPTIONS');
 
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -27,7 +29,7 @@ if ($isDirectScanRequest) {
         $requestedDir = Storage::getDefaultDirectory();
     }
 
-    $homeDir = getenv('HOME') ?: ($_SERVER['HOME'] ?? (getenv('USER') ? '/home/' . getenv('USER') : ''));
+    $homeDir = cachy_home_dir();
 
     // If no directory has been chosen yet, do not load placeholder tracks; prompt user to choose directory first
     if (empty($requestedDir)) {
@@ -42,12 +44,12 @@ if ($isDirectScanRequest) {
     }
 
     if (!empty($requestedDir) && (str_starts_with($requestedDir, '~') || str_starts_with($requestedDir, '~/'))) {
-        $requestedDir = preg_replace('#^~(/|$)#', rtrim($homeDir, '/') . '$1', $requestedDir);
+        $requestedDir = preg_replace('#^~(/|$)#', rtrim($homeDir, "/\\") . '$1', $requestedDir);
     }
 
     $realDir = realpath($requestedDir);
     if ($realDir === false || !is_dir($realDir) || !is_readable($realDir)) {
-        $alt = realpath(__DIR__ . '/../../' . ltrim($requestedDir, '/'));
+        $alt = realpath(__DIR__ . '/../../' . ltrim($requestedDir, "/\\"));
         if ($alt && is_dir($alt) && is_readable($alt)) {
             $realDir = $alt;
         }
@@ -55,40 +57,13 @@ if ($isDirectScanRequest) {
     if ($realDir === false || !is_dir($realDir) || !is_readable($realDir)) {
         echo json_encode([
             'success' => false,
-            'message' => "Directory does not exist or is not readable: " . htmlspecialchars($requestedDir) . ". Please set a valid directory manually in Settings → Library & Folders."
+            'message' => "Directory does not exist or is not readable: " . htmlspecialchars($requestedDir) . ". Please set a valid directory manually in Settings -> Library & Folders."
         ]);
         exit;
     }
 
-    // Security: Block system directories and enforce sandbox allowlist
-    $projectRoot = realpath(__DIR__ . '/../../');
-    $blockedSystemPrefixes = ['/etc', '/proc', '/sys', '/dev', '/root', '/boot', '/bin', '/sbin', '/usr', '/lib', '/lib64', '/var/log', '/var/lib'];
-    $isBlocked = ($realDir === '/');
-    if (!$isBlocked) {
-        foreach ($blockedSystemPrefixes as $bPrefix) {
-            if ($realDir === $bPrefix || str_starts_with($realDir, $bPrefix . '/')) {
-                $isBlocked = true;
-                break;
-            }
-        }
-    }
-
-    $allowedScanRoots = array_filter([
-        $homeDir ? realpath($homeDir) : null,
-        $projectRoot,
-        '/mnt',
-        '/media',
-        '/run/media'
-    ]);
-    $isAllowedRoot = false;
-    foreach ($allowedScanRoots as $aRoot) {
-        if ($realDir === $aRoot || str_starts_with($realDir, rtrim($aRoot, '/') . '/')) {
-            $isAllowedRoot = true;
-            break;
-        }
-    }
-
-    if ($isBlocked || !$isAllowedRoot) {
+    // Security: Block system directories and enforce cross-platform sandbox allowlist
+    if (!cachy_is_allowed_scan_path($realDir)) {
         http_response_code(403);
         echo json_encode([
             'success' => false,
@@ -306,31 +281,37 @@ function extract_actual_audio_metadata($path, $ext, $fileSize) {
         }
     }
 
-    // Method 1: Use ffprobe if available
+    // Method 1: Use ffprobe if available on host
     $hasFfprobe = false;
-    $probeOut = @shell_exec("ffprobe -v quiet -print_format json -show_format -show_streams " . escapeshellarg($path) . " 2>/dev/null");
-    if ($probeOut && strlen($probeOut) > 10) {
-        $probeData = json_decode($probeOut, true);
-        if ($probeData && (isset($probeData['format']) || isset($probeData['streams']))) {
-            $hasFfprobe = true;
-            parse_ffprobe_data($probeData, $path, $result);
+    $ffprobeBin = cachy_find_binary('ffprobe');
+    if ($ffprobeBin !== null) {
+        $probeOut = @shell_exec(escapeshellarg($ffprobeBin) . " -v quiet -print_format json -show_format -show_streams " . escapeshellarg($path) . " 2>/dev/null");
+        if ($probeOut && strlen($probeOut) > 10) {
+            $probeData = json_decode($probeOut, true);
+            if ($probeData && (isset($probeData['format']) || isset($probeData['streams']))) {
+                $hasFfprobe = true;
+                parse_ffprobe_data($probeData, $path, $result);
+            }
         }
     }
 
-    // Method 2: Fallback pure PHP ID3/FLAC parser if ffprobe not available
+    // Method 2: Pure-PHP binary metadata parsers (ID3, FLAC, WAV, OGG/Opus, M4A/MP4/ALAC)
     if (!$hasFfprobe || ($result['title'] === null && $result['artist'] === null)) {
+        $phpTags = null;
         if ($ext === 'mp3') {
             $phpTags = read_php_id3_tags($path);
-            foreach (['title', 'artist', 'album', 'genre', 'year', 'track', 'lyrics'] as $key) {
-                if ($result[$key] === null && !empty($phpTags[$key])) {
-                    $result[$key] = $phpTags[$key];
-                }
-            }
-            if (!empty($phpTags['hasCover'])) $result['hasCover'] = true;
         } elseif ($ext === 'flac') {
             $phpTags = read_php_flac_tags($path, $fileSize);
-            foreach (['title', 'artist', 'album', 'genre', 'year', 'track', 'duration', 'bitrate', 'sampleRate', 'channels', 'bitDepth', 'lyrics'] as $key) {
-                if ($result[$key] === null && !empty($phpTags[$key])) {
+        } elseif ($ext === 'wav' || $ext === 'aiff' || $ext === 'aif') {
+            $phpTags = read_php_wav_tags($path, $fileSize);
+        } elseif ($ext === 'ogg' || $ext === 'opus' || $ext === 'oga') {
+            $phpTags = read_php_ogg_tags($path, $fileSize);
+        } elseif ($ext === 'm4a' || $ext === 'mp4' || $ext === 'aac' || $ext === 'alac') {
+            $phpTags = read_php_m4a_tags($path, $fileSize);
+        }
+        if (is_array($phpTags)) {
+            foreach (['title', 'artist', 'album', 'genre', 'year', 'track', 'duration', 'bitrate', 'sampleRate', 'channels', 'bitDepth', 'lyrics', 'codec'] as $key) {
+                if (($result[$key] === null || ($key === 'codec' && !empty($phpTags['codec']))) && !empty($phpTags[$key])) {
                     $result[$key] = $phpTags[$key];
                 }
             }
@@ -682,6 +663,225 @@ function read_php_flac_tags($path, $fileSize) {
     }
 
     fclose($fh);
+    return $out;
+}
+
+function read_php_wav_tags($path, $fileSize) {
+    $out = ['title' => null, 'artist' => null, 'album' => null, 'genre' => null, 'year' => null, 'track' => null, 'duration' => null, 'bitrate' => null, 'sampleRate' => null, 'channels' => null, 'bitDepth' => 16, 'hasCover' => false, 'lyrics' => null, 'codec' => 'PCM WAV'];
+    $fh = @fopen($path, 'rb');
+    if (!$fh) return $out;
+    $hdr = fread($fh, 12);
+    if (strlen($hdr) < 12 || substr($hdr, 0, 4) !== 'RIFF' || substr($hdr, 8, 4) !== 'WAVE') {
+        fclose($fh);
+        return $out;
+    }
+    $byteRate = 0;
+    $dataSize = 0;
+    while (!feof($fh)) {
+        $chunkHdr = fread($fh, 8);
+        if (strlen($chunkHdr) < 8) break;
+        $cid = substr($chunkHdr, 0, 4);
+        $cSize = unpack('V', substr($chunkHdr, 4, 4))[1];
+        $pad = ($cSize % 2);
+        if ($cid === 'fmt ' && $cSize >= 16) {
+            $fmt = fread($fh, min($cSize, 64));
+            if ($cSize > 64) fseek($fh, $cSize - 64, SEEK_CUR);
+            $out['channels'] = unpack('v', substr($fmt, 2, 2))[1];
+            $out['sampleRate'] = unpack('V', substr($fmt, 4, 4))[1];
+            $byteRate = unpack('V', substr($fmt, 8, 4))[1];
+            $out['bitDepth'] = unpack('v', substr($fmt, 14, 2))[1] ?: 16;
+            if ($byteRate > 0) $out['bitrate'] = (int)round(($byteRate * 8) / 1000);
+        } elseif ($cid === 'data') {
+            $dataSize = $cSize;
+            fseek($fh, $cSize, SEEK_CUR);
+        } elseif ($cid === 'LIST' && $cSize >= 4) {
+            $sub = fread($fh, min($cSize, 65536));
+            if ($cSize > 65536) fseek($fh, $cSize - 65536, SEEK_CUR);
+            if (substr($sub, 0, 4) === 'INFO') {
+                $p = 4;
+                $sLen = strlen($sub);
+                while ($p + 8 <= $sLen) {
+                    $k = substr($sub, $p, 4);
+                    $vLen = unpack('V', substr($sub, $p + 4, 4))[1];
+                    $p += 8;
+                    if ($p + $vLen > $sLen) break;
+                    $val = trim(str_replace("\0", '', substr($sub, $p, $vLen)));
+                    $p += $vLen + ($vLen % 2);
+                    if ($k === 'INAM') $out['title'] = $val;
+                    elseif ($k === 'IART') $out['artist'] = $val;
+                    elseif ($k === 'IPRD') $out['album'] = $val;
+                    elseif ($k === 'IGNR') $out['genre'] = $val;
+                    elseif ($k === 'ICRD' && preg_match('/\d{4}/', $val, $m)) $out['year'] = (int)$m[0];
+                    elseif ($k === 'ITRK') $out['track'] = $val;
+                }
+            }
+        } elseif (strtolower($cid) === 'id3 ' && $cSize > 10) {
+            $id3Raw = fread($fh, min($cSize, 524288));
+            if (substr($id3Raw, 0, 3) === 'ID3') {
+                $ver = ord($id3Raw[3]);
+                $id3Size = synchsafe_to_int(substr($id3Raw, 6, 4));
+                $parsed = ['title' => null, 'artist' => null, 'album' => null, 'genre' => null, 'year' => null, 'track' => null, 'hasCover' => false, 'lyrics' => null];
+                parse_id3v2_frames(substr($id3Raw, 10, $id3Size), $ver, $parsed);
+                foreach ($parsed as $pk => $pv) {
+                    if ($pv !== null && $pv !== false && $out[$pk] === null) $out[$pk] = $pv;
+                }
+                if (!empty($parsed['hasCover'])) $out['hasCover'] = true;
+            }
+        } else {
+            fseek($fh, $cSize, SEEK_CUR);
+        }
+        if ($pad) fseek($fh, 1, SEEK_CUR);
+    }
+    fclose($fh);
+    if ($byteRate > 0 && $dataSize > 0) {
+        $out['duration'] = round($dataSize / $byteRate, 2);
+    }
+    return $out;
+}
+
+function read_php_ogg_tags($path, $fileSize) {
+    $out = ['title' => null, 'artist' => null, 'album' => null, 'genre' => null, 'year' => null, 'track' => null, 'duration' => null, 'bitrate' => null, 'sampleRate' => 48000, 'channels' => 2, 'bitDepth' => 16, 'hasCover' => false, 'lyrics' => null, 'codec' => 'OGG'];
+    $fh = @fopen($path, 'rb');
+    if (!$fh) return $out;
+    $head = fread($fh, min($fileSize, 131072));
+    $tailOffset = max(0, $fileSize - 65536);
+    fseek($fh, $tailOffset, SEEK_SET);
+    $tail = fread($fh, 65536);
+    fclose($fh);
+
+    $pos = 0;
+    $len = strlen($head);
+    $codecType = '';
+    for ($pageIdx = 0; $pageIdx < 6 && $pos < $len; $pageIdx++) {
+        $sig = strpos($head, 'OggS', $pos);
+        if ($sig === false || $sig + 27 > $len) break;
+        $numSegs = ord($head[$sig + 26]);
+        $hdrEnd = $sig + 27 + $numSegs;
+        if ($hdrEnd > $len) break;
+        $pageBytes = 0;
+        for ($s = 0; $s < $numSegs; $s++) $pageBytes += ord($head[$sig + 27 + $s]);
+        $payload = substr($head, $hdrEnd, $pageBytes);
+        $pos = $hdrEnd + $pageBytes;
+
+        if ($pageIdx === 0) {
+            if (str_starts_with($payload, "\x01vorbis") && strlen($payload) >= 28) {
+                $codecType = 'VORBIS';
+                $out['codec'] = 'VORBIS';
+                $out['channels'] = ord($payload[11]);
+                $out['sampleRate'] = unpack('V', substr($payload, 12, 4))[1];
+                $nomBr = unpack('V', substr($payload, 20, 4))[1];
+                if ($nomBr > 0 && $nomBr < 2000000) $out['bitrate'] = (int)round($nomBr / 1000);
+            } elseif (str_starts_with($payload, 'OpusHead') && strlen($payload) >= 19) {
+                $codecType = 'OPUS';
+                $out['codec'] = 'OPUS';
+                $out['channels'] = ord($payload[9]);
+                $out['sampleRate'] = 48000;
+            }
+        } else {
+            $cOff = null;
+            if ($codecType === 'VORBIS' && ($vp = strpos($payload, "\x03vorbis")) !== false) $cOff = $vp + 7;
+            elseif ($codecType === 'OPUS' && ($op = strpos($payload, 'OpusTags')) !== false) $cOff = $op + 8;
+            if ($cOff !== null && $cOff + 8 <= strlen($payload)) {
+                $vLen = unpack('V', substr($payload, $cOff, 4))[1];
+                $p = $cOff + 4 + $vLen;
+                if ($p + 4 <= strlen($payload)) {
+                    $cnt = unpack('V', substr($payload, $p, 4))[1];
+                    $p += 4;
+                    for ($i = 0; $i < $cnt && $p + 4 <= strlen($payload); $i++) {
+                        $cl = unpack('V', substr($payload, $p, 4))[1];
+                        $p += 4;
+                        if ($p + $cl > strlen($payload)) break;
+                        $kv = substr($payload, $p, $cl);
+                        $p += $cl;
+                        $eq = strpos($kv, '=');
+                        if ($eq !== false) {
+                            $k = strtoupper(substr($kv, 0, $eq));
+                            $v = trim(substr($kv, $eq + 1));
+                            if ($k === 'TITLE') $out['title'] = $v;
+                            elseif ($k === 'ARTIST') $out['artist'] = $v;
+                            elseif ($k === 'ALBUM') $out['album'] = $v;
+                            elseif ($k === 'GENRE') $out['genre'] = $v;
+                            elseif (($k === 'DATE' || $k === 'YEAR') && preg_match('/\d{4}/', $v, $m)) $out['year'] = (int)$m[0];
+                            elseif ($k === 'TRACKNUMBER' || $k === 'TRACK') $out['track'] = preg_replace('/\/\d+$/', '', $v);
+                            elseif ($k === 'LYRICS' || $k === 'UNSYNCEDLYRICS') $out['lyrics'] = $v;
+                            elseif ($k === 'METADATA_BLOCK_PICTURE') $out['hasCover'] = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $lastOgg = strrpos($tail, 'OggS');
+    if ($lastOgg !== false && $lastOgg + 14 <= strlen($tail)) {
+        $lo = unpack('V', substr($tail, $lastOgg + 6, 4))[1];
+        $hi = unpack('V', substr($tail, $lastOgg + 10, 4))[1];
+        $granule = ($hi * 4294967296) + $lo;
+        $rate = ($codecType === 'OPUS') ? 48000 : ($out['sampleRate'] ?: 44100);
+        if ($granule > 0 && $rate > 0) {
+            $out['duration'] = round($granule / $rate, 2);
+            if ($out['duration'] > 0 && $out['bitrate'] === null) {
+                $out['bitrate'] = (int)round(($fileSize * 8) / $out['duration'] / 1000);
+            }
+        }
+    }
+    return $out;
+}
+
+function read_php_m4a_tags($path, $fileSize) {
+    $out = ['title' => null, 'artist' => null, 'album' => null, 'genre' => null, 'year' => null, 'track' => null, 'duration' => null, 'bitrate' => null, 'sampleRate' => 44100, 'channels' => 2, 'bitDepth' => 16, 'hasCover' => false, 'lyrics' => null, 'codec' => 'AAC'];
+    $fh = @fopen($path, 'rb');
+    if (!$fh) return $out;
+    $data = fread($fh, min($fileSize, 524288));
+    fclose($fh);
+    $len = strlen($data);
+    if ($len < 16) return $out;
+
+    if (($mvhdPos = strpos($data, 'mvhd')) !== false && $mvhdPos + 28 <= $len) {
+        $ver = ord($data[$mvhdPos + 4]);
+        $tsOff = ($ver === 1) ? $mvhdPos + 20 : $mvhdPos + 16;
+        $durOff = ($ver === 1) ? $mvhdPos + 24 : $mvhdPos + 20;
+        if ($durOff + 8 <= $len) {
+            $scale = unpack('N', substr($data, $tsOff, 4))[1];
+            $dur = unpack('N', substr($data, $durOff, 4))[1];
+            if ($scale > 0 && $dur > 0) {
+                $out['duration'] = round($dur / $scale, 2);
+                $out['bitrate'] = (int)round(($fileSize * 8) / $out['duration'] / 1000);
+            }
+        }
+    }
+    if (($alacPos = strpos($data, 'alac')) !== false) {
+        $out['codec'] = 'ALAC';
+        if ($alacPos + 32 <= $len) {
+            $sr = unpack('N', substr($data, $alacPos + 24, 4))[1] ?? 0;
+            if ($sr >= 8000 && $sr <= 384000) $out['sampleRate'] = $sr;
+        }
+    }
+    $atomMap = ["\xa9nam" => 'title', "\xa9ART" => 'artist', "\xa9alb" => 'album', "\xa9gen" => 'genre', "\xa9day" => 'year', "\xa9lyr" => 'lyrics'];
+    foreach ($atomMap as $tag => $field) {
+        if (($pos = strpos($data, $tag)) !== false && $pos >= 4) {
+            $boxSize = unpack('N', substr($data, $pos - 4, 4))[1];
+            if ($boxSize > 16 && $pos - 4 + $boxSize <= $len) {
+                $chunk = substr($data, $pos, $boxSize - 4);
+                if (($dPos = strpos($chunk, 'data')) !== false && $dPos >= 4) {
+                    $dSize = unpack('N', substr($chunk, $dPos - 4, 4))[1];
+                    $val = trim(substr($chunk, $dPos + 12, max(0, $dSize - 16)));
+                    if ($val !== '') {
+                        if ($field === 'year' && preg_match('/\d{4}/', $val, $m)) $out['year'] = (int)$m[0];
+                        elseif ($field !== 'year') $out[$field] = $val;
+                    }
+                }
+            }
+        }
+    }
+    if (($trknPos = strpos($data, 'trkn')) !== false && $trknPos + 24 <= $len) {
+        $chunk = substr($data, $trknPos, 32);
+        if (($dPos = strpos($chunk, 'data')) !== false && $dPos + 16 <= strlen($chunk)) {
+            $tNo = unpack('n', substr($chunk, $dPos + 14, 2))[1];
+            if ($tNo > 0) $out['track'] = (string)$tNo;
+        }
+    }
+    if (strpos($data, 'covr') !== false) $out['hasCover'] = true;
     return $out;
 }
 

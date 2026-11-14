@@ -1,4 +1,17 @@
-// CachyMusic - Audiophile 32-Bit Floating Point DSP Engine
+// CachyMusic - Audiophile DSP Engine (64-Bit Worklet & Web Audio Fallback)
+import {
+    getValidSampleRate,
+    popModalState,
+    pushModalState,
+    safeStorage,
+    showCachyToast,
+    showToast
+} from './utils.js';
+import { PEQ_FREQS, PEQ_Q_STEPS, hasActiveDsp, store } from './state.js';
+import { getActiveTheme, miniVolumeSlider, volumeLevel, volumeSlider } from './ui-elements.js';
+import { logAudioPlaybackEvent, setDebugMode, updateAudioDiagnosticsUi, updateDebugHudState } from './settings.js';
+import { getRuntime } from './runtime-capabilities.js';
+
     function createSoftClipCurve(samples = 2048) {
         const curve = new Float32Array(samples);
         // Audiophile Analog Soft-Clip Curve:
@@ -29,7 +42,8 @@
     }
 
     function computeLimiterProfile() {
-        if (!isLimiter) {
+        const s = store.state;
+        if (!s.isLimiter) {
             return {
                 threshold: 0,
                 knee: 0,
@@ -40,60 +54,43 @@
             };
         }
 
-        // Base transparent studio master limiter profile
-        // - Ratio 20:1 brickwall peak arrest
-        // - 1.8ms attack captures transient crests without dulling percussion snap
-        // - 90ms release ensures swift gain recovery without pumping or breathing
         let threshold = -1.5; // dBFS
         let knee = 2.8;       // dB
         let ratio = 20.0;     // ratio (Brickwall)
         let attack = 0.0018;  // seconds (1.8ms)
         let release = 0.090;  // seconds (90ms)
 
-        // Low-End Headroom for BASS BOOST (95 Hz Harman Shelf):
-        // Low-frequency waves have long physical periods (~10.5ms at 95 Hz).
-        // 1. Threshold lowers by -1.2 dB to catch heavy sub-bass crests before DAC saturation.
-        // 2. Knee widens by +1.5 dB for an organic, musical onset.
-        // 3. Release extends to 125ms (0.125s) to guarantee zero inter-cycle gain modulation (eliminates buzz/flab).
-        if (isBassBoost) {
+        if (s.isBassBoost) {
             threshold -= 1.2;
             knee += 1.5;
             release = Math.max(release, 0.125);
         }
 
-        // Clean Preamp Headroom for AMP BOOST (+3.6 dB broadcast amplification):
-        // Pulls threshold down by -2.0 dB and widens knee to seamlessly absorb the +3.6 dB gain without distortion.
-        if (isAmpBoost) {
+        if (s.isAmpBoost) {
             threshold -= 2.0;
             knee += 1.5;
             attack = 0.0015;
             release = Math.max(release, 0.100);
         }
 
-        // Dynamic Headroom for VOLUME OVERDRIVE (> 100% up to 150%):
-        // Dynamically scales limitation based on the exact amount of volume overdrive.
-        if (currentVolumeValue > 1.0) {
-            const overdrive = (currentVolumeValue - 1.0) / 0.5; // 0 to 1
+        if (s.currentVolumeValue > 1.0) {
+            const overdrive = (s.currentVolumeValue - 1.0) / 0.5;
             threshold -= overdrive * 2.0;
             knee += overdrive * 1.5;
             attack = Math.min(attack, 0.0012);
             release = Math.max(release, 0.110);
         }
 
-        // Vocal Presence Headroom for VOCAL BOOST (+2.8 dB at 3.0 kHz):
-        if (isVocalBoost) {
+        if (s.isVocalBoost) {
             threshold -= 0.8;
             knee += 0.8;
         }
 
-        // Transient Clamp for TREBLE BOOST (+3.0 dB at 10.0 kHz):
-        // Fast 1.2ms attack swiftly clamps high-frequency transient spikes and prevents digital glare.
-        if (isTrebleBoost) {
+        if (s.isTrebleBoost) {
             threshold -= 0.6;
             attack = Math.min(attack, 0.0012);
         }
 
-        // Guard rails: strictly clamped to maintain studio mastering standards
         threshold = Math.max(-8.0, Math.min(-1.2, threshold));
         knee = Math.min(8.0, knee);
 
@@ -108,73 +105,80 @@
     }
 
     function updateLimiterState(now = 0) {
-        if (!dspLimiter || !audioContext) return;
+        const s = store.state;
+        if (!s.dspLimiter || !s.audioContext) return;
         const profile = computeLimiterProfile();
 
         if (profile.isBypassed) {
-            dspLimiter.threshold.setTargetAtTime(0, now, 0.02);
-            dspLimiter.knee.setTargetAtTime(0, now, 0.02);
-            dspLimiter.ratio.setTargetAtTime(1.0, now, 0.02);
-            dspLimiter.attack.setTargetAtTime(0.0018, now, 0.02);
-            dspLimiter.release.setTargetAtTime(0.090, now, 0.02);
-            if (ceilingTrimGain) {
-                ceilingTrimGain.gain.setTargetAtTime(1.0, now, 0.02);
+            s.dspLimiter.threshold.setTargetAtTime(0, now, 0.02);
+            s.dspLimiter.knee.setTargetAtTime(0, now, 0.02);
+            s.dspLimiter.ratio.setTargetAtTime(1.0, now, 0.02);
+            s.dspLimiter.attack.setTargetAtTime(0.0018, now, 0.02);
+            s.dspLimiter.release.setTargetAtTime(0.090, now, 0.02);
+            if (s.ceilingTrimGain) {
+                s.ceilingTrimGain.gain.setTargetAtTime(1.0, now, 0.02);
             }
-            if (ampSoftClipper) {
-                ampSoftClipper.curve = createLinearCurve(2048);
+            if (s.ampSoftClipper) {
+                s.ampSoftClipper.curve = createLinearCurve(2048);
             }
         } else {
-            dspLimiter.threshold.setTargetAtTime(profile.threshold, now, 0.02);
-            dspLimiter.knee.setTargetAtTime(profile.knee, now, 0.02);
-            dspLimiter.ratio.setTargetAtTime(profile.ratio, now, 0.02);
-            dspLimiter.attack.setTargetAtTime(profile.attack, now, 0.02);
-            dspLimiter.release.setTargetAtTime(profile.release, now, 0.02);
-            if (ceilingTrimGain) {
-                // -0.6 dBFS True Peak headroom ceiling (gain = ~0.93325) guarantees DAC reconstruction safety
-                ceilingTrimGain.gain.setTargetAtTime(Math.pow(10, -0.6 / 20), now, 0.02);
+            s.dspLimiter.threshold.setTargetAtTime(profile.threshold, now, 0.02);
+            s.dspLimiter.knee.setTargetAtTime(profile.knee, now, 0.02);
+            s.dspLimiter.ratio.setTargetAtTime(profile.ratio, now, 0.02);
+            s.dspLimiter.attack.setTargetAtTime(profile.attack, now, 0.02);
+            s.dspLimiter.release.setTargetAtTime(profile.release, now, 0.02);
+            if (s.ceilingTrimGain) {
+                s.ceilingTrimGain.gain.setTargetAtTime(Math.pow(10, -0.6 / 20), now, 0.02);
             }
-            if (ampSoftClipper) {
-                ampSoftClipper.curve = createSoftClipCurve(2048);
+            if (s.ampSoftClipper) {
+                s.ampSoftClipper.curve = createSoftClipCurve(2048);
             }
         }
     }
 
     function getEffectiveAmplification() {
-        // Base clean amplification boost: +3.6 dB when isAmpBoost is enabled (standard broadcast loudness enhancement)
-        let ampDb = isAmpBoost ? 3.6 : 0;
-        // Extended volume overdrive above 100% (from 1.0 to 1.5 adds up to +3.0 dB clean headroom gain)
-        if (currentVolumeValue > 1.0) {
-            const overdrive = (currentVolumeValue - 1.0) / 0.5; // 0 to 1
+        const s = store.state;
+        let ampDb = s.isAmpBoost ? 3.6 : 0;
+        if (s.currentVolumeValue > 1.0) {
+            const overdrive = (s.currentVolumeValue - 1.0) / 0.5;
             ampDb += overdrive * 3.0;
         }
         return Math.pow(10, ampDb / 20);
     }
 
     function updateAmpGain(now = 0) {
-        if (!ampGainNode || !audioContext) return;
+        const s = store.state;
+        if (!s.ampGainNode || !s.audioContext) return;
         const targetLinear = getEffectiveAmplification();
-        ampGainNode.gain.setTargetAtTime(targetLinear, now, 0.04);
+        s.ampGainNode.gain.setTargetAtTime(targetLinear, now, 0.04);
     }
 
     function getPreAmpGainValue() {
+        const s = store.state;
         let maxBoost = 0;
-        if (isBassBoost) maxBoost = Math.max(maxBoost, 3.8);
-        if (isTrebleBoost) maxBoost = Math.max(maxBoost, 3.0);
-        if (isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
-        if (peqGains && peqGains.length) {
-            for (const g of peqGains) {
-                if (g > maxBoost) maxBoost = g;
+        if (!s.isPeqBypassed) {
+            if (s.isBassBoost) maxBoost = Math.max(maxBoost, 3.8);
+            if (s.isTrebleBoost) maxBoost = Math.max(maxBoost, 3.0);
+            if (s.isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
+            if (s.peqGains && s.peqGains.length) {
+                for (const g of s.peqGains) {
+                    if (g > maxBoost) maxBoost = g;
+                }
             }
+        } else {
+            if (s.isBassBoost) maxBoost = Math.max(maxBoost, 3.8);
+            if (s.isTrebleBoost) maxBoost = Math.max(maxBoost, 3.0);
+            if (s.isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
         }
-        // Attenuate input by 70% of max positive boost to preserve dynamic range headroom without clipping
         const trimDb = maxBoost > 0 ? -(maxBoost * 0.70) : 0;
         return Math.pow(10, trimDb / 20);
     }
 
     function updatePreAmpGain(now = 0) {
-        if (!preAmpGainNode || !audioContext) return;
+        const s = store.state;
+        if (!s.preAmpGainNode || !s.audioContext) return;
         const target = getPreAmpGainValue();
-        preAmpGainNode.gain.setTargetAtTime(target, now, 0.025);
+        s.preAmpGainNode.gain.setTargetAtTime(target, now, 0.025);
     }
 
     // Audiophile Bauer / Jan Meier Natural Headphone Crossfeed Network (Unity-Gain Mono Bass)
@@ -251,59 +255,60 @@
     }
 
     function setDspBoost(type, active) {
-        if (!audioContext) {
-            const track = allTracks[currentTrackIndex];
+        const s = store.state;
+        if (!s.audioContext) {
+            const track = s.allTracks[s.currentTrackIndex];
             const targetRate = (track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100;
             initAudioContext(targetRate);
         }
-        const now = audioContext ? audioContext.currentTime : 0;
+        const now = s.audioContext ? s.audioContext.currentTime : 0;
 
         if (type === 'limiter') {
-            isLimiter = active;
-            safeStorage.setItem('cachymusic_limiter', isLimiter ? 'true' : 'false');
+            s.isLimiter = active;
+            safeStorage.setItem('cachymusic_limiter', s.isLimiter ? 'true' : 'false');
         } else if (type === 'amp') {
-            isAmpBoost = active;
-            safeStorage.setItem('cachymusic_amp_boost', isAmpBoost ? 'true' : 'false');
+            s.isAmpBoost = active;
+            safeStorage.setItem('cachymusic_amp_boost', s.isAmpBoost ? 'true' : 'false');
             updateAmpGain(now);
         } else if (type === 'bass') {
-            isBassBoost = active;
-            safeStorage.setItem('cachymusic_bass_boost', isBassBoost ? 'true' : 'false');
-            if (bassFilter && audioContext) {
-                bassFilter.gain.setTargetAtTime(isBassBoost ? 3.8 : 0, now, 0.04);
+            s.isBassBoost = active;
+            safeStorage.setItem('cachymusic_bass_boost', s.isBassBoost ? 'true' : 'false');
+            if (s.bassFilter && s.audioContext) {
+                s.bassFilter.gain.setTargetAtTime(s.isBassBoost ? 3.8 : 0, now, 0.04);
             }
         } else if (type === 'vocal') {
-            isVocalBoost = active;
-            safeStorage.setItem('cachymusic_vocal_boost', isVocalBoost ? 'true' : 'false');
-            if (vocalFilter && audioContext) {
-                vocalFilter.gain.setTargetAtTime(isVocalBoost ? 2.8 : 0, now, 0.04);
+            s.isVocalBoost = active;
+            safeStorage.setItem('cachymusic_vocal_boost', s.isVocalBoost ? 'true' : 'false');
+            if (s.vocalFilter && s.audioContext) {
+                s.vocalFilter.gain.setTargetAtTime(s.isVocalBoost ? 2.8 : 0, now, 0.04);
             }
         } else if (type === 'treble') {
-            isTrebleBoost = active;
-            safeStorage.setItem('cachymusic_treble_boost', isTrebleBoost ? 'true' : 'false');
-            if (trebleFilter && audioContext) {
-                trebleFilter.gain.setTargetAtTime(isTrebleBoost ? 3.0 : 0, now, 0.04);
+            s.isTrebleBoost = active;
+            safeStorage.setItem('cachymusic_treble_boost', s.isTrebleBoost ? 'true' : 'false');
+            if (s.trebleFilter && s.audioContext) {
+                s.trebleFilter.gain.setTargetAtTime(s.isTrebleBoost ? 3.0 : 0, now, 0.04);
             }
         } else if (type === 'xfeed') {
-            isCrossfeed = active;
-            safeStorage.setItem('cachymusic_crossfeed', isCrossfeed ? 'true' : 'false');
+            s.isCrossfeed = active;
+            safeStorage.setItem('cachymusic_crossfeed', s.isCrossfeed ? 'true' : 'false');
         } else if (type === 'subsonic') {
-            isSubsonic = active;
-            safeStorage.setItem('cachymusic_subsonic', isSubsonic ? 'true' : 'false');
-            if (subsonicFilter && audioContext) {
-                subsonicFilter.frequency.setTargetAtTime(isSubsonic ? 20 : 5, now, 0.04);
+            s.isSubsonic = active;
+            safeStorage.setItem('cachymusic_subsonic', s.isSubsonic ? 'true' : 'false');
+            if (s.subsonicFilter && s.audioContext) {
+                s.subsonicFilter.frequency.setTargetAtTime(s.isSubsonic ? 20 : 5, now, 0.04);
             }
         } else if (type === 'agp') {
-            isAgpEnabled = active;
-            safeStorage.setItem('cachymusic_agp', isAgpEnabled ? 'true' : 'false');
+            s.isAgpEnabled = active;
+            safeStorage.setItem('cachymusic_agp', s.isAgpEnabled ? 'true' : 'false');
         } else if (type === 'surround') {
-            isSurroundWidener = active;
-            safeStorage.setItem('cachymusic_surround_ms', isSurroundWidener ? 'true' : 'false');
+            s.isSurroundWidener = active;
+            safeStorage.setItem('cachymusic_surround_ms', s.isSurroundWidener ? 'true' : 'false');
         } else if (type === 'phase') {
-            isPhaseInvert = active;
-            safeStorage.setItem('cachymusic_phase_invert', isPhaseInvert ? 'true' : 'false');
+            s.isPhaseInvert = active;
+            safeStorage.setItem('cachymusic_phase_invert', s.isPhaseInvert ? 'true' : 'false');
         } else if (type === 'mono') {
-            isMonoMix = active;
-            safeStorage.setItem('cachymusic_mono_mix', isMonoMix ? 'true' : 'false');
+            s.isMonoMix = active;
+            safeStorage.setItem('cachymusic_mono_mix', s.isMonoMix ? 'true' : 'false');
         }
 
         updateWorkletParams();
@@ -311,29 +316,31 @@
         updateAudioRouting();
         updateLimiterState(now);
         updateDspButtonsUi();
+        store.emit('dsp:change');
     }
 
     function toggleDspBoost(type) {
-        if (type === 'limiter') setDspBoost('limiter', !isLimiter);
-        else if (type === 'amp') setDspBoost('amp', !isAmpBoost);
-        else if (type === 'bass') setDspBoost('bass', !isBassBoost);
-        else if (type === 'vocal') setDspBoost('vocal', !isVocalBoost);
-        else if (type === 'treble') setDspBoost('treble', !isTrebleBoost);
-        else if (type === 'xfeed') setDspBoost('xfeed', !isCrossfeed);
-        else if (type === 'subsonic') setDspBoost('subsonic', !isSubsonic);
-        else if (type === 'agp') setDspBoost('agp', !isAgpEnabled);
-        else if (type === 'surround') setDspBoost('surround', !isSurroundWidener);
-        else if (type === 'phase') setDspBoost('phase', !isPhaseInvert);
-        else if (type === 'mono') setDspBoost('mono', !isMonoMix);
+        const s = store.state;
+        if (type === 'limiter') setDspBoost('limiter', !s.isLimiter);
+        else if (type === 'amp') setDspBoost('amp', !s.isAmpBoost);
+        else if (type === 'bass') setDspBoost('bass', !s.isBassBoost);
+        else if (type === 'vocal') setDspBoost('vocal', !s.isVocalBoost);
+        else if (type === 'treble') setDspBoost('treble', !s.isTrebleBoost);
+        else if (type === 'xfeed') setDspBoost('xfeed', !s.isCrossfeed);
+        else if (type === 'subsonic') setDspBoost('subsonic', !s.isSubsonic);
+        else if (type === 'agp') setDspBoost('agp', !s.isAgpEnabled);
+        else if (type === 'surround') setDspBoost('surround', !s.isSurroundWidener);
+        else if (type === 'phase') setDspBoost('phase', !s.isPhaseInvert);
+        else if (type === 'mono') setDspBoost('mono', !s.isMonoMix);
         else if (type === 'peq') {
             const peqModal = document.getElementById('peqModal');
             if (peqModal) {
                 const isCurrentlyOpen = peqModal.style.display === 'flex' || window.getComputedStyle(peqModal).display === 'flex';
                 if (isCurrentlyOpen) {
-                    if (typeof closePeqModal === 'function') closePeqModal();
+                    if (typeof s.closePeqModal === 'function') s.closePeqModal();
                     else peqModal.style.display = 'none';
                 } else {
-                    if (typeof openPeqModal === 'function') openPeqModal();
+                    if (typeof s.openPeqModal === 'function') s.openPeqModal();
                     else {
                         peqModal.style.display = 'flex';
                         setTimeout(drawPeqCurve, 40);
@@ -344,21 +351,22 @@
     }
 
     function updateDspButtonsUi() {
+        const s = store.state;
         const dspBtns = document.querySelectorAll('[data-target="limiter"], [data-target="amp"], [data-target="bass"], [data-target="vocal"], [data-target="treble"], [data-target="xfeed"], [data-target="subsonic"], [data-target="agp"], [data-target="surround"], [data-target="phase"], [data-target="mono"], [data-target="peq"]');
         dspBtns.forEach(btn => {
             const target = btn.dataset.target;
-            const isActive = (target === 'limiter' && isLimiter) ||
-                             (target === 'amp' && isAmpBoost) ||
-                             (target === 'bass' && isBassBoost) ||
-                             (target === 'vocal' && isVocalBoost) ||
-                             (target === 'treble' && isTrebleBoost) ||
-                             (target === 'xfeed' && isCrossfeed) ||
-                             (target === 'subsonic' && isSubsonic) ||
-                             (target === 'agp' && isAgpEnabled) ||
-                             (target === 'surround' && isSurroundWidener) ||
-                             (target === 'phase' && isPhaseInvert) ||
-                             (target === 'mono' && isMonoMix) ||
-                             (target === 'peq' && !isPeqBypassed && peqGains.some(g => g !== 0));
+            const isActive = (target === 'limiter' && s.isLimiter) ||
+                             (target === 'amp' && s.isAmpBoost) ||
+                             (target === 'bass' && s.isBassBoost) ||
+                             (target === 'vocal' && s.isVocalBoost) ||
+                             (target === 'treble' && s.isTrebleBoost) ||
+                             (target === 'xfeed' && s.isCrossfeed) ||
+                             (target === 'subsonic' && s.isSubsonic) ||
+                             (target === 'agp' && s.isAgpEnabled) ||
+                             (target === 'surround' && s.isSurroundWidener) ||
+                             (target === 'phase' && s.isPhaseInvert) ||
+                             (target === 'mono' && s.isMonoMix) ||
+                             (target === 'peq' && !s.isPeqBypassed && s.peqGains.some(g => g !== 0));
             btn.classList.toggle('active', isActive);
             btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             const dot = btn.querySelector('.dspDot');
@@ -366,24 +374,24 @@
         });
 
         const peqXfeedStatus = document.getElementById('peqXfeedStatus');
-        if (peqXfeedStatus) peqXfeedStatus.textContent = isCrossfeed ? 'ON' : 'OFF';
+        if (peqXfeedStatus) peqXfeedStatus.textContent = s.isCrossfeed ? 'ON' : 'OFF';
         const peqAgpStatus = document.getElementById('peqAgpStatus');
-        if (peqAgpStatus) peqAgpStatus.textContent = isAgpEnabled ? 'GUARD ON' : 'BYPASS';
+        if (peqAgpStatus) peqAgpStatus.textContent = s.isAgpEnabled ? 'GUARD ON' : 'BYPASS';
         const peqSurroundStatus = document.getElementById('peqSurroundStatus');
-        if (peqSurroundStatus) peqSurroundStatus.textContent = isSurroundWidener ? '135% WIDE' : '100%';
+        if (peqSurroundStatus) peqSurroundStatus.textContent = s.isSurroundWidener ? '135% WIDE' : '100%';
         const peqPhaseStatus = document.getElementById('peqPhaseStatus');
-        if (peqPhaseStatus) peqPhaseStatus.textContent = isPhaseInvert ? '180° INV' : '0° NORM';
+        if (peqPhaseStatus) peqPhaseStatus.textContent = s.isPhaseInvert ? '180° INV' : '0° NORM';
         const peqMonoStatus = document.getElementById('peqMonoStatus');
-        if (peqMonoStatus) peqMonoStatus.textContent = isMonoMix ? 'MONO L+R' : 'STEREO';
+        if (peqMonoStatus) peqMonoStatus.textContent = s.isMonoMix ? 'MONO L+R' : 'STEREO';
 
-        const isPeqActive = !isPeqBypassed && peqGains.some(g => g !== 0);
+        const isPeqActive = !s.isPeqBypassed && s.peqGains.some(g => g !== 0);
         const playerPeqBadge = document.getElementById('playerPeqBadge');
         if (playerPeqBadge) {
             playerPeqBadge.textContent = isPeqActive ? 'ACTIVE' : '10-BAND';
             playerPeqBadge.classList.toggle('active', isPeqActive);
         }
 
-        const activeDspCount = [isAmpBoost, isBassBoost, isVocalBoost, isTrebleBoost, isLimiter, isCrossfeed, isSurroundWidener, isPhaseInvert, isMonoMix].filter(Boolean).length;
+        const activeDspCount = [s.isAmpBoost, s.isBassBoost, s.isVocalBoost, s.isTrebleBoost, s.isLimiter, s.isCrossfeed, s.isSurroundWidener, s.isPhaseInvert, s.isMonoMix].filter(Boolean).length;
         const playerDspCountBadge = document.getElementById('playerDspCountBadge');
         if (playerDspCountBadge) {
             if (activeDspCount > 0) {
@@ -398,8 +406,8 @@
 
         const peqDspActiveSummary = document.getElementById('peqDspActiveSummary');
         if (peqDspActiveSummary) {
-            peqDspActiveSummary.textContent = activeDspCount > 0 ? `${activeDspCount} ACTIVE` : (isAgpEnabled ? 'AGP GUARD READY' : 'ALL BYPASSED');
-            peqDspActiveSummary.classList.toggle('active', activeDspCount > 0 || isAgpEnabled);
+            peqDspActiveSummary.textContent = activeDspCount > 0 ? `${activeDspCount} ACTIVE` : (s.isAgpEnabled ? 'AGP GUARD READY' : 'ALL BYPASSED');
+            peqDspActiveSummary.classList.toggle('active', activeDspCount > 0 || s.isAgpEnabled);
         }
 
         const playerPeqBtn = document.getElementById('playerPeqBtn');
@@ -407,10 +415,8 @@
             playerPeqBtn.classList.toggle('active', isPeqActive || activeDspCount > 0);
         }
 
-        updateDacStatusUi();
-        if (allTracks[currentTrackIndex]) {
-            updateTrackBadgeUi(allTracks[currentTrackIndex]);
-        }
+        store.emit('ui:sync-dac-status');
+        store.emit('ui:sync-track-badge');
     }
 
     function setupDspControls() {
@@ -427,33 +433,38 @@
     // 10-Band Parametric Equalizer (PEQ) & AutoEQ Compensation Engine
     // =========================================================================
     function setPeqBandGain(bandIndex, gainDb) {
+        const s = store.state;
         if (bandIndex < 0 || bandIndex >= PEQ_FREQS.length) return;
         const clampedGain = Math.max(-15, Math.min(15, Number(gainDb) || 0));
-        peqGains[bandIndex] = clampedGain;
+        s.peqGains[bandIndex] = clampedGain;
         try {
-            safeStorage.setItem('cachymusic_peq_gains', JSON.stringify(peqGains));
+            safeStorage.setItem('cachymusic_peq_gains', JSON.stringify(s.peqGains));
         } catch (_) {}
 
-        if (peqNodes && peqNodes[bandIndex] && audioContext) {
-            const now = audioContext.currentTime;
-            peqNodes[bandIndex].gain.setTargetAtTime(isPeqBypassed ? 0 : clampedGain, now, 0.04);
+        if (s.peqNodes && s.peqNodes[bandIndex] && s.audioContext) {
+            const now = s.audioContext.currentTime;
+            s.peqNodes[bandIndex].gain.setTargetAtTime(s.isPeqBypassed ? 0 : clampedGain, now, 0.04);
         }
+        updateWorkletParams();
+        updatePreAmpGain(s.audioContext ? s.audioContext.currentTime : 0);
         updateAudioRouting();
-        updateLimiterState(audioContext ? audioContext.currentTime : 0);
+        updateLimiterState(s.audioContext ? s.audioContext.currentTime : 0);
         updateDspButtonsUi();
     }
 
     function setPeqBandQ(bandIndex, qVal) {
+        const s = store.state;
         if (bandIndex < 0 || bandIndex >= PEQ_FREQS.length) return;
         const clampedQ = Math.max(0.4, Math.min(8.0, Number(qVal) || 1.41));
-        peqQs[bandIndex] = clampedQ;
+        s.peqQs[bandIndex] = clampedQ;
         try {
-            safeStorage.setItem('cachymusic_peq_qs', JSON.stringify(peqQs));
+            safeStorage.setItem('cachymusic_peq_qs', JSON.stringify(s.peqQs));
         } catch (_) {}
 
-        if (peqNodes && peqNodes[bandIndex] && audioContext) {
-            peqNodes[bandIndex].Q.setTargetAtTime(clampedQ, audioContext.currentTime, 0.03);
+        if (s.peqNodes && s.peqNodes[bandIndex] && s.audioContext) {
+            s.peqNodes[bandIndex].Q.setTargetAtTime(clampedQ, s.audioContext.currentTime, 0.03);
         }
+        updateWorkletParams();
     }
 
     function setPeqPreset(name) {
@@ -602,28 +613,88 @@
             ctx.stroke();
         });
 
-        // 2. Calculate Combined Frequency Response H(f)
+        // 2. Calculate Combined Digital Biquad Frequency Response |H(e^jw)|^2
+        const s = store.state;
+        const sampleRate = (s.audioContext && s.audioContext.sampleRate) ? s.audioContext.sampleRate : 48000;
+        const bandCoeffs = [];
+        if (!s.isPeqBypassed) {
+            for (let b = 0; b < PEQ_FREQS.length; b++) {
+                const gainDb = s.peqGains[b];
+                if (!gainDb) continue;
+                const f0 = Math.min(PEQ_FREQS[b], sampleRate * 0.45);
+                const Q = (s.peqQs && s.peqQs[b]) ? s.peqQs[b] : 1.414;
+                const A = Math.pow(10, gainDb / 40);
+                const w0 = (2 * Math.PI * f0) / sampleRate;
+                const cosW0 = Math.cos(w0);
+                const sinW0 = Math.sin(w0);
+
+                let b0, b1, b2, a0, a1, a2;
+                if (b === 0) {
+                    const alphaS = (sinW0 / 2) * Math.sqrt(Math.max(0.01, (A + 1 / A) * (1 / 0.7071 - 1) + 2));
+                    const twoSqrtA = 2 * Math.sqrt(A) * alphaS;
+                    b0 = A * ((A + 1) - (A - 1) * cosW0 + twoSqrtA);
+                    b1 = 2 * A * ((A - 1) - (A + 1) * cosW0);
+                    b2 = A * ((A + 1) - (A - 1) * cosW0 - twoSqrtA);
+                    a0 = (A + 1) + (A - 1) * cosW0 + twoSqrtA;
+                    a1 = -2 * ((A - 1) + (A + 1) * cosW0);
+                    a2 = (A + 1) + (A - 1) * cosW0 - twoSqrtA;
+                } else if (b === PEQ_FREQS.length - 1) {
+                    const alphaS = (sinW0 / 2) * Math.sqrt(Math.max(0.01, (A + 1 / A) * (1 / 0.7071 - 1) + 2));
+                    const twoSqrtA = 2 * Math.sqrt(A) * alphaS;
+                    b0 = A * ((A + 1) + (A - 1) * cosW0 + twoSqrtA);
+                    b1 = -2 * A * ((A - 1) + (A + 1) * cosW0);
+                    b2 = A * ((A + 1) + (A - 1) * cosW0 - twoSqrtA);
+                    a0 = (A + 1) - (A - 1) * cosW0 + twoSqrtA;
+                    a1 = 2 * ((A - 1) - (A + 1) * cosW0);
+                    a2 = (A + 1) - (A - 1) * cosW0 - twoSqrtA;
+                } else {
+                    const alpha = sinW0 / (2 * Math.max(0.4, Q));
+                    b0 = 1 + alpha * A;
+                    b1 = -2 * cosW0;
+                    b2 = 1 - alpha * A;
+                    a0 = 1 + alpha / A;
+                    a1 = -2 * cosW0;
+                    a2 = 1 - alpha / A;
+                }
+                bandCoeffs.push({
+                    b0: b0 / a0,
+                    b1: b1 / a0,
+                    b2: b2 / a0,
+                    a1: a1 / a0,
+                    a2: a2 / a0
+                });
+            }
+        }
+
         const points = [];
         const numSteps = Math.min(300, Math.round(w));
-
-        for (let s = 0; s <= numSteps; s++) {
-            const x = (s / numSteps) * w;
+        for (let stepIdx = 0; stepIdx <= numSteps; stepIdx++) {
+            const x = (stepIdx / numSteps) * w;
             const freq = Math.pow(10, logMin + (x / w) * (logMax - logMin));
-            let totalGain = 0;
+            let magSq = 1.0;
 
-            if (!isPeqBypassed) {
-                for (let b = 0; b < PEQ_FREQS.length; b++) {
-                    const g = peqGains[b];
-                    if (g === 0) continue;
-                    const f0 = PEQ_FREQS[b];
-                    const ratio = freq / f0;
-                    const Q = (peqQs && peqQs[b]) ? peqQs[b] : 1.414;
-                    const weight = 1.0 / (1.0 + Math.pow(Q * (ratio - 1.0 / ratio), 2));
-                    totalGain += g * weight;
+            if (bandCoeffs.length > 0 && freq < sampleRate * 0.495) {
+                const omega = (2 * Math.PI * freq) / sampleRate;
+                const cos1 = Math.cos(omega);
+                const sin1 = Math.sin(omega);
+                const cos2 = Math.cos(2 * omega);
+                const sin2 = Math.sin(2 * omega);
+
+                for (let c = 0; c < bandCoeffs.length; c++) {
+                    const k = bandCoeffs[c];
+                    const numRe = k.b0 + k.b1 * cos1 + k.b2 * cos2;
+                    const numIm = -k.b1 * sin1 - k.b2 * sin2;
+                    const denRe = 1 + k.a1 * cos1 + k.a2 * cos2;
+                    const denIm = -k.a1 * sin1 - k.a2 * sin2;
+                    const denMagSq = denRe * denRe + denIm * denIm;
+                    if (denMagSq > 1e-18) {
+                        magSq *= (numRe * numRe + numIm * numIm) / denMagSq;
+                    }
                 }
             }
 
-            const y = dbToY(totalGain);
+            const totalGain = 10 * Math.log10(Math.max(1e-6, magSq));
+            const y = dbToY(Math.max(-15, Math.min(15, totalGain)));
             points.push({ x, y, totalGain });
         }
 
@@ -664,9 +735,10 @@
             }
             const activeStroke = isWarmTheme ? '#9a3412' : (isLightCanvas ? '#09090b' : (curTheme === 'minimalist-obsidian' ? '#38bdf8' : '#00e5ff'));
             const isFx = document.documentElement.classList.contains('is-firefox') || /firefox|fxios/i.test(navigator.userAgent || '');
-            ctx.strokeStyle = isPeqBypassed ? '#dc2626' : activeStroke;
+            const bypassed = store.state.isPeqBypassed;
+            ctx.strokeStyle = bypassed ? '#dc2626' : activeStroke;
             ctx.lineWidth = 2.5;
-            ctx.shadowColor = isPeqBypassed ? '#dc2626' : activeStroke;
+            ctx.shadowColor = bypassed ? '#dc2626' : activeStroke;
             ctx.shadowBlur = isFx ? 0 : (isLightCanvas ? 2 : 3);
             ctx.stroke();
             ctx.shadowBlur = 0;
@@ -675,7 +747,7 @@
         // 5. Center Frequency Nodes
         PEQ_FREQS.forEach((f0, b) => {
             const x = freqToX(f0);
-            const g = isPeqBypassed ? 0 : peqGains[b];
+            const g = store.state.isPeqBypassed ? 0 : store.state.peqGains[b];
             const y = dbToY(g);
 
             ctx.beginPath();
@@ -723,12 +795,13 @@
         }
 
         // Populate 10 Tactile Vertical Faders
+        const s = store.state;
         peqGrid.innerHTML = '';
         PEQ_FREQS.forEach((freq, i) => {
             const col = document.createElement('div');
             col.className = 'peqFaderCol';
-            const val = peqGains[i] || 0;
-            const qVal = (peqQs && peqQs[i]) ? peqQs[i] : 1.41;
+            const val = s.peqGains[i] || 0;
+            const qVal = (s.peqQs && s.peqQs[i]) ? s.peqQs[i] : 1.41;
             const sign = val > 0 ? '+' : '';
             const dbClass = val > 0 ? 'boost' : (val < 0 ? 'cut' : '');
             const hzText = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
@@ -751,8 +824,8 @@
                 syncBipolarSliderFill(slider, gain, -15, 15);
                 const dbEl = document.getElementById(`peqFaderDb-${i}`);
                 if (dbEl) {
-                    const s = gain > 0 ? '+' : '';
-                    dbEl.textContent = `${s}${gain.toFixed(1)}`;
+                    const sgn = gain > 0 ? '+' : '';
+                    dbEl.textContent = `${sgn}${gain.toFixed(1)}`;
                     dbEl.className = `peqFaderDb ${gain > 0 ? 'boost' : (gain < 0 ? 'cut' : '')}`;
                 }
                 drawPeqCurve();
@@ -772,7 +845,7 @@
             const qBtn = col.querySelector('.peqFaderQBtn');
             if (qBtn) {
                 qBtn.addEventListener('click', () => {
-                    const curQ = peqQs[i] || 1.41;
+                    const curQ = s.peqQs[i] || 1.41;
                     let nextIdx = PEQ_Q_STEPS.findIndex(q => q > curQ + 0.05);
                     if (nextIdx === -1) nextIdx = 0;
                     const nextQ = PEQ_Q_STEPS[nextIdx];
@@ -786,11 +859,11 @@
         });
 
         function updateBypassUi() {
-            if (bypassBtn) bypassBtn.classList.toggle('bypassed', isPeqBypassed);
-            if (bypassText) bypassText.textContent = isPeqBypassed ? 'BYPASS' : 'ACTIVE';
+            if (bypassBtn) bypassBtn.classList.toggle('bypassed', s.isPeqBypassed);
+            if (bypassText) bypassText.textContent = s.isPeqBypassed ? 'BYPASS' : 'ACTIVE';
             if (playerEqBtn) {
-                const isPeqActive = !isPeqBypassed && peqGains.some(g => g !== 0);
-                const activeDspCount = [isAmpBoost, isBassBoost, isVocalBoost, isTrebleBoost, isLimiter, isCrossfeed].filter(Boolean).length;
+                const isPeqActive = !s.isPeqBypassed && s.peqGains.some(g => g !== 0);
+                const activeDspCount = [s.isAmpBoost, s.isBassBoost, s.isVocalBoost, s.isTrebleBoost, s.isLimiter, s.isCrossfeed].filter(Boolean).length;
                 playerEqBtn.classList.toggle('active', isPeqActive || activeDspCount > 0);
                 const playerPeqBadge = document.getElementById('playerPeqBadge');
                 if (playerPeqBadge) {
@@ -803,14 +876,16 @@
 
         if (bypassBtn) {
             bypassBtn.addEventListener('click', () => {
-                isPeqBypassed = !isPeqBypassed;
-                safeStorage.setItem('cachymusic_peq_bypassed', isPeqBypassed ? 'true' : 'false');
+                s.isPeqBypassed = !s.isPeqBypassed;
+                safeStorage.setItem('cachymusic_peq_bypassed', s.isPeqBypassed ? 'true' : 'false');
                 updateBypassUi();
                 for (let i = 0; i < PEQ_FREQS.length; i++) {
-                    if (peqNodes[i] && audioContext) {
-                        peqNodes[i].gain.setTargetAtTime(isPeqBypassed ? 0 : peqGains[i], audioContext.currentTime, 0.04);
+                    if (s.peqNodes[i] && s.audioContext) {
+                        s.peqNodes[i].gain.setTargetAtTime(s.isPeqBypassed ? 0 : s.peqGains[i], s.audioContext.currentTime, 0.04);
                     }
                 }
+                updateWorkletParams();
+                updatePreAmpGain(s.audioContext ? s.audioContext.currentTime : 0);
                 updateAudioRouting();
                 drawPeqCurve();
             });
@@ -853,16 +928,16 @@
         }
 
         if (balanceSlider) {
-            const initBalPct = Math.round(stereoBalance * 100);
+            const initBalPct = Math.round(s.stereoBalance * 100);
             balanceSlider.value = initBalPct;
             syncBipolarSliderFill(balanceSlider, initBalPct, -100, 100);
-            if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(stereoBalance);
+            if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(s.stereoBalance);
             balanceSlider.addEventListener('input', (e) => {
                 const rawPct = parseInt(e.target.value, 10) || 0;
-                stereoBalance = Math.max(-1.0, Math.min(1.0, rawPct / 100));
+                s.stereoBalance = Math.max(-1.0, Math.min(1.0, rawPct / 100));
                 syncBipolarSliderFill(balanceSlider, rawPct, -100, 100);
-                safeStorage.setItem('cachymusic_stereo_balance', stereoBalance.toFixed(2));
-                if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(stereoBalance);
+                safeStorage.setItem('cachymusic_stereo_balance', s.stereoBalance.toFixed(2));
+                if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(s.stereoBalance);
                 updateWorkletParams();
                 updateAudioRouting();
             });
@@ -870,7 +945,7 @@
 
         if (balanceResetBtn) {
             balanceResetBtn.addEventListener('click', () => {
-                stereoBalance = 0;
+                s.stereoBalance = 0;
                 safeStorage.setItem('cachymusic_stereo_balance', '0');
                 if (balanceSlider) {
                     balanceSlider.value = 0;
@@ -883,25 +958,26 @@
         }
 
         function applyAudioPitchLockMode() {
-            if (!audio) return;
+            const audioEl = s.audio;
+            if (!audioEl) return;
             try {
-                audio.preservesPitch = isPitchLockTempo;
-                audio.mozPreservesPitch = isPitchLockTempo;
-                audio.webkitPreservesPitch = isPitchLockTempo;
+                audioEl.preservesPitch = s.isPitchLockTempo;
+                audioEl.mozPreservesPitch = s.isPitchLockTempo;
+                audioEl.webkitPreservesPitch = s.isPitchLockTempo;
             } catch (_) {}
             if (pitchLockBtn) {
-                pitchLockBtn.textContent = isPitchLockTempo ? 'PITCH-LOCK TEMPO' : 'ANALOG VINYL PITCH';
-                pitchLockBtn.classList.toggle('active', isPitchLockTempo);
+                pitchLockBtn.textContent = s.isPitchLockTempo ? 'PITCH-LOCK TEMPO' : 'ANALOG VINYL PITCH';
+                pitchLockBtn.classList.toggle('active', s.isPitchLockTempo);
             }
         }
         applyAudioPitchLockMode();
 
         if (pitchLockBtn) {
             pitchLockBtn.addEventListener('click', () => {
-                isPitchLockTempo = !isPitchLockTempo;
-                safeStorage.setItem('cachymusic_pitch_lock', isPitchLockTempo ? 'true' : 'false');
+                s.isPitchLockTempo = !s.isPitchLockTempo;
+                safeStorage.setItem('cachymusic_pitch_lock', s.isPitchLockTempo ? 'true' : 'false');
                 applyAudioPitchLockMode();
-                showToast(isPitchLockTempo ? 'Pitch-Lock Enabled: Independent Tempo' : 'Analog Vinyl Mode: Coupled Pitch + RPM');
+                showToast(s.isPitchLockTempo ? 'Pitch-Lock Enabled: Independent Tempo' : 'Analog Vinyl Mode: Coupled Pitch + RPM');
             });
         }
 
@@ -911,19 +987,19 @@
                 for (let i = 0; i < PEQ_FREQS.length; i++) {
                     const slider = document.getElementById(`peqSlider-${i}`);
                     const dbEl = document.getElementById(`peqFaderDb-${i}`);
-                    const g = peqGains[i];
+                    const g = s.peqGains[i];
                     if (slider) {
                         slider.value = g;
                         syncBipolarSliderFill(slider, g, -15, 15);
                     }
                     if (dbEl) {
-                        const s = g > 0 ? '+' : '';
-                        dbEl.textContent = `${s}${g.toFixed(1)}`;
+                        const sgn = g > 0 ? '+' : '';
+                        dbEl.textContent = `${sgn}${g.toFixed(1)}`;
                         dbEl.className = `peqFaderDb ${g > 0 ? 'boost' : (g < 0 ? 'cut' : '')}`;
                     }
                 }
-                if (isPeqBypassed) {
-                    isPeqBypassed = false;
+                if (s.isPeqBypassed) {
+                    s.isPeqBypassed = false;
                     safeStorage.setItem('cachymusic_peq_bypassed', 'false');
                     updateBypassUi();
                 }
@@ -952,20 +1028,20 @@
                     for (let i = 0; i < PEQ_FREQS.length; i++) {
                         const slider = document.getElementById(`peqSlider-${i}`);
                         const dbEl = document.getElementById(`peqFaderDb-${i}`);
-                        const g = peqGains[i];
+                        const g = s.peqGains[i];
                         if (slider) {
                             slider.value = g;
                             syncBipolarSliderFill(slider, g, -15, 15);
                         }
                         if (dbEl) {
-                            const s = g > 0 ? '+' : '';
-                            dbEl.textContent = `${s}${g.toFixed(1)}`;
+                            const sgn = g > 0 ? '+' : '';
+                            dbEl.textContent = `${sgn}${g.toFixed(1)}`;
                             dbEl.className = `peqFaderDb ${g > 0 ? 'boost' : (g < 0 ? 'cut' : '')}`;
                         }
                     }
                     if (autoEqDrawer) autoEqDrawer.style.display = 'none';
-                    if (isPeqBypassed) {
-                        isPeqBypassed = false;
+                    if (s.isPeqBypassed) {
+                        s.isPeqBypassed = false;
                         safeStorage.setItem('cachymusic_peq_bypassed', 'false');
                         updateBypassUi();
                     }
@@ -974,7 +1050,7 @@
             });
         }
 
-        openPeqModal = function() {
+        s.openPeqModal = function() {
             if (!peqModal) return;
             peqModal.style.display = 'flex';
             pushModalState('peqModal');
@@ -985,17 +1061,17 @@
             });
         };
 
-        closePeqModal = function() {
+        s.closePeqModal = function() {
             if (!peqModal) return;
             peqModal.style.display = 'none';
             popModalState('peqModal');
         };
 
-        if (closeBtn) closeBtn.addEventListener('click', closePeqModal);
+        if (closeBtn) closeBtn.addEventListener('click', s.closePeqModal);
 
         if (peqModal) {
             peqModal.addEventListener('click', (e) => {
-                if (e.target === peqModal) closePeqModal();
+                if (e.target === peqModal) s.closePeqModal();
             });
         }
 
@@ -1010,25 +1086,26 @@
 
     // AudioWorklet 64-Bit Processor Loader
     async function loadDspWorklet() {
-        if (!audioContext || !audioContext.audioWorklet) return;
-        const targetCtx = audioContext;
+        const s = store.state;
+        if (!s.audioContext || !s.audioContext.audioWorklet) return;
+        const targetCtx = s.audioContext;
         try {
-            await targetCtx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=10.47&t=' + Date.now());
-            if (!audioContext || audioContext !== targetCtx || targetCtx.state === 'closed') return;
-            dspWorkletNode = new AudioWorkletNode(targetCtx, 'cachymusic-dsp-processor', {
+            await targetCtx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=2.0.0');
+            if (!s.audioContext || s.audioContext !== targetCtx || targetCtx.state === 'closed') return;
+            s.dspWorkletNode = new AudioWorkletNode(targetCtx, 'cachymusic-dsp-processor', {
                 numberOfInputs: 1,
                 numberOfOutputs: 1,
                 outputChannelCount: [2]
             });
-            dspWorkletNode.onprocessorerror = (err) => {
+            s.dspWorkletNode.onprocessorerror = (err) => {
                 console.warn('[AudioWorklet] Processor runtime error, falling back to native Web Audio graph:', err);
-                dspWorkletNode = null;
+                s.dspWorkletNode = null;
                 updateAudioRouting();
             };
-            dspWorkletNode.port.onmessage = (e) => {
+            s.dspWorkletNode.port.onmessage = (e) => {
                 if (e.data && e.data.type === 'agp_telemetry') {
                     const peqAgpStatus = document.getElementById('peqAgpStatus');
-                    if (peqAgpStatus && isAgpEnabled) {
+                    if (peqAgpStatus && store.state.isAgpEnabled) {
                         const gr = e.data.gainReductionDb;
                         peqAgpStatus.textContent = (gr < -0.1) ? `${gr.toFixed(1)} dB` : 'GUARD ON';
                     }
@@ -1038,45 +1115,88 @@
             updateAudioRouting();
         } catch (e) {
             console.warn('[AudioWorklet] Fallback to native Web Audio graph:', e);
-            dspWorkletNode = null;
+            s.dspWorkletNode = null;
             updateAudioRouting();
         }
     }
 
+    function computeReplayGainMultiplier() {
+        const s = store.state;
+        const curTrack = s.allTracks[s.currentTrackIndex];
+        let rg = 1.0;
+        if (s.isReplayGain && curTrack && typeof curTrack.replayGain === 'number' && !isNaN(curTrack.replayGain)) {
+            rg = Math.pow(10, curTrack.replayGain / 20);
+            if (typeof curTrack.replayPeak === 'number' && curTrack.replayPeak > 0 && (rg * curTrack.replayPeak) > 0.965) {
+                rg = 0.965 / curTrack.replayPeak;
+            }
+        }
+        return rg;
+    }
+
     function updateWorkletParams() {
-        if (!dspWorkletNode || !dspWorkletNode.port) return;
-        dspWorkletNode.port.postMessage({
-            precision64: isPrecision64,
-            agpEnabled: isAgpEnabled,
-            subsonicEnabled: isSubsonic,
-            ultrasonicEnabled: isUltrasonic,
-            ultrasonicCutoff: ultrasonicCutoff,
-            ditherMode: ditherMode,
-            ambiophonicsEnabled: isAmbiophonics,
-            phaseInvert: isPhaseInvert,
-            monoMix: isMonoMix,
-            stereoWidth: isSurroundWidener ? 1.35 : 1.0,
-            stereoBalance: stereoBalance
+        const s = store.state;
+        if (!s.dspWorkletNode || !s.dspWorkletNode.port) return;
+        const sr = (s.audioContext && s.audioContext.sampleRate) ? s.audioContext.sampleRate : 48000;
+        const rg = computeReplayGainMultiplier();
+        const preAmp = getPreAmpGainValue();
+        const amp = s.isAmpBoost ? getEffectiveAmplification() : 1.0;
+        const curTrack = s.allTracks[s.currentTrackIndex];
+        const trackBits = (curTrack && curTrack.bitsPerSample) ? Number(curTrack.bitsPerSample) : 0;
+        const quantBits = (trackBits === 16 && sr <= 48000 && !s.isPrecision64) ? 16 : 24;
+
+        s.dspWorkletNode.port.postMessage({
+            precision64: s.isPrecision64,
+            agpEnabled: s.isAgpEnabled,
+            limiterEnabled: Boolean(s.isLimiter || s.currentVolumeValue > 1.0),
+            subsonicEnabled: s.isSubsonic,
+            ultrasonicEnabled: s.isUltrasonic,
+            ultrasonicCutoff: s.ultrasonicCutoff,
+            ditherMode: s.ditherMode,
+            quantizationBits: quantBits,
+            linearGainTarget: rg * preAmp * amp,
+            peqBypassed: s.isPeqBypassed,
+            peqGains: Array.isArray(s.peqGains) ? [...s.peqGains] : new Array(10).fill(0),
+            peqQs: Array.isArray(s.peqQs) ? [...s.peqQs] : new Array(10).fill(1.41),
+            bassBoost: s.isBassBoost,
+            vocalBoost: s.isVocalBoost,
+            trebleBoost: s.isTrebleBoost,
+            crossfeedEnabled: s.isCrossfeed,
+            ambiophonicsEnabled: s.isAmbiophonics,
+            ambiophonicsDelaySamples: Math.max(1, Math.min(32, Math.round(0.000083 * sr))),
+            ambiophonicsAttenuation: 0.65,
+            phaseInvert: s.isPhaseInvert,
+            monoMix: s.isMonoMix,
+            stereoWidth: s.isSurroundWidener ? 1.35 : 1.0,
+            stereoBalance: s.stereoBalance
         });
     }
 
     // Hardware Analog Gain (PipeWire / ALSA Bridge)
     let hwVolumeDebounceTimer = null;
     async function checkHardwareGainStatus() {
+        const s = store.state;
+        if (!getRuntime().hasHardwareGain) {
+            markHwGainUnavailable();
+            return;
+        }
         try {
             const res = await fetch('php/api/hardware_volume.php?action=status');
+            if (!res.ok) {
+                markHwGainUnavailable();
+                return;
+            }
             const data = await res.json();
             if (data && data.success) {
-                hwVolumeBackend = data.backend;
+                s.hwVolumeBackend = data.backend || 'none';
                 const pill = document.getElementById('settingsHardwareGainPill');
                 const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
                 const hwGainDot = document.getElementById('settingsHwGainDot');
                 const hwGainText = document.getElementById('settingsHwGainText');
                 if (pill) {
-                    pill.textContent = data.available ? `READY (${data.backend.toUpperCase()})` : 'UNAVAILABLE';
+                    pill.textContent = data.available ? `READY (${s.hwVolumeBackend.toUpperCase()})` : 'UNAVAILABLE';
                 }
                 if (!data.available) {
-                    isHardwareGain = false;
+                    s.isHardwareGain = false;
                     if (hwGainBtn) {
                         hwGainBtn.disabled = true;
                         hwGainBtn.classList.add('disabled');
@@ -1093,22 +1213,22 @@
                         hwGainBtn.removeAttribute('aria-disabled');
                         hwGainBtn.title = 'Direct PipeWire/ALSA physical volume bridge.';
                     }
-                    if (hwGainText && isHardwareGain) {
-                        hwGainText.textContent = `HARDWARE GAIN: ON (${data.backend.toUpperCase()})`;
+                    if (hwGainText && s.isHardwareGain) {
+                        hwGainText.textContent = `HARDWARE GAIN: ON (${s.hwVolumeBackend.toUpperCase()})`;
                     }
                 }
-                if (isHardwareGain && data.available && typeof data.volume === 'number') {
-                    currentVolumeValue = Math.max(0, Math.min(1.5, data.volume));
-                    if (volumeSlider) volumeSlider.value = currentVolumeValue;
-                    if (miniVolumeSlider) miniVolumeSlider.value = Math.min(1.0, currentVolumeValue);
+                if (s.isHardwareGain && data.available && typeof data.volume === 'number') {
+                    s.currentVolumeValue = Math.max(0, Math.min(1.5, data.volume));
+                    if (volumeSlider) volumeSlider.value = s.currentVolumeValue;
+                    if (miniVolumeSlider) miniVolumeSlider.value = Math.min(1.0, s.currentVolumeValue);
                     if (volumeLevel) {
-                        const pct = Math.round(currentVolumeValue * 100);
-                        volumeLevel.textContent = currentVolumeValue > 1.0 ? `${pct}% HW-AMP` : `${pct}%`;
+                        const pct = Math.round(s.currentVolumeValue * 100);
+                        volumeLevel.textContent = s.currentVolumeValue > 1.0 ? `${pct}% HW-AMP` : `${pct}%`;
                     }
-                    updateVolumeIcon(Math.min(1.0, currentVolumeValue));
-                    if (audio) {
-                        audio.volume = 1.0; // 0 dBFS unscaled bit-perfect pass-through
-                        audio.muted = data.muted || false;
+                    store.emit('ui:sync-volume-icon', { volume: Math.min(1.0, s.currentVolumeValue) });
+                    if (s.audio) {
+                        s.audio.volume = 1.0; // 0 dBFS unscaled bit-perfect pass-through
+                        s.audio.muted = data.muted || false;
                     }
                 }
             } else {
@@ -1120,7 +1240,7 @@
     }
 
     function markHwGainUnavailable() {
-        isHardwareGain = false;
+        store.state.isHardwareGain = false;
         const pill = document.getElementById('settingsHardwareGainPill');
         const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
         const hwGainDot = document.getElementById('settingsHwGainDot');
@@ -1138,7 +1258,7 @@
     }
 
     function dispatchHardwareVolume(vol) {
-        if (!isHardwareGain) return;
+        if (!store.state.isHardwareGain || !getRuntime().hasHardwareGain) return;
         if (hwVolumeDebounceTimer) clearTimeout(hwVolumeDebounceTimer);
         hwVolumeDebounceTimer = setTimeout(() => {
             fetch('php/api/hardware_volume.php?action=set_volume', {
@@ -1151,6 +1271,7 @@
 
     // Neutron HiFi™ Settings Controls Wiring
     function setupNeutronSettingsControls() {
+        const s = store.state;
         const applyAudioBtn = document.getElementById('settingsApplyAudioBtn');
         const applyAudioStatus = document.getElementById('settingsApplyAudioStatus');
         let pendingAudioChanges = 0;
@@ -1173,23 +1294,23 @@
         const updatePrecisionUi = () => {
             precisionBtns.forEach(b => {
                 const is64 = b.getAttribute('data-precision') === '64';
-                b.classList.toggle('active', is64 === isPrecision64);
+                b.classList.toggle('active', is64 === s.isPrecision64);
             });
             if (precisionPill) {
-                precisionPill.textContent = isPrecision64 ? '64-BIT DOUBLE FLOAT' : '32-BIT FAST FLOAT';
+                precisionPill.textContent = s.isPrecision64 ? '64-BIT DOUBLE FLOAT' : '32-BIT FAST FLOAT';
             }
         };
         updatePrecisionUi();
         precisionBtns.forEach(b => {
             b.addEventListener('click', () => {
-                isPrecision64 = b.getAttribute('data-precision') === '64';
-                safeStorage.setItem('cachymusic_precision_64', isPrecision64 ? 'true' : 'false');
-                safeStorage.setItem('cachymusic_engine_precision', isPrecision64 ? '64' : '32');
+                s.isPrecision64 = b.getAttribute('data-precision') === '64';
+                safeStorage.setItem('cachymusic_precision_64', s.isPrecision64 ? 'true' : 'false');
+                safeStorage.setItem('cachymusic_engine_precision', s.isPrecision64 ? '64' : '32');
                 updatePrecisionUi();
                 updateWorkletParams();
-                updateSignalPathUi();
-                markAudioSettingsPending('Math Precision', isPrecision64 ? '64-Bit Studio Float' : '32-Bit Fast Float');
-                showToast(`Precision Engine: ${isPrecision64 ? '64-Bit Studio Float' : '32-Bit Fast Float'}`);
+                store.emit('ui:sync-signal-path');
+                markAudioSettingsPending('Math Precision', s.isPrecision64 ? '64-Bit Studio Float' : '32-Bit Fast Float');
+                showToast(`Precision Engine: ${s.isPrecision64 ? '64-Bit Studio Float' : '32-Bit Fast Float'}`);
             });
         });
 
@@ -1198,31 +1319,31 @@
         const hwGainDot = document.getElementById('settingsHwGainDot');
         const hwGainText = document.getElementById('settingsHwGainText');
         const updateHwGainUi = () => {
-            if (hwGainBtn) hwGainBtn.classList.toggle('active', isHardwareGain);
-            if (hwGainDot) hwGainDot.classList.toggle('active', isHardwareGain);
+            if (hwGainBtn) hwGainBtn.classList.toggle('active', s.isHardwareGain);
+            if (hwGainDot) hwGainDot.classList.toggle('active', s.isHardwareGain);
             if (hwGainText) {
-                hwGainText.textContent = isHardwareGain ? `HARDWARE GAIN: ON (${hwVolumeBackend.toUpperCase()})` : 'HARDWARE GAIN: OFF';
+                hwGainText.textContent = s.isHardwareGain ? `HARDWARE GAIN: ON (${String(s.hwVolumeBackend || 'NONE').toUpperCase()})` : 'HARDWARE GAIN: OFF';
             }
         };
         updateHwGainUi();
         if (hwGainBtn) {
             hwGainBtn.addEventListener('click', async () => {
                 if (hwGainBtn.disabled || hwGainBtn.classList.contains('disabled')) return;
-                isHardwareGain = !isHardwareGain;
-                safeStorage.setItem('cachymusic_hardware_gain', isHardwareGain ? 'true' : 'false');
-                safeStorage.setItem('cachymusic_hw_gain', isHardwareGain ? 'true' : 'false');
+                s.isHardwareGain = !s.isHardwareGain;
+                safeStorage.setItem('cachymusic_hardware_gain', s.isHardwareGain ? 'true' : 'false');
+                safeStorage.setItem('cachymusic_hw_gain', s.isHardwareGain ? 'true' : 'false');
                 updateHwGainUi();
-                if (isHardwareGain) {
+                if (s.isHardwareGain) {
                     await checkHardwareGainStatus();
                     updateHwGainUi();
                     showToast('Hardware Analog Gain Enabled (0 dBFS Bit-Perfect DAC Stream)');
                 } else {
-                    if (audio) {
-                        audio.volume = Math.min(1.0, currentVolumeValue);
+                    if (s.audio) {
+                        s.audio.volume = Math.min(1.0, s.currentVolumeValue);
                     }
                     showToast('Hardware Analog Gain Disabled (Digital Volume)');
                 }
-                updateSignalPathUi();
+                store.emit('ui:sync-signal-path');
             });
         }
 
@@ -1233,40 +1354,40 @@
         const ultrasonicSelect = document.getElementById('settingsUltrasonicCutoffSelect');
         const ultrasonicPill = document.getElementById('settingsUltrasonicPill');
         const updateUltrasonicUi = () => {
-            if (ultrasonicBtn) ultrasonicBtn.classList.toggle('active', isUltrasonic);
-            if (ultrasonicDot) ultrasonicDot.classList.toggle('active', isUltrasonic);
+            if (ultrasonicBtn) ultrasonicBtn.classList.toggle('active', s.isUltrasonic);
+            if (ultrasonicDot) ultrasonicDot.classList.toggle('active', s.isUltrasonic);
             if (ultrasonicText) {
-                ultrasonicText.textContent = isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
+                ultrasonicText.textContent = s.isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
             }
             if (ultrasonicPill) {
-                ultrasonicPill.textContent = isUltrasonic ? `ACTIVE (${Math.round(ultrasonicCutoff / 1000)} kHz)` : 'BYPASS';
+                ultrasonicPill.textContent = s.isUltrasonic ? `ACTIVE (${Math.round(s.ultrasonicCutoff / 1000)} kHz)` : 'BYPASS';
             }
             if (ultrasonicSelect) {
-                ultrasonicSelect.value = ultrasonicCutoff.toString();
+                ultrasonicSelect.value = s.ultrasonicCutoff.toString();
             }
         };
         updateUltrasonicUi();
         if (ultrasonicBtn) {
             ultrasonicBtn.addEventListener('click', () => {
-                isUltrasonic = !isUltrasonic;
-                safeStorage.setItem('cachymusic_ultrasonic', isUltrasonic ? 'true' : 'false');
+                s.isUltrasonic = !s.isUltrasonic;
+                safeStorage.setItem('cachymusic_ultrasonic', s.isUltrasonic ? 'true' : 'false');
                 updateUltrasonicUi();
                 updateWorkletParams();
                 updateAudioRouting();
-                updateSignalPathUi();
-                markAudioSettingsPending('Ultrasonic Filter', isUltrasonic ? 'Active (' + Math.round(ultrasonicCutoff / 1000) + ' kHz)' : 'Bypassed');
-                showToast(`Ultrasonic IMD Filter: ${isUltrasonic ? 'Active (' + Math.round(ultrasonicCutoff / 1000) + ' kHz)' : 'Bypassed'}`);
+                store.emit('ui:sync-signal-path');
+                markAudioSettingsPending('Ultrasonic Filter', s.isUltrasonic ? 'Active (' + Math.round(s.ultrasonicCutoff / 1000) + ' kHz)' : 'Bypassed');
+                showToast(`Ultrasonic IMD Filter: ${s.isUltrasonic ? 'Active (' + Math.round(s.ultrasonicCutoff / 1000) + ' kHz)' : 'Bypassed'}`);
             });
         }
         if (ultrasonicSelect) {
             ultrasonicSelect.addEventListener('change', () => {
-                ultrasonicCutoff = parseInt(ultrasonicSelect.value, 10) || 32000;
-                safeStorage.setItem('cachymusic_ultrasonic_cutoff', ultrasonicCutoff.toString());
+                s.ultrasonicCutoff = parseInt(ultrasonicSelect.value, 10) || 32000;
+                safeStorage.setItem('cachymusic_ultrasonic_cutoff', s.ultrasonicCutoff.toString());
                 updateUltrasonicUi();
                 updateWorkletParams();
-                updateSignalPathUi();
-                markAudioSettingsPending('Ultrasonic Cutoff', `${Math.round(ultrasonicCutoff / 1000)} kHz`);
-                showToast(`Ultrasonic Cutoff: ${Math.round(ultrasonicCutoff / 1000)} kHz`);
+                store.emit('ui:sync-signal-path');
+                markAudioSettingsPending('Ultrasonic Cutoff', `${Math.round(s.ultrasonicCutoff / 1000)} kHz`);
+                showToast(`Ultrasonic Cutoff: ${Math.round(s.ultrasonicCutoff / 1000)} kHz`);
             });
         }
 
@@ -1276,23 +1397,23 @@
         const updateDitherUi = () => {
             ditherBtns.forEach(b => {
                 const mode = b.getAttribute('data-dither');
-                b.classList.toggle('active', mode === ditherMode);
+                b.classList.toggle('active', mode === s.ditherMode);
             });
             if (ditherPill) {
-                ditherPill.textContent = ditherMode === 'shaped' ? 'SHAPED (>18 kHz)' : (ditherMode === 'tpdf' ? 'TPDF FLAT' : 'OFF (TRUNCATE)');
+                ditherPill.textContent = s.ditherMode === 'shaped' ? 'SHAPED (>18 kHz)' : (s.ditherMode === 'tpdf' ? 'TPDF FLAT' : 'OFF (TRUNCATE)');
             }
         };
         updateDitherUi();
         ditherBtns.forEach(b => {
             b.addEventListener('click', () => {
-                ditherMode = b.getAttribute('data-dither') || 'shaped';
-                safeStorage.setItem('cachymusic_dither_mode', ditherMode);
+                s.ditherMode = b.getAttribute('data-dither') || 'shaped';
+                safeStorage.setItem('cachymusic_dither_mode', s.ditherMode);
                 updateDitherUi();
                 updateWorkletParams();
                 updateAudioRouting();
-                updateSignalPathUi();
-                markAudioSettingsPending('Dither Mode', ditherMode === 'shaped' ? 'Psychoacoustic Shaped' : (ditherMode === 'tpdf' ? 'TPDF Flat' : 'Off'));
-                showToast(`Dither: ${ditherMode === 'shaped' ? 'Psychoacoustic Shaped' : (ditherMode === 'tpdf' ? 'TPDF Flat' : 'Off')}`);
+                store.emit('ui:sync-signal-path');
+                markAudioSettingsPending('Dither Mode', s.ditherMode === 'shaped' ? 'Psychoacoustic Shaped' : (s.ditherMode === 'tpdf' ? 'TPDF Flat' : 'Off'));
+                showToast(`Dither: ${s.ditherMode === 'shaped' ? 'Psychoacoustic Shaped' : (s.ditherMode === 'tpdf' ? 'TPDF Flat' : 'Off')}`);
             });
         });
 
@@ -1302,26 +1423,26 @@
         const ambiText = document.getElementById('settingsAmbiText');
         const ambiPill = document.getElementById('settingsAmbiPill');
         const updateAmbiUi = () => {
-            if (ambiBtn) ambiBtn.classList.toggle('active', isAmbiophonics);
-            if (ambiDot) ambiDot.classList.toggle('active', isAmbiophonics);
+            if (ambiBtn) ambiBtn.classList.toggle('active', s.isAmbiophonics);
+            if (ambiDot) ambiDot.classList.toggle('active', s.isAmbiophonics);
             if (ambiText) {
-                ambiText.textContent = isAmbiophonics ? 'AMBIOPHONICS: ON (R.A.C.E.)' : 'AMBIOPHONICS: OFF (SPEAKERS ONLY)';
+                ambiText.textContent = s.isAmbiophonics ? 'AMBIOPHONICS: ON (R.A.C.E.)' : 'AMBIOPHONICS: OFF (SPEAKERS ONLY)';
             }
             if (ambiPill) {
-                ambiPill.textContent = isAmbiophonics ? 'ACTIVE (R.A.C.E.)' : 'BYPASS';
+                ambiPill.textContent = s.isAmbiophonics ? 'ACTIVE (R.A.C.E.)' : 'BYPASS';
             }
         };
         updateAmbiUi();
         if (ambiBtn) {
             ambiBtn.addEventListener('click', () => {
-                isAmbiophonics = !isAmbiophonics;
-                safeStorage.setItem('cachymusic_ambiophonics', isAmbiophonics ? 'true' : 'false');
+                s.isAmbiophonics = !s.isAmbiophonics;
+                safeStorage.setItem('cachymusic_ambiophonics', s.isAmbiophonics ? 'true' : 'false');
                 updateAmbiUi();
                 updateWorkletParams();
                 updateAudioRouting();
-                updateSignalPathUi();
-                markAudioSettingsPending('Speaker Ambiophonics', isAmbiophonics ? 'Enabled (Speakers Only)' : 'Disabled');
-                showToast(`Speaker Ambiophonics: ${isAmbiophonics ? 'Enabled (Speakers Only)' : 'Disabled'}`);
+                store.emit('ui:sync-signal-path');
+                markAudioSettingsPending('Speaker Ambiophonics', s.isAmbiophonics ? 'Enabled (Speakers Only)' : 'Disabled');
+                showToast(`Speaker Ambiophonics: ${s.isAmbiophonics ? 'Enabled (Speakers Only)' : 'Disabled'}`);
             });
         }
 
@@ -1331,22 +1452,22 @@
         const updateBufferUi = () => {
             bufferBtns.forEach(b => {
                 const latency = b.getAttribute('data-latency');
-                b.classList.toggle('active', latency === bufferLatencyTarget);
+                b.classList.toggle('active', latency === s.bufferLatencyTarget);
             });
             if (bufferPill) {
-                bufferPill.textContent = bufferLatencyTarget === 'interactive' ? 'STUDIO LOW-LATENCY (~15ms)' : 'PLAYBACK (~100ms)';
+                bufferPill.textContent = s.bufferLatencyTarget === 'interactive' ? 'STUDIO LOW-LATENCY (~15ms)' : 'PLAYBACK (~100ms)';
             }
         };
         updateBufferUi();
         bufferBtns.forEach(b => {
             b.addEventListener('click', () => {
                 const newLatency = b.getAttribute('data-latency') || 'playback';
-                if (newLatency === bufferLatencyTarget) return;
-                bufferLatencyTarget = newLatency;
-                safeStorage.setItem('cachymusic_buffer_latency', bufferLatencyTarget);
+                if (newLatency === s.bufferLatencyTarget) return;
+                s.bufferLatencyTarget = newLatency;
+                safeStorage.setItem('cachymusic_buffer_latency', s.bufferLatencyTarget);
                 updateBufferUi();
                 updateWorkletParams();
-                updateSignalPathUi();
+                store.emit('ui:sync-signal-path');
                 markAudioSettingsPending('Buffer Latency', newLatency === 'interactive' ? 'Low Latency (~15ms)' : 'Stable (~100ms)');
                 showToast(`Audio Buffer Calibrated: ${newLatency === 'interactive' ? 'Low Latency (~15ms)' : 'Stable Playback (~100ms)'}`);
             });
@@ -1364,13 +1485,48 @@
                 }
                 updateWorkletParams();
                 updateAudioRouting();
-                updateSignalPathUi();
-                if (typeof showCachyToast === 'function') {
-                    showCachyToast('Settings Applied', 'Audio & DSP configuration applied successfully.', 'success');
-                } else {
-                    showToast('Settings Applied Successfully');
-                }
+                store.emit('ui:sync-signal-path');
+                showCachyToast('Settings Applied', 'Audio & DSP configuration applied successfully.', 'success');
                 logAudioPlaybackEvent('info', 'User confirmed and applied audio DSP settings.');
+            });
+        }
+
+        // 7b. Opt-in Desktop Background Web Notifications (Default OFF)
+        const bgNotifToggle = document.getElementById('settingsBgNotificationsToggle');
+        if (bgNotifToggle) {
+            const syncBgNotifUi = () => {
+                const on = Boolean(s.backgroundNotificationsEnabled);
+                if ('checked' in bgNotifToggle) bgNotifToggle.checked = on;
+                bgNotifToggle.classList.toggle('active', on);
+                bgNotifToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+            };
+            syncBgNotifUi();
+            bgNotifToggle.addEventListener('click', async () => {
+                const wantsEnable = !s.backgroundNotificationsEnabled;
+                if (wantsEnable && typeof Notification !== 'undefined') {
+                    if (Notification.permission === 'denied') {
+                        showCachyToast('Notifications Blocked', 'Enable browser notification permission in site settings to use background alerts.', 'warning');
+                        s.backgroundNotificationsEnabled = false;
+                        safeStorage.setItem('cachymusic_bg_notifications', 'false');
+                        syncBgNotifUi();
+                        return;
+                    }
+                    if (Notification.permission === 'default') {
+                        try {
+                            const perm = await Notification.requestPermission();
+                            if (perm !== 'granted') {
+                                s.backgroundNotificationsEnabled = false;
+                                safeStorage.setItem('cachymusic_bg_notifications', 'false');
+                                syncBgNotifUi();
+                                return;
+                            }
+                        } catch (_) {}
+                    }
+                }
+                s.backgroundNotificationsEnabled = wantsEnable;
+                safeStorage.setItem('cachymusic_bg_notifications', wantsEnable ? 'true' : 'false');
+                syncBgNotifUi();
+                showToast(`Background Notifications: ${wantsEnable ? 'Enabled' : 'Disabled'}`);
             });
         }
 
@@ -1379,8 +1535,8 @@
         const clearDebugBtn = document.getElementById('settingsClearDebugLogBtn');
         if (copyDebugBtn) {
             copyDebugBtn.addEventListener('click', () => {
-                const logs = window.audioPlaybackDebugLogs && window.audioPlaybackDebugLogs.length > 0
-                    ? window.audioPlaybackDebugLogs.join('\n')
+                const logs = s.audioPlaybackDebugLogs && s.audioPlaybackDebugLogs.length > 0
+                    ? s.audioPlaybackDebugLogs.join('\n')
                     : 'No telemetry events logged yet.';
                 navigator.clipboard.writeText(logs).then(() => {
                     showToast('Playback Diagnostics Copied');
@@ -1391,10 +1547,10 @@
         }
         if (clearDebugBtn) {
             clearDebugBtn.addEventListener('click', () => {
-                window.audioPlaybackDebugLogs = [];
+                s.audioPlaybackDebugLogs = [];
                 const logBox = document.getElementById('settingsAudioDebugLog');
                 if (logBox) logBox.textContent = '[AudioEngine] Diagnostics log cleared.';
-                consecutiveSkipCount = 0;
+                s.consecutiveSkipCount = 0;
                 updateAudioDiagnosticsUi();
                 showToast('Diagnostics Log Cleared');
             });
@@ -1421,28 +1577,24 @@
         const hudCloseBtn = document.getElementById('debugHudCloseBtn');
         if (hudClearBtn) {
             hudClearBtn.addEventListener('click', () => {
-                window.audioPlaybackDebugLogs = [];
+                s.audioPlaybackDebugLogs = [];
                 const logList = document.getElementById('debugHudLogList');
                 if (logList) logList.innerHTML = '<div class="debugHudLogEntry system">[SYSTEM] Debug telemetry cleared.</div>';
                 const logBox = document.getElementById('settingsAudioDebugLog');
                 if (logBox) logBox.textContent = '';
-                consecutiveSkipCount = 0;
+                s.consecutiveSkipCount = 0;
                 updateAudioDiagnosticsUi();
             });
         }
         if (hudCopyBtn) {
             hudCopyBtn.addEventListener('click', () => {
-                const logs = window.audioPlaybackDebugLogs && window.audioPlaybackDebugLogs.length > 0
-                    ? window.audioPlaybackDebugLogs.join('\n')
+                const logs = s.audioPlaybackDebugLogs && s.audioPlaybackDebugLogs.length > 0
+                    ? s.audioPlaybackDebugLogs.join('\n')
                     : 'No telemetry events logged yet.';
                 navigator.clipboard.writeText(logs).then(() => {
-                    if (typeof showCachyToast === 'function') {
-                        showCachyToast('Copied', 'Debug telemetry log copied to clipboard.', 'success');
-                    }
+                    showCachyToast('Copied', 'Debug telemetry log copied to clipboard.', 'success');
                 }).catch(() => {
-                    if (typeof showCachyToast === 'function') {
-                        showCachyToast('Clipboard Error', 'Could not copy diagnostics to clipboard.', 'warning');
-                    }
+                    showCachyToast('Clipboard Error', 'Could not copy diagnostics to clipboard.', 'warning');
                 });
             });
         }
@@ -1512,14 +1664,14 @@
             let hasDac = false;
             let dacLabel = '';
             try {
-                if (audioContext && audioContext.sampleRate > 48000) {
+                if (s.audioContext && s.audioContext.sampleRate > 48000) {
                     hasDac = true;
-                    dacLabel = `${Math.round(audioContext.sampleRate / 1000)}kHz Hi-Res Interface`;
+                    dacLabel = `${Math.round(s.audioContext.sampleRate / 1000)}kHz Hi-Res Interface`;
                 }
                 if (!hasDac && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
                     const devices = await navigator.mediaDevices.enumerateDevices();
-                    const dacDev = devices.find(d => 
-                        d.kind === 'audiooutput' && 
+                    const dacDev = devices.find(d =>
+                        d.kind === 'audiooutput' &&
                         /dac|hi-?res|headphone|usb|external|interface|fiio|topping|schiit|audioquest|chord/i.test(d.label)
                     );
                     if (dacDev) {
@@ -1540,8 +1692,8 @@
                     dacBtn.setAttribute('disabled', 'true');
                     dacBtn.classList.add('disabled');
                     dacBtn.setAttribute('title', 'Requires connected USB DAC or high-res audio interface (96kHz+)');
-                    if (ditherMode === 'shaped') {
-                        ditherMode = 'tpdf';
+                    if (s.ditherMode === 'shaped') {
+                        s.ditherMode = 'tpdf';
                         try {
                             safeStorage.setItem('cachymusic_dither_mode', 'tpdf');
                         } catch (_) {}
@@ -1566,13 +1718,11 @@
 
         // Ensure sleep timer cancel button is hidden initially if no timer is active
         const initCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
-        if (initCancelSleepBtn && !sleepTimerMode) {
+        if (initCancelSleepBtn && !s.sleepTimerMode) {
             initCancelSleepBtn.style.display = 'none';
         }
 
-        if (typeof updateDebugHudState === 'function') {
-            updateDebugHudState();
-        }
+        updateDebugHudState();
 
         // 7. Settings Category Sub-Navigation Filter Bar (Balanced 2-Column Sub-Groupings)
         const catBtns = document.querySelectorAll('#settingsCategoryNav .settingsCatBtn');
@@ -1611,66 +1761,70 @@
     }
 
     function toggleReplayGain(active) {
-        isReplayGain = typeof active === 'boolean' ? active : !isReplayGain;
+        const s = store.state;
+        s.isReplayGain = typeof active === 'boolean' ? active : !s.isReplayGain;
         try {
-            safeStorage.setItem('cachymusic_replaygain', isReplayGain ? 'true' : 'false');
+            safeStorage.setItem('cachymusic_replaygain', s.isReplayGain ? 'true' : 'false');
         } catch (_) {}
-        const curTrack = allTracks[currentTrackIndex];
-        if (curTrack && replayGainNode && audioContext) {
-            let targetGain = (isReplayGain && typeof curTrack.replayGain === 'number' && !isNaN(curTrack.replayGain))
-                ? Math.pow(10, curTrack.replayGain / 20)
-                : 1.0;
-            if (isReplayGain && typeof curTrack.replayPeak === 'number' && curTrack.replayPeak > 0 && (targetGain * curTrack.replayPeak) > 0.965) {
-                targetGain = 0.965 / curTrack.replayPeak; // -0.31 dBFS true-peak safety ceiling
-            }
-            replayGainNode.gain.setTargetAtTime(targetGain, audioContext.currentTime, 0.04);
+        const targetGain = computeReplayGainMultiplier();
+        if (s.replayGainNode && s.audioContext) {
+            s.replayGainNode.gain.setTargetAtTime(targetGain, s.audioContext.currentTime, 0.04);
         }
-        updateDacStatusUi();
+        updateWorkletParams();
+        store.emit('ui:sync-dac-status');
     }
 
     function setVolume(val, updateInput = false) {
+        const s = store.state;
         if (typeof val !== 'number' || isNaN(val) || !isFinite(val)) {
             val = 0.8;
         }
-        currentVolumeValue = Math.max(0, Math.min(1.5, val));
-        safeStorage.setItem('cachymusic_volume', currentVolumeValue.toString());
+        s.currentVolumeValue = Math.max(0, Math.min(1.5, val));
+        safeStorage.setItem('cachymusic_volume', s.currentVolumeValue.toString());
         if (updateInput && volumeSlider) {
-            volumeSlider.value = currentVolumeValue;
+            volumeSlider.value = s.currentVolumeValue;
         }
         if (miniVolumeSlider) {
-            miniVolumeSlider.value = Math.min(1.0, currentVolumeValue);
+            miniVolumeSlider.value = Math.min(1.0, s.currentVolumeValue);
         }
 
-        if (isHardwareGain) {
+        if (s.isHardwareGain && getRuntime().hasHardwareGain) {
             // Bit-Perfect Hardware Analog Gain: Keep software digital stream at 0 dBFS full precision
-            audio.volume = 1.0;
-            audio.muted = false;
-            dispatchHardwareVolume(currentVolumeValue);
+            if (s.audio) {
+                s.audio.volume = 1.0;
+                s.audio.muted = false;
+            }
+            dispatchHardwareVolume(s.currentVolumeValue);
         } else {
             // Standard HTML5 audio.volume clamped to [0.0, 1.0]
-            const baseVol = Math.min(1.0, currentVolumeValue);
-            audio.volume = baseVol;
-            audio.muted = false;
+            const baseVol = Math.min(1.0, s.currentVolumeValue);
+            if (s.audio) {
+                s.audio.volume = baseVol;
+                s.audio.muted = false;
+            }
 
-            if (audioContext) {
-                const now = audioContext.currentTime;
+            if (s.audioContext) {
+                const now = s.audioContext.currentTime;
                 updateAmpGain(now);
                 updateLimiterState(now);
+                updateWorkletParams();
                 updateAudioRouting();
             }
         }
 
-        const pct = Math.round(currentVolumeValue * 100);
-        if (currentVolumeValue > 1.0) {
-            volumeLevel.textContent = isHardwareGain ? `${pct}% HW-AMP` : `${pct}% AMP`;
-            volumeLevel.classList.add('amplified');
-            volumeLevel.setAttribute('title', isHardwareGain ? `Hardware Analog Gain: ${pct}%` : `Volume: 100% + Clean Amplification: ${pct - 100}%`);
-        } else {
-            volumeLevel.textContent = `${pct}%`;
-            volumeLevel.classList.remove('amplified');
-            volumeLevel.removeAttribute('title');
+        const pct = Math.round(s.currentVolumeValue * 100);
+        if (volumeLevel) {
+            if (s.currentVolumeValue > 1.0) {
+                volumeLevel.textContent = s.isHardwareGain ? `${pct}% HW-AMP` : `${pct}% AMP`;
+                volumeLevel.classList.add('amplified');
+                volumeLevel.setAttribute('title', s.isHardwareGain ? `Hardware Analog Gain: ${pct}%` : `Volume: 100% + Clean Amplification: ${pct - 100}%`);
+            } else {
+                volumeLevel.textContent = `${pct}%`;
+                volumeLevel.classList.remove('amplified');
+                volumeLevel.removeAttribute('title');
+            }
         }
-        updateVolumeIcon(Math.min(1.0, currentVolumeValue));
+        store.emit('ui:sync-volume-icon', { volume: Math.min(1.0, s.currentVolumeValue) });
     }
 
 
@@ -1681,97 +1835,100 @@
 
 
     function initDspNodes() {
-        if (!audioContext) return;
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 2048; // 1024 frequency bins for full 0Hz - 24,000Hz (24kHz) Nyquist spectrum fidelity
-        analyser.smoothingTimeConstant = 0.38; // Highly responsive FFT buffer: captures musical transient spikes without lag
-        analyser.minDecibels = -90; // Wide dynamic range captures delicate high-frequency air, harmonics & cymbals above 16kHz
-        analyser.maxDecibels = -25;
+        const s = store.state;
+        if (!s.audioContext) return;
+        const ctx = s.audioContext;
+        s.analyser = ctx.createAnalyser();
+        s.analyser.fftSize = 2048; // 1024 frequency bins for full 0Hz - 24,000Hz (24kHz) Nyquist spectrum fidelity
+        s.analyser.smoothingTimeConstant = 0.38; // Highly responsive FFT buffer: captures musical transient spikes without lag
+        s.analyser.minDecibels = -90; // Wide dynamic range captures delicate high-frequency air, harmonics & cymbals above 16kHz
+        s.analyser.maxDecibels = -25;
 
         // -1. Subsonic High-Pass Filter: Infrasonic rumble eliminator at 20 Hz (Butterworth Q=0.707)
-        subsonicFilter = audioContext.createBiquadFilter();
-        subsonicFilter.type = 'highpass';
-        subsonicFilter.frequency.value = isSubsonic ? 20 : 5;
-        subsonicFilter.Q.value = 0.707;
+        s.subsonicFilter = ctx.createBiquadFilter();
+        s.subsonicFilter.type = 'highpass';
+        s.subsonicFilter.frequency.value = s.isSubsonic ? 20 : 5;
+        s.subsonicFilter.Q.value = 0.707;
 
         // 0. ReplayGain / EBU R128 Loudness Normalization Stage
-        replayGainNode = audioContext.createGain();
-        replayGainNode.gain.value = 1.0;
+        s.replayGainNode = ctx.createGain();
+        s.replayGainNode.gain.value = 1.0;
 
         // 0.5. Dynamic Headroom Pre-Amp Gain Stage
-        preAmpGainNode = audioContext.createGain();
-        preAmpGainNode.gain.value = getPreAmpGainValue();
+        s.preAmpGainNode = ctx.createGain();
+        s.preAmpGainNode.gain.value = getPreAmpGainValue();
 
         // 0.8. Bauer Headphone Crossfeed Network (Meier / Bauer Acoustic HRTF Simulation)
-        xfeedNetwork = createCrossfeedNetwork(audioContext);
+        s.xfeedNetwork = createCrossfeedNetwork(ctx);
 
         // 10-Band Parametric Equalizer (ISO standard 1-octave frequencies from 31 Hz to 16 kHz)
-        peqNodes = PEQ_FREQS.map((freq, i) => {
-            const f = audioContext.createBiquadFilter();
+        s.peqNodes = PEQ_FREQS.map((freq, i) => {
+            const f = ctx.createBiquadFilter();
             if (i === 0) f.type = 'lowshelf';
             else if (i === PEQ_FREQS.length - 1) f.type = 'highshelf';
             else f.type = 'peaking';
             f.frequency.value = freq;
-            f.Q.value = (peqQs && typeof peqQs[i] === 'number') ? peqQs[i] : 1.41;
-            f.gain.value = (peqGains && typeof peqGains[i] === 'number' && !isPeqBypassed) ? peqGains[i] : 0;
+            f.Q.value = (s.peqQs && typeof s.peqQs[i] === 'number') ? s.peqQs[i] : 1.41;
+            f.gain.value = (s.peqGains && typeof s.peqGains[i] === 'number' && !s.isPeqBypassed) ? s.peqGains[i] : 0;
             return f;
         });
 
         // 1. Bass Boost Filter: Low-shelf filter at 95 Hz (+3.8 dB Harman sub-bass target)
-        bassFilter = audioContext.createBiquadFilter();
-        bassFilter.type = 'lowshelf';
-        bassFilter.frequency.value = 95;
-        bassFilter.gain.value = isBassBoost ? 3.8 : 0;
+        s.bassFilter = ctx.createBiquadFilter();
+        s.bassFilter.type = 'lowshelf';
+        s.bassFilter.frequency.value = 95;
+        s.bassFilter.gain.value = s.isBassBoost ? 3.8 : 0;
 
         // 2. Vocal Boost Filter: Peaking bandpass at 3000 Hz (+2.8 dB Pinna Ear-Gain presence)
-        vocalFilter = audioContext.createBiquadFilter();
-        vocalFilter.type = 'peaking';
-        vocalFilter.frequency.value = 3000;
-        vocalFilter.Q.value = 1.2;
-        vocalFilter.gain.value = isVocalBoost ? 2.8 : 0;
+        s.vocalFilter = ctx.createBiquadFilter();
+        s.vocalFilter.type = 'peaking';
+        s.vocalFilter.frequency.value = 3000;
+        s.vocalFilter.Q.value = 1.2;
+        s.vocalFilter.gain.value = s.isVocalBoost ? 2.8 : 0;
 
         // 3. Treble Boost Filter: High-shelf filter at 10000 Hz (+3.0 dB Air Band & high shimmer)
-        trebleFilter = audioContext.createBiquadFilter();
-        trebleFilter.type = 'highshelf';
-        trebleFilter.frequency.value = 10000;
-        trebleFilter.gain.value = isTrebleBoost ? 3.0 : 0;
+        s.trebleFilter = ctx.createBiquadFilter();
+        s.trebleFilter.type = 'highshelf';
+        s.trebleFilter.frequency.value = 10000;
+        s.trebleFilter.gain.value = s.isTrebleBoost ? 3.0 : 0;
 
         // 4. Clean Amplification Gain Stage (raw unconstrained gain)
-        ampGainNode = audioContext.createGain();
-        ampGainNode.gain.value = isAmpBoost ? getEffectiveAmplification() : 1.0;
+        s.ampGainNode = ctx.createGain();
+        s.ampGainNode.gain.value = s.isAmpBoost ? getEffectiveAmplification() : 1.0;
 
         // 5. Dedicated Studio-Grade Transparent Brickwall Limiter (Master anti-clipping protection)
-        dspLimiter = audioContext.createDynamicsCompressor();
+        s.dspLimiter = ctx.createDynamicsCompressor();
         const initProfile = computeLimiterProfile();
-        if (isLimiter && !initProfile.isBypassed) {
-            dspLimiter.threshold.value = initProfile.threshold;
-            dspLimiter.knee.value = initProfile.knee;
-            dspLimiter.ratio.value = initProfile.ratio;
-            dspLimiter.attack.value = initProfile.attack;
-            dspLimiter.release.value = initProfile.release;
+        if (s.isLimiter && !initProfile.isBypassed) {
+            s.dspLimiter.threshold.value = initProfile.threshold;
+            s.dspLimiter.knee.value = initProfile.knee;
+            s.dspLimiter.ratio.value = initProfile.ratio;
+            s.dspLimiter.attack.value = initProfile.attack;
+            s.dspLimiter.release.value = initProfile.release;
         } else {
-            dspLimiter.threshold.value = 0;
-            dspLimiter.knee.value = 0;
-            dspLimiter.ratio.value = 1.0;
-            dspLimiter.attack.value = 0.0018;
-            dspLimiter.release.value = 0.090;
+            s.dspLimiter.threshold.value = 0;
+            s.dspLimiter.knee.value = 0;
+            s.dspLimiter.ratio.value = 1.0;
+            s.dspLimiter.attack.value = 0.0018;
+            s.dspLimiter.release.value = 0.090;
         }
 
         // 6. True Peak Output Ceiling Stage (-0.6 dBFS anti-clipping ceiling for DAC reconstruction)
-        ceilingTrimGain = audioContext.createGain();
-        ceilingTrimGain.gain.value = isLimiter ? Math.pow(10, -0.6 / 20) : 1.0;
+        s.ceilingTrimGain = ctx.createGain();
+        s.ceilingTrimGain.gain.value = s.isLimiter ? Math.pow(10, -0.6 / 20) : 1.0;
 
         // 7. Analog Soft-Clipper (Smooth hyperbolic tangent curve prevents harsh square-wave DAC clipping)
-        ampSoftClipper = audioContext.createWaveShaper();
-        ampSoftClipper.curve = isLimiter ? createSoftClipCurve(2048) : createLinearCurve(2048);
+        s.ampSoftClipper = ctx.createWaveShaper();
+        s.ampSoftClipper.curve = s.isLimiter ? createSoftClipCurve(2048) : createLinearCurve(2048);
         // Adaptive oversampling: Hi-Res audio (>= 88.2 kHz) already has ultra-high Nyquist headroom (44.1+ kHz bandwidth),
         // so 2x oversampling is redundant and overloads the audio rendering thread (192,000+ samples/sec).
-        ampSoftClipper.oversample = (audioContext.sampleRate >= 88200) ? 'none' : '2x';
+        s.ampSoftClipper.oversample = (ctx.sampleRate >= 88200) ? 'none' : '2x';
     }
 
     function resetMediaElementForNewAudioContext() {
-        if (!audio) return;
-        const oldAudio = audio;
+        const s = store.state;
+        if (!s.audio) return;
+        const oldAudio = s.audio;
         oldAudio._isDisposed = true;
         try {
             oldAudio.pause();
@@ -1801,196 +1958,195 @@
         if (oldAudio.parentNode) {
             oldAudio.parentNode.replaceChild(newAudio, oldAudio);
         }
-        audio = newAudio;
-        attachAudioListeners(audio);
+        s.audio = newAudio;
+        store.emit('audio:attach-listeners', { audio: newAudio });
     }
 
     function getOrCreateAudioSourceNode() {
-        if (!audioContext || !audio) return null;
-        if (audioSourceNode) return audioSourceNode;
-        if (audio._mediaSourceNode && audio._mediaSourceContext === audioContext) {
-            audioSourceNode = audio._mediaSourceNode;
-            return audioSourceNode;
+        const s = store.state;
+        if (!s.audioContext || !s.audio) return null;
+        if (s.audioSourceNode) return s.audioSourceNode;
+        if (s.audio._mediaSourceNode && s.audio._mediaSourceContext === s.audioContext) {
+            s.audioSourceNode = s.audio._mediaSourceNode;
+            return s.audioSourceNode;
         }
         try {
-            audioSourceNode = audioContext.createMediaElementSource(audio);
-            audio._mediaSourceNode = audioSourceNode;
-            audio._mediaSourceContext = audioContext;
-            return audioSourceNode;
+            s.audioSourceNode = s.audioContext.createMediaElementSource(s.audio);
+            s.audio._mediaSourceNode = s.audioSourceNode;
+            s.audio._mediaSourceContext = s.audioContext;
+            return s.audioSourceNode;
         } catch (_) {
             // Chromium safety fallback: if element was attached to an earlier context, refresh it
             resetMediaElementForNewAudioContext();
             try {
-                audioSourceNode = audioContext.createMediaElementSource(audio);
-                audio._mediaSourceNode = audioSourceNode;
-                audio._mediaSourceContext = audioContext;
+                s.audioSourceNode = s.audioContext.createMediaElementSource(s.audio);
+                s.audio._mediaSourceNode = s.audioSourceNode;
+                s.audio._mediaSourceContext = s.audioContext;
             } catch (e2) {
                 console.error('Failed to create MediaElementSource on replacement element:', e2);
             }
-            return audioSourceNode;
+            return s.audioSourceNode;
         }
     }
 
     function updateAudioRouting() {
-        if (!audioContext) return;
-        if (!audioSourceNode) {
+        const s = store.state;
+        if (!s.audioContext) return;
+        if (!s.audioSourceNode) {
             getOrCreateAudioSourceNode();
         }
-        if (!audioSourceNode) return;
+        if (!s.audioSourceNode) return;
         try {
-            audioSourceNode.disconnect();
-            if (softwareSourceGainNode) {
-                try { softwareSourceGainNode.disconnect(); } catch (_) {}
+            s.audioSourceNode.disconnect();
+            if (s.softwareSourceGainNode) {
+                try { s.softwareSourceGainNode.disconnect(); } catch (_) {}
             }
-            if (subsonicFilter) subsonicFilter.disconnect();
-            if (replayGainNode) replayGainNode.disconnect();
-            if (preAmpGainNode) preAmpGainNode.disconnect();
-            if (xfeedNetwork && xfeedNetwork.output) xfeedNetwork.output.disconnect();
-            if (peqNodes) peqNodes.forEach(node => { try { node.disconnect(); } catch (_) {} });
-            if (bassFilter) bassFilter.disconnect();
-            if (vocalFilter) vocalFilter.disconnect();
-            if (trebleFilter) trebleFilter.disconnect();
-            if (ampGainNode) ampGainNode.disconnect();
-            if (dspLimiter) dspLimiter.disconnect();
-            if (ceilingTrimGain) ceilingTrimGain.disconnect();
-            if (ampSoftClipper) ampSoftClipper.disconnect();
-            if (dspWorkletNode) {
-                try { dspWorkletNode.disconnect(); } catch (_) {}
+            if (s.subsonicFilter) s.subsonicFilter.disconnect();
+            if (s.replayGainNode) s.replayGainNode.disconnect();
+            if (s.preAmpGainNode) s.preAmpGainNode.disconnect();
+            if (s.xfeedNetwork && s.xfeedNetwork.output) s.xfeedNetwork.output.disconnect();
+            if (s.peqNodes) s.peqNodes.forEach(node => { try { node.disconnect(); } catch (_) {} });
+            if (s.bassFilter) s.bassFilter.disconnect();
+            if (s.vocalFilter) s.vocalFilter.disconnect();
+            if (s.trebleFilter) s.trebleFilter.disconnect();
+            if (s.ampGainNode) s.ampGainNode.disconnect();
+            if (s.dspLimiter) s.dspLimiter.disconnect();
+            if (s.ceilingTrimGain) s.ceilingTrimGain.disconnect();
+            if (s.ampSoftClipper) s.ampSoftClipper.disconnect();
+            if (s.dspWorkletNode) {
+                try { s.dspWorkletNode.disconnect(); } catch (_) {}
             }
-
-            // Headroom Pre-Amp Gain
-            updatePreAmpGain(audioContext.currentTime);
 
             // Active source: if in software decoding buffer mode, route through softwareSourceGainNode
-            const activeSource = (isSoftwareDecoding && softwareSourceGainNode) ? softwareSourceGainNode : audioSourceNode;
+            const activeSource = (s.isSoftwareDecoding && s.softwareSourceGainNode)
+                ? s.softwareSourceGainNode
+                : s.audioSourceNode;
 
-            // Root node after source: Subsonic (only if worklet is not active, avoiding duplicate 24dB/oct roll-off) + ReplayGain + Pre-Amp headroom
+            // Parallel visualizer FFT tap directly on active source (zero double processing)
+            if (s.analyser) {
+                activeSource.connect(s.analyser);
+            }
+
+            // Primary Studio 64-Bit Single-Path Worklet Graph:
+            // All filtering, EQ, crossfeed, R.A.C.E., M/S, AGP, soft-clip & final dither run strictly inside dspWorkletNode
+            if (s.dspWorkletNode) {
+                updateWorkletParams();
+                activeSource.connect(s.dspWorkletNode);
+                s.dspWorkletNode.connect(s.audioContext.destination);
+                store.emit('ui:sync-dac-status');
+                return;
+            }
+
+            // Fallback Web Audio Biquad Graph (only when AudioWorklet is unavailable)
+            updatePreAmpGain(s.audioContext.currentTime);
             let rootNode = activeSource;
-            if (isSubsonic && subsonicFilter && !dspWorkletNode) {
-                activeSource.connect(subsonicFilter);
-                rootNode = subsonicFilter;
+            if (s.isSubsonic && s.subsonicFilter) {
+                activeSource.connect(s.subsonicFilter);
+                rootNode = s.subsonicFilter;
             }
-            if (replayGainNode) {
-                rootNode.connect(replayGainNode);
-                rootNode = replayGainNode;
+            if (s.replayGainNode) {
+                rootNode.connect(s.replayGainNode);
+                rootNode = s.replayGainNode;
             }
-            if (preAmpGainNode) {
-                rootNode.connect(preAmpGainNode);
-                rootNode = preAmpGainNode;
+            if (s.preAmpGainNode) {
+                rootNode.connect(s.preAmpGainNode);
+                rootNode = s.preAmpGainNode;
             }
 
             if (!hasActiveDsp()) {
-                // Pure Native Linear Pass-Through:
-                // If 64-bit precision worklet is loaded, stream through double-precision worklet buffer; otherwise direct DAC stream
-                if (dspWorkletNode && isPrecision64) {
-                    rootNode.connect(dspWorkletNode);
-                    dspWorkletNode.connect(audioContext.destination);
-                } else {
-                    rootNode.connect(audioContext.destination);
-                }
-                // Non-invasive parallel tap to analyser (visualizer receives full native audio data)
-                if (analyser) {
-                    rootNode.connect(analyser);
-                }
+                rootNode.connect(s.audioContext.destination);
             } else {
                 let current = rootNode;
 
                 // Bauer Headphone Crossfeed (if active)
-                if (isCrossfeed && xfeedNetwork) {
-                    current.connect(xfeedNetwork.input);
-                    current = xfeedNetwork.output;
+                if (s.isCrossfeed && s.xfeedNetwork) {
+                    current.connect(s.xfeedNetwork.input);
+                    current = s.xfeedNetwork.output;
                 }
 
                 // 10-Band Parametric Equalizer Stage
-                if (peqNodes && peqNodes.length > 0) {
-                    for (const peqBand of peqNodes) {
+                if (s.peqNodes && s.peqNodes.length > 0) {
+                    for (const peqBand of s.peqNodes) {
                         current.connect(peqBand);
                         current = peqBand;
                     }
                 }
 
                 // Full Studio DSP & Dynamics Engine Route:
-                current.connect(bassFilter);
-                bassFilter.connect(vocalFilter);
-                vocalFilter.connect(trebleFilter);
-                if (analyser) trebleFilter.connect(analyser);
-                trebleFilter.connect(ampGainNode);
+                current.connect(s.bassFilter);
+                s.bassFilter.connect(s.vocalFilter);
+                s.vocalFilter.connect(s.trebleFilter);
+                s.trebleFilter.connect(s.ampGainNode);
 
                 // Only route through DynamicsCompressor + SoftClipper when Limiter or Volume Overdrive (>100%) is active
-                let terminalNode = ampGainNode;
-                if ((isLimiter || currentVolumeValue > 1.0) && dspLimiter && ampSoftClipper) {
-                    ampGainNode.connect(dspLimiter);
-                    if (ceilingTrimGain) {
-                        dspLimiter.connect(ceilingTrimGain);
-                        ceilingTrimGain.connect(ampSoftClipper);
+                let terminalNode = s.ampGainNode;
+                if ((s.isLimiter || s.currentVolumeValue > 1.0) && s.dspLimiter && s.ampSoftClipper) {
+                    s.ampGainNode.connect(s.dspLimiter);
+                    if (s.ceilingTrimGain) {
+                        s.dspLimiter.connect(s.ceilingTrimGain);
+                        s.ceilingTrimGain.connect(s.ampSoftClipper);
                     } else {
-                        dspLimiter.connect(ampSoftClipper);
+                        s.dspLimiter.connect(s.ampSoftClipper);
                     }
-                    terminalNode = ampSoftClipper;
+                    terminalNode = s.ampSoftClipper;
                 }
-
-                // Route through 64-bit AudioWorklet (Ultrasonic IMD filter, Ambiophonics R.A.C.E., TPDF/Noise-Shaped Dither)
-                if (dspWorkletNode) {
-                    terminalNode.connect(dspWorkletNode);
-                    dspWorkletNode.connect(audioContext.destination);
-                } else {
-                    terminalNode.connect(audioContext.destination);
-                }
+                terminalNode.connect(s.audioContext.destination);
             }
         } catch (e) {
             console.warn('Audio routing update warning:', e);
         }
-        updateDacStatusUi();
+        store.emit('ui:sync-dac-status');
     }
 
     async function ensureAudioEngineForSampleRate(targetRate = 44100, forceRecreate = false) {
+        const s = store.state;
         // Respect native integer clocking (44.1k, 48k, 88.2k, 96k, 176.4k, 192k)
         const cleanRate = getValidSampleRate(targetRate);
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) return null;
 
         // If audioContext is already initialized and active, reuse it to preserve active HTMLMediaElement source & user gesture state
-        if (!forceRecreate && audioContext && audioContext.state !== 'closed') {
-            if (audioContext.state === 'suspended') {
-                audioContext.resume().catch(() => {});
+        if (!forceRecreate && s.audioContext && s.audioContext.state !== 'closed') {
+            if (s.audioContext.state === 'suspended') {
+                s.audioContext.resume().catch(() => {});
             }
-            if (!audioSourceNode) {
+            if (!s.audioSourceNode) {
                 getOrCreateAudioSourceNode();
                 updateAudioRouting();
             }
-            updateDacStatusUi();
-            return audioContext;
+            store.emit('ui:sync-dac-status');
+            return s.audioContext;
         }
 
         // Initial creation needed
         try {
-            if (dspWorkletNode) {
-                try { dspWorkletNode.disconnect(); } catch (_) {}
-                dspWorkletNode = null;
+            if (s.dspWorkletNode) {
+                try { s.dspWorkletNode.disconnect(); } catch (_) {}
+                s.dspWorkletNode = null;
             }
-            if (audioSourceNode) {
-                try { audioSourceNode.disconnect(); } catch (_) {}
-                audioSourceNode = null;
+            if (s.audioSourceNode) {
+                try { s.audioSourceNode.disconnect(); } catch (_) {}
+                s.audioSourceNode = null;
             }
-            if (audioContext) {
-                try { await audioContext.close(); } catch (_) {}
-                audioContext = null;
+            if (s.audioContext) {
+                try { await s.audioContext.close(); } catch (_) {}
+                s.audioContext = null;
                 resetMediaElementForNewAudioContext();
             }
 
             // Create studio-grade AudioContext with native sample rate and user latency target
-            const latencyHintVal = bufferLatencyTarget === 'interactive' ? 'interactive' : 'playback';
+            const latencyHintVal = s.bufferLatencyTarget === 'interactive' ? 'interactive' : 'playback';
             try {
-                audioContext = new AudioCtx({
+                s.audioContext = new AudioCtx({
                     sampleRate: cleanRate,
                     latencyHint: latencyHintVal
                 });
             } catch (err) {
                 console.warn(`Hardware or browser rejected sampleRate (${cleanRate}Hz), falling back gracefully:`, err);
                 try {
-                    audioContext = new AudioCtx({ latencyHint: latencyHintVal });
+                    s.audioContext = new AudioCtx({ latencyHint: latencyHintVal });
                 } catch (_) {
-                    audioContext = new AudioCtx();
+                    s.audioContext = new AudioCtx();
                 }
             }
 
@@ -1999,107 +2155,90 @@
             updateAudioRouting();
             loadDspWorklet().catch(() => {});
 
-            if (audioContext && audioContext.state === 'suspended') {
-                audioContext.resume().catch(() => {});
+            if (s.audioContext && s.audioContext.state === 'suspended') {
+                s.audioContext.resume().catch(() => {});
             }
         } catch (e) {
             console.error('ensureAudioEngineForSampleRate failure:', e);
         }
 
-        updateDacStatusUi();
-        return audioContext;
+        store.emit('ui:sync-dac-status');
+        return s.audioContext;
     }
 
     function initAudioContext(preferredRate = null) {
-        if (audioContext && audioContext.state !== 'closed') {
-            if (audioContext.state === 'suspended') {
-                audioContext.resume().catch(() => {});
+        const s = store.state;
+        if (s.audioContext && s.audioContext.state !== 'closed') {
+            if (s.audioContext.state === 'suspended') {
+                s.audioContext.resume().catch(() => {});
             }
-            return audioContext;
+            return s.audioContext;
         }
 
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) return null;
 
         if (!preferredRate) {
-            const track = allTracks[currentTrackIndex];
+            const track = s.allTracks[s.currentTrackIndex];
             preferredRate = (track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100;
         }
         const cleanRate = getValidSampleRate(preferredRate);
 
-        const latencyHintVal = bufferLatencyTarget === 'interactive' ? 'interactive' : 'playback';
+        const latencyHintVal = s.bufferLatencyTarget === 'interactive' ? 'interactive' : 'playback';
         try {
-            audioContext = new AudioCtx({
+            s.audioContext = new AudioCtx({
                 sampleRate: cleanRate,
                 latencyHint: latencyHintVal
             });
         } catch (err) {
             try {
-                audioContext = new AudioCtx({ latencyHint: latencyHintVal });
+                s.audioContext = new AudioCtx({ latencyHint: latencyHintVal });
             } catch (_) {
-                audioContext = new AudioCtx();
+                s.audioContext = new AudioCtx();
             }
         }
 
-        dspWorkletNode = null;
+        s.dspWorkletNode = null;
         initDspNodes();
         getOrCreateAudioSourceNode();
         updateAudioRouting();
         loadDspWorklet().catch(() => {});
-        updateDacStatusUi();
-        return audioContext;
+        store.emit('ui:sync-dac-status');
+        return s.audioContext;
     }
 
     // Unlock AudioContext on any user interaction if suspended
     ['click', 'keydown', 'touchstart', 'pointerdown'].forEach(ev => {
         window.addEventListener(ev, () => {
-            if (audioContext && audioContext.state === 'suspended') {
-                audioContext.resume().catch(() => {});
+            if (store.state.audioContext && store.state.audioContext.state === 'suspended') {
+                store.state.audioContext.resume().catch(() => {});
             }
         }, { passive: true });
     });
 
-
-    // Attach top-level Audio Engine functions to window for cross-module accessibility
-    if (typeof window !== "undefined") {
-        try { window.checkHardwareGainStatus = checkHardwareGainStatus; } catch (_) {}
-        try { window.computeLimiterProfile = computeLimiterProfile; } catch (_) {}
-        try { window.createCrossfeedNetwork = createCrossfeedNetwork; } catch (_) {}
-        try { window.createLinearCurve = createLinearCurve; } catch (_) {}
-        try { window.createSoftClipCurve = createSoftClipCurve; } catch (_) {}
-        try { window.dispatchHardwareVolume = dispatchHardwareVolume; } catch (_) {}
-        try { window.drawPeqCurve = drawPeqCurve; } catch (_) {}
-        try { window.ensureAudioEngineForSampleRate = ensureAudioEngineForSampleRate; } catch (_) {}
-        try { window.getEffectiveAmplification = getEffectiveAmplification; } catch (_) {}
-        try { window.getOrCreateAudioSourceNode = getOrCreateAudioSourceNode; } catch (_) {}
-        try { window.getPreAmpGainValue = getPreAmpGainValue; } catch (_) {}
-        try { window.hwVolumeDebounceTimer = hwVolumeDebounceTimer; } catch (_) {}
-        try { window.importAutoEqProfile = importAutoEqProfile; } catch (_) {}
-        try { window.initAudioContext = initAudioContext; } catch (_) {}
-        try { window.initDspNodes = initDspNodes; } catch (_) {}
-        try { window.initPeqWorkstation = initPeqWorkstation; } catch (_) {}
-        try { window.loadDspWorklet = loadDspWorklet; } catch (_) {}
-        try { window.markHwGainUnavailable = markHwGainUnavailable; } catch (_) {}
-        try { window.resetMediaElementForNewAudioContext = resetMediaElementForNewAudioContext; } catch (_) {}
-        try { window.setDspBoost = setDspBoost; } catch (_) {}
-        try { window.setPeqBandGain = setPeqBandGain; } catch (_) {}
-        try { window.setPeqBandQ = setPeqBandQ; } catch (_) {}
-        try { window.setPeqPreset = setPeqPreset; } catch (_) {}
-        try { window.setVolume = setVolume; } catch (_) {}
-        try { window.setupDspControls = setupDspControls; } catch (_) {}
-        try { window.setupNeutronSettingsControls = setupNeutronSettingsControls; } catch (_) {}
-        try { window.toggleDspBoost = toggleDspBoost; } catch (_) {}
-        try { window.toggleReplayGain = toggleReplayGain; } catch (_) {}
-        try { window.updateAmpGain = updateAmpGain; } catch (_) {}
-        try { window.updateAudioRouting = updateAudioRouting; } catch (_) {}
-        try { window.updateDspButtonsUi = updateDspButtonsUi; } catch (_) {}
-        try { window.updateLimiterState = updateLimiterState; } catch (_) {}
-        try { window.updatePreAmpGain = updatePreAmpGain; } catch (_) {}
-        try { window.updateWorkletParams = updateWorkletParams; } catch (_) {}
+    function openPeqModal() {
+        if (typeof store.state.openPeqModal === 'function') store.state.openPeqModal();
     }
+
+    function closePeqModal() {
+        if (typeof store.state.closePeqModal === 'function') store.state.closePeqModal();
+    }
+
+    store.subscribe('audio:set-volume', (e) => {
+        const detail = e?.detail || {};
+        setVolume(detail.volume, Boolean(detail.persist));
+    });
+    store.subscribe('audio:reset-element', () => resetMediaElementForNewAudioContext());
+    store.subscribe('peq:redraw', () => drawPeqCurve());
+    store.subscribe('dsp:change', () => updateWorkletParams());
+    store.subscribe('track:change', () => {
+        updateWorkletParams();
+        toggleReplayGain(store.state.isReplayGain);
+    });
 
     export {
         checkHardwareGainStatus,
+        closePeqModal,
         computeLimiterProfile,
         createCrossfeedNetwork,
         createLinearCurve,
@@ -2117,6 +2256,7 @@
         initPeqWorkstation,
         loadDspWorklet,
         markHwGainUnavailable,
+        openPeqModal,
         resetMediaElementForNewAudioContext,
         setDspBoost,
         setPeqBandGain,

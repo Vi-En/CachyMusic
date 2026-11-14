@@ -1,5 +1,16 @@
-// CachyMusic - 10-Theme Palette & Ambient Aura Engine
-    let ambientCtx = null;
+// CachyMusic - Theme Palette & Ambient Aura Engine
+import { popModalState, pushModalState, safeStorage } from './utils.js';
+import { VALID_THEME_IDS, store } from './state.js';
+import {
+    themeModal,
+    themeQuickBtns,
+    themeSelectCards,
+    topThemeLabel,
+    turntableCenterVis,
+    vinylLabel,
+    vinylTurntable
+} from './ui-elements.js';
+
     const ambientColorCache = new Map();
 
     function updateAmbientLighting(coverUrl) {
@@ -16,12 +27,15 @@
         img.crossOrigin = 'anonymous';
         img.onload = () => {
             try {
-                if (!ambientCanvas) {
-                    ambientCanvas = document.createElement('canvas');
-                    ambientCanvas.width = 16;
-                    ambientCanvas.height = 16;
-                    ambientCtx = ambientCanvas.getContext('2d', { willReadFrequently: true });
+                if (!store.state.ambientCanvas) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 16;
+                    canvas.height = 16;
+                    store.state.ambientCanvas = canvas;
+                    store.state.ambientCtx = canvas.getContext('2d', { willReadFrequently: true });
                 }
+                const ambientCtx = store.state.ambientCtx;
+                if (!ambientCtx) return;
                 ambientCtx.drawImage(img, 0, 0, 16, 16);
                 const imgData = ambientCtx.getImageData(0, 0, 16, 16).data;
 
@@ -82,18 +96,12 @@
         } else if (themeName === 'brutalist-minimalism-dark' || themeName === 'brutalist-dark') {
             themeName = 'minimalist-dark';
         }
-        const validThemes = [
-            'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
-            'abyssal-void', 'dissonance', 'sentinel',
-            'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian',
-            'brutalist-light', 'brutalist-dark'
-        ];
-        if (!validThemes.includes(themeName)) {
+        if (!VALID_THEME_IDS.includes(themeName)) {
             themeName = 'default';
         }
-        activeTheme = themeName;
+        store.setState({ activeTheme: themeName }, ['theme:change']);
         if (showToastNotification) {
-            showThemeLoadingOverlay(themeName);
+            store.emit('theme:loading', { themeName });
         }
         document.documentElement.setAttribute('data-theme', themeName);
         document.body.removeAttribute('data-theme');
@@ -101,8 +109,6 @@
             safeStorage.setItem('cachymusic_active_theme', themeName);
             localStorage.setItem('cachymusic_active_theme', themeName);
         } catch (_) {}
-        window.applyTheme = applyTheme;
-        window.activeTheme = themeName;
 
         try {
             if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
@@ -191,7 +197,7 @@
         }
 
         // Sync turntable center visualizer and fidelity according to activeVisualizerMode
-        const isThematicActive = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple');
+        const isThematicActive = (store.state.activeVisualizerMode === 'thematic' || store.state.activeVisualizerMode === 'badapple');
         if (turntableCenterVis) {
             turntableCenterVis.style.display = 'flex';
         }
@@ -200,28 +206,14 @@
         }
         if (vinylTurntable) {
             vinylTurntable.classList.toggle('thematicFidelity', isThematicActive);
-            vinylTurntable.classList.toggle('spinning', isPlaying);
+            vinylTurntable.classList.toggle('spinning', store.state.isPlaying);
         }
-        if (typeof updateSignalPathUi === 'function') {
-            updateSignalPathUi();
-        }
-        if (typeof updateDacStatusUi === 'function') {
-            updateDacStatusUi();
-        }
-        if (typeof drawPeqCurve === 'function') {
-            drawPeqCurve();
-        }
-        if (typeof loadVisualizerThemes1 === 'function') loadVisualizerThemes1();
-        else if (typeof window !== 'undefined' && typeof window.loadVisualizerThemes1 === 'function') window.loadVisualizerThemes1();
-        if (typeof loadVisualizerThemes2 === 'function') loadVisualizerThemes2();
-        else if (typeof window !== 'undefined' && typeof window.loadVisualizerThemes2 === 'function') window.loadVisualizerThemes2();
-        if (typeof resumeVisualizerLoop === 'function') {
-            resumeVisualizerLoop();
-        } else if (typeof window !== 'undefined' && typeof window.resumeVisualizerLoop === 'function') {
-            window.resumeVisualizerLoop();
-        }
+        store.emit('ui:sync-signal-path');
+        store.emit('ui:sync-dac-status');
+        store.emit('peq:redraw');
+        store.emit('visualizer:ensure-themes');
+        store.emit('visualizer:resume');
     }
-    window.applyTheme = applyTheme;
 
     function openThemeModal() {
         if (!themeModal) return;
@@ -238,15 +230,6 @@
     function closeThemeModal() {
         if (themeModal) themeModal.style.display = 'none';
         popModalState('themeModal');
-    }
-
-    if (typeof window !== 'undefined') {
-        Object.assign(window, {
-            updateAmbientLighting,
-            applyTheme,
-            openThemeModal,
-            closeThemeModal
-        });
     }
 
     export {

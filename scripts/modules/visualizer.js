@@ -1,40 +1,41 @@
 // CachyMusic - High-Fidelity Canvas Visualizer Engine (Liquid Wave & Segmented Bars)
-import './visualizer-themes-1.js';
-import './visualizer-themes-2.js';
+import { isFirefox, safeStorage } from './utils.js';
+import { NUM_BANDS, emitShockwave, store } from './state.js';
+import {
+    auditMetricHeadroom,
+    bgDisc,
+    ctx,
+    getActiveTheme,
+    playerDeckEl,
+    settingsPanelEl,
+    signalPathModal,
+    statDynamicRange,
+    statPeakLevel,
+    turntableCenterCanvas,
+    turntableCenterCtx,
+    turntableCenterVis,
+    vinylLabel,
+    vinylTurntable,
+    visModeBtns,
+    visPillBtns,
+    visualizerCanvas,
+    visualizerDock
+} from './ui-elements.js';
+import * as themes1 from './visualizer-themes-1.js';
+import * as themes2 from './visualizer-themes-2.js';
 
-    let themes1Promise = null;
-    let themes2Promise = null;
+const { updateAndDrawParticles } = themes2;
 
     function loadVisualizerThemes1() {
-        if (!themes1Promise) {
-            themes1Promise = import('./visualizer-themes-1.js').then(mod => {
-                if (typeof window !== 'undefined') {
-                    Object.assign(window, mod);
-                }
-                return mod;
-            }).catch(err => {
-                console.warn('Failed to load visualizer-themes-1.js', err);
-            });
-        }
-        return themes1Promise;
+        return Promise.resolve(themes1);
     }
 
     function loadVisualizerThemes2() {
-        if (!themes2Promise) {
-            themes2Promise = import('./visualizer-themes-2.js').then(mod => {
-                if (typeof window !== 'undefined') {
-                    Object.assign(window, mod);
-                }
-                return mod;
-            }).catch(err => {
-                console.warn('Failed to load visualizer-themes-2.js', err);
-            });
-        }
-        return themes2Promise;
+        return Promise.resolve(themes2);
     }
 
     function setupVisualizerMode() {
-        setVisualizerMode(activeVisualizerMode);
+        setVisualizerMode(store.state.activeVisualizerMode);
 
         visPillBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -50,34 +51,30 @@ import './visualizer-themes-2.js';
     }
 
     function setVisualizerMode(mode) {
-        if (mode === 'badapple' || mode === 'thematic') {
-            activeVisualizerMode = 'thematic';
-            loadVisualizerThemes1();
-            loadVisualizerThemes2();
-        } else {
-            activeVisualizerMode = mode;
-        }
-        safeStorage.setItem('cachymusic_vis_mode', activeVisualizerMode);
+        const s = store.state;
+        const nextMode = (mode === 'badapple' || mode === 'thematic') ? 'thematic' : mode;
+        store.setState({ activeVisualizerMode: nextMode }, ['visualizer:change']);
+        safeStorage.setItem('cachymusic_vis_mode', nextMode);
 
         visPillBtns.forEach(b => {
             const m = b.dataset.mode;
-            const matches = (m === activeVisualizerMode) || (activeVisualizerMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
+            const matches = (m === nextMode) || (nextMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
             b.classList.toggle('active', matches);
         });
         visModeBtns.forEach(b => {
             const m = b.dataset.mode;
-            const matches = (m === activeVisualizerMode) || (activeVisualizerMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
+            const matches = (m === nextMode) || (nextMode === 'thematic' && (m === 'badapple' || m === 'thematic'));
             b.classList.toggle('active', matches);
         });
 
         // Reset peak drops for dash mode & pulse state
-        peakValues.fill(0);
-        peakVelocity.fill(0);
-        peakHold.fill(0);
-        smoothDashLevels.fill(0);
-        smoothHeartPulse = 1.0;
+        s.peakValues.fill(0);
+        s.peakVelocity.fill(0);
+        s.peakHold.fill(0);
+        s.smoothDashLevels.fill(0);
+        s.smoothHeartPulse = 1.0;
 
-        const isThematic = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple');
+        const isThematic = (nextMode === 'thematic' || nextMode === 'badapple');
         if (turntableCenterVis) {
             turntableCenterVis.style.display = 'flex';
         }
@@ -86,16 +83,15 @@ import './visualizer-themes-2.js';
         }
         if (vinylTurntable) {
             vinylTurntable.classList.toggle('thematicFidelity', isThematic);
-            vinylTurntable.classList.toggle('spinning', isPlaying);
+            vinylTurntable.classList.toggle('spinning', s.isPlaying);
         }
         if (bgDisc) {
-            bgDisc.classList.toggle('fast', isPlaying && isThematic);
+            bgDisc.classList.toggle('fast', s.isPlaying && isThematic);
         }
-        if (typeof resumeVisualizerLoop === 'function') {
-            resumeVisualizerLoop();
+        if (typeof s.resumeVisualizerLoop === 'function') {
+            s.resumeVisualizerLoop();
         }
     }
-    window.setVisualizerMode = setVisualizerMode;
 
     let lastCanvasW = 0;
     let lastCanvasH = 0;
@@ -126,7 +122,7 @@ import './visualizer-themes-2.js';
             if (cw > 0 && ch > 0) {
                 cachedCenterW = cw;
                 cachedCenterH = ch;
-                if (typeof resumeVisualizerLoop === 'function') resumeVisualizerLoop();
+                if (typeof store.state.resumeVisualizerLoop === 'function') store.state.resumeVisualizerLoop();
             }
         }
     }
@@ -143,8 +139,8 @@ import './visualizer-themes-2.js';
                 } else if (entry.target === turntableCenterCanvas) {
                     cachedCenterW = Math.round(entry.contentRect.width);
                     cachedCenterH = Math.round(entry.contentRect.height);
-                    if (cachedCenterW > 0 && cachedCenterH > 0 && typeof resumeVisualizerLoop === 'function') {
-                        resumeVisualizerLoop();
+                    if (cachedCenterW > 0 && cachedCenterH > 0 && typeof store.state.resumeVisualizerLoop === 'function') {
+                        store.state.resumeVisualizerLoop();
                     }
                 }
             }
@@ -205,21 +201,8 @@ import './visualizer-themes-2.js';
         refreshCanvasDimensions();
     }
 
-    // Expanding soundwave ripple rings for beat hits
-    const shockwaveRings = [];
-    function emitShockwave(x, y, maxRadius, initialAlpha = 0.75) {
-        if (shockwaveRings.length >= 8) shockwaveRings.shift();
-        shockwaveRings.push({
-            x,
-            y,
-            r: 6,
-            maxR: maxRadius,
-            alpha: initialAlpha,
-            speed: (maxRadius - 6) * 2.6
-        });
-    }
-
     function updateAndDrawShockwaves(ctx, dt) {
+        const shockwaveRings = store.state.shockwaveRings;
         if (shockwaveRings.length === 0) return;
         ctx.save();
         for (let i = shockwaveRings.length - 1; i >= 0; i--) {
@@ -365,60 +348,78 @@ import './visualizer-themes-2.js';
             return precomputedBands;
         }
 
-        resumeVisualizerLoop = function() {
-            if (!isVisualizerLoopRunning) {
-                isVisualizerLoopRunning = true;
+        store.state.resumeVisualizerLoop = function() {
+            const st = store.state;
+            if (!st.isVisualizerLoopRunning) {
+                st.isVisualizerLoopRunning = true;
                 idleFramesAfterPause = 0;
-                lastRenderTime = performance.now();
-                animFrameId = requestAnimationFrame(renderFrame);
+                st.lastRenderTime = performance.now();
+                st.animFrameId = requestAnimationFrame(renderFrame);
             }
         };
 
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && typeof resumeVisualizerLoop === 'function') {
-                resumeVisualizerLoop();
+            if (!document.hidden && typeof store.state.resumeVisualizerLoop === 'function') {
+                store.state.resumeVisualizerLoop();
+            }
+        });
+
+        store.subscribe('visualizer:resume', () => {
+            if (typeof store.state.resumeVisualizerLoop === 'function') store.state.resumeVisualizerLoop();
+        });
+        store.subscribe('workspace:change', ({ detail }) => {
+            if (detail && detail.viewName === 'player') {
+                if (typeof store.state.resumeVisualizerLoop === 'function') store.state.resumeVisualizerLoop();
+                refreshCanvasDimensions();
             }
         });
 
         function renderFrame(now) {
-            if (currentWorkspace !== 'player') {
-                isVisualizerLoopRunning = false;
+            const st = store.state;
+            const isPlaying = st.isPlaying;
+            const activeVisualizerMode = st.activeVisualizerMode;
+            const smoothBands = st.smoothBands;
+            const analyser = st.analyser;
+            const audioContext = st.audioContext;
+
+            if (st.currentWorkspace !== 'player') {
+                st.isVisualizerLoopRunning = false;
                 return;
             }
 
             if (document.hidden) {
-                isVisualizerLoopRunning = false;
+                st.isVisualizerLoopRunning = false;
                 return;
             }
 
             if (!isPlaying) {
                 idleFramesAfterPause++;
                 const targetFidelity = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple') ? 1.0 : 0.0;
-                const isFidelityTransitioning = Math.abs(targetFidelity - smoothTurntableFidelity) > 0.002;
-                const isAlreadySilent = (smoothBass < 0.002 && smoothMid < 0.002 && smoothTreble < 0.002 && beatPulse < 0.002);
+                const isFidelityTransitioning = Math.abs(targetFidelity - st.smoothTurntableFidelity) > 0.002;
+                const isAlreadySilent = (st.smoothBass < 0.002 && smoothMid < 0.002 && st.smoothTreble < 0.002 && beatPulse < 0.002);
                 if (!isFidelityTransitioning && ((isAlreadySilent && idleFramesAfterPause > 2) || idleFramesAfterPause > 45)) {
-                    isVisualizerLoopRunning = false;
+                    st.isVisualizerLoopRunning = false;
                     return;
                 }
             } else {
                 idleFramesAfterPause = 0;
             }
 
-            const elapsed = now - lastRenderTime;
+            const elapsed = now - st.lastRenderTime;
             if (elapsed < 7) {
-                animFrameId = requestAnimationFrame(renderFrame);
+                st.animFrameId = requestAnimationFrame(renderFrame);
                 return;
             }
             const dt = Math.min(elapsed / 1000, 0.1);
-            lastRenderTime = now;
+            st.lastRenderTime = now;
 
             const isMobileViewport = window.innerWidth <= 768;
             if (isMobileViewport) {
-                const isDeckActive = Boolean(playerDeckEl && playerDeckEl.classList.contains('mobileActive') && !isLyricsView);
+                const isDeckActive = Boolean(playerDeckEl && playerDeckEl.classList.contains('mobileActive') && !st.isLyricsView);
                 const isInfoActive = Boolean(settingsPanelEl && settingsPanelEl.classList.contains('mobileActive'));
                 const isSignalOpen = Boolean(signalPathModal && signalPathModal.style.display === 'flex');
                 if (!isDeckActive && !isInfoActive && !isSignalOpen) {
-                    isVisualizerLoopRunning = false;
+                    st.isVisualizerLoopRunning = false;
                     return;
                 }
             }
@@ -528,10 +529,10 @@ import './visualizer-themes-2.js';
 
                         if (isSignalModalVisible && auditMetricHeadroom) {
                             const headroomDb = Math.max(0, -peakDb);
-                            let maxBoost = (!isPeqBypassed && Array.isArray(peqGains)) ? Math.max(0, ...peqGains) : 0;
-                            if (isBassBoost) maxBoost = Math.max(maxBoost, 3.8);
-                            if (isTrebleBoost) maxBoost = Math.max(maxBoost, 3.0);
-                            if (isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
+                            let maxBoost = (!st.isPeqBypassed && Array.isArray(st.peqGains)) ? Math.max(0, ...st.peqGains) : 0;
+                            if (st.isBassBoost) maxBoost = Math.max(maxBoost, 3.8);
+                            if (st.isTrebleBoost) maxBoost = Math.max(maxBoost, 3.0);
+                            if (st.isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
                             const guardStr = maxBoost > 0 ? `-${(maxBoost * 0.7).toFixed(1)} dB Pre-Amp` : 'Live Peak';
                             const txt = `+${headroomDb.toFixed(1)} dB (${guardStr})`;
                             if (txt !== lastHeadroomText) {
@@ -583,16 +584,16 @@ import './visualizer-themes-2.js';
                 }
             } else {
                 // Procedural ambient simulation (smooth breathing waves when idle or fallback)
-                simPhase += isPlaying ? dt * 3.2 : dt * 0.7;
+                st.simPhase += isPlaying ? dt * 3.2 : dt * 0.7;
                 for (let b = 0; b < NUM_BANDS; b++) {
                     let target = 0;
                     if (isPlaying) {
                         const normB = b / (NUM_BANDS - 1);
-                        const wave1 = Math.sin(simPhase * 1.8 + b * 0.14) * 0.28;
-                        const wave2 = Math.cos(simPhase * 2.6 + b * 0.22) * 0.18;
-                        const bassImpulse = (b < 12) ? Math.max(0, Math.sin(simPhase * 3.0)) * 0.42 * (1.0 - b / 12) : 0;
-                        const midImpulse = (b >= 16 && b <= 34) ? Math.max(0, Math.sin(simPhase * 2.2 + 1.2)) * 0.32 : 0;
-                        const highImpulse = (b > 38) ? Math.max(0, Math.sin(simPhase * 4.0 + 2.0)) * 0.24 * normB : 0;
+                        const wave1 = Math.sin(st.simPhase * 1.8 + b * 0.14) * 0.28;
+                        const wave2 = Math.cos(st.simPhase * 2.6 + b * 0.22) * 0.18;
+                        const bassImpulse = (b < 12) ? Math.max(0, Math.sin(st.simPhase * 3.0)) * 0.42 * (1.0 - b / 12) : 0;
+                        const midImpulse = (b >= 16 && b <= 34) ? Math.max(0, Math.sin(st.simPhase * 2.2 + 1.2)) * 0.32 : 0;
+                        const highImpulse = (b > 38) ? Math.max(0, Math.sin(st.simPhase * 4.0 + 2.0)) * 0.24 * normB : 0;
                         target = Math.min(0.92, Math.max(0.04, 0.14 + wave1 + wave2 + bassImpulse + midImpulse + highImpulse));
                     } else {
                         target = 0;
@@ -624,13 +625,15 @@ import './visualizer-themes-2.js';
 
             // Energy domains with continuous time-delta smoothing
             const currentBass = (smoothBands[0] + smoothBands[1] + smoothBands[2] + smoothBands[3] + smoothBands[4] + smoothBands[5]) / 6;
-            smoothBass += (currentBass - smoothBass) * (1.0 - Math.exp(-18 * dt));
+            st.smoothBass += (currentBass - st.smoothBass) * (1.0 - Math.exp(-18 * dt));
 
             const currentMid = (smoothBands[12] + smoothBands[16] + smoothBands[20] + smoothBands[24] + smoothBands[28]) / 5;
             smoothMid += (currentMid - smoothMid) * (1.0 - Math.exp(-14 * dt));
 
             const currentTreble = (smoothBands[42] + smoothBands[46] + smoothBands[50] + smoothBands[54] + smoothBands[58]) / 5;
-            smoothTreble += (currentTreble - smoothTreble) * (1.0 - Math.exp(-14 * dt));
+            st.smoothTreble += (currentTreble - st.smoothTreble) * (1.0 - Math.exp(-14 * dt));
+            const smoothBass = st.smoothBass;
+            const smoothTreble = st.smoothTreble;
 
             // Triple transient detectors:
             // 1. Bass Transient (Drum Kicks & 808 Drops)
@@ -668,12 +671,7 @@ import './visualizer-themes-2.js';
                         break;
                     case 'thematic':
                     case 'badapple': {
-                        const fnThematicWave = (typeof drawThematicWave === 'function' ? drawThematicWave : (typeof window !== 'undefined' && typeof window.drawThematicWave === 'function' ? window.drawThematicWave : null));
-                        if (fnThematicWave) {
-                            fnThematicWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
-                        } else {
-                            loadVisualizerThemes2();
-                        }
+                        themes2.drawThematicWave(ctx, width, height, filteredBands, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble);
                         break;
                     }
                     case 'wave':
@@ -688,19 +686,19 @@ import './visualizer-themes-2.js';
             // Visualizer fidelity smoothly transitions so activating Thematic Core blossoms into full-feature design!
             const currentTheme = getActiveTheme();
             const targetFidelity = (activeVisualizerMode === 'thematic' || activeVisualizerMode === 'badapple') ? 1.0 : 0.0;
-            smoothTurntableFidelity += (targetFidelity - smoothTurntableFidelity) * (1.0 - Math.exp(-6.0 * dt));
-            if (Math.abs(targetFidelity - smoothTurntableFidelity) < 0.001) {
-                smoothTurntableFidelity = targetFidelity;
+            st.smoothTurntableFidelity += (targetFidelity - st.smoothTurntableFidelity) * (1.0 - Math.exp(-6.0 * dt));
+            if (Math.abs(targetFidelity - st.smoothTurntableFidelity) < 0.001) {
+                st.smoothTurntableFidelity = targetFidelity;
             }
-            const fidelity = smoothTurntableFidelity;
+            const fidelity = st.smoothTurntableFidelity;
 
-            const currentDeckEl = (typeof playerDeckEl !== 'undefined' && playerDeckEl) ? playerDeckEl : document.querySelector('.playerDeck');
-            const isTurntableVisible = !isLyricsView &&
+            const currentDeckEl = playerDeckEl || document.querySelector('.playerDeck');
+            const isTurntableVisible = !st.isLyricsView &&
                 (window.innerWidth > 768 || (currentDeckEl && currentDeckEl.classList.contains('mobileActive')));
 
-            const currentCenterVis = (typeof turntableCenterVis !== 'undefined' && turntableCenterVis) ? turntableCenterVis : document.getElementById('turntableCenterVis');
-            const currentCenterCanvas = (typeof turntableCenterCanvas !== 'undefined' && turntableCenterCanvas) ? turntableCenterCanvas : document.getElementById('turntableCenterCanvas');
-            const currentCenterCtx = (typeof turntableCenterCtx !== 'undefined' && turntableCenterCtx) ? turntableCenterCtx : (currentCenterCanvas ? currentCenterCanvas.getContext('2d') : null);
+            const currentCenterVis = turntableCenterVis || document.getElementById('turntableCenterVis');
+            const currentCenterCanvas = turntableCenterCanvas || document.getElementById('turntableCenterCanvas');
+            const currentCenterCtx = turntableCenterCtx || (currentCenterCanvas ? currentCenterCanvas.getContext('2d') : null);
 
             if (isTurntableVisible && currentCenterCanvas && currentCenterCtx) {
                 if (!turntableCenterStylesSet) {
@@ -724,110 +722,44 @@ import './visualizer-themes-2.js';
                     currentCenterCtx.arc(centerDims.width / 2, centerDims.height / 2, Math.min(centerDims.width, centerDims.height) * 0.495, 0, Math.PI * 2);
                     currentCenterCtx.clip();
 
-                    const getThemeFn = (fnName) => {
-                        if (typeof window !== 'undefined' && typeof window[fnName] === 'function') return window[fnName];
-                        try {
-                            const f = eval(fnName);
-                            if (typeof f === 'function') return f;
-                        } catch (_) {}
-                        return null;
-                    };
-                    const fnAtlas = getThemeFn('drawTurntableCenterAtlasCore');
-                    const fnSolar = getThemeFn('drawTurntableCenterSolarEclipse');
-                    const fnEuclid = getThemeFn('drawTurntableCenterEuclidPortal');
-                    const fnParadise = getThemeFn('drawTurntableCenterAlienParadise');
-                    const fnAbyssal = getThemeFn('drawTurntableCenterAbyssalVoid');
-                    const fnDissonance = getThemeFn('drawTurntableCenterDissonance');
-                    const fnSentinel = getThemeFn('drawTurntableCenterSentinel');
-                    const fnBrutalist = getThemeFn('drawTurntableCenterBrutalist');
-                    const fnHeart = getThemeFn('drawTurntableCenterHeart');
-
                     switch (currentTheme) {
                         case 'nms':
-                            if (fnAtlas) {
-                                fnAtlas(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes1();
-                            }
+                            themes1.drawTurntableCenterAtlasCore(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         case 'solar-eclipse':
-                            if (fnSolar) {
-                                fnSolar(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes1();
-                            }
+                            themes1.drawTurntableCenterSolarEclipse(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         case 'euclid-horizon':
-                            if (fnEuclid) {
-                                fnEuclid(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes1();
-                            }
+                            themes1.drawTurntableCenterEuclidPortal(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         case 'alien-paradise':
-                            if (fnParadise) {
-                                fnParadise(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes1();
-                            }
+                            themes1.drawTurntableCenterAlienParadise(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         case 'abyssal-void':
-                            if (fnAbyssal) {
-                                fnAbyssal(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes2();
-                            }
+                            themes2.drawTurntableCenterAbyssalVoid(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         case 'dissonance':
-                            if (fnDissonance) {
-                                fnDissonance(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity, filteredBands);
-                            } else {
-                                loadVisualizerThemes2();
-                            }
+                            themes2.drawTurntableCenterDissonance(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity, filteredBands);
                             break;
                         case 'sentinel':
-                            if (fnSentinel) {
-                                fnSentinel(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity, filteredBands);
-                            } else {
-                                loadVisualizerThemes2();
-                            }
+                            themes2.drawTurntableCenterSentinel(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity, filteredBands);
                             break;
                         case 'minimalist-light':
                         case 'brutalist-light':
-                            if (fnBrutalist) {
-                                fnBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'light', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes2();
-                            }
+                            themes2.drawTurntableCenterBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'light', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         case 'minimalist-dark':
                         case 'brutalist-dark':
-                            if (fnBrutalist) {
-                                fnBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'dark', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes2();
-                            }
+                            themes2.drawTurntableCenterBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'dark', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         case 'minimalist-warm':
-                            if (fnBrutalist) {
-                                fnBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'warm', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes2();
-                            }
+                            themes2.drawTurntableCenterBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'warm', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         case 'minimalist-obsidian':
-                            if (fnBrutalist) {
-                                fnBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'obsidian', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes2();
-                            }
+                            themes2.drawTurntableCenterBrutalist(currentCenterCtx, centerDims.width, centerDims.height, 'obsidian', isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                         default:
-                            if (fnHeart) {
-                                fnHeart(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
-                            } else {
-                                loadVisualizerThemes2();
-                            }
+                            themes2.drawTurntableCenterHeart(currentCenterCtx, centerDims.width, centerDims.height, isPlaying, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble, fidelity);
                             break;
                     }
                     currentCenterCtx.restore();
@@ -835,13 +767,13 @@ import './visualizer-themes-2.js';
                 }
             }
 
-            if (isVisualizerLoopRunning) {
-                animFrameId = requestAnimationFrame(renderFrame);
+            if (st.isVisualizerLoopRunning) {
+                st.animFrameId = requestAnimationFrame(renderFrame);
             }
         }
 
-        isVisualizerLoopRunning = true;
-        animFrameId = requestAnimationFrame(renderFrame);
+        store.state.isVisualizerLoopRunning = true;
+        store.state.animFrameId = requestAnimationFrame(renderFrame);
     }
 
     // -------------------------------------------------------------------------
@@ -1947,27 +1879,6 @@ import './visualizer-themes-2.js';
         ctx.quadraticCurveTo(x, y, x + r, y);
         ctx.closePath();
         ctx.fill();
-    }
-
-    // Attach visualizer functions to window
-    if (typeof window !== "undefined") {
-        try { window.setupVisualizerMode = setupVisualizerMode; } catch (_) {}
-        try { window.setVisualizerMode = setVisualizerMode; } catch (_) {}
-        try { window.refreshCanvasDimensions = refreshCanvasDimensions; } catch (_) {}
-        try { window.syncTurntableCenterCanvas = syncTurntableCenterCanvas; } catch (_) {}
-        try { window.syncCanvasResolution = syncCanvasResolution; } catch (_) {}
-        try { window.setupCanvas = setupCanvas; } catch (_) {}
-        try { window.emitShockwave = emitShockwave; } catch (_) {}
-        try { window.updateAndDrawShockwaves = updateAndDrawShockwaves; } catch (_) {}
-        try { window.emitSparkle = emitSparkle; } catch (_) {}
-        try { window.updateAndDrawSparkles = updateAndDrawSparkles; } catch (_) {}
-        try { window.drawSplinePath = drawSplinePath; } catch (_) {}
-        try { window.startVisualizerLoop = startVisualizerLoop; } catch (_) {}
-        try { window.drawSolidWave = drawSolidWave; } catch (_) {}
-        try { window.drawVerticalDash = drawVerticalDash; } catch (_) {}
-        try { window.drawRoundedRect = drawRoundedRect; } catch (_) {}
-        try { window.loadVisualizerThemes1 = loadVisualizerThemes1; } catch (_) {}
-        try { window.loadVisualizerThemes2 = loadVisualizerThemes2; } catch (_) {}
     }
 
     export {

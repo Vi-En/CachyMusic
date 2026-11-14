@@ -1,5 +1,6 @@
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { SlskClient } = require('slsk-client');
 
@@ -572,7 +573,7 @@ function startTransfer(transferEntry, reqOffset = 0) {
   let lastTime = Date.now();
   let throttleSave = Date.now();
 
-  const tempSinkPath = path.join('/tmp', `slsk_sink_${Date.now()}_${Math.random().toString(36).substring(7)}.tmp`);
+  const tempSinkPath = path.join(os.tmpdir(), `slsk_sink_${Date.now()}_${Math.random().toString(36).substring(7)}.tmp`);
 
   try {
     const downloadOpts = {
