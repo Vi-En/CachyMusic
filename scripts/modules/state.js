@@ -96,11 +96,11 @@ function createInitialParticles() {
 const DSP_STATE_KEYS = new Set([
     'isAmpBoost', 'isBassBoost', 'isVocalBoost', 'isTrebleBoost', 'isLimiter',
     'isReplayGain', 'isCrossfeed', 'isSubsonic', 'currentVolumeValue',
-    'isPrecision64', 'isAgpEnabled', 'isSurroundWidener', 'isPhaseInvert',
+    'isPrecision64', 'mathPrecision', 'isAgpEnabled', 'isSurroundWidener', 'isPhaseInvert',
     'isMonoMix', 'stereoBalance', 'isPitchLockTempo', 'currentPlaybackSpeed',
     'isHardwareGain', 'isUltrasonic', 'ultrasonicCutoff', 'ditherMode',
     'isAmbiophonics', 'bufferLatencyTarget', 'isPeqBypassed', 'peqGains', 'peqQs',
-    'dspWorkletNode', 'hwVolumeBackend'
+    'dspWorkletNode', 'hwVolumeBackend', 'detectedDacLabel', 'hasExternalDac'
 ]);
 
 const TRACK_STATE_KEYS = new Set([
@@ -218,9 +218,19 @@ export class WorkstationStore extends EventTarget {
             isCrossfeed: safeStorage.getItem('cachymusic_crossfeed') === 'true',
             isSubsonic: safeStorage.getItem('cachymusic_subsonic') !== 'false',
             currentVolumeValue: initVol,
-            isPrecision64: safeStorage.getItem('cachymusic_precision_64') !== null
-                ? safeStorage.getItem('cachymusic_precision_64') === 'true'
-                : safeStorage.getItem('cachymusic_engine_precision') !== '32',
+            mathPrecision: (() => {
+                const raw = safeStorage.getItem('cachymusic_engine_precision');
+                if (raw === 'native' || raw === '32' || raw === '64') return raw;
+                return safeStorage.getItem('cachymusic_precision_64') === 'false' ? '32' : '64';
+            })(),
+            isPrecision64: (() => {
+                const raw = safeStorage.getItem('cachymusic_engine_precision');
+                if (raw === 'native' || raw === '32') return false;
+                if (raw === '64') return true;
+                return safeStorage.getItem('cachymusic_precision_64') !== 'false';
+            })(),
+            detectedDacLabel: '',
+            hasExternalDac: false,
             isAgpEnabled: safeStorage.getItem('cachymusic_agp') !== 'false',
             isSurroundWidener: safeStorage.getItem('cachymusic_surround_ms') === 'true',
             isPhaseInvert: safeStorage.getItem('cachymusic_phase_invert') === 'true',

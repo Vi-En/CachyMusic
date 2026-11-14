@@ -82,6 +82,7 @@ export async function detectRuntimeCapabilities(forceRefresh = false) {
         hasMediaSession: typeof navigator !== 'undefined' && 'mediaSession' in navigator,
         hasNotifications: typeof window !== 'undefined' && 'Notification' in window,
         hasMprisBridge: hasPhpBackend && resolvedOs === 'linux',
+        hasHardwareGain: isAndroidNative || hasPhpBackend,
         getSoulseekHost: () => {
             if (isAndroidNative) return '';
             const h = safeStorage.getItem('cachymusic_slsk_host') || '';
@@ -124,6 +125,7 @@ export function getRuntime() {
         hasMediaSession: typeof navigator !== 'undefined' && 'mediaSession' in navigator,
         hasNotifications: typeof window !== 'undefined' && 'Notification' in window,
         hasMprisBridge: false,
+        hasHardwareGain: isAndroidNative,
         getSoulseekHost: () => (safeStorage.getItem('cachymusic_slsk_host') || '').trim().replace(/\/+$/, '')
     };
 }
@@ -131,12 +133,12 @@ export function getRuntime() {
 export function applyRuntimeUiAdaptation(runtime = getRuntime()) {
     if (typeof document === 'undefined') return;
 
-    // 1. Hardware Gain card: hide entirely when not running on a Linux PHP desktop
+    // 1. Hardware Gain & Connected DAC card: show on Linux/Windows/macOS PHP desktop AND Android APK (hidden only on static pure-web if unavailable? Wait: allow web users with USB DACs/Moondrop May to see & scan!)
     const hwGainRow = document.getElementById('settingsRowHwGain')
         || document.getElementById('settingsHwGainToggleBtn')?.closest('.settingsRowItem, .settingsControlRow, .settingsCard, .settingRow')
         || document.getElementById('settingsHardwareGainCard');
     if (hwGainRow) {
-        const showHwGain = runtime.hasPhpBackend && runtime.osFamily === 'linux';
+        const showHwGain = Boolean(runtime.hasHardwareGain || runtime.isAndroidNative || runtime.hasPhpBackend);
         hwGainRow.style.display = showHwGain ? '' : 'none';
     }
 

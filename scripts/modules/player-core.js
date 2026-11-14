@@ -278,7 +278,15 @@ let currentPlayRequestId = 0;
 let currentTrackGeneration = 0;
 let activeLoadedMetadataHandler = null;
 let playPendingTimeout = null;
+let noDataStallTimer = null;
 let lastPositionStateUpdate = 0;
+
+function clearNoDataStallTimer() {
+    if (noDataStallTimer) {
+        clearTimeout(noDataStallTimer);
+        noDataStallTimer = null;
+    }
+}
 
 function applyTrackMetadataToDom(track, isStandalone = false) {
     const s = store.state;
@@ -342,6 +350,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
     s.isSoftwareDecoding = false;
     currentPlayRequestId++;
     s.isPlayPending = false;
+    clearNoDataStallTimer();
     if (playPendingTimeout) {
         clearTimeout(playPendingTimeout);
         playPendingTimeout = null;
@@ -799,6 +808,7 @@ async function playAudio(userInitiated = false) {
     const reqId = ++currentPlayRequestId;
     s.userExplicitlyPaused = false;
     s.isPlayPending = true;
+    clearNoDataStallTimer();
     if (playPendingTimeout) clearTimeout(playPendingTimeout);
     playPendingTimeout = setTimeout(() => {
         if (s.isPlayPending && reqId === currentPlayRequestId) {
@@ -807,6 +817,28 @@ async function playAudio(userInitiated = false) {
     }, 4000);
 
     syncPlayPauseUI(true);
+
+    const scheduleNoDataFallback = (targetAudio) => {
+        clearNoDataStallTimer();
+        if (!targetAudio || !currentTrack || s.userExplicitlyPaused || s.isSoftwareDecoding) return;
+        if (targetAudio.readyState >= 1) return;
+        noDataStallTimer = setTimeout(() => {
+            noDataStallTimer = null;
+            if (reqId !== currentPlayRequestId || s.userExplicitlyPaused || s.isSoftwareDecoding || s.audio !== targetAudio) return;
+            if (targetAudio.readyState === 0 && !targetAudio.ended) {
+                const rawSrc = targetAudio.getAttribute('src') || targetAudio.src || '';
+                if (rawSrc) s.alwaysSoftwareDecodeUrls.add(rawSrc);
+                if (currentTrack.src) s.alwaysSoftwareDecodeUrls.add(currentTrack.src);
+                try {
+                    targetAudio.pause();
+                    targetAudio.removeAttribute('src');
+                    targetAudio.load();
+                } catch (_) {}
+                logAudioPlaybackEvent('info', `HTML5 Audio stalled at No Data (readyState 0) on "${currentTrack.title || currentTrack.filename}". Switching to 32-bit Web Audio Software Engine.`);
+                playWithSoftwareDecoder(currentTrack, targetAudio.currentTime || 0);
+            }
+        }, 2200);
+    };
 
     try {
         const track = s.allTracks[s.currentTrackIndex];
@@ -845,11 +877,32 @@ async function playAudio(userInitiated = false) {
         }
         activeAudio._isFreshTrackLoad = false;
 
+        scheduleNoDataFallback(activeAudio);
         await activeAudio.play();
         if (reqId !== currentPlayRequestId) return;
+        if (activeAudio.readyState >= 1) clearNoDataStallTimer();
         syncPlayPauseUI(!activeAudio.paused);
     } catch (err) {
+        clearNoDataStallTimer();
         if (reqId !== currentPlayRequestId) return;
+        const errCode = s.audio && s.audio.error ? s.audio.error.code : 0;
+        const shouldSoftwareFallback = !s.userExplicitlyPaused && currentTrack && !s.isSoftwareDecoding
+            && (err.name === 'NotSupportedError' || errCode === 3 || errCode === 4);
+        if (shouldSoftwareFallback) {
+            const rawSrc = (s.audio && (s.audio.getAttribute('src') || s.audio.src)) || '';
+            if (rawSrc) s.alwaysSoftwareDecodeUrls.add(rawSrc);
+            if (currentTrack.src) s.alwaysSoftwareDecodeUrls.add(currentTrack.src);
+            try {
+                if (s.audio) {
+                    s.audio.pause();
+                    s.audio.removeAttribute('src');
+                    s.audio.load();
+                }
+            } catch (_) {}
+            logAudioPlaybackEvent('info', `HTML5 play() rejected (${err.name || 'code ' + errCode}) on "${currentTrack.title || currentTrack.filename}". Switching to 32-bit Web Audio Software Engine.`);
+            playWithSoftwareDecoder(currentTrack, (s.audio && s.audio.currentTime) || 0);
+            return;
+        }
         if (err.name !== 'AbortError') {
             console.warn('Audio playback error:', err);
         }
@@ -870,6 +923,7 @@ async function playAudio(userInitiated = false) {
 function pauseAudio() {
     const s = store.state;
     s.userExplicitlyPaused = true;
+    clearNoDataStallTimer();
     if (s.isSoftwareDecoding) {
         pauseSoftwarePlayback();
         syncPlayPauseUI(false);
@@ -1321,9 +1375,57 @@ function onSoftwarePlaybackEnded() {
     }
 }
 
+function stripId3ToFlacMagic(arrayBuffer) {
+    if (!arrayBuffer || arrayBuffer.byteLength < 16) return null;
+    const bytes = new Uint8Array(arrayBuffer);
+    // Only scan when file begins with ID3v2 header ('I','D','3')
+    if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
+    // Syncsafe ID3v2 tag size + 10-byte header
+    let startOffset = 10 + ((bytes[6] & 0x7f) << 21) + ((bytes[7] & 0x7f) << 14) + ((bytes[8] & 0x7f) << 7) + (bytes[9] & 0x7f);
+    if (startOffset + 4 <= bytes.length
+        && bytes[startOffset] === 0x66 && bytes[startOffset + 1] === 0x4c
+        && bytes[startOffset + 2] === 0x61 && bytes[startOffset + 3] === 0x43) {
+        return arrayBuffer.slice(startOffset);
+    }
+    const scanLimit = Math.min(bytes.length - 4, 262144);
+    for (let i = 10; i < scanLimit; i++) {
+        if (bytes[i] === 0x66 && bytes[i + 1] === 0x4c && bytes[i + 2] === 0x61 && bytes[i + 3] === 0x43) {
+            return arrayBuffer.slice(i);
+        }
+    }
+    return null;
+}
+
+async function decodeBufferWithAudioContext(ctx, rawArrayBuf) {
+    const attemptDecode = (buf) => new Promise((resolve, reject) => {
+        const p = ctx.decodeAudioData(
+            buf,
+            decoded => resolve(decoded),
+            err => reject(err || new Error('decodeAudioData callback returned error'))
+        );
+        if (p && typeof p.then === 'function') {
+            p.then(resolve, reject);
+        }
+    });
+    try {
+        // Slice a copy so decodeAudioData neutering never destroys our fallback slice
+        return await attemptDecode(rawArrayBuf.slice(0));
+    } catch (primaryErr) {
+        const stripped = stripId3ToFlacMagic(rawArrayBuf);
+        if (stripped) {
+            logAudioPlaybackEvent('info', 'Stripped prepended ID3v2 tag wrapper before fLaC sync frame for software decoder.');
+            return await attemptDecode(stripped);
+        }
+        throw primaryErr;
+    }
+}
+
 async function playWithSoftwareDecoder(track, startTime = 0) {
     const s = store.state;
     if (!track) return;
+    clearNoDataStallTimer();
+    const decodeGen = currentTrackGeneration;
+    s.activeDecodedBuffer = null;
     s.isSoftwareDecoding = true;
     s.isSoftwarePaused = false;
     s.userExplicitlyPaused = false;
@@ -1340,31 +1442,35 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
 
         const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
         await ensureAudioEngineForSampleRate(targetRate);
+        if (decodeGen !== currentTrackGeneration) return;
         if (s.audioContext && s.audioContext.state !== 'running') {
-            try { await s.audioContext.resume(); } catch (_) {}
+            try {
+                await Promise.race([
+                    s.audioContext.resume(),
+                    new Promise(resolve => setTimeout(resolve, 250))
+                ]);
+            } catch (_) {}
         }
 
         let src = track.src || '';
         if (src.startsWith('../')) src = src.substring(3);
 
         logAudioPlaybackEvent('info', `Fetching stream bitstream for 32-bit software decode: "${track.title || track.filename}"`);
-        showCachyToast('Software Audio Engine', `Decoding 24-bit/audiophile stream: "${track.title || track.filename}"`, 'info');
+        showCachyToast('Software Audio Engine', `Decompressing lossless bitstream: "${track.title || track.filename}"`, 'info');
 
-        const res = await fetch(src);
-        if (!res.ok) throw new Error(`HTTP ${res.status} fetch failure`);
-        const arrayBuf = await res.arrayBuffer();
+        let arrayBuf = null;
+        if (track._fileBlob && typeof track._fileBlob.arrayBuffer === 'function') {
+            arrayBuf = await track._fileBlob.arrayBuffer();
+        } else {
+            const res = await fetch(src);
+            if (!res.ok) throw new Error(`HTTP ${res.status} fetch failure`);
+            arrayBuf = await res.arrayBuffer();
+        }
+        if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
 
         logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
-        const decodedBuffer = await new Promise((resolve, reject) => {
-            const p = s.audioContext.decodeAudioData(
-                arrayBuf,
-                buf => resolve(buf),
-                err => reject(err || new Error('decodeAudioData callback returned error'))
-            );
-            if (p && typeof p.then === 'function') {
-                p.then(resolve, reject);
-            }
-        });
+        const decodedBuffer = await decodeBufferWithAudioContext(s.audioContext, arrayBuf);
+        if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
         s.activeDecodedBuffer = decodedBuffer;
 
         track.duration = decodedBuffer.duration;
@@ -1376,9 +1482,11 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
         s.consecutiveSkipCount = 0;
         logAudioPlaybackEvent('info', `Web Audio Software Engine playing "${track.title || track.filename}" at ${decodedBuffer.sampleRate}Hz, ${decodedBuffer.numberOfChannels}ch, ${decodedBuffer.duration.toFixed(1)}s.`);
     } catch (err) {
+        if (decodeGen !== currentTrackGeneration) return;
         console.error('[AudioEngine] Software decoder fallback failed:', err);
         logAudioPlaybackEvent('error', `Web Audio software decode failure: ${err.message}`);
         s.isSoftwareDecoding = false;
+        s.activeDecodedBuffer = null;
         showCachyToast('Playback Error', 'File corrupted or unreadable. Skipping track...', 'error');
         setTimeout(() => nextTrack(), 1000);
     }
@@ -1402,6 +1510,7 @@ function attachAudioListeners(targetAudio) {
     });
     targetAudio.addEventListener('playing', () => {
         if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        clearNoDataStallTimer();
         if (s.userExplicitlyPaused && document.hidden) {
             targetAudio.pause();
             syncPlayPauseUI(false);
@@ -1409,6 +1518,10 @@ function attachAudioListeners(targetAudio) {
         }
         isAudioBuffering = false;
         syncPlayPauseUI(true);
+    });
+    targetAudio.addEventListener('canplay', () => {
+        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (targetAudio.readyState >= 1) clearNoDataStallTimer();
     });
     targetAudio.addEventListener('pause', () => {
         if (targetAudio._isDisposed || targetAudio !== s.audio) return;
@@ -1442,6 +1555,7 @@ function attachAudioListeners(targetAudio) {
         const err = targetAudio.error;
         if (!err) return;
         console.error('Audio element error:', err);
+        clearNoDataStallTimer();
         isAudioBuffering = false;
         syncPlayPauseUI(false);
         s.isPlayPending = false;
@@ -1693,8 +1807,13 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
     if (s.isReplayGain) activeStages.push('ReplayGain');
 
     const dspActive = hasActiveDsp();
-    const workletPrecisionStr = s.isPrecision64 ? '64-Bit Double-Float Worklet' : '32-Bit Fast-Float Biquad';
-    const shortEngineLabel = s.isPrecision64 ? '64-BIT WORKLET' : '32-BIT FLOAT';
+    const isNativeBypass = s.mathPrecision === 'native';
+    const workletPrecisionStr = isNativeBypass
+        ? 'Native Host Bypass'
+        : (s.isPrecision64 ? '64-Bit Double-Float Worklet' : '32-Bit Fast-Float Biquad');
+    const shortEngineLabel = isNativeBypass
+        ? 'NATIVE BYPASS'
+        : (s.isPrecision64 ? '64-BIT WORKLET' : '32-BIT FLOAT');
 
     if (!hasTrack) {
         if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'idle';
@@ -1703,7 +1822,9 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
             auditQualityBadge.className = 'signalQualityBadge highPrecision';
         }
         if (auditQualityDesc) {
-            auditQualityDesc.textContent = `No audio track loaded. Browser Web Audio decodes streams to 32-bit IEEE 754 float; DSP worklet is configured for ${s.isPrecision64 ? '64-bit double-precision' : '32-bit single-precision'} math.`;
+            auditQualityDesc.textContent = isNativeBypass
+                ? 'No audio track loaded. Native Bypass mode skips worklet DSP math & dithering when EQ/effects are flat, passing decoded Web Audio float frames directly.'
+                : `No audio track loaded. Browser Web Audio decodes streams to 32-bit IEEE 754 float; DSP worklet is configured for ${s.isPrecision64 ? '64-bit double-precision' : '32-bit single-precision'} math.`;
         }
         const dotCol = isLightSurface ? '#475569' : '#94a3b8';
         if (deckSignalDot) deckSignalDot.style.color = dotCol;
@@ -1715,7 +1836,9 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
             auditQualityBadge.className = 'signalQualityBadge bitPerfect';
         }
         if (auditQualityDesc) {
-            auditQualityDesc.textContent = `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${s.isUltrasonic || s.ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
+            auditQualityDesc.textContent = isNativeBypass
+                ? `Lossless ${format} decoded by host engine in Native Bypass mode (custom worklet float math & dither bypassed for direct path).`
+                : `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${s.isUltrasonic || s.ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
         }
         const dotCol = isLightSurface ? '#059669' : '#10b981';
         if (deckSignalDot) deckSignalDot.style.color = dotCol;
@@ -1723,11 +1846,11 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
     } else if (isLossless) {
         if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'dsp';
         if (auditQualityBadge) {
-            auditQualityBadge.textContent = `LOSSLESS ${format} → ${s.isPrecision64 ? '64-BIT' : '32-BIT'} DSP`;
+            auditQualityBadge.textContent = `LOSSLESS ${format} → ${isNativeBypass ? 'NATIVE' : (s.isPrecision64 ? '64-BIT' : '32-BIT')} DSP`;
             auditQualityBadge.className = 'signalQualityBadge dspEnhanced';
         }
         if (auditQualityDesc) {
-            auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
+            auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${isNativeBypass ? '32-bit host DSP (user EQ/FX active)' : workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
         }
         const dotCol = isLightSurface ? '#b45309' : '#fbbf24';
         if (deckSignalDot) deckSignalDot.style.color = dotCol;
@@ -1735,7 +1858,7 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
     } else {
         if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'lossy';
         if (auditQualityBadge) {
-            auditQualityBadge.textContent = `${format} LOSSY → ${dspActive ? (s.isPrecision64 ? '64-BIT DSP' : '32-BIT DSP') : '32-BIT DECODE'}`;
+            auditQualityBadge.textContent = `${format} LOSSY → ${dspActive ? (isNativeBypass ? 'NATIVE DSP' : (s.isPrecision64 ? '64-BIT DSP' : '32-BIT DSP')) : (isNativeBypass ? 'NATIVE BYPASS' : '32-BIT DECODE')}`;
             auditQualityBadge.className = 'signalQualityBadge highPrecision';
         }
         if (auditQualityDesc) {

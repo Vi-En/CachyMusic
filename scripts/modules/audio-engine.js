@@ -1133,6 +1133,16 @@ import { getRuntime } from './runtime-capabilities.js';
         return rg;
     }
 
+    function hasUserShapingDsp() {
+        const s = store.state;
+        const hasPeq = !s.isPeqBypassed && Array.isArray(s.peqGains) && s.peqGains.some(g => Math.abs(g) > 0.001);
+        const hasTone = s.isBassBoost || s.isVocalBoost || s.isTrebleBoost;
+        const hasStage = s.isAmpBoost || s.isLimiter || s.isCrossfeed || s.isAmbiophonics
+            || s.isSurroundWidener || s.isPhaseInvert || s.isMonoMix || s.isUltrasonic
+            || s.isReplayGain || (Math.abs(s.stereoBalance) > 0.005) || (s.currentVolumeValue > 1.0);
+        return hasPeq || hasTone || hasStage;
+    }
+
     function updateWorkletParams() {
         const s = store.state;
         if (!s.dspWorkletNode || !s.dspWorkletNode.port) return;
@@ -1142,10 +1152,11 @@ import { getRuntime } from './runtime-capabilities.js';
         const amp = s.isAmpBoost ? getEffectiveAmplification() : 1.0;
         const curTrack = s.allTracks[s.currentTrackIndex];
         const trackBits = (curTrack && curTrack.bitsPerSample) ? Number(curTrack.bitsPerSample) : 0;
-        const quantBits = (trackBits === 16 && sr <= 48000 && !s.isPrecision64) ? 16 : 24;
+        const usePrecision64 = (s.mathPrecision === '64') && s.isPrecision64;
+        const quantBits = (trackBits === 16 && sr <= 48000 && !usePrecision64) ? 16 : 24;
 
         s.dspWorkletNode.port.postMessage({
-            precision64: s.isPrecision64,
+            precision64: usePrecision64,
             agpEnabled: s.isAgpEnabled,
             limiterEnabled: Boolean(s.isLimiter || s.currentVolumeValue > 1.0),
             subsonicEnabled: s.isSubsonic,
@@ -1171,29 +1182,268 @@ import { getRuntime } from './runtime-capabilities.js';
         });
     }
 
-    // Hardware Analog Gain (PipeWire / ALSA Bridge)
+    // DAC Capability & Output Device Detection (Android USB/AudioManager + PHP PipeWire/ALSA + Browser WebUSB/MediaDevices)
+    const DAC_DEVICE_REGEX = /dac|hi-?res|usb|uac|external|interface|iem|moondrop|may|aria|kato|blessing|dusk|chifi|truthear|tanchjim|simgot|kiwiears|7hz|thieaudio|fiio|topping|schiit|audioquest|chord|ifi|qudelix|shanling|hiby|ibasso|questyle|jcally|tempotec|khadas|apple|dongle|headphone|headset|earphone|earbud|airpods|buds|sony|sennheiser|bose|jbl|edifier|speaker|bluetooth|a2dp|ldac|aptx|lhdc|hdmi|displayport|line\s*out|realtek|focusrite|scarlett|audient|motu|rme|beyerdynamic/i;
+
+    function syncDacCapabilitiesUi(hasDac, dacLabel, fallbackNote = '') {
+        const s = store.state;
+        s.hasExternalDac = Boolean(hasDac);
+        s.detectedDacLabel = dacLabel || (hasDac ? 'Connected DAC / Audio Output' : 'Standard Built-in Audio');
+        if (hasDac) {
+            document.documentElement.setAttribute('data-dac', 'external');
+        } else {
+            document.documentElement.removeAttribute('data-dac');
+        }
+
+        const dacBtn = document.getElementById('dacShapedDitherBtn');
+        const dacPill = document.getElementById('settingsDacRequiredPill');
+        const dacBadge = document.getElementById('settingsDetectedDacBadge');
+        if (dacBadge) {
+            dacBadge.textContent = hasDac
+                ? `Output: ${s.detectedDacLabel} (DAC Ready)`
+                : (fallbackNote || `Output: ${s.detectedDacLabel}`);
+        }
+
+        if (dacBtn) {
+            if (hasDac) {
+                dacBtn.removeAttribute('disabled');
+                dacBtn.classList.remove('disabled');
+                dacBtn.setAttribute('title', `Active DAC/Output detected: ${s.detectedDacLabel}`);
+            } else {
+                dacBtn.setAttribute('disabled', 'true');
+                dacBtn.classList.add('disabled');
+                dacBtn.setAttribute('title', 'Requires connected USB DAC, IEM dongle, headphones, or external audio interface');
+                if (s.ditherMode === 'shaped') {
+                    s.ditherMode = 'tpdf';
+                    try {
+                        safeStorage.setItem('cachymusic_dither_mode', 'tpdf');
+                    } catch (_) {}
+                    if (typeof s.syncDitherAutoFallback === 'function') {
+                        s.syncDitherAutoFallback();
+                    } else {
+                        const ditherBtns = document.querySelectorAll('.ditherModeBtn');
+                        ditherBtns.forEach(b => {
+                            b.classList.toggle('active', b.getAttribute('data-dither') === 'tpdf');
+                        });
+                        const ditherPillEl = document.getElementById('settingsDitherPill');
+                        if (ditherPillEl) ditherPillEl.textContent = 'TPDF FLAT';
+                    }
+                }
+            }
+        }
+        if (dacPill) {
+            dacPill.textContent = hasDac ? 'DAC READY' : 'REQUIRES DAC';
+            dacPill.classList.toggle('active', hasDac);
+        }
+        if (typeof s.syncHwGainCapabilitiesUi === 'function') {
+            s.syncHwGainCapabilitiesUi();
+        }
+    }
+
+    async function checkDacCapabilities(interactiveScan = false) {
+        const s = store.state;
+        const rt = getRuntime();
+        let hasDac = false;
+        let dacLabel = '';
+        let fallbackNote = '';
+
+        try {
+            const hasAndroidBridge = typeof window !== 'undefined' && Boolean(window.AndroidBridge);
+
+            // 1. Android APK Native Bridge (USB Audio Class + AudioManager output devices, no permission needed)
+            if (hasAndroidBridge && typeof window.AndroidBridge.getAudioOutputDevicesJson === 'function') {
+                try {
+                    const raw = window.AndroidBridge.getAudioOutputDevicesJson();
+                    const parsed = JSON.parse(raw || '{}');
+                    if (parsed.hasExternalDac && parsed.activeDevice) {
+                        hasDac = true;
+                        dacLabel = parsed.activeDevice;
+                    } else if (Array.isArray(parsed.devices)) {
+                        const match = parsed.devices.find(d => d && (d.isExternalDac || DAC_DEVICE_REGEX.test(d.name || '')));
+                        if (match) {
+                            hasDac = true;
+                            dacLabel = match.name || 'Connected Android DAC / Headset';
+                        } else if (parsed.activeDevice) {
+                            dacLabel = parsed.activeDevice;
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // 2. PHP Desktop Backend (PipeWire / PulseAudio / Linux USB ALSA cards)
+            if (!hasDac && rt.hasPhpBackend) {
+                try {
+                    const res = await fetch('php/api/hardware_volume.php?action=status');
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data && data.isExternalDac && data.activeDevice) {
+                            hasDac = true;
+                            dacLabel = data.activeDevice;
+                        } else if (data && Array.isArray(data.devices)) {
+                            const match = data.devices.find(d => d && (d.isExternalDac || DAC_DEVICE_REGEX.test(d.name || '')));
+                            if (match) {
+                                hasDac = true;
+                                dacLabel = match.name || 'External Sink';
+                            } else if (data.activeDevice) {
+                                dacLabel = data.activeDevice;
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // 3. Previously Authorized WebUSB Audio Class Devices (e.g., Moondrop May USB-C IEM in Chrome PWA)
+            if (!hasDac && navigator.usb && typeof navigator.usb.getDevices === 'function') {
+                try {
+                    const usbDevs = await navigator.usb.getDevices();
+                    const audioUsb = usbDevs.find(dev => {
+                        const label = `${dev.manufacturerName || ''} ${dev.productName || ''}`.trim();
+                        const hasAudioIf = dev.configuration && Array.isArray(dev.configuration.interfaces)
+                            && dev.configuration.interfaces.some(iface => iface.alternates && iface.alternates.some(alt => alt.interfaceClass === 1));
+                        return hasAudioIf || DAC_DEVICE_REGEX.test(label);
+                    });
+                    if (audioUsb) {
+                        const mfg = (audioUsb.manufacturerName || '').trim();
+                        const prod = (audioUsb.productName || '').trim();
+                        dacLabel = (mfg && prod && !prod.toLowerCase().includes(mfg.toLowerCase())) ? `${mfg} ${prod}` : (prod || mfg || 'USB Audio DAC');
+                        hasDac = true;
+                    }
+                } catch (_) {}
+            }
+
+            // 4. Hi-Res AudioContext Clocking (> 48 kHz)
+            if (!hasDac && s.audioContext && s.audioContext.sampleRate > 48000) {
+                hasDac = true;
+                dacLabel = `${Math.round(s.audioContext.sampleRate / 1000)}kHz Hi-Res Interface`;
+            }
+
+            // 5. Web MediaDevices Output Enumeration
+            let hadRedactedLabels = false;
+            if (!hasDac && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const outputs = devices.filter(d => d.kind === 'audiooutput');
+                hadRedactedLabels = outputs.length > 0 && outputs.every(d => !d.label);
+                const dacDev = outputs.find(d => DAC_DEVICE_REGEX.test(d.label || ''));
+                if (dacDev) {
+                    hasDac = true;
+                    dacLabel = dacDev.label;
+                } else {
+                    const nonDefaultOutputs = outputs.filter(d => d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+                    if (nonDefaultOutputs.length >= 2) {
+                        const named = nonDefaultOutputs.find(d => d.label && !/^default\b/i.test(d.label));
+                        hasDac = true;
+                        dacLabel = (named && named.label) ? named.label : 'External Audio Output';
+                    }
+                }
+            }
+
+            // 6. Check Persisted Browser Output Pairing (matching present deviceIds if labels redacted)
+            if (!hasDac) {
+                const savedRaw = safeStorage.getItem('cachymusic_paired_dac');
+                if (savedRaw) {
+                    try {
+                        const saved = JSON.parse(savedRaw);
+                        if (saved && saved.label && saved.source === 'selectAudioOutput' && navigator.mediaDevices?.enumerateDevices) {
+                            const devs = await navigator.mediaDevices.enumerateDevices();
+                            if (devs.some(d => d.kind === 'audiooutput' && d.deviceId === saved.deviceId)) {
+                                hasDac = true;
+                                dacLabel = saved.label;
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            // 7. Interactive Browser Scan / Pair (when user clicks SCAN / PAIR DAC)
+            if (!hasDac && interactiveScan) {
+                if (navigator.mediaDevices && typeof navigator.mediaDevices.selectAudioOutput === 'function') {
+                    try {
+                        const picked = await navigator.mediaDevices.selectAudioOutput();
+                        if (picked && picked.label) {
+                            hasDac = true;
+                            dacLabel = picked.label;
+                            safeStorage.setItem('cachymusic_paired_dac', JSON.stringify({
+                                source: 'selectAudioOutput',
+                                deviceId: picked.deviceId,
+                                label: picked.label
+                            }));
+                        }
+                    } catch (_) {}
+                }
+                if (!hasDac && navigator.usb && typeof navigator.usb.requestDevice === 'function') {
+                    try {
+                        const usbDev = await navigator.usb.requestDevice({ filters: [{ classCode: 1 }] });
+                        if (usbDev) {
+                            const mfg = (usbDev.manufacturerName || '').trim();
+                            const prod = (usbDev.productName || '').trim();
+                            dacLabel = (mfg && prod && !prod.toLowerCase().includes(mfg.toLowerCase())) ? `${mfg} ${prod}` : (prod || mfg || 'USB-C Audio DAC');
+                            hasDac = true;
+                        }
+                    } catch (_) {}
+                }
+                if (!hasDac && hadRedactedLabels && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+                    try {
+                        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        tempStream.getTracks().forEach(t => t.stop());
+                        const refreshed = await navigator.mediaDevices.enumerateDevices();
+                        const dacDev = refreshed.find(d => d.kind === 'audiooutput' && DAC_DEVICE_REGEX.test(d.label || ''));
+                        if (dacDev) {
+                            hasDac = true;
+                            dacLabel = dacDev.label;
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            if (!hasDac && hadRedactedLabels && !dacLabel) {
+                fallbackNote = 'Output: Hidden by browser privacy — click SCAN / PAIR DAC to detect USB-C IEMs/DACs.';
+            }
+        } catch (_) {}
+
+        syncDacCapabilitiesUi(hasDac, dacLabel, fallbackNote);
+        const hasAndroidBridge = typeof window !== 'undefined' && Boolean(window.AndroidBridge && typeof window.AndroidBridge.getHardwareVolumeStatusJson === 'function');
+        if (rt.hasHardwareGain || hasAndroidBridge) {
+            await checkHardwareGainStatus();
+        }
+        return { hasDac, dacLabel };
+    }
+
+    // Hardware Analog Gain (Android AudioManager / Linux PipeWire / ALSA Bridge)
     let hwVolumeDebounceTimer = null;
     async function checkHardwareGainStatus() {
         const s = store.state;
-        if (!getRuntime().hasHardwareGain) {
+        const rt = getRuntime();
+        const hasAndroidBridge = typeof window !== 'undefined' && Boolean(window.AndroidBridge && typeof window.AndroidBridge.getHardwareVolumeStatusJson === 'function');
+        if (!rt.hasHardwareGain && !hasAndroidBridge) {
             markHwGainUnavailable();
             return;
         }
         try {
-            const res = await fetch('php/api/hardware_volume.php?action=status');
-            if (!res.ok) {
-                markHwGainUnavailable();
-                return;
+            let data = null;
+            if (hasAndroidBridge) {
+                data = JSON.parse(window.AndroidBridge.getHardwareVolumeStatusJson() || '{}');
+            } else if (rt.hasPhpBackend) {
+                const res = await fetch('php/api/hardware_volume.php?action=status');
+                if (!res.ok) {
+                    markHwGainUnavailable();
+                    return;
+                }
+                data = await res.json();
             }
-            const data = await res.json();
+
             if (data && data.success) {
                 s.hwVolumeBackend = data.backend || 'none';
+                s.hwGainAvailable = Boolean(data.available);
+                if (data.isExternalDac && data.activeDevice && !s.hasExternalDac) {
+                    syncDacCapabilitiesUi(true, data.activeDevice);
+                }
                 const pill = document.getElementById('settingsHardwareGainPill');
                 const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
                 const hwGainDot = document.getElementById('settingsHwGainDot');
                 const hwGainText = document.getElementById('settingsHwGainText');
+                const devTag = data.activeDevice ? `${s.hwVolumeBackend.toUpperCase()} • ${data.activeDevice}` : s.hwVolumeBackend.toUpperCase();
                 if (pill) {
-                    pill.textContent = data.available ? `READY (${s.hwVolumeBackend.toUpperCase()})` : 'UNAVAILABLE';
+                    pill.textContent = data.available ? `READY (${devTag})` : 'UNAVAILABLE';
                 }
                 if (!data.available) {
                     s.isHardwareGain = false;
@@ -1211,9 +1461,13 @@ import { getRuntime } from './runtime-capabilities.js';
                         hwGainBtn.disabled = false;
                         hwGainBtn.classList.remove('disabled');
                         hwGainBtn.removeAttribute('aria-disabled');
-                        hwGainBtn.title = 'Direct PipeWire/ALSA physical volume bridge.';
+                        hwGainBtn.title = hasAndroidBridge
+                            ? 'Direct Android AudioManager / USB DAC physical stream volume control.'
+                            : 'Direct PipeWire/ALSA physical volume bridge.';
                     }
-                    if (hwGainText && s.isHardwareGain) {
+                    if (typeof s.syncHwGainDraftUi === 'function') {
+                        s.syncHwGainDraftUi();
+                    } else if (hwGainText && s.isHardwareGain) {
                         hwGainText.textContent = `HARDWARE GAIN: ON (${s.hwVolumeBackend.toUpperCase()})`;
                     }
                 }
@@ -1240,32 +1494,52 @@ import { getRuntime } from './runtime-capabilities.js';
     }
 
     function markHwGainUnavailable() {
-        store.state.isHardwareGain = false;
+        const s = store.state;
+        s.isHardwareGain = false;
+        s.hwGainAvailable = false;
         const pill = document.getElementById('settingsHardwareGainPill');
         const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
         const hwGainDot = document.getElementById('settingsHwGainDot');
         const hwGainText = document.getElementById('settingsHwGainText');
-        if (pill) pill.textContent = 'UNAVAILABLE';
+        if (pill) {
+            pill.textContent = s.hasExternalDac
+                ? `DAC DETECTED (${s.detectedDacLabel}) • OS VOL ONLY`
+                : 'UNAVAILABLE';
+        }
         if (hwGainBtn) {
             hwGainBtn.disabled = true;
             hwGainBtn.classList.add('disabled');
             hwGainBtn.classList.remove('active');
             hwGainBtn.setAttribute('aria-disabled', 'true');
-            hwGainBtn.title = 'Hardware Analog Gain is unavailable on this platform or output interface.';
+            hwGainBtn.title = s.hasExternalDac
+                ? 'Browser sandbox blocks direct USB DAC hardware volume registers; use system volume or CachyMusic Android APK / Linux PHP Desktop.'
+                : 'Hardware Analog Gain is unavailable on this platform or output interface.';
         }
         if (hwGainDot) hwGainDot.classList.remove('active');
-        if (hwGainText) hwGainText.textContent = 'HARDWARE GAIN: UNAVAILABLE';
+        if (hwGainText) {
+            hwGainText.textContent = s.hasExternalDac ? 'HARDWARE GAIN: BROWSER OS-LOCKED' : 'HARDWARE GAIN: UNAVAILABLE';
+        }
     }
 
     function dispatchHardwareVolume(vol) {
-        if (!store.state.isHardwareGain || !getRuntime().hasHardwareGain) return;
+        const rt = getRuntime();
+        const hasAndroidBridge = typeof window !== 'undefined' && Boolean(window.AndroidBridge && typeof window.AndroidBridge.setHardwareStreamVolume === 'function');
+        if (!store.state.isHardwareGain || (!rt.hasHardwareGain && !hasAndroidBridge)) return;
         if (hwVolumeDebounceTimer) clearTimeout(hwVolumeDebounceTimer);
         hwVolumeDebounceTimer = setTimeout(() => {
-            fetch('php/api/hardware_volume.php?action=set_volume', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ volume: vol })
-            }).catch(() => {});
+            if (hasAndroidBridge) {
+                try {
+                    window.AndroidBridge.setHardwareStreamVolume(Math.max(0, Math.min(1.0, vol)));
+                } catch (_) {}
+                return;
+            }
+            if (rt.hasPhpBackend) {
+                fetch('php/api/hardware_volume.php?action=set_volume', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ volume: vol })
+                }).catch(() => {});
+            }
         }, 35);
     }
 
@@ -1273,77 +1547,138 @@ import { getRuntime } from './runtime-capabilities.js';
     function setupNeutronSettingsControls() {
         const s = store.state;
         const applyAudioBtn = document.getElementById('settingsApplyAudioBtn');
+        const discardAudioBtn = document.getElementById('settingsDiscardAudioBtn');
         const applyAudioStatus = document.getElementById('settingsApplyAudioStatus');
-        let pendingAudioChanges = 0;
 
-        function markAudioSettingsPending(name, val) {
-            pendingAudioChanges++;
+        function snapshotCommittedAudioState() {
+            return {
+                mathPrecision: s.mathPrecision || (s.isPrecision64 ? '64' : '32'),
+                isHardwareGain: Boolean(s.isHardwareGain),
+                isUltrasonic: Boolean(s.isUltrasonic),
+                ultrasonicCutoff: parseInt(s.ultrasonicCutoff, 10) || 32000,
+                ditherMode: s.ditherMode || 'tpdf',
+                isAmbiophonics: Boolean(s.isAmbiophonics),
+                bufferLatencyTarget: s.bufferLatencyTarget || 'playback',
+                debugModeActive: Boolean(s.debugModeActive)
+            };
+        }
+
+        let draft = snapshotCommittedAudioState();
+
+        function getPendingDiffList() {
+            const committed = snapshotCommittedAudioState();
+            const diffs = [];
+            if (draft.mathPrecision !== committed.mathPrecision) {
+                diffs.push(`Precision: ${draft.mathPrecision === 'native' ? 'Native' : (draft.mathPrecision === '64' ? '64-Bit' : '32-Bit')}`);
+            }
+            if (draft.isHardwareGain !== committed.isHardwareGain) {
+                diffs.push(`Hardware Gain: ${draft.isHardwareGain ? 'ON' : 'OFF'}`);
+            }
+            if (draft.isUltrasonic !== committed.isUltrasonic || draft.ultrasonicCutoff !== committed.ultrasonicCutoff) {
+                diffs.push(`Ultrasonic: ${draft.isUltrasonic ? Math.round(draft.ultrasonicCutoff / 1000) + 'kHz' : 'OFF'}`);
+            }
+            if (draft.ditherMode !== committed.ditherMode) {
+                diffs.push(`Dither: ${draft.ditherMode.toUpperCase()}`);
+            }
+            if (draft.isAmbiophonics !== committed.isAmbiophonics) {
+                diffs.push(`Ambiophonics: ${draft.isAmbiophonics ? 'ON' : 'OFF'}`);
+            }
+            if (draft.bufferLatencyTarget !== committed.bufferLatencyTarget) {
+                diffs.push(`Buffer: ${draft.bufferLatencyTarget === 'interactive' ? 'Low-Latency' : 'Playback'}`);
+            }
+            if (draft.debugModeActive !== committed.debugModeActive) {
+                diffs.push(`Debug HUD: ${draft.debugModeActive ? 'ON' : 'OFF'}`);
+            }
+            return diffs;
+        }
+
+        function refreshPendingAudioBanner() {
+            const diffs = getPendingDiffList();
+            const count = diffs.length;
             if (applyAudioBtn) {
-                applyAudioBtn.textContent = `APPLY AUDIO SETTINGS (${pendingAudioChanges} PENDING)`;
-                applyAudioBtn.style.boxShadow = '0 0 16px var(--accent-glow, rgba(0,240,255,0.4))';
+                applyAudioBtn.textContent = count > 0
+                    ? `APPLY AUDIO SETTINGS (${count} PENDING)`
+                    : 'APPLY AUDIO SETTINGS';
+                applyAudioBtn.style.boxShadow = count > 0
+                    ? '0 0 16px var(--accent-glow, rgba(0,240,255,0.4))'
+                    : '';
+            }
+            if (discardAudioBtn) {
+                discardAudioBtn.style.display = count > 0 ? '' : 'none';
             }
             if (applyAudioStatus) {
-                applyAudioStatus.textContent = `Pending: ${name} (${val}). Click Apply to activate.`;
-                applyAudioStatus.style.color = 'var(--accent-primary, #38bdf8)';
+                if (count > 0) {
+                    applyAudioStatus.textContent = `Staged (not active yet): ${diffs.join(' • ')}. Click Apply to activate.`;
+                    applyAudioStatus.style.color = 'var(--accent-primary, #38bdf8)';
+                } else {
+                    applyAudioStatus.textContent = 'All audio settings synced & active.';
+                    applyAudioStatus.style.color = '';
+                }
             }
         }
 
-        // 1. Math Precision Architecture
+        // 1. Math Precision Architecture (Native Bypass | 64-Bit Studio | 32-Bit Fast)
         const precisionBtns = document.querySelectorAll('.enginePrecisionBtn');
         const precisionPill = document.getElementById('settingsEnginePrecisionPill');
         const updatePrecisionUi = () => {
+            const cur = draft.mathPrecision;
             precisionBtns.forEach(b => {
-                const is64 = b.getAttribute('data-precision') === '64';
-                b.classList.toggle('active', is64 === s.isPrecision64);
+                b.classList.toggle('active', b.getAttribute('data-precision') === cur);
             });
             if (precisionPill) {
-                precisionPill.textContent = s.isPrecision64 ? '64-BIT DOUBLE FLOAT' : '32-BIT FAST FLOAT';
+                precisionPill.textContent = cur === 'native'
+                    ? 'NATIVE (SOURCE BYPASS)'
+                    : (cur === '64' ? '64-BIT DOUBLE FLOAT' : '32-BIT FAST FLOAT');
             }
         };
         updatePrecisionUi();
         precisionBtns.forEach(b => {
             b.addEventListener('click', () => {
-                s.isPrecision64 = b.getAttribute('data-precision') === '64';
-                safeStorage.setItem('cachymusic_precision_64', s.isPrecision64 ? 'true' : 'false');
-                safeStorage.setItem('cachymusic_engine_precision', s.isPrecision64 ? '64' : '32');
+                const nextMode = b.getAttribute('data-precision') || '64';
+                draft.mathPrecision = (nextMode === 'native' || nextMode === '32' || nextMode === '64') ? nextMode : '64';
                 updatePrecisionUi();
-                updateWorkletParams();
-                store.emit('ui:sync-signal-path');
-                markAudioSettingsPending('Math Precision', s.isPrecision64 ? '64-Bit Studio Float' : '32-Bit Fast Float');
-                showToast(`Precision Engine: ${s.isPrecision64 ? '64-Bit Studio Float' : '32-Bit Fast Float'}`);
+                refreshPendingAudioBanner();
             });
         });
 
-        // 2. Hardware Analog Gain (PipeWire / ALSA)
+        // 2. Hardware Analog Gain (Android AudioManager / Linux PipeWire / ALSA)
         const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
         const hwGainDot = document.getElementById('settingsHwGainDot');
         const hwGainText = document.getElementById('settingsHwGainText');
         const updateHwGainUi = () => {
-            if (hwGainBtn) hwGainBtn.classList.toggle('active', s.isHardwareGain);
-            if (hwGainDot) hwGainDot.classList.toggle('active', s.isHardwareGain);
-            if (hwGainText) {
-                hwGainText.textContent = s.isHardwareGain ? `HARDWARE GAIN: ON (${String(s.hwVolumeBackend || 'NONE').toUpperCase()})` : 'HARDWARE GAIN: OFF';
+            if (!s.hwGainAvailable) {
+                if (hwGainBtn) hwGainBtn.classList.remove('active');
+                if (hwGainDot) hwGainDot.classList.remove('active');
+                if (hwGainText) {
+                    hwGainText.textContent = s.hasExternalDac ? 'HARDWARE GAIN: BROWSER OS-LOCKED' : 'HARDWARE GAIN: UNAVAILABLE';
+                }
+                return;
             }
+            if (hwGainBtn) hwGainBtn.classList.toggle('active', draft.isHardwareGain);
+            if (hwGainDot) hwGainDot.classList.toggle('active', draft.isHardwareGain);
+            if (hwGainText) {
+                hwGainText.textContent = draft.isHardwareGain
+                    ? `HARDWARE GAIN: ON (${String(s.hwVolumeBackend || 'READY').toUpperCase()})`
+                    : 'HARDWARE GAIN: OFF';
+            }
+        };
+        s.syncHwGainDraftUi = updateHwGainUi;
+        s.syncHwGainCapabilitiesUi = () => {
+            const pill = document.getElementById('settingsHardwareGainPill');
+            if (!s.hwGainAvailable && pill) {
+                pill.textContent = s.hasExternalDac
+                    ? `DAC DETECTED (${s.detectedDacLabel}) • OS VOL ONLY`
+                    : 'UNAVAILABLE';
+            }
+            updateHwGainUi();
         };
         updateHwGainUi();
         if (hwGainBtn) {
-            hwGainBtn.addEventListener('click', async () => {
-                if (hwGainBtn.disabled || hwGainBtn.classList.contains('disabled')) return;
-                s.isHardwareGain = !s.isHardwareGain;
-                safeStorage.setItem('cachymusic_hardware_gain', s.isHardwareGain ? 'true' : 'false');
-                safeStorage.setItem('cachymusic_hw_gain', s.isHardwareGain ? 'true' : 'false');
+            hwGainBtn.addEventListener('click', () => {
+                if (hwGainBtn.disabled || hwGainBtn.classList.contains('disabled') || !s.hwGainAvailable) return;
+                draft.isHardwareGain = !draft.isHardwareGain;
                 updateHwGainUi();
-                if (s.isHardwareGain) {
-                    await checkHardwareGainStatus();
-                    updateHwGainUi();
-                    showToast('Hardware Analog Gain Enabled (0 dBFS Bit-Perfect DAC Stream)');
-                } else {
-                    if (s.audio) {
-                        s.audio.volume = Math.min(1.0, s.currentVolumeValue);
-                    }
-                    showToast('Hardware Analog Gain Disabled (Digital Volume)');
-                }
-                store.emit('ui:sync-signal-path');
+                refreshPendingAudioBanner();
             });
         }
 
@@ -1354,40 +1689,31 @@ import { getRuntime } from './runtime-capabilities.js';
         const ultrasonicSelect = document.getElementById('settingsUltrasonicCutoffSelect');
         const ultrasonicPill = document.getElementById('settingsUltrasonicPill');
         const updateUltrasonicUi = () => {
-            if (ultrasonicBtn) ultrasonicBtn.classList.toggle('active', s.isUltrasonic);
-            if (ultrasonicDot) ultrasonicDot.classList.toggle('active', s.isUltrasonic);
+            if (ultrasonicBtn) ultrasonicBtn.classList.toggle('active', draft.isUltrasonic);
+            if (ultrasonicDot) ultrasonicDot.classList.toggle('active', draft.isUltrasonic);
             if (ultrasonicText) {
-                ultrasonicText.textContent = s.isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
+                ultrasonicText.textContent = draft.isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
             }
             if (ultrasonicPill) {
-                ultrasonicPill.textContent = s.isUltrasonic ? `ACTIVE (${Math.round(s.ultrasonicCutoff / 1000)} kHz)` : 'BYPASS';
+                ultrasonicPill.textContent = draft.isUltrasonic ? `ACTIVE (${Math.round(draft.ultrasonicCutoff / 1000)} kHz)` : 'BYPASS';
             }
             if (ultrasonicSelect) {
-                ultrasonicSelect.value = s.ultrasonicCutoff.toString();
+                ultrasonicSelect.value = draft.ultrasonicCutoff.toString();
             }
         };
         updateUltrasonicUi();
         if (ultrasonicBtn) {
             ultrasonicBtn.addEventListener('click', () => {
-                s.isUltrasonic = !s.isUltrasonic;
-                safeStorage.setItem('cachymusic_ultrasonic', s.isUltrasonic ? 'true' : 'false');
+                draft.isUltrasonic = !draft.isUltrasonic;
                 updateUltrasonicUi();
-                updateWorkletParams();
-                updateAudioRouting();
-                store.emit('ui:sync-signal-path');
-                markAudioSettingsPending('Ultrasonic Filter', s.isUltrasonic ? 'Active (' + Math.round(s.ultrasonicCutoff / 1000) + ' kHz)' : 'Bypassed');
-                showToast(`Ultrasonic IMD Filter: ${s.isUltrasonic ? 'Active (' + Math.round(s.ultrasonicCutoff / 1000) + ' kHz)' : 'Bypassed'}`);
+                refreshPendingAudioBanner();
             });
         }
         if (ultrasonicSelect) {
             ultrasonicSelect.addEventListener('change', () => {
-                s.ultrasonicCutoff = parseInt(ultrasonicSelect.value, 10) || 32000;
-                safeStorage.setItem('cachymusic_ultrasonic_cutoff', s.ultrasonicCutoff.toString());
+                draft.ultrasonicCutoff = parseInt(ultrasonicSelect.value, 10) || 32000;
                 updateUltrasonicUi();
-                updateWorkletParams();
-                store.emit('ui:sync-signal-path');
-                markAudioSettingsPending('Ultrasonic Cutoff', `${Math.round(s.ultrasonicCutoff / 1000)} kHz`);
-                showToast(`Ultrasonic Cutoff: ${Math.round(s.ultrasonicCutoff / 1000)} kHz`);
+                refreshPendingAudioBanner();
             });
         }
 
@@ -1397,25 +1723,55 @@ import { getRuntime } from './runtime-capabilities.js';
         const updateDitherUi = () => {
             ditherBtns.forEach(b => {
                 const mode = b.getAttribute('data-dither');
-                b.classList.toggle('active', mode === s.ditherMode);
+                b.classList.toggle('active', mode === draft.ditherMode);
             });
             if (ditherPill) {
-                ditherPill.textContent = s.ditherMode === 'shaped' ? 'SHAPED (>18 kHz)' : (s.ditherMode === 'tpdf' ? 'TPDF FLAT' : 'OFF (TRUNCATE)');
+                ditherPill.textContent = draft.ditherMode === 'shaped'
+                    ? 'SHAPED (>18 kHz)'
+                    : (draft.ditherMode === 'tpdf' ? 'TPDF FLAT' : 'OFF (TRUNCATE)');
             }
         };
         updateDitherUi();
+        s.syncDitherAutoFallback = () => {
+            if (draft.ditherMode === 'shaped' && !s.hasExternalDac) {
+                draft.ditherMode = 'tpdf';
+            }
+            updateDitherUi();
+            refreshPendingAudioBanner();
+        };
         ditherBtns.forEach(b => {
             b.addEventListener('click', () => {
-                s.ditherMode = b.getAttribute('data-dither') || 'shaped';
-                safeStorage.setItem('cachymusic_dither_mode', s.ditherMode);
+                if (b.disabled || b.classList.contains('disabled')) return;
+                draft.ditherMode = b.getAttribute('data-dither') || 'tpdf';
                 updateDitherUi();
-                updateWorkletParams();
-                updateAudioRouting();
-                store.emit('ui:sync-signal-path');
-                markAudioSettingsPending('Dither Mode', s.ditherMode === 'shaped' ? 'Psychoacoustic Shaped' : (s.ditherMode === 'tpdf' ? 'TPDF Flat' : 'Off'));
-                showToast(`Dither: ${s.ditherMode === 'shaped' ? 'Psychoacoustic Shaped' : (s.ditherMode === 'tpdf' ? 'TPDF Flat' : 'Off')}`);
+        s.syncDitherAutoFallback = () => {
+            if (draft.ditherMode === 'shaped' && !s.hasExternalDac) {
+                draft.ditherMode = 'tpdf';
+            }
+            updateDitherUi();
+            refreshPendingAudioBanner();
+        };
+                refreshPendingAudioBanner();
             });
         });
+
+        const scanDacBtn = document.getElementById('settingsScanDacBtn');
+        if (scanDacBtn) {
+            scanDacBtn.addEventListener('click', async () => {
+                const origText = scanDacBtn.textContent;
+                scanDacBtn.textContent = 'SCANNING...';
+                try {
+                    const res = await checkDacCapabilities(true);
+                    if (res.hasDac) {
+                        showCachyToast('DAC / Output Ready', `Detected: ${res.dacLabel}. Psychoacoustic Shaping unlocked.`, 'success');
+                    } else {
+                        showCachyToast('No External DAC Found', 'Standard built-in audio output reported by browser/OS.', 'info');
+                    }
+                } finally {
+                    scanDacBtn.textContent = origText;
+                }
+            });
+        }
 
         // 5. Speaker Ambiophonics R.A.C.E.
         const ambiBtn = document.getElementById('settingsAmbiToggleBtn');
@@ -1423,26 +1779,21 @@ import { getRuntime } from './runtime-capabilities.js';
         const ambiText = document.getElementById('settingsAmbiText');
         const ambiPill = document.getElementById('settingsAmbiPill');
         const updateAmbiUi = () => {
-            if (ambiBtn) ambiBtn.classList.toggle('active', s.isAmbiophonics);
-            if (ambiDot) ambiDot.classList.toggle('active', s.isAmbiophonics);
+            if (ambiBtn) ambiBtn.classList.toggle('active', draft.isAmbiophonics);
+            if (ambiDot) ambiDot.classList.toggle('active', draft.isAmbiophonics);
             if (ambiText) {
-                ambiText.textContent = s.isAmbiophonics ? 'AMBIOPHONICS: ON (R.A.C.E.)' : 'AMBIOPHONICS: OFF (SPEAKERS ONLY)';
+                ambiText.textContent = draft.isAmbiophonics ? 'AMBIOPHONICS: ON (R.A.C.E.)' : 'AMBIOPHONICS: OFF (SPEAKERS ONLY)';
             }
             if (ambiPill) {
-                ambiPill.textContent = s.isAmbiophonics ? 'ACTIVE (R.A.C.E.)' : 'BYPASS';
+                ambiPill.textContent = draft.isAmbiophonics ? 'ACTIVE (R.A.C.E.)' : 'BYPASS';
             }
         };
         updateAmbiUi();
         if (ambiBtn) {
             ambiBtn.addEventListener('click', () => {
-                s.isAmbiophonics = !s.isAmbiophonics;
-                safeStorage.setItem('cachymusic_ambiophonics', s.isAmbiophonics ? 'true' : 'false');
+                draft.isAmbiophonics = !draft.isAmbiophonics;
                 updateAmbiUi();
-                updateWorkletParams();
-                updateAudioRouting();
-                store.emit('ui:sync-signal-path');
-                markAudioSettingsPending('Speaker Ambiophonics', s.isAmbiophonics ? 'Enabled (Speakers Only)' : 'Disabled');
-                showToast(`Speaker Ambiophonics: ${s.isAmbiophonics ? 'Enabled (Speakers Only)' : 'Disabled'}`);
+                refreshPendingAudioBanner();
             });
         }
 
@@ -1452,42 +1803,108 @@ import { getRuntime } from './runtime-capabilities.js';
         const updateBufferUi = () => {
             bufferBtns.forEach(b => {
                 const latency = b.getAttribute('data-latency');
-                b.classList.toggle('active', latency === s.bufferLatencyTarget);
+                b.classList.toggle('active', latency === draft.bufferLatencyTarget);
             });
             if (bufferPill) {
-                bufferPill.textContent = s.bufferLatencyTarget === 'interactive' ? 'STUDIO LOW-LATENCY (~15ms)' : 'PLAYBACK (~100ms)';
+                bufferPill.textContent = draft.bufferLatencyTarget === 'interactive'
+                    ? 'STUDIO LOW-LATENCY (~15ms)'
+                    : 'PLAYBACK (~100ms)';
             }
         };
         updateBufferUi();
         bufferBtns.forEach(b => {
             b.addEventListener('click', () => {
-                const newLatency = b.getAttribute('data-latency') || 'playback';
-                if (newLatency === s.bufferLatencyTarget) return;
-                s.bufferLatencyTarget = newLatency;
-                safeStorage.setItem('cachymusic_buffer_latency', s.bufferLatencyTarget);
+                draft.bufferLatencyTarget = b.getAttribute('data-latency') || 'playback';
                 updateBufferUi();
-                updateWorkletParams();
-                store.emit('ui:sync-signal-path');
-                markAudioSettingsPending('Buffer Latency', newLatency === 'interactive' ? 'Low Latency (~15ms)' : 'Stable (~100ms)');
-                showToast(`Audio Buffer Calibrated: ${newLatency === 'interactive' ? 'Low Latency (~15ms)' : 'Stable Playback (~100ms)'}`);
+                refreshPendingAudioBanner();
             });
         });
 
-        // 7. Settings Confirmation & Apply Action Handler
+        // 7. Settings Confirmation & Apply / Discard Action Handlers
+        const syncAllSettingsDraftUi = () => {
+            updatePrecisionUi();
+            updateHwGainUi();
+            updateUltrasonicUi();
+            updateDitherUi();
+        s.syncDitherAutoFallback = () => {
+            if (draft.ditherMode === 'shaped' && !s.hasExternalDac) {
+                draft.ditherMode = 'tpdf';
+            }
+            updateDitherUi();
+            refreshPendingAudioBanner();
+        };
+            updateAmbiUi();
+            updateBufferUi();
+            updateDebugDraftUi();
+            refreshPendingAudioBanner();
+        };
+
+        if (discardAudioBtn) {
+            discardAudioBtn.addEventListener('click', () => {
+                draft = snapshotCommittedAudioState();
+                syncAllSettingsDraftUi();
+                showToast('Pending audio settings discarded.');
+            });
+        }
+
         if (applyAudioBtn) {
-            applyAudioBtn.addEventListener('click', () => {
-                pendingAudioChanges = 0;
-                applyAudioBtn.textContent = 'APPLY AUDIO SETTINGS';
-                applyAudioBtn.style.boxShadow = '';
+            applyAudioBtn.addEventListener('click', async () => {
+                const prevHwGain = s.isHardwareGain;
+                const prevLatency = s.bufferLatencyTarget;
+                const prevDebug = s.debugModeActive;
+
+                s.mathPrecision = draft.mathPrecision;
+                s.isPrecision64 = (s.mathPrecision === '64');
+                s.isHardwareGain = Boolean(draft.isHardwareGain && s.hwGainAvailable);
+                s.isUltrasonic = Boolean(draft.isUltrasonic);
+                s.ultrasonicCutoff = parseInt(draft.ultrasonicCutoff, 10) || 32000;
+                s.ditherMode = (draft.ditherMode === 'shaped' && !s.hasExternalDac) ? 'tpdf' : (draft.ditherMode || 'tpdf');
+                s.isAmbiophonics = Boolean(draft.isAmbiophonics);
+                s.bufferLatencyTarget = draft.bufferLatencyTarget || 'playback';
+
+                try {
+                    safeStorage.setItem('cachymusic_engine_precision', s.mathPrecision);
+                    safeStorage.setItem('cachymusic_precision_64', s.isPrecision64 ? 'true' : 'false');
+                    safeStorage.setItem('cachymusic_hardware_gain', s.isHardwareGain ? 'true' : 'false');
+                    safeStorage.setItem('cachymusic_hw_gain', s.isHardwareGain ? 'true' : 'false');
+                    safeStorage.setItem('cachymusic_ultrasonic', s.isUltrasonic ? 'true' : 'false');
+                    safeStorage.setItem('cachymusic_ultrasonic_cutoff', s.ultrasonicCutoff.toString());
+                    safeStorage.setItem('cachymusic_dither_mode', s.ditherMode);
+                    safeStorage.setItem('cachymusic_ambiophonics', s.isAmbiophonics ? 'true' : 'false');
+                    safeStorage.setItem('cachymusic_buffer_latency', s.bufferLatencyTarget);
+                } catch (_) {}
+
+                if (draft.debugModeActive !== prevDebug) {
+                    setDebugMode(draft.debugModeActive);
+                }
+
+                if (s.isHardwareGain !== prevHwGain) {
+                    if (s.isHardwareGain) {
+                        await checkHardwareGainStatus();
+                    } else if (s.audio) {
+                        s.audio.volume = Math.min(1.0, s.currentVolumeValue);
+                    }
+                }
+
+                if (s.bufferLatencyTarget !== prevLatency && s.audioContext && s.audioContext.state !== 'closed'
+                    && !s.isSoftwareDecoding && (!s.audio || s.audio.paused)) {
+                    const curTrack = s.allTracks[s.currentTrackIndex];
+                    const sr = (curTrack && curTrack.sampleRate) ? getValidSampleRate(curTrack.sampleRate) : 44100;
+                    await ensureAudioEngineForSampleRate(sr, true);
+                }
+
+                draft = snapshotCommittedAudioState();
+                syncAllSettingsDraftUi();
+                updateWorkletParams();
+                updateAudioRouting();
+                store.emit('ui:sync-signal-path');
+
                 if (applyAudioStatus) {
                     applyAudioStatus.textContent = 'All audio settings applied successfully & active.';
                     applyAudioStatus.style.color = '#10b981';
                 }
-                updateWorkletParams();
-                updateAudioRouting();
-                store.emit('ui:sync-signal-path');
                 showCachyToast('Settings Applied', 'Audio & DSP configuration applied successfully.', 'success');
-                logAudioPlaybackEvent('info', 'User confirmed and applied audio DSP settings.');
+                logAudioPlaybackEvent('info', `Applied audio settings (Precision=${s.mathPrecision}, Dither=${s.ditherMode}, Ultrasonic=${s.isUltrasonic ? s.ultrasonicCutoff + 'Hz' : 'OFF'}, Latency=${s.bufferLatencyTarget}).`);
             });
         }
 
@@ -1556,19 +1973,30 @@ import { getRuntime } from './runtime-capabilities.js';
             });
         }
 
-        // 9. On-Screen Audio Diagnostics & Debug Mode Controls
+        // 9. On-Screen Audio Diagnostics & Debug Mode Controls (staged until Apply)
         const debugEnableBtn = document.getElementById('debugModeEnableBtn');
         const debugDisableBtn = document.getElementById('debugModeDisableBtn');
+        const debugPill = document.getElementById('settingsDebugPill');
+        function updateDebugDraftUi() {
+            if (debugPill) {
+                debugPill.textContent = draft.debugModeActive ? 'ENABLED (HUD)' : 'DISABLED';
+                debugPill.className = `settingsEnginePill ${draft.debugModeActive ? 'active' : ''}`;
+            }
+            if (debugEnableBtn) debugEnableBtn.classList.toggle('active', draft.debugModeActive);
+            if (debugDisableBtn) debugDisableBtn.classList.toggle('active', !draft.debugModeActive);
+        }
         if (debugEnableBtn) {
             debugEnableBtn.addEventListener('click', () => {
-                setDebugMode(true);
-                markAudioSettingsPending('Debug Mode', 'Enabled');
+                draft.debugModeActive = true;
+                updateDebugDraftUi();
+                refreshPendingAudioBanner();
             });
         }
         if (debugDisableBtn) {
             debugDisableBtn.addEventListener('click', () => {
-                setDebugMode(false);
-                markAudioSettingsPending('Debug Mode', 'Disabled');
+                draft.debugModeActive = false;
+                updateDebugDraftUi();
+                refreshPendingAudioBanner();
             });
         }
 
@@ -1599,7 +2027,12 @@ import { getRuntime } from './runtime-capabilities.js';
             });
         }
         if (hudCloseBtn) {
-            hudCloseBtn.addEventListener('click', () => setDebugMode(false));
+            hudCloseBtn.addEventListener('click', () => {
+                setDebugMode(false);
+                draft.debugModeActive = false;
+                updateDebugDraftUi();
+                refreshPendingAudioBanner();
+            });
         }
 
         // Make Diagnostics HUD Draggable by Header
@@ -1659,61 +2092,14 @@ import { getRuntime } from './runtime-capabilities.js';
             hudHeaderEl.addEventListener('pointercancel', stopDrag);
         }
 
-        // DAC Capability Detection & Feature Gating
-        async function checkDacCapabilities() {
-            let hasDac = false;
-            let dacLabel = '';
-            try {
-                if (s.audioContext && s.audioContext.sampleRate > 48000) {
-                    hasDac = true;
-                    dacLabel = `${Math.round(s.audioContext.sampleRate / 1000)}kHz Hi-Res Interface`;
-                }
-                if (!hasDac && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const dacDev = devices.find(d =>
-                        d.kind === 'audiooutput' &&
-                        /dac|hi-?res|headphone|usb|external|interface|fiio|topping|schiit|audioquest|chord/i.test(d.label)
-                    );
-                    if (dacDev) {
-                        hasDac = true;
-                        dacLabel = dacDev.label || 'Connected DAC';
-                    }
-                }
-            } catch (_) {}
-
-            const dacBtn = document.getElementById('dacShapedDitherBtn');
-            const dacPill = document.getElementById('settingsDacRequiredPill');
-            if (dacBtn) {
-                if (hasDac) {
-                    dacBtn.removeAttribute('disabled');
-                    dacBtn.classList.remove('disabled');
-                    dacBtn.setAttribute('title', `Active DAC detected: ${dacLabel}`);
-                } else {
-                    dacBtn.setAttribute('disabled', 'true');
-                    dacBtn.classList.add('disabled');
-                    dacBtn.setAttribute('title', 'Requires connected USB DAC or high-res audio interface (96kHz+)');
-                    if (s.ditherMode === 'shaped') {
-                        s.ditherMode = 'tpdf';
-                        try {
-                            safeStorage.setItem('cachymusic_dither_mode', 'tpdf');
-                        } catch (_) {}
-                        const ditherBtns = document.querySelectorAll('.ditherModeBtn');
-                        ditherBtns.forEach(b => {
-                            b.classList.toggle('active', b.getAttribute('data-dither') === 'tpdf');
-                        });
-                        const ditherPillEl = document.getElementById('settingsDitherPill');
-                        if (ditherPillEl) ditherPillEl.textContent = 'TPDF FLAT';
-                    }
-                }
-            }
-            if (dacPill) {
-                dacPill.textContent = hasDac ? 'DAC READY' : 'REQUIRES DAC';
-                dacPill.classList.toggle('active', hasDac);
-            }
-        }
-        checkDacCapabilities();
+        // Initial DAC & Hardware Output Capability Scan + Hotplug Listener
+        checkDacCapabilities(false);
         if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-            navigator.mediaDevices.addEventListener('devicechange', checkDacCapabilities);
+            navigator.mediaDevices.addEventListener('devicechange', () => checkDacCapabilities(false));
+        }
+        if (navigator.usb && navigator.usb.addEventListener) {
+            navigator.usb.addEventListener('connect', () => checkDacCapabilities(false));
+            navigator.usb.addEventListener('disconnect', () => checkDacCapabilities(false));
         }
 
         // Ensure sleep timer cancel button is hidden initially if no timer is active
@@ -2027,6 +2413,13 @@ import { getRuntime } from './runtime-capabilities.js';
                 activeSource.connect(s.analyser);
             }
 
+            // Native Host Bypass mode: skip worklet DSP math & re-dither when user EQ/FX are flat
+            if (s.mathPrecision === 'native' && !hasUserShapingDsp()) {
+                activeSource.connect(s.audioContext.destination);
+                store.emit('ui:sync-dac-status');
+                return;
+            }
+
             // Primary Studio 64-Bit Single-Path Worklet Graph:
             // All filtering, EQ, crossfeed, R.A.C.E., M/S, AGP, soft-clip & final dither run strictly inside dspWorkletNode
             if (s.dspWorkletNode) {
@@ -2040,7 +2433,7 @@ import { getRuntime } from './runtime-capabilities.js';
             // Fallback Web Audio Biquad Graph (only when AudioWorklet is unavailable)
             updatePreAmpGain(s.audioContext.currentTime);
             let rootNode = activeSource;
-            if (s.isSubsonic && s.subsonicFilter) {
+            if (s.isSubsonic && s.subsonicFilter && s.mathPrecision !== 'native') {
                 activeSource.connect(s.subsonicFilter);
                 rootNode = s.subsonicFilter;
             }
@@ -2053,7 +2446,7 @@ import { getRuntime } from './runtime-capabilities.js';
                 rootNode = s.preAmpGainNode;
             }
 
-            if (!hasActiveDsp()) {
+            if ((s.mathPrecision === 'native' && !hasUserShapingDsp()) || !hasActiveDsp()) {
                 rootNode.connect(s.audioContext.destination);
             } else {
                 let current = rootNode;
@@ -2237,6 +2630,7 @@ import { getRuntime } from './runtime-capabilities.js';
     });
 
     export {
+        checkDacCapabilities,
         checkHardwareGainStatus,
         closePeqModal,
         computeLimiterProfile,
@@ -2249,6 +2643,7 @@ import { getRuntime } from './runtime-capabilities.js';
         getEffectiveAmplification,
         getOrCreateAudioSourceNode,
         getPreAmpGainValue,
+        hasUserShapingDsp,
         hwVolumeDebounceTimer,
         importAutoEqProfile,
         initAudioContext,

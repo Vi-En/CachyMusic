@@ -255,8 +255,7 @@
         display: none;
     }
 
-    :root:not([data-runtime="php-desktop"]) #settingsRowHwGain,
-    :root:not([data-os="linux"]) #settingsRowHwGain {
+    :root:not([data-runtime="php-desktop"]):not([data-runtime="android-apk"]):not([data-dac="external"]) #settingsRowHwGain {
         display: none;
     }
 

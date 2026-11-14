@@ -234,6 +234,9 @@ import {
                 const state = s.isSoftwarePaused ? 'PAUSED' : 'PLAYING';
                 html5El.textContent = `SOFTWARE ENGINE • ${state} (${cur.toFixed(1)}s / ${dur.toFixed(1)}s) • 32-bit Float PCM`;
                 html5El.title = `Decoded: ${s.activeDecodedBuffer.sampleRate}Hz, ${s.activeDecodedBuffer.numberOfChannels}ch, Web Audio Buffer`;
+            } else if (s.isSoftwareDecoding) {
+                html5El.textContent = 'SOFTWARE ENGINE • DECOMPRESSING BITSTREAM...';
+                html5El.title = 'Decoding FLAC/audio container into 32-bit Float PCM buffer...';
             } else if (audio) {
                 const rLabels = ['No Data', 'Metadata Loaded', 'Current Frame Ready', 'Buffering', 'Ready to Play'];
                 const rText = rLabels[audio.readyState] || `State ${audio.readyState}`;
@@ -299,17 +302,24 @@ import {
             const br = curTrack.bitrate ? `${curTrack.bitrate} kbps` : '';
             formatVal.textContent = `${rate} • ${depth} • ${fmt} ${br ? '• ' + br : ''}`;
         }
-        if (pipeVal && audio) {
-            const rStates = [
-                'Idle (No Data)',
-                'Metadata Loaded',
-                'Decoding Frame',
-                'Buffering Stream',
-                'Ready (Buffered)'
-            ];
-            const r = rStates[audio.readyState] || 'Ready';
+        if (pipeVal) {
             const ctxState = s.audioContext ? (s.audioContext.state === 'running' ? 'Active' : 'Standby') : 'Inactive';
-            pipeVal.textContent = `${r} • DSP: ${ctxState}`;
+            if (s.isSoftwareDecoding && s.activeDecodedBuffer) {
+                const swState = s.isSoftwarePaused ? 'Software Paused' : 'Software Engine Active';
+                pipeVal.textContent = `${swState} • DSP: ${ctxState}`;
+            } else if (s.isSoftwareDecoding) {
+                pipeVal.textContent = `Decompressing Bitstream... • DSP: ${ctxState}`;
+            } else if (audio) {
+                const rStates = [
+                    'Idle (No Data)',
+                    'Metadata Loaded',
+                    'Decoding Frame',
+                    'Buffering Stream',
+                    'Ready (Buffered)'
+                ];
+                const r = rStates[audio.readyState] || 'Ready';
+                pipeVal.textContent = `${r} • DSP: ${ctxState}`;
+            }
         }
         if (skipVal) {
             skipVal.textContent = s.consecutiveSkipCount > 0 ? `${s.consecutiveSkipCount} skip(s) logged` : 'No abnormal skips (0)';

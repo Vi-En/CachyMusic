@@ -970,11 +970,12 @@
                         <div class="settingsRowItem" id="settingsRowPrecision">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">MATH PRECISION<button type="button" class="settingHintBtn" title="Controls calculation accuracy for audio filters. 64-bit provides studio clarity, while 32-bit saves CPU battery." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">MATH PRECISION<button type="button" class="settingHintBtn" title="Controls DSP calculation precision. Native Bypass routes audio directly at the Web Audio host rate without extra worklet float math when EQ/FX are flat; 32-bit saves CPU; 64-bit runs double-precision internal DSP accumulators." aria-label="Feature explanation">!</button></h4>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsEnginePrecisionPill">64-BIT DOUBLE FLOAT</span>
                             </div>
                             <div class="settingsOptionToggles">
+                                <button type="button" class="actionBtn enginePrecisionBtn" data-precision="native">NATIVE (BYPASS)</button>
                                 <button type="button" class="actionBtn enginePrecisionBtn active" data-precision="64">64-BIT STUDIO FLOAT</button>
                                 <button type="button" class="actionBtn enginePrecisionBtn" data-precision="32">32-BIT FAST FLOAT</button>
                             </div>
@@ -984,14 +985,16 @@
                         <div class="settingsRowItem" id="settingsRowDither">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">DITHERING &amp; NOISE SHAPING<button type="button" class="settingHintBtn" title="Smooths digital sound when sending audio to your speakers or DAC. Advanced psychoacoustic shaping requires a connected DAC." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">DITHERING &amp; NOISE SHAPING<button type="button" class="settingHintBtn" title="Smooths digital quantization when sending audio to your speakers, IEMs, or DAC. Psychoacoustic shaping unlocks automatically when an external DAC/IEM/Hi-Res device is detected or paired." aria-label="Feature explanation">!</button></h4>
+                                    <p class="settingsRowDesc" id="settingsDetectedDacBadge">Output: Scanning audio interface...</p>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsDitherPill">TPDF FLAT</span>
                             </div>
                             <div class="settingsOptionToggles">
                                 <button type="button" class="actionBtn ditherModeBtn" data-dither="off">OFF (TRUNCATE)</button>
                                 <button type="button" class="actionBtn ditherModeBtn active" data-dither="tpdf">TPDF FLAT</button>
-                                <button type="button" class="actionBtn ditherModeBtn" id="dacShapedDitherBtn" data-dither="shaped" title="Requires connected USB DAC or high-res audio interface" disabled>PSYCHOACOUSTIC (DAC ONLY)</button>
+                                <button type="button" class="actionBtn ditherModeBtn" id="dacShapedDitherBtn" data-dither="shaped" title="Requires connected USB DAC, IEM dongle, or Hi-Res audio interface" disabled>PSYCHOACOUSTIC (DAC ONLY)</button>
+                                <button type="button" class="actionBtn" id="settingsScanDacBtn" title="Scan for connected USB DACs, IEM dongles (e.g. Moondrop May), headphones, or external speakers">SCAN / PAIR DAC</button>
                             </div>
                         </div>
 
@@ -1028,6 +1031,9 @@
                             <div class="settingsApplyBar">
                                 <button type="button" id="settingsApplyAudioBtn" class="actionBtn primaryBtn settingsApplyBtn">
                                     APPLY AUDIO SETTINGS
+                                </button>
+                                <button type="button" id="settingsDiscardAudioBtn" class="actionBtn" style="display: none;">
+                                    DISCARD PENDING
                                 </button>
                                 <span class="settingsApplyStatus" id="settingsApplyAudioStatus">All audio settings synced &amp; active.</span>
                             </div>

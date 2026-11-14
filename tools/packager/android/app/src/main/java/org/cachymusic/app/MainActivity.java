@@ -13,6 +13,14 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.hardware.usb.UsbConstants;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbInterface;
+import android.hardware.usb.UsbManager;
+import android.media.AudioDeviceCallback;
+import android.media.AudioDeviceInfo;
+import android.media.AudioFormat;
+import android.media.AudioManager;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Build;
@@ -81,6 +89,8 @@ public class MainActivity extends Activity {
     private String currentUrl = STANDALONE_URL;
     private volatile boolean isScanCancelled = false;
     private BroadcastReceiver mediaCommandReceiver;
+    private AudioManager audioManager;
+    private AudioDeviceCallback audioDeviceCallback;
 
     public class AndroidBridge {
         @JavascriptInterface
@@ -132,6 +142,65 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String callSoulseekApi(String action, String bodyJson, String queryString) {
             return SoulseekClient.getInstance(getApplicationContext()).dispatchApi(action, bodyJson, queryString);
+        }
+
+        @JavascriptInterface
+        public String getAudioOutputDevicesJson() {
+            return buildAudioDevicesPayload().toString();
+        }
+
+        @JavascriptInterface
+        public String getHardwareVolumeStatusJson() {
+            try {
+                AudioManager am = audioManager != null ? audioManager : (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                JSONObject payload = buildAudioDevicesPayload();
+                int maxVol = am != null ? Math.max(1, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)) : 15;
+                int curVol = am != null ? am.getStreamVolume(AudioManager.STREAM_MUSIC) : maxVol;
+                boolean muted = am != null && am.isStreamMute(AudioManager.STREAM_MUSIC);
+                payload.put("success", true);
+                payload.put("available", am != null);
+                payload.put("backend", payload.optBoolean("isUsbDac", false) ? "android-usb-dac" : "android-audiomanager");
+                payload.put("volume", Math.max(0.0, Math.min(1.0, (double) curVol / (double) maxVol)));
+                payload.put("muted", muted || curVol == 0);
+                payload.put("streamIndex", curVol);
+                payload.put("streamMax", maxVol);
+                return payload.toString();
+            } catch (Exception e) {
+                return "{\"success\":false,\"available\":false,\"backend\":\"android-audiomanager\"}";
+            }
+        }
+
+        @JavascriptInterface
+        public boolean setHardwareStreamVolume(double normalizedVol) {
+            try {
+                AudioManager am = audioManager != null ? audioManager : (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                if (am == null) return false;
+                int maxVol = Math.max(1, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+                double clamped = Math.max(0.0, Math.min(1.0, normalizedVol));
+                int targetIdx = (int) Math.round(clamped * maxVol);
+                am.setStreamVolume(AudioManager.STREAM_MUSIC, targetIdx, 0);
+                return true;
+            } catch (Exception e) {
+                Log.w(TAG, "setHardwareStreamVolume error: " + e.getMessage());
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public boolean toggleHardwareStreamMute(boolean mute) {
+            try {
+                AudioManager am = audioManager != null ? audioManager : (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+                if (am == null) return false;
+                am.adjustStreamVolume(
+                        AudioManager.STREAM_MUSIC,
+                        mute ? AudioManager.ADJUST_MUTE : AudioManager.ADJUST_UNMUTE,
+                        0
+                );
+                return true;
+            } catch (Exception e) {
+                Log.w(TAG, "toggleHardwareStreamMute error: " + e.getMessage());
+                return false;
+            }
         }
 
         @JavascriptInterface
@@ -311,6 +380,31 @@ public class MainActivity extends Activity {
 
         // Register AndroidBridge for native folder directory picking and MediaStore queries
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
+
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            audioDeviceCallback = new AudioDeviceCallback() {
+                private void notifyWebAudioDevicesChanged() {
+                    if (webView != null) {
+                        webView.post(() -> webView.evaluateJavascript(
+                                "if (window.__cachyMusic && window.__cachyMusic.engine && window.__cachyMusic.engine.checkDacCapabilities) { window.__cachyMusic.engine.checkDacCapabilities(); }",
+                                null
+                        ));
+                    }
+                }
+
+                @Override
+                public void onAudioDevicesAdded(AudioDeviceInfo[] addedDevices) {
+                    notifyWebAudioDevicesChanged();
+                }
+
+                @Override
+                public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
+                    notifyWebAudioDevicesChanged();
+                }
+            };
+            audioManager.registerAudioDeviceCallback(audioDeviceCallback, new Handler(Looper.getMainLooper()));
+        }
 
         // WebChromeClient with onShowFileChooser supporting multi-track file selection
         webView.setWebChromeClient(new WebChromeClient() {
@@ -1458,8 +1552,168 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private JSONObject buildAudioDevicesPayload() {
+        JSONObject result = new JSONObject();
+        JSONArray devicesArr = new JSONArray();
+        boolean hasExternalDac = false;
+        boolean isUsbDac = false;
+        String activeLabel = Build.MODEL != null ? (Build.MODEL + " Speaker") : "Device Speaker";
+        String activeCategory = "builtin";
+        int activePriority = 0;
+
+        // Collect USB Audio Class (UAC) product names (e.g., Moondrop May, FiiO, Topping, Apple Dongle)
+        List<String> usbAudioLabels = new ArrayList<>();
+        try {
+            UsbManager usbMgr = (UsbManager) getSystemService(Context.USB_SERVICE);
+            if (usbMgr != null) {
+                Map<String, UsbDevice> usbMap = usbMgr.getDeviceList();
+                if (usbMap != null) {
+                    for (UsbDevice dev : usbMap.values()) {
+                        if (dev == null) continue;
+                        boolean isAudioClass = (dev.getDeviceClass() == UsbConstants.USB_CLASS_AUDIO);
+                        if (!isAudioClass) {
+                            int ifCount = dev.getInterfaceCount();
+                            for (int idx = 0; idx < ifCount; idx++) {
+                                UsbInterface iface = dev.getInterface(idx);
+                                if (iface != null && iface.getInterfaceClass() == UsbConstants.USB_CLASS_AUDIO) {
+                                    isAudioClass = true;
+                                    break;
+                                }
+                            }
+                        }
+                        String mfg = dev.getManufacturerName() != null ? dev.getManufacturerName().trim() : "";
+                        String prod = dev.getProductName() != null ? dev.getProductName().trim() : "";
+                        String combined = (!mfg.isEmpty() && !prod.isEmpty() && !prod.toLowerCase(Locale.US).contains(mfg.toLowerCase(Locale.US)))
+                                ? (mfg + " " + prod)
+                                : (!prod.isEmpty() ? prod : mfg);
+                        if (isAudioClass || combined.toLowerCase(Locale.US).matches(".*(dac|iem|moondrop|may|dongle|fiio|topping|audio|headphone|earphone|uac).*")) {
+                            String label = combined.isEmpty() ? String.format(Locale.US, "USB DAC (%04X:%04X)", dev.getVendorId(), dev.getProductId()) : combined;
+                            usbAudioLabels.add(label);
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            AudioManager am = audioManager != null ? audioManager : (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                AudioDeviceInfo[] outputs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+                if (outputs != null) {
+                    for (AudioDeviceInfo info : outputs) {
+                        if (info == null) continue;
+                        int type = info.getType();
+                        String category = "builtin";
+                        boolean external = false;
+                        int priority = 1;
+                        if (type == AudioDeviceInfo.TYPE_USB_DEVICE || type == AudioDeviceInfo.TYPE_USB_HEADSET || type == AudioDeviceInfo.TYPE_USB_ACCESSORY) {
+                            category = "usb-dac";
+                            external = true;
+                            priority = 100;
+                            isUsbDac = true;
+                        } else if (type == AudioDeviceInfo.TYPE_WIRED_HEADSET || type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+                                || type == AudioDeviceInfo.TYPE_LINE_ANALOG || type == AudioDeviceInfo.TYPE_LINE_DIGITAL || type == AudioDeviceInfo.TYPE_AUX_LINE) {
+                            category = "wired";
+                            external = true;
+                            priority = 80;
+                        } else if (type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || type == 26 || type == 27) {
+                            category = "bluetooth";
+                            external = true;
+                            priority = 60;
+                        } else if (type == AudioDeviceInfo.TYPE_HDMI || type == AudioDeviceInfo.TYPE_HDMI_ARC || type == 29) {
+                            category = "digital";
+                            external = true;
+                            priority = 50;
+                        }
+
+                        if (external) hasExternalDac = true;
+
+                        String name = info.getProductName() != null ? info.getProductName().toString().trim() : "";
+                        if ("usb-dac".equals(category) && !usbAudioLabels.isEmpty()) {
+                            // Prefer exact USB descriptor name when Android OS returns generic phone model
+                            if (name.isEmpty() || (Build.MODEL != null && name.equalsIgnoreCase(Build.MODEL)) || name.equalsIgnoreCase("USB-Audio")) {
+                                name = usbAudioLabels.get(0);
+                            }
+                        }
+                        if (name.isEmpty()) {
+                            name = "usb-dac".equals(category) ? "USB-C DAC / IEM" : ("wired".equals(category) ? "Wired Headphones / IEM" : ("bluetooth".equals(category) ? "Bluetooth Audio" : "Device Speaker"));
+                        }
+
+                        int maxRate = 48000;
+                        int[] rates = info.getSampleRates();
+                        if (rates != null) {
+                            for (int r : rates) {
+                                if (r > maxRate) maxRate = r;
+                            }
+                        }
+
+                        int maxBitDepth = 16;
+                        int[] encs = info.getEncodings();
+                        if (encs != null) {
+                            for (int enc : encs) {
+                                if (enc == AudioFormat.ENCODING_PCM_FLOAT || enc == 22) {
+                                    maxBitDepth = Math.max(maxBitDepth, 32);
+                                } else if (enc == 21) {
+                                    maxBitDepth = Math.max(maxBitDepth, 24);
+                                }
+                            }
+                        }
+
+                        JSONObject devObj = new JSONObject();
+                        devObj.put("id", info.getId());
+                        devObj.put("name", name);
+                        devObj.put("type", type);
+                        devObj.put("category", category);
+                        devObj.put("isExternalDac", external);
+                        devObj.put("maxSampleRate", maxRate);
+                        devObj.put("maxBitDepth", maxBitDepth);
+                        devicesArr.put(devObj);
+
+                        if (priority > activePriority) {
+                            activePriority = priority;
+                            activeLabel = name;
+                            activeCategory = category;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "buildAudioDevicesPayload warning: " + e.getMessage());
+        }
+
+        if (!isUsbDac && !usbAudioLabels.isEmpty()) {
+            hasExternalDac = true;
+            isUsbDac = true;
+            activeLabel = usbAudioLabels.get(0);
+            activeCategory = "usb-dac";
+            try {
+                JSONObject usbObj = new JSONObject();
+                usbObj.put("id", -1);
+                usbObj.put("name", usbAudioLabels.get(0));
+                usbObj.put("category", "usb-dac");
+                usbObj.put("isExternalDac", true);
+                devicesArr.put(usbObj);
+            } catch (Exception ignored) {}
+        }
+
+        try {
+            result.put("hasExternalDac", hasExternalDac);
+            result.put("isUsbDac", isUsbDac);
+            result.put("activeDevice", activeLabel);
+            result.put("activeCategory", activeCategory);
+            result.put("devices", devicesArr);
+        } catch (Exception ignored) {}
+        return result;
+    }
+
     @Override
     protected void onDestroy() {
+        if (audioManager != null && audioDeviceCallback != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                audioManager.unregisterAudioDeviceCallback(audioDeviceCallback);
+            } catch (Exception ignored) {}
+            audioDeviceCallback = null;
+        }
         if (mediaCommandReceiver != null) {
             try {
                 unregisterReceiver(mediaCommandReceiver);

@@ -42,6 +42,84 @@ function detect_hardware_backend() {
     return $backend;
 }
 
+function detect_alsa_control() {
+    $out = @shell_exec("amixer scontrols 2>/dev/null");
+    if ($out) {
+        foreach (['Master', 'PCM', 'Headphone', 'Speaker', 'DAC', 'Digital'] as $cand) {
+            if (stripos($out, "Simple mixer control '{$cand}'") !== false) {
+                return $cand;
+            }
+        }
+        if (preg_match("/Simple mixer control '([^']+)'/", $out, $m)) {
+            return $m[1];
+        }
+    }
+    return 'Master';
+}
+
+function detect_connected_audio_devices() {
+    $activeDevice = 'Default Audio Sink';
+    $isExternalDac = false;
+    $devices = [];
+
+    if (strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN' && PHP_OS !== 'Darwin') {
+        if (!empty(shell_exec('which wpctl 2>/dev/null'))) {
+            $inspect = @shell_exec('wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null');
+            if ($inspect) {
+                if (preg_match('/node\.description\s*=\s*"([^"]+)"/i', $inspect, $m)
+                    || preg_match('/device\.description\s*=\s*"([^"]+)"/i', $inspect, $m)
+                    || preg_match('/node\.nick\s*=\s*"([^"]+)"/i', $inspect, $m)) {
+                    $activeDevice = trim($m[1]);
+                }
+                if (preg_match('/(usb|dac|iem|moondrop|may|dongle|fiio|topping|schiit|chord|headphone|earphone|bluetooth|bluez|hdmi|displayport|external|speaker)/i', $inspect . ' ' . $activeDevice)) {
+                    $isExternalDac = true;
+                }
+                if ($activeDevice !== 'Default Audio Sink') {
+                    $devices[] = [
+                        'name' => $activeDevice,
+                        'isExternalDac' => $isExternalDac,
+                        'backend' => 'pipewire'
+                    ];
+                }
+            }
+        } elseif (!empty(shell_exec('which pactl 2>/dev/null'))) {
+            $defaultSink = trim((string)@shell_exec('pactl get-default-sink 2>/dev/null'));
+            $sinksOut = @shell_exec('pactl list sinks 2>/dev/null');
+            if ($sinksOut && preg_match_all('/Name:\s*([^\n]+).*?Description:\s*([^\n]+)/is', $sinksOut, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $row) {
+                    $sinkName = trim($row[1]);
+                    $sinkDesc = trim($row[2]);
+                    $ext = (bool)preg_match('/(usb|dac|iem|moondrop|may|dongle|fiio|topping|headphone|earphone|bluez|bluetooth|external|hdmi)/i', $sinkName . ' ' . $sinkDesc);
+                    $devices[] = ['name' => $sinkDesc, 'sink' => $sinkName, 'isExternalDac' => $ext, 'backend' => 'pulseaudio'];
+                    if ($sinkName === $defaultSink || ($activeDevice === 'Default Audio Sink' && $ext)) {
+                        $activeDevice = $sinkDesc;
+                        $isExternalDac = $ext;
+                    }
+                }
+            }
+        }
+        if (is_readable('/proc/asound/cards')) {
+            $cards = @file_get_contents('/proc/asound/cards');
+            if ($cards && preg_match_all('/^\s*\d+\s+\[[^\]]+\]:\s*USB-Audio\s*-\s*([^\n]+)/mi', $cards, $usbMatches)) {
+                foreach ($usbMatches[1] as $cardName) {
+                    $cleanName = trim($cardName);
+                    $isExternalDac = true;
+                    if ($activeDevice === 'Default Audio Sink') {
+                        $activeDevice = $cleanName;
+                    }
+                    $devices[] = ['name' => $cleanName, 'category' => 'usb-dac', 'isExternalDac' => true, 'backend' => 'alsa-usb'];
+                }
+            }
+        }
+    }
+
+    return [
+        'activeDevice' => $activeDevice,
+        'isExternalDac' => $isExternalDac,
+        'devices' => $devices
+    ];
+}
+
 function get_hardware_volume() {
     $backend = detect_hardware_backend();
     $volume = 1.0;
@@ -68,7 +146,8 @@ function get_hardware_volume() {
             $muted = true;
         }
     } elseif ($backend === 'alsa') {
-        $out = @shell_exec("amixer sget Master 2>/dev/null");
+        $ctl = escapeshellarg(detect_alsa_control());
+        $out = @shell_exec("amixer sget {$ctl} 2>/dev/null");
         if ($out && preg_match('/\[(\d+)%\]/i', $out, $m)) {
             $volume = (float)$m[1] / 100.0;
         }
@@ -77,11 +156,16 @@ function get_hardware_volume() {
         }
     }
 
+    $devInfo = detect_connected_audio_devices();
+
     return [
-        'available' => in_array($backend, ['pipewire', 'pulseaudio', 'alsa'], true),
-        'backend'   => $backend,
-        'volume'    => max(0.0, min(1.5, round($volume, 3))),
-        'muted'     => $muted
+        'available'     => in_array($backend, ['pipewire', 'pulseaudio', 'alsa'], true),
+        'backend'       => $backend,
+        'volume'        => max(0.0, min(1.5, round($volume, 3))),
+        'muted'         => $muted,
+        'activeDevice'  => $devInfo['activeDevice'],
+        'isExternalDac' => $devInfo['isExternalDac'],
+        'devices'       => $devInfo['devices']
     ];
 }
 
@@ -99,7 +183,8 @@ function set_hardware_volume($vol) {
         return true;
     } elseif ($backend === 'alsa') {
         $pct = (int)round($vol * 100);
-        @shell_exec("amixer sset Master {$pct}% 2>/dev/null");
+        $ctl = escapeshellarg(detect_alsa_control());
+        @shell_exec("amixer sset {$ctl} {$pct}% 2>/dev/null");
         return true;
     }
     return false;
@@ -124,11 +209,12 @@ function toggle_hardware_mute($muteState = null) {
         }
         return true;
     } elseif ($backend === 'alsa') {
+        $ctl = escapeshellarg(detect_alsa_control());
         if ($muteState === null) {
-            @shell_exec('amixer sset Master toggle 2>/dev/null');
+            @shell_exec("amixer sset {$ctl} toggle 2>/dev/null");
         } else {
             $val = $muteState ? 'mute' : 'unmute';
-            @shell_exec("amixer sset Master {$val} 2>/dev/null");
+            @shell_exec("amixer sset {$ctl} {$val} 2>/dev/null");
         }
         return true;
     }
