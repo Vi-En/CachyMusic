@@ -113,14 +113,18 @@
     }
 
     function formatFileSize(bytes) {
-        if (!bytes) return 'N/A';
-        if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
-        return (bytes / 1024).toFixed(1) + ' KB';
+        if (bytes === null || bytes === undefined || bytes === '') return 'N/A';
+        if (typeof bytes === 'string' && /[a-zA-Z]/.test(bytes)) return bytes;
+        const n = Number(bytes);
+        if (!Number.isFinite(n) || n <= 0) return 'N/A';
+        if (n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GB';
+        if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+        return (n / 1024).toFixed(1) + ' KB';
     }
 
     // Scan Directory via Server API
 
-    function showToast(message, actionText = null, actionCallback = null, duration = 3500) {
+    function showToast(message, actionText = null, actionCallback = null, duration = 3200, level = 'info') {
         let container = document.getElementById('cachyToastContainer');
         if (!container) {
             container = document.createElement('div');
@@ -129,8 +133,14 @@
             document.body.appendChild(container);
         }
 
+        // Prevent overflowing toast stacks when rapidly skipping tracks on mobile
+        while (container.children.length >= 2) {
+            container.firstElementChild.remove();
+        }
+
         const toast = document.createElement('div');
-        toast.className = 'cachyToast';
+        const safeLevel = (level === 'success' || level === 'warning' || level === 'error') ? ` ${level}` : '';
+        toast.className = `cachyToast${safeLevel}`;
 
         const msgSpan = document.createElement('span');
         msgSpan.className = 'toastMsg';
@@ -163,9 +173,9 @@
         }, duration);
     }
 
-    function showCachyToast(title, message = '', _level = 'info') {
+    function showCachyToast(title, message = '', level = 'info') {
         const text = message ? `${title}: ${message}` : String(title || '');
-        showToast(text);
+        showToast(text, null, null, 2800, level);
     }
 
     function setScanStatus(msg, isError = false) {
@@ -173,12 +183,12 @@
         const scanStatusEl = document.getElementById('scanStatus');
         if (scanStatusEl) {
             scanStatusEl.textContent = msg;
-            scanStatusEl.style.color = isError ? '#ff4d4d' : 'var(--text-secondary, #888888)';
+            scanStatusEl.style.color = isError ? 'var(--status-danger)' : 'var(--text-secondary)';
         }
         const settingsTabScanStatus = document.getElementById('settingsTabScanStatus');
         if (settingsTabScanStatus) {
             settingsTabScanStatus.textContent = msg;
-            settingsTabScanStatus.style.color = isError ? '#ff4d4d' : 'var(--accent-color, #00f0ff)';
+            settingsTabScanStatus.style.color = isError ? 'var(--status-danger)' : 'var(--text-accent)';
         }
     }
 

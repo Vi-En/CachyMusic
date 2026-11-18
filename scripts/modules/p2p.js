@@ -1782,29 +1782,24 @@ import {
 
             let title = 'Connection Failed';
             let explanation = rawErr || fallbackMsg;
-            let icon = '⚠️';
 
             if (reason === 'mobile_standalone' || /standalone/i.test(rawErr)) {
                 title = 'Desktop Workstation Required';
                 explanation = 'Soulseek P2P transfers require a desktop workstation running the Nicotine+ daemon. In the settings field above, enter your Desktop Host IP (e.g. http://192.168.1.50:8000) to connect your mobile device.';
-                icon = '📱';
             } else if (reason === 'daemon_offline' || /port 12339|daemon|refused|could not launch/i.test(rawErr)) {
                 title = 'Soulseek Service Offline';
                 explanation = 'The background Nicotine+ daemon (port 12339) is offline on the host machine. Please start the Nicotine+ background service on your desktop.';
-                icon = '🔌';
             } else if (reason === 'invalid_credentials' || /password|invalid username|invaliduserpass|credentials/i.test(rawErr)) {
                 title = 'Invalid Soulseek Credentials';
                 explanation = 'Incorrect username or password. Please verify your Soulseek account credentials with server.slsknet.org.';
-                icon = '🔑';
             } else if (reason === 'network_unreachable' || /timeout|etimedout|econn|unreachable/i.test(rawErr)) {
                 title = 'Network Unreachable';
                 explanation = 'Could not reach server.slsknet.org (port 2242). Please check your internet connection or firewall rules.';
-                icon = '🌐';
             }
 
             el.className = 'slskModalAlert error';
             el.innerHTML = `
-                <div class="slskAlertTitle">${icon} <strong>${title}</strong></div>
+                <div class="slskAlertTitle"><strong>${title}</strong></div>
                 <div class="slskAlertBody">${explanation}</div>
             `;
             el.style.display = 'block';

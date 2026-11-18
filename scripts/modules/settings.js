@@ -19,7 +19,7 @@ import {
         if (minutes === 'end') {
             s.sleepTimerMode = 'end';
             s.sleepTimerRemainingSec = 0;
-            if (sleepTimerLabel) sleepTimerLabel.textContent = '🌙 End of Track';
+            if (sleepTimerLabel) sleepTimerLabel.textContent = 'Sleep: End';
             if (sleepStatusRemaining) sleepStatusRemaining.textContent = 'Pauses at end of current track';
             if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
             if (sleepTimerBtn) sleepTimerBtn.classList.add('hasActiveTimer');
@@ -71,7 +71,7 @@ import {
                     s.sleepTimerOriginalVolume = null;
                 }
                 cancelSleepTimer(false);
-                showToast('🌙 Sleep timer finished: Playback paused.');
+                showToast('Sleep timer finished: Playback paused.');
             }
         }, 1000);
     }
@@ -81,7 +81,7 @@ import {
         const m = Math.floor(rem / 60);
         const s = rem % 60;
         const timeStr = `${m}:${s < 10 ? '0' : ''}${s}`;
-        if (sleepTimerLabel) sleepTimerLabel.textContent = `🌙 ${timeStr}`;
+        if (sleepTimerLabel) sleepTimerLabel.textContent = `Sleep: ${timeStr}`;
         if (sleepStatusRemaining) sleepStatusRemaining.textContent = `${timeStr} remaining`;
         const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
         if (settingsTabSleepStatusBadge) {

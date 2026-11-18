@@ -988,6 +988,55 @@ public class MainActivity extends Activity {
         return null;
     }
 
+    private static final class AudioHeaderInfo {
+        int sampleRate = 44100;
+        int bitDepth = 16;
+        int channels = 2;
+        int bitrateKbps = 0;
+        long durationMs = 0;
+    }
+
+    private AudioHeaderInfo readFlacHeaderInfo(Uri uri, long fileSize, long knownDurationMs) {
+        AudioHeaderInfo info = new AudioHeaderInfo();
+        info.durationMs = knownDurationMs;
+        if (uri == null) return info;
+        try (InputStream is = getContentResolver().openInputStream(uri)) {
+            if (is == null) return info;
+            byte[] buf = new byte[42];
+            int total = 0;
+            while (total < buf.length) {
+                int r = is.read(buf, total, buf.length - total);
+                if (r <= 0) break;
+                total += r;
+            }
+            if (total >= 26 && buf[0] == 'f' && buf[1] == 'L' && buf[2] == 'a' && buf[3] == 'C' && (buf[4] & 0x7F) == 0) {
+                // STREAMINFO payload begins at byte 8; sample rate/ch/bps packed at bytes 18..21
+                int sr = ((buf[18] & 0xFF) << 12) | ((buf[19] & 0xFF) << 4) | ((buf[20] & 0xF0) >>> 4);
+                int ch = ((buf[20] & 0x0E) >>> 1) + 1;
+                int bps = (((buf[20] & 0x01) << 4) | ((buf[21] & 0xF0) >>> 4)) + 1;
+                if (sr >= 8000 && sr <= 384000) info.sampleRate = sr;
+                if (ch >= 1 && ch <= 8) info.channels = ch;
+                if (bps >= 8 && bps <= 32) info.bitDepth = bps;
+                if (total >= 26 && info.durationMs <= 0 && info.sampleRate > 0) {
+                    long totalSamples = ((long)(buf[21] & 0x0F) << 32)
+                            | ((long)(buf[22] & 0xFF) << 24)
+                            | ((long)(buf[23] & 0xFF) << 16)
+                            | ((long)(buf[24] & 0xFF) << 8)
+                            | (long)(buf[25] & 0xFF);
+                    if (totalSamples > 0) {
+                        info.durationMs = (totalSamples * 1000L) / info.sampleRate;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "FLAC header parse skip: " + e.getMessage());
+        }
+        if (fileSize > 0 && info.durationMs > 0) {
+            info.bitrateKbps = (int) Math.max(64L, (fileSize * 8L) / info.durationMs);
+        }
+        return info;
+    }
+
     private Map<Long, Byte> getFlacPatches(Uri uri) {
         if (uri == null) return java.util.Collections.emptyMap();
         String key = uri.toString();
@@ -1475,6 +1524,18 @@ public class MainActivity extends Activity {
             }
 
             String detectedMime = fastDetectMime(filename, mediaMime);
+            int bitDepth = 16;
+            int channels = 2;
+            if ("FLAC".equals(format) || detectedMime.contains("flac")) {
+                AudioHeaderInfo flacInfo = readFlacHeaderInfo(uri, size, durationMs);
+                sampleRate = flacInfo.sampleRate;
+                bitDepth = flacInfo.bitDepth;
+                channels = flacInfo.channels;
+                if (flacInfo.durationMs > 0) durationMs = flacInfo.durationMs;
+                if (flacInfo.bitrateKbps > 0) bitrate = flacInfo.bitrateKbps;
+            } else if (bitrate <= 0 && size > 0 && durationMs > 0) {
+                bitrate = (int) Math.max(32L, (size * 8L) / durationMs);
+            }
             String encodedUri = URLEncoder.encode(uri.toString(), "UTF-8");
             String encodedName = URLEncoder.encode(filename, "UTF-8");
             String encodedMime = URLEncoder.encode(detectedMime, "UTF-8");
@@ -1493,7 +1554,8 @@ public class MainActivity extends Activity {
             obj.put("duration", durationMs > 0 ? (durationMs / 1000.0) : 0);
             obj.put("bitrate", bitrate > 0 ? bitrate : 320);
             obj.put("sampleRate", sampleRate);
-            obj.put("channels", 2);
+            obj.put("bitDepth", bitDepth);
+            obj.put("channels", channels);
             obj.put("format", format);
             obj.put("size", size);
             obj.put("src", streamUrl);
@@ -1560,6 +1622,18 @@ public class MainActivity extends Activity {
                             Uri trackUri = ContentUris.withAppendedId(musicUri, id);
                             // Fast in-memory MIME detection prevents redundant SQLite queries per track
                             String detectedMime = fastDetectMime(resolvedFilename, mediaMime);
+                            int trackSampleRate = 44100;
+                            int trackBitDepth = 16;
+                            int trackChannels = 2;
+                            int trackBitrate = (size > 0 && dur > 0) ? (int) Math.max(32L, (size * 8L) / dur) : 320;
+                            if ("FLAC".equals(format) || detectedMime.contains("flac")) {
+                                AudioHeaderInfo flacInfo = readFlacHeaderInfo(trackUri, size, dur);
+                                trackSampleRate = flacInfo.sampleRate;
+                                trackBitDepth = flacInfo.bitDepth;
+                                trackChannels = flacInfo.channels;
+                                if (flacInfo.durationMs > 0) dur = flacInfo.durationMs;
+                                if (flacInfo.bitrateKbps > 0) trackBitrate = flacInfo.bitrateKbps;
+                            }
                             String encodedUri = URLEncoder.encode(trackUri.toString(), "UTF-8");
                             String encodedName = URLEncoder.encode(resolvedFilename, "UTF-8");
                             String encodedMime = URLEncoder.encode(detectedMime, "UTF-8");
@@ -1577,9 +1651,10 @@ public class MainActivity extends Activity {
                             obj.put("artist", (artist != null && !artist.equals("<unknown>")) ? artist : "Unknown Artist");
                             obj.put("album", (album != null && !album.equals("<unknown>")) ? album : "Device Music");
                             obj.put("duration", dur > 0 ? (dur / 1000.0) : 0);
-                            obj.put("bitrate", 320);
-                            obj.put("sampleRate", 44100);
-                            obj.put("channels", 2);
+                            obj.put("bitrate", trackBitrate);
+                            obj.put("sampleRate", trackSampleRate);
+                            obj.put("bitDepth", trackBitDepth);
+                            obj.put("channels", trackChannels);
                             obj.put("format", format);
                             obj.put("size", size);
                             obj.put("src", streamUrl);

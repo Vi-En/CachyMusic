@@ -85,5 +85,8 @@ GEMINI.md
 AGENTS.md
 CLAUDE.md
 INSTRUCTIONS.md
+CHANGELOG.md
 .agents/
-docs/wiki/
+docs/
+tools/nicotine-plugin/*.md
+tools/nicotine-plugin/test_api.sh

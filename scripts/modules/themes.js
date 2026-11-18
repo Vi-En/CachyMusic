@@ -88,7 +88,28 @@ import {
     }
 
 
-    function applyTheme(themeName, showToastNotification = false) {
+    function syncBrowserThemeColor(themeName) {
+        if (typeof document === 'undefined') return;
+        const metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (!metaTheme) return;
+        const fallbacks = {
+            default: '#090e14',
+            nms: '#15080a',
+            'solar-eclipse': '#0a0b1a',
+            'euclid-horizon': '#120e09',
+            'alien-paradise': '#140912',
+            'abyssal-void': '#06140f',
+            dissonance: '#12081c',
+            sentinel: '#09111a',
+            'minimalist-light': '#f4f3ef',
+            'minimalist-dark': '#080808',
+            'minimalist-warm': '#faf8f5',
+            'minimalist-obsidian': '#000000'
+        };
+        metaTheme.setAttribute('content', fallbacks[themeName] || '#090e14');
+    }
+
+    function applyTheme(themeName, _showToastNotification = false) {
         if (themeName === 'atlas' || themeName === 'spotify' || themeName === 'apple') {
             themeName = 'nms';
         } else if (themeName === 'brutalist-minimalism-light' || themeName === 'brutalist-light') {
@@ -100,11 +121,9 @@ import {
             themeName = 'default';
         }
         store.setState({ activeTheme: themeName }, ['theme:change']);
-        if (showToastNotification) {
-            store.emit('theme:loading', { themeName });
-        }
         document.documentElement.setAttribute('data-theme', themeName);
         document.body.removeAttribute('data-theme');
+        syncBrowserThemeColor(themeName);
         try {
             safeStorage.setItem('cachymusic_active_theme', themeName);
             localStorage.setItem('cachymusic_active_theme', themeName);

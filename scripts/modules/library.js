@@ -1,6 +1,7 @@
 // CachyMusic - Music Library, Virtual Scroller, Playlists, Queue & Metadata Editor
 import {
     escapeHtml,
+    formatFileSize,
     formatTime,
     popModalState,
     pushModalState,
@@ -893,9 +894,6 @@ function renderVirtualTrackWindow(force = false) {
 
         item.innerHTML = `
             <span class="trackIndex">${idx + 1 < 10 ? '0' : ''}${idx + 1}</span>
-            <div class="miniEq">
-                <span></span><span></span><span></span>
-            </div>
             <img src="${escapeHtml(coverSrc)}" alt="Cover" class="trackThumb" width="40" height="40" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='resources/images/default.svg'">
             <div class="trackDetails">
                 <div class="trackTitle">${displayTitle}</div>
@@ -903,7 +901,7 @@ function renderVirtualTrackWindow(force = false) {
             </div>
             <span class="trackDuration">${formatTime(track.duration)}</span>
             <div class="trackItemActions">
-                <button type="button" class="trackActionIconBtn actionPillBtn playNextTrackBtn" title="Play Next" data-index="${idx}">⤹</button>
+                <button type="button" class="trackActionIconBtn actionPillBtn playNextTrackBtn" title="Play Next" data-index="${idx}">NEXT</button>
                 <button type="button" class="trackActionIconBtn actionPillBtn enqueueTrackBtn" title="Add to Queue" data-index="${idx}">+Q</button>
                 ${s.currentPlaylistId !== null ? `
                     <button type="button" class="trackActionIconBtn addPlaylistBtn danger removePlaylistBtn" title="Remove from playlist" data-id="${escapeHtml(track.id)}">✕</button>
@@ -1095,7 +1093,9 @@ function renderPlaylistsView() {
     if (s.playlists.length === 0) {
         playlistList.innerHTML = `
             <div class="playlistEmptyContainer">
-                <div class="playlistEmptyIcon">📂</div>
+                <div class="playlistEmptyIcon" aria-hidden="true">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                </div>
                 <div class="playlistEmptyTitle">No playlists yet</div>
                 <div class="playlistEmptyDesc">Use the quick presets above or type a name to create your first high-fidelity playlist!</div>
             </div>
@@ -1114,7 +1114,9 @@ function renderPlaylistsView() {
         card.innerHTML = `
             <div class="playlistCardTopRow">
                 <div class="playlistCardArtwork">
-                    <span class="playlistIcon">🎵</span>
+                    <span class="playlistIcon" aria-hidden="true">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                    </span>
                 </div>
                 <div class="playlistCardMain">
                     <div class="playlistCardTitleRow">
@@ -1743,7 +1745,7 @@ function updateTrackMetadataDisplay(track) {
         statChannels.textContent = track.channels === 2 ? 'Stereo' : (track.channels === 1 ? 'Mono' : (track.channels ? `${track.channels} ch` : 'N/A'));
     }
     if (statFormat) statFormat.textContent = track.format ? track.format.toUpperCase() : 'N/A';
-    if (statSize) statSize.textContent = track.size ? track.size : 'N/A';
+    if (statSize) statSize.textContent = formatFileSize(track.size);
     if (statPath) {
         statPath.textContent = track.filename ? track.filename : 'N/A';
         statPath.title = track.fullPath || track.filename || 'N/A';

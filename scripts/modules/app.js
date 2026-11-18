@@ -300,6 +300,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         const willCollapse = (forcedState !== undefined) ? !forcedState : !isCollapsed;
 
         document.body.classList.toggle('metadata-collapsed', willCollapse);
+        document.body.classList.toggle('metadata-expanded', !willCollapse);
         if (metadataToggleBtn) {
             metadataToggleBtn.classList.toggle('active', !willCollapse);
             metadataToggleBtn.setAttribute('aria-pressed', String(!willCollapse));
@@ -621,13 +622,13 @@ store.subscribe('workspace:change', ({ detail }) => {
             let activePointerId = null;
             let pendingPct = null;
             let cachedRect = null;
+            let scrubRafPending = false;
+            let latestClientX = null;
 
-            const updateVisual = (e) => {
+            const paintScrub = (clientX) => {
                 const rect = (cachedRect && cachedRect.width > 0) ? cachedRect : containerEl.getBoundingClientRect();
-                if (!rect || rect.width <= 0) return null;
+                if (!rect || rect.width <= 0 || typeof clientX !== 'number' || !Number.isFinite(clientX)) return null;
                 cachedRect = rect;
-                const clientX = getClientX(e);
-                if (typeof clientX !== 'number' || !Number.isFinite(clientX)) return null;
                 const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
                 if (!Number.isFinite(pct)) return null;
                 pendingPct = pct;
@@ -638,15 +639,38 @@ store.subscribe('workspace:change', ({ detail }) => {
                     const formatted = formatTime(pct * dur);
                     currentTimeEl.textContent = formatted;
                     if (miniCurrentTime) miniCurrentTime.textContent = formatted;
+                    if (progressHoverTooltip && containerEl === progressCon) {
+                        progressHoverTooltip.textContent = formatted;
+                        progressHoverTooltip.style.left = `${pct * 100}%`;
+                    }
                 }
                 return pct;
+            };
+
+            const updateVisual = (e, immediate = false) => {
+                latestClientX = getClientX(e);
+                if (immediate) {
+                    scrubRafPending = false;
+                    return paintScrub(latestClientX);
+                }
+                if (scrubRafPending) return pendingPct;
+                scrubRafPending = true;
+                requestAnimationFrame(() => {
+                    scrubRafPending = false;
+                    if (activePointerId !== null && latestClientX !== null) {
+                        paintScrub(latestClientX);
+                    }
+                });
+                return pendingPct;
             };
 
             const finishDrag = (e, shouldCommit) => {
                 if (activePointerId === null || e.pointerId !== activePointerId) return;
                 if (shouldCommit) {
-                    updateVisual(e);
+                    updateVisual(e, true);
                 }
+                scrubRafPending = false;
+                latestClientX = null;
                 try {
                     if (containerEl.hasPointerCapture && containerEl.hasPointerCapture(activePointerId)) {
                         containerEl.releasePointerCapture(activePointerId);
@@ -676,12 +700,12 @@ store.subscribe('workspace:change', ({ detail }) => {
                 try {
                     if (containerEl.setPointerCapture) containerEl.setPointerCapture(e.pointerId);
                 } catch (_) { /* ignore synthetic pointer events without active pointer */ }
-                updateVisual(e);
+                updateVisual(e, true);
             });
 
             containerEl.addEventListener('pointermove', (e) => {
                 if (activePointerId === null || e.pointerId !== activePointerId) return;
-                updateVisual(e);
+                updateVisual(e, false);
             });
 
             containerEl.addEventListener('pointerup', (e) => finishDrag(e, true));
@@ -736,9 +760,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                 const target = btn.dataset.target;
                 if (target === 'soulseekWorkspace') {
                     switchWorkspace('soulseek');
-                } else if (target === 'downloadWorkspace') {
-                    switchWorkspace('download');
-                } else if (target === 'settingsWorkspace') {
+                } else if (target === 'settingsWorkspace' || target === 'downloadWorkspace') {
                     switchWorkspace('settings');
                 } else {
                     switchWorkspace('player', target);
@@ -809,13 +831,28 @@ store.subscribe('workspace:change', ({ detail }) => {
 
         // Search Input (Debounced 80ms for fluid typing without layout stutter)
         let searchDebounceTimer = null;
+        const trackSearchClearBtn = document.getElementById('trackSearchClearBtn');
+        const syncSearchClearBtn = () => {
+            if (!trackSearchClearBtn) return;
+            trackSearchClearBtn.style.display = trackSearch.value.trim().length > 0 ? 'inline-flex' : 'none';
+        };
         trackSearch.addEventListener('input', (e) => {
             store.state.searchQuery = e.target.value;
+            syncSearchClearBtn();
             if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
                 applySearchAndSort();
             }, 80);
         });
+        if (trackSearchClearBtn) {
+            trackSearchClearBtn.addEventListener('click', () => {
+                trackSearch.value = '';
+                store.state.searchQuery = '';
+                syncSearchClearBtn();
+                applySearchAndSort();
+                trackSearch.focus();
+            });
+        }
 
         // Sort Select
         if (sortSelect) {
@@ -1247,25 +1284,13 @@ store.subscribe('workspace:change', ({ detail }) => {
 
         // 5. Cross-Platform App & Downloads inside Settings
         const settingsTabOpenDownloadHubBtn = document.getElementById('settingsTabOpenDownloadHubBtn');
-        if (settingsTabOpenDownloadHubBtn) {
-            settingsTabOpenDownloadHubBtn.addEventListener('click', () => {
-                switchWorkspace('download');
-            });
-        }
-        const settingsDownloadBtn = document.getElementById('settingsDownloadBtn');
-        if (settingsDownloadBtn) {
-            settingsDownloadBtn.addEventListener('click', () => {
-                switchWorkspace('download');
-            });
-        }
-        const settingsTabPwaInstallBtn = document.getElementById('settingsTabPwaInstallBtn');
         if (settingsTabPwaInstallBtn) {
             settingsTabPwaInstallBtn.addEventListener('click', () => {
                 if (store.state.deferredInstallPrompt) {
                     store.state.deferredInstallPrompt.prompt();
                     store.state.deferredInstallPrompt.userChoice.then(() => { store.state.deferredInstallPrompt = null; });
                 } else {
-                    switchWorkspace('download');
+                    showToast('App is ready: use browser menu "Install App" or "Add to Home Screen".');
                 }
             });
         }
@@ -1708,8 +1733,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                     if (window.innerWidth <= 768) {
                         switchWorkspace('player', 'settingsPanel');
                     } else {
-                        const metaTab = document.getElementById('tabMetadata');
-                        if (metaTab) metaTab.click();
+                        toggleMetadataPanel(true);
                     }
                 });
             }
@@ -2014,9 +2038,8 @@ store.subscribe('workspace:change', ({ detail }) => {
                     } catch (_) {}
                 }
 
-                if (vinylTurntable) {
-                    vinylTurntable.style.animationDuration = speed === 1 ? '2.2s' : `${2.2 / speed}s`;
-                }
+                const basePeriod = 1.8;
+                document.documentElement.style.setProperty('--platter-speed', `${(basePeriod / speed).toFixed(2)}s`);
             });
         });
 
@@ -2128,7 +2151,7 @@ store.subscribe('workspace:change', ({ detail }) => {
 
         if (wsPlayerBtn) bindFastAction(wsPlayerBtn, () => switchWorkspace('player'));
         if (wsSoulseekBtn) bindFastAction(wsSoulseekBtn, () => switchWorkspace('soulseek'));
-        if (wsDownloadBtn) bindFastAction(wsDownloadBtn, () => switchWorkspace('download'));
+        if (wsDownloadBtn) bindFastAction(wsDownloadBtn, () => switchWorkspace('settings'));
 
         // Soulseek / P2P toolbar power triggers (loads P2P module on demand)
         if (slskPowerBtn) {
@@ -2153,8 +2176,6 @@ store.subscribe('workspace:change', ({ detail }) => {
             if (urlParams.get('slsk_open') === '1') {
                 setMobileSearchPanelCollapsed(false);
             }
-        } else if (urlParams.get('view') === 'download' || window.location.hash === '#download') {
-            switchWorkspace('download');
         } else if (urlParams.get('view') === 'settings' || window.location.hash === '#settings' || urlParams.get('tab') === 'settings') {
             switchWorkspace('settings');
         } else if (urlParams.get('panel')) {

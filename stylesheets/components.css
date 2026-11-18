@@ -45,8 +45,15 @@
         color: var(--text-primary); font-size: var(--font-sm);
         transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
     }
-    .searchContainer input { padding: 0.45rem 2.15rem 0.45rem 2.1rem; }
+    .searchContainer input { padding: 0.45rem 2.35rem 0.45rem 2.1rem; }
     .searchIcon { position: absolute; left: 0.65rem; color: var(--text-muted); pointer-events: none; z-index: 1; }
+    .searchClearBtn {
+        position: absolute; right: 2.1rem; width: 26px; height: 26px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: var(--font-3xs); font-weight: 700; color: var(--text-muted);
+        background: var(--bg-surface-3); transition: color var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast);
+    }
+    .searchClearBtn:hover { color: var(--text-primary); }
     :is(.searchContainer input, .settingsInput, .slskDirInput, .metaEditorInput, .metaEditorOnlineInput, #newPlaylistInput):focus {
         outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 2px var(--accent-surface);
     }
@@ -62,9 +69,13 @@
         display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
         font-size: var(--font-xs); font-weight: 700; letter-spacing: 0.05em;
         border: 1px solid var(--border-subtle); background: var(--bg-surface-2); color: var(--text-primary);
-        transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+        transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform 90ms cubic-bezier(0.2, 0, 0, 1);
     }
     :is(.topBtn, .actionBtn, .folderBrowseBtn, .backBtn, .uploadBtn):hover { background: var(--bg-surface-3); border-color: var(--border-medium); }
+    :is(.mediaBtn, .topBtn, .actionBtn, .deckActionBtn, .speedBtn, .speedPresetBtn, .formatFilterPill, .miniBtn, .miniDeckReturnBtn, .mobileTabBtn, .wsTabBtn, .eqDeckBtn, .peqDspBtn, .themeSelectCard, .trackMenuItemBtn, .sampleTagBtn, .settingsCatBtn, .visModeBtn, .trackMenuTriggerBtn, .closeModalBtn, .searchClearBtn):active {
+        transform: scale(0.96);
+        transition-duration: 80ms;
+    }
     .actionBtn.primaryBtn, .scanFolderActionBtn { background: var(--accent-color); border-color: var(--accent-color); color: var(--text-on-accent); }
     .actionBtn.primaryBtn:hover, .scanFolderActionBtn:hover { background: var(--accent-hover); }
     .actionBtn.active, .toggleActiveBtn.active, .dspBtn.active { background: var(--accent-surface); border-color: var(--border-bold); color: var(--text-accent); }
@@ -82,16 +93,24 @@
     .settingsGroup { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-xs) var(--space-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
     .speedRow, .speedPresetButtons, .deckTopControls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2xs); }
     .speedRow { justify-content: space-between; font-size: var(--font-xs); color: var(--text-secondary); }
-    .speedPresetBtn { min-height: 30px; padding: 0.2rem 0.48rem; border-radius: var(--radius-xs); border: 1px solid var(--border-subtle); background: var(--bg-surface-1); font-size: var(--font-2xs); font-weight: 700; color: var(--text-secondary); }
-    .speedPresetBtn.active { background: var(--accent-color); color: var(--text-on-accent); border-color: var(--accent-color); }
+    .speedSelector { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2xs); }
+    .speedBtn, .speedPresetBtn {
+        min-height: 36px; padding: 0.32rem 0.55rem; border-radius: var(--radius-xs);
+        border: 1px solid var(--border-subtle); background: var(--bg-surface-1);
+        font-size: var(--font-2xs); font-weight: 700; color: var(--text-secondary);
+        text-align: center; transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    }
+    .speedBtn:hover, .speedPresetBtn:hover { border-color: var(--border-medium); color: var(--text-primary); }
+    .speedBtn.active, .speedPresetBtn.active { background: var(--accent-color); color: var(--text-on-accent); border-color: var(--accent-color); }
     .speedSlider { width: 100%; accent-color: var(--accent-color); }
-    .metaGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2xs); }
-    .metaItem { min-width: 0; padding: var(--space-2xs) var(--space-xs); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-xs); display: flex; flex-direction: column; gap: 2px; }
+    .metaGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-sm); }
+    .metaItem { min-width: 0; padding: 0.42rem 0.15rem; border-bottom: 1px solid color-mix(in oklch, var(--border-subtle) 55%, transparent); display: flex; flex-direction: column; gap: 2px; }
+    .metaItemFull { grid-column: 1 / -1; }
     .metaKey { font-size: var(--font-3xs); color: var(--text-muted); letter-spacing: 0.06em; font-weight: 700; }
-    .metaVal { font-size: var(--font-xs); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .metaVal { font-size: var(--font-xs); font-variant-numeric: tabular-nums; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     /* Center Panel: Vinyl Turntable Deck */
-    .playerDeck { padding: var(--space-sm) var(--space-md); justify-content: space-between; gap: var(--space-xs); }
+    .playerDeck { padding: var(--space-sm) var(--space-md); justify-content: space-between; gap: var(--space-xs); overflow-y: auto; }
     .turntableStage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; border-radius: var(--radius-md); background: radial-gradient(circle at center, var(--accent-surface), transparent 72%); container-type: size; }
     .deckArtworkWrapper { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
     .deckArtworkAmbient { position: absolute; inset: -12%; width: 124%; height: 124%; object-fit: cover; opacity: 0.16; filter: blur(26px) saturate(1.25); pointer-events: none; }
@@ -137,53 +156,59 @@
     .lyricsContent { white-space: pre-wrap; line-height: 1.8; color: var(--text-primary); font-size: var(--font-base); }
 
     /* Track Title & Empty State */
-    .trackMeta { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+    .trackMeta { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; padding-inline: var(--space-xs); }
     .metaBadgeRow { display: flex; align-items: center; justify-content: center; gap: var(--space-xs); flex-wrap: wrap; }
-    .formatBadge, .signalPathBadge, .signalQualityBadge { padding: 0.18rem 0.55rem; border-radius: var(--radius-full); font-size: var(--font-3xs); font-family: var(--font-mono); font-weight: 700; letter-spacing: 0.05em; border: 1px solid var(--border-medium); background: var(--accent-surface); color: var(--text-accent); display: inline-flex; align-items: center; gap: 0.3rem; }
+    .formatBadge, .signalPathBadge, .signalQualityBadge { padding: 0.18rem 0.55rem; border-radius: var(--radius-full); font-size: var(--font-3xs); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: 0.05em; border: 1px solid var(--border-medium); background: var(--accent-surface); color: var(--text-accent); display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
     .signalQualityBadge.bitPerfect { border-color: var(--status-success); color: var(--status-success); }
     .signalQualityBadge.highPrecision { border-color: var(--border-bold); color: var(--text-accent); }
-    #trackName { font-size: var(--font-lg); font-weight: 800; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); }
+    #trackName { font-size: var(--font-lg); font-weight: 800; letter-spacing: -0.018em; line-height: 1.15; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); }
     #artistName { font-size: var(--font-sm); font-weight: 600; color: var(--text-secondary); max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .albumName { font-size: var(--font-xs); color: var(--text-muted); }
     .isMarquee { text-overflow: clip; }
-    .isMarquee .marqueeContent { display: inline-block; padding-left: 15%; animation: marqueeScroll 14s linear infinite; }
+    .isMarquee .marqueeContent { display: inline-block; animation: marqueeScroll var(--marquee-duration, 12s) linear infinite; }
     .playerEmptyPrompt { padding: var(--space-md); border-radius: var(--radius-md); background: var(--bg-surface-2); border: 1px dashed var(--border-medium); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); max-width: 30rem; }
-    .playerEmptyTitle { font-weight: 800; font-size: var(--font-md); color: var(--text-primary); }
+    .playerEmptyTitle { font-weight: 800; font-size: var(--font-md); letter-spacing: -0.015em; line-height: 1.18; color: var(--text-primary); }
     .playerEmptySub { font-size: var(--font-xs); color: var(--text-secondary); }
     .playerEmptyActions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-xs); margin-top: var(--space-2xs); }
 
     /* Scrubber, Transport & EQ Strip */
     .timelineCon { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-xs); }
-    .timeLabel { font-family: var(--font-mono); font-size: var(--font-2xs); color: var(--text-muted); min-width: 2.8rem; text-align: center; }
+    .timeLabel { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-2xs); color: var(--text-muted); min-width: 2.8rem; text-align: center; }
     .progressBarCon { position: relative; height: var(--slider-scrub-zone); display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
-    .progressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 6px; border-radius: var(--radius-full); background: var(--bg-surface-3); }
-    .progressBar { position: relative; height: 6px; width: 0%; border-radius: var(--radius-full); background: var(--accent-color); box-shadow: 0 0 10px var(--accent-glow); }
-    .progressPlayhead { position: absolute; right: -6px; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--accent-color); transform: translateY(-50%); }
+    .progressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 6px; border-radius: var(--radius-full); background: var(--bg-surface-3); transition: height 120ms ease-out; }
+    .progressBar { position: relative; height: 6px; width: 0%; border-radius: var(--radius-full); background: var(--accent-color); box-shadow: 0 0 10px var(--accent-glow); transition: height 120ms ease-out; }
+    .progressPlayhead { position: absolute; right: -6px; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--accent-color); transform: translateY(-50%); transition: transform 120ms ease-out; }
+    :is(.progressBarCon.dragging, .miniProgressBarCon.dragging)::before,
+    :is(.progressBarCon.dragging, .miniProgressBarCon.dragging) :is(.progressBar, .miniProgressBar) { height: 8px; }
+    :is(.progressBarCon.dragging, .miniProgressBarCon.dragging) .progressPlayhead { transform: translateY(-50%) scale(1.38); }
     .progressHover { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); background: oklch(1 0 0 / 0.16); border-radius: var(--radius-full); pointer-events: none; opacity: 0; }
-    .progressHoverTooltip { position: absolute; bottom: 100%; transform: translateX(-50%); padding: 0.15rem 0.4rem; border-radius: var(--radius-xs); background: var(--bg-surface-3); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--font-3xs); pointer-events: none; opacity: 0; }
-    .progressBarCon:hover :is(.progressHoverTooltip, .progressHover) { opacity: 1; }
+    .progressHoverTooltip { position: absolute; bottom: 100%; transform: translateX(-50%); padding: 0.18rem 0.45rem; border-radius: var(--radius-xs); background: var(--bg-surface-3); color: var(--text-primary); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); pointer-events: none; opacity: 0; transition: opacity 100ms ease-out; white-space: nowrap; }
+    .progressBarCon:hover :is(.progressHoverTooltip, .progressHover),
+    .progressBarCon.dragging .progressHoverTooltip { opacity: 1; }
     .mediaCon { display: flex; align-items: center; justify-content: center; gap: var(--space-sm); }
-    .mediaBtn { min-width: var(--touch-min); min-height: var(--touch-min); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); transition: transform var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast); }
+    .mediaBtn { min-width: var(--touch-min); min-height: var(--touch-min); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); transition: transform 90ms cubic-bezier(0.2, 0, 0, 1), border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast); }
     .mediaBtn:hover { color: var(--text-primary); border-color: var(--border-medium); transform: translateY(-1px); }
     .mediaBtn.active, .mediaBtn.repeat-one { color: var(--text-accent); border-color: var(--border-bold); background: var(--accent-surface); }
     .playPauseBtn { width: clamp(3.15rem, 6dvh, 3.65rem); height: clamp(3.15rem, 6dvh, 3.65rem); background: var(--accent-color); border-color: var(--accent-color); color: var(--text-on-accent); box-shadow: 0 0 22px var(--accent-glow); }
+    .playPauseBtn:active { transform: scale(0.92); }
     .playPauseBtn .icon-pause, .playPauseBtn.playing .icon-play { display: none; }
     .playPauseBtn.playing .icon-pause { display: block; }
     .volumeDeck { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-xs); }
     .muteBtn, .miniMuteBtn { width: 36px; height: 36px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); }
-    .volumeSlider { width: 100%; accent-color: var(--accent-color); }
+    .volumeSlider { width: 100%; accent-color: var(--accent-color); touch-action: none; }
     .volumeSlider.amplified { accent-color: var(--status-warning); }
-    .volumeLevel { font-family: var(--font-mono); font-size: var(--font-xs); color: var(--text-secondary); min-width: 3rem; text-align: right; }
+    .volumeLevel { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-xs); color: var(--text-secondary); min-width: 3rem; text-align: right; }
     .audioProcessingBar { display: flex; align-items: center; }
     .eqDeckModule { width: 100%; }
     .eqDeckBtn { width: 100%; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-medium); display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); text-align: left; }
     .eqDeckBtn.active { background: var(--accent-surface); border-color: var(--border-bold); }
+    .eqDeckInfo { min-width: 0; }
     .eqDeckTitle { font-size: var(--font-xs); font-weight: 800; color: var(--text-accent); }
-    .eqDeckSub { display: block; font-size: var(--font-3xs); color: var(--text-muted); }
-    .eqDeckBadges { display: flex; gap: 4px; flex-wrap: wrap; }
+    .eqDeckSub { display: block; font-size: var(--font-3xs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .eqDeckBadges { display: flex; gap: 4px; flex-wrap: nowrap; flex-shrink: 0; align-items: center; }
     .eqDeckBadge, .eqDeckDspBadge, .counter, .activeListLabel, .queueCountBadge, .playlistsCounterBadge, .playlistMetaPill {
-        padding: 0.16rem 0.5rem; border-radius: var(--radius-xs); font-size: var(--font-3xs); font-weight: 700;
-        font-family: var(--font-mono); background: var(--bg-surface-3); color: var(--text-secondary); border: 1px solid var(--border-subtle);
+        padding: 0.16rem 0.5rem; border-radius: var(--radius-xs); font-size: var(--font-3xs); font-weight: 700; white-space: nowrap;
+        font-family: var(--font-mono); font-variant-numeric: tabular-nums; background: var(--bg-surface-3); color: var(--text-secondary); border: 1px solid var(--border-subtle);
     }
 
     /* Right Panel: Library, Playlists & Queue */
@@ -214,13 +239,19 @@
     }
     :is(.trackItem, .queueItem, .richPlaylistCard):hover { border-color: var(--border-medium); background: var(--bg-surface-3); }
     .trackItem.active, .queueItem.active, .richPlaylistCard.active { border-color: var(--border-bold); background: var(--accent-surface); }
-    .trackIndex, .queueIndex { font-family: var(--font-mono); font-size: var(--font-3xs); color: var(--text-muted); min-width: 1.6rem; text-align: center; }
-    .trackThumb, .queueThumb, .batchAddThumb, .trackMenuThumb, .playlistCardArtwork { width: 40px; height: 40px; border-radius: var(--radius-xs); object-fit: cover; flex: 0 0 40px; background: var(--bg-surface-3); }
+    .trackIndex, .queueIndex { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); color: var(--text-muted); min-width: 1.6rem; text-align: center; }
+    .trackThumb, .queueThumb, .batchAddThumb, .trackMenuThumb, .playlistCardArtwork { width: 40px; height: 40px; border-radius: var(--radius-xs); object-fit: cover; flex: 0 0 40px; background: var(--bg-surface-3); display: flex; align-items: center; justify-content: center; color: var(--text-accent); }
     .trackInfo, .queueDetails, .batchAddInfo, .playlistCardMain { flex: 1 1 auto; min-width: 0; }
     .trackTitle, .queueTitle, .playlistCardName, .batchAddTitle { font-size: var(--font-sm); font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .trackArtist, .queueArtist, .batchAddArtist, .trackDetails { font-size: var(--font-xs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .trackDuration, .queueDuration, .batchAddDuration { font-family: var(--font-mono); font-size: var(--font-2xs); color: var(--text-muted); }
+    .trackDuration, .queueDuration, .batchAddDuration { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-2xs); color: var(--text-muted); flex-shrink: 0; }
     .trackItemActions, .queueItemActions, .playlistCardQuickActions { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
+    @media (hover: hover) {
+        .trackItem .trackItemActions { opacity: 0; transition: opacity var(--transition-fast); }
+        .trackItem:is(:hover, :focus-within, .active) .trackItemActions { opacity: 1; }
+    }
+    .trackMenuTriggerBtn { min-width: 32px; min-height: 32px; border-radius: var(--radius-xs); display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); transition: color var(--transition-fast), background-color var(--transition-fast); }
+    .trackMenuTriggerBtn:hover { color: var(--text-primary); background: var(--bg-surface-2); }
     .trackActionIconBtn, .queuePlayNowBtn, .queueMoveBtn, .queueRemoveBtn, .actionPillBtn, .playlistCardDeleteBtn {
         min-width: 28px; min-height: 28px; padding: 0 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border-subtle);
         background: var(--bg-surface-1); font-size: var(--font-3xs); font-weight: 700; color: var(--text-secondary);
@@ -244,10 +275,10 @@
     .miniPlayBtn { background: var(--accent-color); color: var(--text-on-accent); border-color: var(--accent-color); }
     .miniPlayBtn .icon-pause, .miniPlayBtn.playing .icon-play { display: none; }
     .miniPlayBtn.playing .icon-pause { display: block; }
-    .miniProgressBarCon { position: relative; flex: 1 1 auto; height: 22px; display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
-    .miniProgressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 5px; border-radius: var(--radius-full); background: var(--bg-surface-3); }
-    .miniProgressBar { position: relative; z-index: 1; height: 5px; border-radius: var(--radius-full); width: 0%; background: var(--accent-color); }
-    .miniTime { font-family: var(--font-mono); font-size: var(--font-3xs); color: var(--text-muted); }
+    .miniProgressBarCon { position: relative; flex: 1 1 auto; height: 34px; display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .miniProgressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 5px; border-radius: var(--radius-full); background: var(--bg-surface-3); transition: height 120ms ease-out; }
+    .miniProgressBar { position: relative; z-index: 1; height: 5px; border-radius: var(--radius-full); width: 0%; background: var(--accent-color); transition: height 120ms ease-out; }
+    .miniTime { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); color: var(--text-muted); }
 
     /* Modals & Backdrops */
     .modalBackdrop, .slskModalOverlay {
@@ -265,25 +296,55 @@
     .metaEditorCard { width: min(100%, 44rem); }
     .trackLoadingCard, .themeLoadingCard { text-align: center; align-items: center; width: min(100%, 24rem); }
     .modalHeader, .slskModalHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding-bottom: var(--space-xs); border-bottom: 1px solid var(--border-subtle); }
-    .modalHeader h3, .slskModalHeader h3 { font-size: var(--font-md); font-weight: 800; color: var(--text-primary); }
+    .modalHeader h3, .slskModalHeader h3 { font-size: var(--font-md); font-weight: 800; letter-spacing: -0.012em; line-height: 1.2; color: var(--text-primary); }
 
     /* PEQ Studio Modal */
     .peqCanvasContainer { position: relative; width: 100%; height: 170px; border-radius: var(--radius-sm); background: var(--bg-canvas); border: 1px solid var(--border-subtle); overflow: hidden; }
     .peqCurveCanvas { width: 100%; height: 100%; }
     .peqCanvasOverlay { position: absolute; inset: 6px 8px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
-    .peqDbLabel { font-family: var(--font-mono); font-size: var(--font-3xs); color: var(--text-muted); }
+    .peqDbLabel { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); color: var(--text-muted); }
     .peqDspGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: var(--space-2xs); }
-    .peqDspBtn { padding: 0.45rem 0.5rem; border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+    .peqDspBtn { padding: 0.45rem 0.5rem; border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; transition: border-color var(--transition-fast), background-color var(--transition-fast), transform 90ms ease-out; }
+    .peqDspBtn.active { background: var(--accent-surface); border-color: var(--border-bold); }
     .peqDspName { font-size: var(--font-2xs); font-weight: 800; }
-    .peqDspSpec { font-size: var(--font-3xs); color: var(--text-muted); font-family: var(--font-mono); }
+    .peqDspSpec { font-size: var(--font-3xs); color: var(--text-muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .peqSpatialCalibrationRow, .peqToolbarRow, .peqHeaderActions, .peqDspHeader, .peqAutoEqDrawerActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs); }
     .peqSpatialControlGroup, .peqPresetGroup, .peqDspTitleGroup { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); font-size: var(--font-xs); }
     .peqAutoEqDrawer { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-xs); background: var(--bg-surface-2); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); }
-    .peqFadersGrid { display: grid; grid-template-columns: repeat(10, minmax(42px, 1fr)); gap: var(--space-2xs); overflow-x: auto; padding: var(--space-xs); background: var(--bg-surface-2); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); }
+    .peqFadersGrid { display: grid; grid-template-columns: repeat(10, minmax(44px, 1fr)); gap: var(--space-2xs); overflow-x: auto; padding: var(--space-xs); background: var(--bg-surface-2); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); }
     .peqFaderCol { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-    .peqFaderDb, .peqFaderHz { font-family: var(--font-mono); font-size: var(--font-3xs); color: var(--text-secondary); }
-    .peqFaderTrackCon { height: 118px; display: flex; align-items: center; justify-content: center; }
-    .peqSlider { width: 104px; transform: rotate(-90deg); accent-color: var(--accent-color); }
+    .peqFaderDb, .peqFaderHz { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); color: var(--text-secondary); }
+    .peqFaderDb.boost { color: var(--text-accent); }
+    .peqFaderDb.cut { color: var(--status-warning); }
+    .peqFaderTrackCon { position: relative; height: 118px; width: 32px; display: flex; align-items: center; justify-content: center; }
+    .peqFaderTrackZero { position: absolute; left: 50%; top: 50%; width: 16px; height: 1px; background: var(--border-medium); transform: translate(-50%, -50%); pointer-events: none; opacity: 0.7; }
+    .peqSlider {
+        appearance: none; -webkit-appearance: none; width: 104px; height: 28px; padding: 0;
+        background: transparent; cursor: pointer; touch-action: none; transform: rotate(-90deg);
+    }
+    .peqSlider::-webkit-slider-runnable-track {
+        height: 5px; border-radius: var(--radius-full);
+        background: linear-gradient(90deg,
+            var(--bg-surface-3) 0%, var(--bg-surface-3) var(--fill-low, 50%),
+            var(--accent-color) var(--fill-low, 50%), var(--accent-color) var(--fill-high, 50%),
+            var(--bg-surface-3) var(--fill-high, 50%), var(--bg-surface-3) 100%);
+    }
+    .peqSlider::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none; width: 15px; height: 15px; margin-top: -5px;
+        border-radius: 50%; background: var(--text-primary); border: 2px solid var(--accent-color);
+        box-shadow: 0 1px 4px oklch(0 0 0 / 0.45);
+    }
+    .peqSlider::-moz-range-track {
+        height: 5px; border-radius: var(--radius-full);
+        background: linear-gradient(90deg,
+            var(--bg-surface-3) 0%, var(--bg-surface-3) var(--fill-low, 50%),
+            var(--accent-color) var(--fill-low, 50%), var(--accent-color) var(--fill-high, 50%),
+            var(--bg-surface-3) var(--fill-high, 50%), var(--bg-surface-3) 100%);
+    }
+    .peqSlider::-moz-range-thumb {
+        width: 15px; height: 15px; border-radius: 50%; background: var(--text-primary);
+        border: 2px solid var(--accent-color); box-shadow: 0 1px 4px oklch(0 0 0 / 0.45);
+    }
     .peqFaderQBtn, .peqMiniResetBtn, .peqMiniModeBtn, .peqBypassBtn, .peqResetBtn, .peqAutoEqBtn { padding: 0.25rem 0.55rem; border-radius: var(--radius-xs); border: 1px solid var(--border-subtle); background: var(--bg-surface-1); font-size: var(--font-3xs); font-family: var(--font-mono); color: var(--text-secondary); }
     .peqBypassBtn.bypassed { color: var(--status-warning); border-color: var(--status-warning); }
     .auditStageChain { display: flex; flex-direction: column; gap: 4px; }
@@ -320,14 +381,24 @@
     .themeCategoryHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); margin-bottom: 2px; }
     .themeCategoryLead, .themeModalSubtitle, .settingsSubtitle, .settingsRowDesc, .settingsSectionDesc { font-size: var(--font-xs); color: var(--text-muted); }
     .themeModalGrid { margin-top: var(--space-xs); display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-xs); }
-    .themeSelectCard { padding: var(--space-xs); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-surface-2); display: flex; align-items: center; gap: var(--space-xs); text-align: left; }
+    .themeSelectCard { padding: var(--space-xs); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-surface-2); display: flex; align-items: center; gap: var(--space-xs); text-align: left; transition: border-color var(--transition-fast), background-color var(--transition-fast), transform 90ms ease-out; }
+    .themeSelectCard:hover { border-color: var(--border-medium); background: var(--bg-surface-3); }
     .themeSelectCard.active { border-color: var(--border-bold); box-shadow: 0 0 0 1px var(--border-bold); }
     .themeCardPreview { width: 48px; height: 48px; border-radius: var(--radius-xs); flex: 0 0 48px; display: flex; align-items: center; justify-content: center; gap: 3px; border: 1px solid var(--border-subtle); }
     .previewDot { width: 9px; height: 9px; border-radius: 50%; }
     .themeCardHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2xs); font-weight: 800; font-size: var(--font-xs); }
-    .themeActivePill { display: none; padding: 0.1rem 0.35rem; border-radius: var(--radius-xs); background: var(--accent-color); color: var(--text-on-accent); font-size: var(--font-3xs); }
-    .themeSelectCard.active .themeActivePill { display: inline-block; }
+    .themeActivePill { visibility: hidden; padding: 0.1rem 0.35rem; border-radius: var(--radius-xs); background: var(--accent-color); color: var(--text-on-accent); font-size: var(--font-3xs); flex-shrink: 0; }
+    .themeSelectCard.active .themeActivePill { visibility: visible; }
     .themeCardDesc { display: block; font-size: var(--font-3xs); color: var(--text-muted); }
+
+    .settingsDebugLogBox {
+        max-height: 110px; overflow-y: auto; font-family: var(--font-mono); font-size: var(--font-3xs);
+        padding: var(--space-xs); background: var(--bg-canvas); border-radius: var(--radius-xs);
+        border: 1px solid var(--border-subtle); color: var(--text-secondary);
+    }
+    .settingsDebugLogActions { gap: var(--space-2xs); }
+    .settingsDebugLogActions .actionBtn { flex: 1 1 120px; }
+    .sleepStatusTime { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
 
     /* Settings Workspace */
     .settingsHubHeader, .settingsCategoryNav, .settingsRowHeader, .settingsApplyBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs); }
@@ -351,24 +422,67 @@
     .cachySwitchLabel { display: inline-flex; align-items: center; gap: var(--space-xs); cursor: pointer; font-size: var(--font-xs); font-weight: 700; }
     .cachySwitchLabel input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-color); cursor: pointer; }
 
+    /* Settings Theme Picker Card */
+    .settingsThemePickerBtn {
+        width: 100%; min-height: 54px; padding: var(--space-sm); border-radius: var(--radius-sm);
+        border: 1px solid var(--border-medium); background: var(--bg-surface-1);
+        display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); text-align: left;
+        transition: border-color var(--transition-fast), background-color var(--transition-fast);
+    }
+    .settingsThemePickerBtn:hover { border-color: var(--border-bold); background: var(--bg-surface-3); }
+    .settingsThemePickerInfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .settingsThemePickerSub { font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.08em; color: var(--text-muted); }
+    .settingsThemePickerCurrent {
+        display: inline-flex; align-items: center; gap: 0.45rem;
+        font-size: var(--font-sm); font-weight: 800; color: var(--text-primary);
+    }
+    .settingsThemePickerCurrent::before {
+        content: ''; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px;
+        background: var(--accent-color); box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .settingsThemePickerAction {
+        flex: 0 0 auto; padding: 0.38rem 0.75rem; border-radius: var(--radius-full);
+        background: var(--accent-surface); border: 1px solid var(--border-bold);
+        color: var(--text-accent); font-size: var(--font-2xs); font-weight: 800; letter-spacing: 0.06em;
+    }
+
     /* Soulseek P2P Studio & Account Modal */
     .slskWorkspaceNotice, .slskToolbar, .slskSearchRow, .slskFilterRow, .slskResultsHeaderBar,
     .slskResultsFooter, .slskTransfersHeader, .slskTransferRow {
         display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs);
         padding: var(--space-xs) var(--space-sm); background: var(--bg-surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
     }
-    .slskControlsPanel, .slskResultsPanel, .slskTransfersDrawer, .slskSearchArea, .slskModalBody, .slskFormGroup { display: flex; flex-direction: column; gap: var(--space-xs); }
+    .slskNoticeContent { display: flex; align-items: flex-start; gap: var(--space-xs); flex: 1 1 220px; min-width: 0; }
+    .slskNoticeText { display: flex; flex-direction: column; gap: 2px; font-size: var(--font-xs); color: var(--text-secondary); min-width: 0; }
+    .slskNoticeText strong { color: var(--text-primary); font-size: var(--font-xs); }
+    .slskNoticeActions { display: flex; align-items: center; gap: var(--space-xs); flex-shrink: 0; }
+    .slskControlsPanel, .slskResultsPanel, .slskSearchArea, .slskModalBody, .slskFormGroup { display: flex; flex-direction: column; gap: var(--space-xs); }
+    .slskTransfersDrawer { flex-direction: column; gap: var(--space-xs); }
     .slskModalActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-xs); margin-top: var(--space-xs); }
     .slskModalAlert { padding: var(--space-xs); border-radius: var(--radius-xs); border: 1px solid var(--border-medium); background: var(--bg-surface-2); font-size: var(--font-xs); }
     .slskStatusDot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-disabled); display: inline-block; }
     .slskStatusDot.online { background: var(--status-success); box-shadow: 0 0 8px var(--status-success); }
     .slskStatusDot.offline { background: var(--status-danger); }
+    .slskResultsCon { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; background: var(--bg-surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-xs); gap: var(--space-xs); }
     .slskResultsPanel, .slskTransfersDrawer { flex: 1 1 auto; min-height: 0; background: var(--bg-surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-xs); }
-    .slskResultsBody, .slskTransfersBody { flex: 1 1 auto; min-height: 180px; overflow-y: auto; }
+    .slskResultsHeader {
+        display: grid; grid-template-columns: minmax(180px, 1.8fr) 68px 86px 76px minmax(110px, 1fr) 74px 92px;
+        gap: var(--space-xs); align-items: center; padding: var(--space-xs) var(--space-sm);
+        font-size: var(--font-3xs); font-weight: 800; color: var(--text-muted); letter-spacing: 0.06em;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+    .slskResultsList, .slskResultsBody, .slskTransfersBody { flex: 1 1 auto; min-height: 180px; overflow-y: auto; }
+    .slskPlaceholder { padding: var(--space-xl) var(--space-md); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: var(--space-sm); }
+    .slskPlaceholder h3 { font-size: var(--font-sm); font-weight: 800; letter-spacing: 0.08em; color: var(--text-primary); }
+    .slskPlaceholder p { max-width: 30rem; font-size: var(--font-xs); color: var(--text-secondary); }
+    .slskSampleTags { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2xs); margin-top: var(--space-2xs); font-size: var(--font-xs); color: var(--text-muted); }
+    .sampleTagBtn { min-height: 36px; padding: 0.35rem 0.72rem; border-radius: var(--radius-full); border: 1px solid var(--border-medium); background: var(--bg-surface-2); color: var(--text-accent); font-size: var(--font-2xs); font-weight: 700; }
     .slskSearchBox { flex: 1 1 220px; position: relative; display: flex; align-items: center; }
-    .slskResultRow { display: grid; grid-template-columns: minmax(180px, 1.8fr) auto auto auto auto auto; gap: var(--space-xs); align-items: center; padding: var(--space-xs); border-bottom: 1px solid var(--border-subtle); font-size: var(--font-xs); }
+    .slskDirPill { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .slskResultRow { display: grid; grid-template-columns: minmax(180px, 1.8fr) 68px 86px 76px minmax(110px, 1fr) 74px 92px; gap: var(--space-xs); align-items: center; padding: var(--space-xs); border-bottom: 1px solid var(--border-subtle); font-size: var(--font-xs); }
+    .slskSizeVal, .slskBitrateVal, .slskPeerSpeed { font-variant-numeric: tabular-nums; }
     .slskSearchingState { padding: var(--space-lg); display: flex; flex-direction: column; align-items: center; gap: var(--space-sm); text-align: center; }
-    .slskRadarGraphic { position: relative; width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--border-bold); }
+    .slskRadarGraphic { position: relative; width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--border-bold); margin: 0 auto; }
     .radarSweep { position: absolute; inset: 0; border-radius: 50%; border-top: 2px solid var(--accent-color); animation: vinylSpin 1.4s linear infinite; }
     .slskSearchingProgressCon { width: min(100%, 16rem); height: 5px; background: var(--bg-surface-3); border-radius: var(--radius-full); overflow: hidden; }
     .slskSearchingProgressBar { width: 45%; height: 100%; background: var(--accent-color); }
@@ -381,27 +495,45 @@
 
     @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
         .libraryControls.mobileCollapsed { display: none; }
+        .searchContainer input, .topBtn, .deckActionBtn, .speedBtn, .speedPresetBtn,
+        .settingsCatBtn, .visModeBtn, .miniBtn, .slskMiniTransfersBtn, .sampleTagBtn { min-height: var(--touch-min); }
+        .muteBtn, .miniMuteBtn { min-width: var(--touch-min); min-height: var(--touch-min); }
+        #metadataToggleBtn, #tracklistToggleBtn { display: none; }
+        .signalPathBadge { min-height: 30px; padding: 0.24rem 0.65rem; }
         .miniPlayerCenter { display: contents; }
         .miniPlayerRight, .miniVolumeCon, .miniDeckReturnBtn { display: none; }
         .miniScrubberRow { grid-column: 1 / -1; }
         .miniTurntableThumb { width: 32px; height: 32px; flex: 0 0 32px; }
-        .miniBtn { min-height: 32px; padding: 0.2rem 0.5rem; }
+        .miniBtn { padding: 0.25rem 0.65rem; }
         .settingsHubHeader { padding: var(--space-xs) var(--space-sm); }
         .settingsSubtitle { display: none; }
         .settingsCategoryNav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
         .settingsCategoryNav::-webkit-scrollbar { display: none; }
         .settingsCatBtn { flex: 0 0 auto; white-space: nowrap; }
         .modalBackdrop { padding: 0.35rem; align-items: flex-end; }
-        .modalCard { width: 100%; max-width: 100%; max-height: 94dvh; border-radius: var(--radius-md); }
+        .modalCard { width: 100%; max-width: 100%; max-height: 94dvh; border-radius: var(--radius-md); animation: modalSheetIn var(--transition-base); }
         .modalCard .peqCanvasContainer { height: 120px; }
+        .trackItem .trackItemActions { display: none; }
+        .trackMenuTriggerBtn { min-width: var(--touch-min); min-height: var(--touch-min); }
         .settingsSubPane { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-content: start; gap: var(--space-xs); }
         .settingsSubPane > .coverCardCon { width: 88px; height: 88px; max-height: 88px; }
+        .settingsSubPane > #metaTurntableSpeedGroup,
         .settingsSubPane > .metaGrid,
         .settingsSubPane > .actionBtn,
         .settingsSubPane > :nth-child(n+3) { grid-column: 1 / -1; }
-        .slskPanelToggleBar { display: flex; align-items: center; justify-content: space-between; padding: var(--space-xs) var(--space-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+        .slskPanelToggleBar { display: flex; align-items: center; justify-content: space-between; min-height: var(--touch-min); padding: var(--space-xs) var(--space-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+        .slskToggleBarLeft, .slskToggleBarRight { display: flex; align-items: center; gap: var(--space-xs); }
         .slskControlsPanel.is-collapsed .slskPanelCollapsible { display: none; }
-        .slskResultRow { grid-template-columns: 1fr auto; }
+        .slskResultsHeader { display: none; }
+        .slskResultRow { grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-2xs) var(--space-xs); }
+        .slskResultRow .colTrack { grid-column: 1; min-width: 0; }
+        .slskResultRow :is(.colFormat, .colBitrate, .colSize, .colPeer, .colQueue) { grid-column: 1; display: inline-flex; align-items: center; gap: var(--space-2xs); font-size: var(--font-3xs); color: var(--text-muted); }
+        .slskResultRow .colAction { grid-column: 2; grid-row: 1 / span 6; display: flex; flex-direction: column; gap: var(--space-2xs); }
+        .toastContainer, .debugHudContainer {
+            left: var(--space-xs); right: var(--space-xs);
+            bottom: calc(var(--mobile-tabbar-height) + var(--safe-bottom) + var(--space-xs));
+            align-items: center;
+        }
     }
 
     @media (max-height: 500px) and (orientation: landscape) {
@@ -439,11 +571,18 @@
     @keyframes brandEq2 { 0% { transform: scaleY(0.28) translateZ(0); } 100% { transform: scaleY(0.78) translateZ(0); } }
     @keyframes brandEq3 { 0% { transform: scaleY(0.18) translateZ(0); } 100% { transform: scaleY(1.00) translateZ(0); } }
     @keyframes brandEq4 { 0% { transform: scaleY(0.35) translateZ(0); } 100% { transform: scaleY(0.72) translateZ(0); } }
-    @keyframes marqueeScroll { 0%, 15% { transform: translateX(0); } 85%, 100% { transform: translateX(-55%); } }
+    @keyframes marqueeScroll { 0%, 15% { transform: translateX(0); } 80%, 100% { transform: translateX(calc(-1 * var(--marquee-overflow, 0px))); } }
     @keyframes modalPopIn { from { opacity: 0; transform: scale(0.97) translateY(6px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    @keyframes modalSheetIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes lyricsReveal { from { opacity: 0; } to { opacity: 1; } }
     @keyframes toastSlideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { animation-duration: 0.01ms; animation-iteration-count: 1; transition-duration: 0.01ms; }
+    }
+    @media (prefers-reduced-transparency: reduce) {
+        .topBar, .persistentMiniPlayer, .mobileTabBar, .modalBackdrop, .slskModalOverlay, .debugHudContainer, .lyricsCon {
+            backdrop-filter: none;
+            background: var(--bg-surface-1);
+        }
     }
 }

@@ -37,5 +37,23 @@
         try { if (window.sessionStorage) sessionStorage.setItem('cachymusic_active_theme', t); } catch (_) {}
         try { document.cookie = 'cachymusic_active_theme=' + encodeURIComponent(t) + '; path=/; max-age=31536000; SameSite=Lax'; } catch (_) {}
         root.setAttribute('data-theme', t);
+        var themeMetaColors = {
+            default: '#090e14', 'studio-dark': '#090e14',
+            nms: '#15080a', atlas: '#15080a',
+            'solar-eclipse': '#0a0b1a', cyberpunk: '#0a0b1a', 'neon-night': '#0a0b1a',
+            'euclid-horizon': '#120e09',
+            'alien-paradise': '#140912',
+            'abyssal-void': '#06140f',
+            dissonance: '#12081c',
+            sentinel: '#09111a',
+            'minimalist-light': '#f4f3ef', 'brutalist-light': '#f4f3ef',
+            'minimalist-dark': '#080808', 'brutalist-dark': '#080808',
+            'minimalist-warm': '#faf8f5',
+            'minimalist-obsidian': '#000000', 'midnight-amoled': '#000000'
+        };
+        var metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme && themeMetaColors[t]) {
+            metaTheme.setAttribute('content', themeMetaColors[t]);
+        }
     } catch (_) {}
 })();

@@ -1,5 +1,6 @@
 // CachyMusic - Core Audio Player, Software Decoder & Gapless Transport
 import {
+    formatFileSize,
     formatTime,
     getValidSampleRate,
     safeStorage,
@@ -281,6 +282,48 @@ let playPendingTimeout = null;
 let noDataStallTimer = null;
 let seekStallTimer = null;
 let lastPositionStateUpdate = 0;
+let activeDecodeAbortController = null;
+const softwareBufferCache = new Map();
+
+function isAndroidFlacHazard(track) {
+    if (!track) return false;
+    const rt = getRuntime();
+    const onAndroid = Boolean(rt && rt.isAndroidNative)
+        || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || ''));
+    if (!onAndroid) return false;
+    const fmt = (track.format || '').toUpperCase();
+    const fname = (track.filename || '').toLowerCase();
+    const src = (track.src || '').toLowerCase();
+    return fmt === 'FLAC' || fname.endsWith('.flac') || src.includes('mime=audio%2fflac') || src.includes('.flac');
+}
+
+function shouldPreferSoftwareDecoder(track, cleanSrc = '') {
+    const s = store.state;
+    if (!track) return false;
+    return s.alwaysSoftwareDecodeUrls.has(cleanSrc)
+        || (track.src && s.alwaysSoftwareDecodeUrls.has(track.src))
+        || isAndroidFlacHazard(track);
+}
+
+function abortActiveSoftwareFetch() {
+    if (activeDecodeAbortController) {
+        try { activeDecodeAbortController.abort(); } catch (_) {}
+        activeDecodeAbortController = null;
+    }
+}
+
+function cacheSoftwareAudioBuffer(cacheKey, decodedBuffer) {
+    if (!cacheKey || !decodedBuffer) return;
+    if (softwareBufferCache.has(cacheKey)) {
+        softwareBufferCache.delete(cacheKey);
+    }
+    softwareBufferCache.set(cacheKey, decodedBuffer);
+    // Keep at most 2 decoded PCM AudioBuffers (~60-90MB max headroom) for instant prev/next replay on mobile
+    while (softwareBufferCache.size > 2) {
+        const oldestKey = softwareBufferCache.keys().next().value;
+        softwareBufferCache.delete(oldestKey);
+    }
+}
 
 function clearSeekStallTimer() {
     if (seekStallTimer) {
@@ -317,7 +360,7 @@ function applyTrackMetadataToDom(track, isStandalone = false) {
         statChannels.textContent = track.channels === 2 ? 'Stereo' : (track.channels === 1 ? 'Mono' : (track.channels ? `${track.channels} ch` : 'N/A'));
     }
     if (statFormat) statFormat.textContent = track.format ? track.format.toUpperCase() : 'N/A';
-    if (statSize) statSize.textContent = track.size ? track.size : 'N/A';
+    if (statSize) statSize.textContent = formatFileSize(track.size);
     if (statPath) {
         statPath.textContent = track.filename ? track.filename : (isStandalone ? 'Standalone File' : 'N/A');
         statPath.title = track.fullPath || track.filename || 'N/A';
@@ -386,7 +429,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
     let trackSrc = track.src || '';
     if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
 
-    const isKnownSoftware = s.alwaysSoftwareDecodeUrls.has(trackSrc) || (track.src && s.alwaysSoftwareDecodeUrls.has(track.src));
+    const isKnownSoftware = shouldPreferSoftwareDecoder(track, trackSrc);
     const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
     await ensureAudioEngineForSampleRate(targetRate);
 
@@ -537,6 +580,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
         if (autoPlay) {
             playWithSoftwareDecoder(track, initialTime);
         } else {
+            s.pendingSoftwareSeekSec = initialTime > 0 ? initialTime : null;
             s.isSoftwarePaused = true;
             syncPlayPauseUI(false);
         }
@@ -609,7 +653,7 @@ async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
 
     let trackSrc = track.src || '';
     if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
-    const isKnownSoftware = s.alwaysSoftwareDecodeUrls.has(trackSrc) || (track.src && s.alwaysSoftwareDecodeUrls.has(track.src));
+    const isKnownSoftware = shouldPreferSoftwareDecoder(track, trackSrc);
     const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
     await ensureAudioEngineForSampleRate(targetRate);
 
@@ -749,7 +793,7 @@ function updateRepeatUI() {
     } else {
         repeatBtn.classList.remove('active', 'repeat-one');
         repeatBtn.setAttribute('title', 'Repeat Off — Click for Repeat All');
-        repeatBtn.style.opacity = '0.45';
+        repeatBtn.style.opacity = '0.72';
         repeatBtn.innerHTML = `
             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                 <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
@@ -833,12 +877,13 @@ async function playAudio(userInitiated = false) {
         : s.allTracks[s.currentTrackIndex];
     const currentSrc = currentTrack ? (currentTrack.src || '') : '';
     const cleanSrc = currentSrc.startsWith('../') ? currentSrc.substring(3) : currentSrc;
-    const isKnownSoftware = currentTrack && (s.alwaysSoftwareDecodeUrls.has(cleanSrc) || (currentTrack.src && s.alwaysSoftwareDecodeUrls.has(currentTrack.src)));
+    const isKnownSoftware = shouldPreferSoftwareDecoder(currentTrack, cleanSrc);
 
     if (isKnownSoftware && !s.isSoftwareDecoding) {
         s.userExplicitlyPaused = false;
         syncPlayPauseUI(true);
-        playWithSoftwareDecoder(currentTrack, 0);
+        const startOffset = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : 0;
+        playWithSoftwareDecoder(currentTrack, startOffset);
         return;
     }
 
@@ -867,11 +912,21 @@ async function playAudio(userInitiated = false) {
     const scheduleNoDataFallback = (targetAudio) => {
         clearNoDataStallTimer();
         if (!targetAudio || !currentTrack || s.userExplicitlyPaused || s.isSoftwareDecoding) return;
-        if (targetAudio.readyState >= 1) return;
+        const startTimeAtSchedule = targetAudio.currentTime || 0;
+        const onAdvance = () => {
+            if (!targetAudio || targetAudio !== s.audio) return;
+            if ((targetAudio.currentTime || 0) > startTimeAtSchedule + 0.04) {
+                clearNoDataStallTimer();
+                targetAudio.removeEventListener('timeupdate', onAdvance);
+            }
+        };
+        targetAudio.addEventListener('timeupdate', onAdvance);
         noDataStallTimer = setTimeout(() => {
             noDataStallTimer = null;
+            targetAudio.removeEventListener('timeupdate', onAdvance);
             if (reqId !== currentPlayRequestId || s.userExplicitlyPaused || s.isSoftwareDecoding || s.audio !== targetAudio) return;
-            if (targetAudio.readyState === 0 && !targetAudio.ended) {
+            const timeStalled = Math.abs((targetAudio.currentTime || 0) - startTimeAtSchedule) < 0.04;
+            if ((targetAudio.readyState === 0 || timeStalled) && !targetAudio.ended) {
                 const rawSrc = targetAudio.getAttribute('src') || targetAudio.src || '';
                 if (rawSrc) s.alwaysSoftwareDecodeUrls.add(rawSrc);
                 if (currentTrack.src) s.alwaysSoftwareDecodeUrls.add(currentTrack.src);
@@ -880,10 +935,10 @@ async function playAudio(userInitiated = false) {
                     targetAudio.removeAttribute('src');
                     targetAudio.load();
                 } catch (_) {}
-                logAudioPlaybackEvent('info', `HTML5 Audio stalled at No Data (readyState 0) on "${currentTrack.title || currentTrack.filename}". Switching to 32-bit Web Audio Software Engine.`);
-                playWithSoftwareDecoder(currentTrack, targetAudio.currentTime || 0);
+                logAudioPlaybackEvent('info', `HTML5 Audio stalled (readyState ${targetAudio.readyState}) on "${currentTrack.title || currentTrack.filename}". Switching to 32-bit Web Audio Software Engine.`);
+                playWithSoftwareDecoder(currentTrack, startTimeAtSchedule);
             }
-        }, 2200);
+        }, 1450);
     };
 
     try {
@@ -926,7 +981,6 @@ async function playAudio(userInitiated = false) {
         scheduleNoDataFallback(activeAudio);
         await activeAudio.play();
         if (reqId !== currentPlayRequestId) return;
-        if (activeAudio.readyState >= 1) clearNoDataStallTimer();
         syncPlayPauseUI(!activeAudio.paused);
     } catch (err) {
         clearNoDataStallTimer();
@@ -1408,6 +1462,7 @@ function seekSoftwarePlayback(targetSec) {
 function stopSoftwarePlayback() {
     const s = store.state;
     clearSeekStallTimer();
+    abortActiveSoftwareFetch();
     cancelSoftwareProgressLoop();
     if (s.softwareSourceNode) {
         try {
@@ -1467,23 +1522,24 @@ async function decodeBufferWithAudioContext(ctx, rawArrayBuf) {
             p.then(resolve, reject);
         }
     });
-    try {
-        // Slice a copy so decodeAudioData neutering never destroys our fallback slice
-        return await attemptDecode(rawArrayBuf.slice(0));
-    } catch (primaryErr) {
+    const head = rawArrayBuf && rawArrayBuf.byteLength >= 16 ? new Uint8Array(rawArrayBuf, 0, 3) : null;
+    const hasId3Header = Boolean(head && head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33);
+    if (hasId3Header) {
         const stripped = stripId3ToFlacMagic(rawArrayBuf);
         if (stripped) {
             logAudioPlaybackEvent('info', 'Stripped prepended ID3v2 tag wrapper before fLaC sync frame for software decoder.');
             return await attemptDecode(stripped);
         }
-        throw primaryErr;
     }
+    // Zero-copy decode avoids duplicating large 50-90MB FLAC ArrayBuffers on 4GB devices
+    return await attemptDecode(rawArrayBuf);
 }
 
 async function playWithSoftwareDecoder(track, startTime = 0) {
     const s = store.state;
     if (!track) return;
     clearNoDataStallTimer();
+    abortActiveSoftwareFetch();
     const decodeGen = currentTrackGeneration;
     s.activeDecodedBuffer = null;
     s.isSoftwareDecoding = true;
@@ -1514,23 +1570,37 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
 
         let src = track.src || '';
         if (src.startsWith('../')) src = src.substring(3);
+        const ctxRate = s.audioContext ? s.audioContext.sampleRate : targetRate;
+        const cacheKey = src ? `${src}@${ctxRate}` : '';
+        let decodedBuffer = (cacheKey && softwareBufferCache.has(cacheKey))
+            ? softwareBufferCache.get(cacheKey)
+            : null;
 
-        logAudioPlaybackEvent('info', `Fetching stream bitstream for 32-bit software decode: "${track.title || track.filename}"`);
-        showCachyToast('Software Audio Engine', `Decompressing lossless bitstream: "${track.title || track.filename}"`, 'info');
+        if (!decodedBuffer) {
+            logAudioPlaybackEvent('info', `Fetching stream bitstream for 32-bit software decode: "${track.title || track.filename}"`);
+            const abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            activeDecodeAbortController = abortCtrl;
 
-        let arrayBuf = null;
-        if (track._fileBlob && typeof track._fileBlob.arrayBuffer === 'function') {
-            arrayBuf = await track._fileBlob.arrayBuffer();
+            let arrayBuf = null;
+            if (track._fileBlob && typeof track._fileBlob.arrayBuffer === 'function') {
+                arrayBuf = await track._fileBlob.arrayBuffer();
+            } else {
+                const res = await fetch(src, abortCtrl ? { signal: abortCtrl.signal } : undefined);
+                if (!res.ok) throw new Error(`HTTP ${res.status} fetch failure`);
+                arrayBuf = await res.arrayBuffer();
+            }
+            if (activeDecodeAbortController === abortCtrl) activeDecodeAbortController = null;
+            if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
+
+            logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
+            decodedBuffer = await decodeBufferWithAudioContext(s.audioContext, arrayBuf);
+            arrayBuf = null;
+            if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
+            if (cacheKey) cacheSoftwareAudioBuffer(cacheKey, decodedBuffer);
         } else {
-            const res = await fetch(src);
-            if (!res.ok) throw new Error(`HTTP ${res.status} fetch failure`);
-            arrayBuf = await res.arrayBuffer();
+            logAudioPlaybackEvent('info', `Playing cached 32-bit PCM buffer instantly: "${track.title || track.filename}"`);
         }
-        if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
 
-        logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
-        const decodedBuffer = await decodeBufferWithAudioContext(s.audioContext, arrayBuf);
-        if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
         s.activeDecodedBuffer = decodedBuffer;
 
         track.duration = decodedBuffer.duration;
@@ -1544,6 +1614,7 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
         s.consecutiveSkipCount = 0;
         logAudioPlaybackEvent('info', `Web Audio Software Engine playing "${track.title || track.filename}" at ${decodedBuffer.sampleRate}Hz, ${decodedBuffer.numberOfChannels}ch, ${decodedBuffer.duration.toFixed(1)}s.`);
     } catch (err) {
+        if (err && err.name === 'AbortError') return;
         if (decodeGen !== currentTrackGeneration) return;
         console.error('[AudioEngine] Software decoder fallback failed:', err);
         logAudioPlaybackEvent('error', `Web Audio software decode failure: ${err.message}`);
@@ -1572,7 +1643,6 @@ function attachAudioListeners(targetAudio) {
     });
     targetAudio.addEventListener('playing', () => {
         if (targetAudio._isDisposed || targetAudio !== s.audio) return;
-        clearNoDataStallTimer();
         clearSeekStallTimer();
         if (s.userExplicitlyPaused && document.hidden) {
             targetAudio.pause();
@@ -1581,10 +1651,6 @@ function attachAudioListeners(targetAudio) {
         }
         isAudioBuffering = false;
         syncPlayPauseUI(true);
-    });
-    targetAudio.addEventListener('canplay', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (targetAudio.readyState >= 1) clearNoDataStallTimer();
     });
     targetAudio.addEventListener('pause', () => {
         if (targetAudio._isDisposed || targetAudio !== s.audio) return;
@@ -1849,9 +1915,6 @@ function resolveTrackFormat(track) {
 
 function updateSignalPathUi(track = store.state.allTracks[store.state.currentTrackIndex]) {
     const s = store.state;
-    if (signalPathLabel) {
-        signalPathLabel.textContent = 'SPA';
-    }
 
     const curTheme = getActiveTheme();
     const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
@@ -1881,6 +1944,11 @@ function updateSignalPathUi(track = store.state.allTracks[store.state.currentTra
 
     const dspActive = hasActiveDsp();
     const isNativeBypass = s.mathPrecision === 'native';
+    if (signalPathLabel) {
+        if (!hasTrack) signalPathLabel.textContent = isNativeBypass ? 'NATIVE' : 'READY';
+        else if (isNativeBypass && !dspActive) signalPathLabel.textContent = 'BIT-PERFECT';
+        else signalPathLabel.textContent = dspActive ? 'DSP ON' : 'DIRECT';
+    }
     const workletPrecisionStr = isNativeBypass
         ? 'Native Host Bypass'
         : (s.isPrecision64 ? '64-Bit Double-Float Worklet' : '32-Bit Fast-Float Biquad');

@@ -363,7 +363,7 @@ import { store } from './state.js';
             miniPlayBtn.classList.toggle('playing', playing);
         }
         if (miniTurntableThumb) {
-            miniTurntableThumb.classList.toggle('playing', playing);
+            miniTurntableThumb.classList.toggle('spinning', playing);
         }
     }
 

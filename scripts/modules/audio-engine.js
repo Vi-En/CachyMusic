@@ -1901,7 +1901,7 @@ import { getRuntime } from './runtime-capabilities.js';
 
                 if (applyAudioStatus) {
                     applyAudioStatus.textContent = 'All audio settings applied successfully & active.';
-                    applyAudioStatus.style.color = '#10b981';
+                    applyAudioStatus.style.color = 'var(--status-success)';
                 }
                 showCachyToast('Settings Applied', 'Audio & DSP configuration applied successfully.', 'success');
                 logAudioPlaybackEvent('info', `Applied audio settings (Precision=${s.mathPrecision}, Dither=${s.ditherMode}, Ultrasonic=${s.isUltrasonic ? s.ultrasonicCutoff + 'Hz' : 'OFF'}, Latency=${s.bufferLatencyTarget}).`);
