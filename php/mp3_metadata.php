@@ -19,7 +19,7 @@ function cm_id3_parse_frames(string $tag,int $version): array {
     return $frames;
 }
 function cm_id3_build(int $version,array $frames,array $fields,?string $picture=null,?array $info=null): string {
-        $encode=function(string $s)use($version):string{if($version===4){if(!preg_match('//u',$s))throw new RuntimeException('Invalid UTF-8');return $s;}$v=iconv('UTF-8','UTF-16LE',$s);if($v===false)throw new RuntimeException('Invalid UTF-8');return "\xff\xfe".$v;};
+        $encode=function(string $s)use($version):string{if(!preg_match('//u',$s))throw new RuntimeException('Invalid UTF-8');if($version===4)return $s;if(function_exists('iconv')){$v=iconv('UTF-8','UTF-16LE',$s);}elseif(function_exists('mb_convert_encoding')){$v=mb_convert_encoding($s,'UTF-16LE','UTF-8');}else{throw new RuntimeException('UTF-16LE encoder unavailable');}if($v===false)throw new RuntimeException('Invalid UTF-8');return "\xff\xfe".$v;};
         $enc=chr($version===4?3:1);
         $frame=function(string $id,string $body)use($version):string{return $id.($version===4?cm_id3_sync_write(strlen($body)):pack('N',strlen($body)))."\0\0".$body;};
         $map=['title'=>'TIT2','artist'=>'TPE1','album'=>'TALB','genre'=>'TCON','track_num'=>'TRCK'];$changed=[];
