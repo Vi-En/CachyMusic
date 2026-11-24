@@ -33,7 +33,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Random;
+import java.security.SecureRandom;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,10 +70,22 @@ public class SoulseekClient {
 
     private final Context mContext;
     private final SharedPreferences mPrefs;
-    private final ExecutorService mExecutor = Executors.newCachedThreadPool();
+    private final ThreadPoolExecutor mExecutor = new ThreadPoolExecutor(4, 24, 30L, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(64), new ThreadPoolExecutor.AbortPolicy());
+    private final ThreadPoolExecutor mControlExecutor = new ThreadPoolExecutor(2, 4, 10L, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(4), new ThreadPoolExecutor.AbortPolicy());
+    private volatile long mConnectionGeneration = 0;
+    private CountDownLatch mPendingLoginLatch;
+    private final InetSocketAddress mTestServerAddress;
+    private final Set<Socket> mOutgoingSockets = ConcurrentHashMap.newKeySet();
     private final ThreadPoolExecutor mPeerPool;
+    // Untrusted inbound peers must not allocate arbitrary threads or retain idle sockets.
+    private final ThreadPoolExecutor mIncomingPool = new ThreadPoolExecutor(
+            4, 16, 20L, TimeUnit.SECONDS, new java.util.concurrent.SynchronousQueue<>(),
+            new ThreadPoolExecutor.AbortPolicy());
+    private final Set<Socket> mIncomingSockets = ConcurrentHashMap.newKeySet();
     private final ScheduledExecutorService mScheduler = Executors.newSingleThreadScheduledExecutor();
-    private final Random mRandom = new Random();
+    private final SecureRandom mRandom = new SecureRandom();
 
     // Connection state
     private volatile boolean mIsConnected = false;
@@ -84,8 +96,8 @@ public class SoulseekClient {
 
     // Server networking
     private Socket mServerSocket;
-    private OutputStream mServerOut;
-    private InputStream mServerIn;
+    private volatile OutputStream mServerOut;
+    
     private final Object mServerWriteLock = new Object();
 
     // Local listening server socket for peer connections
@@ -95,7 +107,6 @@ public class SoulseekClient {
     // Search state
     private final AtomicInteger mTokenGenerator = new AtomicInteger(1000 + (int)(System.currentTimeMillis() % 100000));
     private final ConcurrentHashMap<Integer, List<SlskResult>> mSearchResults = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Integer> mActiveSearchQueries = new ConcurrentHashMap<>();
 
     // Peer connections & address resolution
     private final ConcurrentHashMap<String, PeerAddr> mPeerAddresses = new ConcurrentHashMap<>();
@@ -127,6 +138,7 @@ public class SoulseekClient {
         public int queuePosition;
         public int speed;
         public Integer bitrate;
+        public String bitrateSource;
         public Integer duration;
         public Integer sampleRate;
         public Integer bitDepth;
@@ -152,7 +164,7 @@ public class SoulseekClient {
         public volatile String transferToken;
         public volatile boolean userCancelled = false;
         public volatile boolean userPaused = false;
-        public Socket fileSocket;
+        public volatile Socket fileSocket;
         public long startTime;
     }
 
@@ -167,7 +179,12 @@ public class SoulseekClient {
         return sInstance;
     }
 
-    private SoulseekClient(Context context) {
+    private SoulseekClient(Context context) { this(context,null); }
+
+    // Package-private loopback injection for host-JVM protocol tests only; no bridge exposure.
+    SoulseekClient(Context context, InetSocketAddress testAddress) {
+        if(testAddress!=null&&(testAddress.isUnresolved()||!testAddress.getAddress().isLoopbackAddress()))throw new IllegalArgumentException("Test server must be loopback");
+        mTestServerAddress=testAddress;
         mContext = context;
         mPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
@@ -177,14 +194,15 @@ public class SoulseekClient {
                 30L,
                 TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(256),
-                new ThreadPoolExecutor.DiscardOldestPolicy()
+                new ThreadPoolExecutor.AbortPolicy()
         );
         mPeerPool.allowCoreThreadTimeOut(true);
 
         mCurrentUsername = mPrefs.getString("slsk_username", "");
-        mCurrentPassword = mPrefs.getString("slsk_password", "");
+        mCurrentPassword = "";
+        mPrefs.edit().remove("slsk_password").apply();
 
-        startLocalListenServer();
+        // Peer listener is started only by an explicit connection.
 
         // Server keepalive scheduled task
         mScheduler.scheduleAtFixedRate(() -> {
@@ -221,7 +239,7 @@ public class SoulseekClient {
         if (saved != null && !saved.trim().isEmpty()) {
             return saved.trim();
         }
-        return getDownloadsDir();
+        return ""; // sharing must be explicitly selected
     }
 
     public void setDownloadsDir(String dir) {
@@ -234,32 +252,46 @@ public class SoulseekClient {
     }
 
     public void setSharedDir(String dir) {
-        if (dir != null && !dir.trim().isEmpty()) {
-            mPrefs.edit().putString("slsk_shared_dir", dir.trim()).apply();
-        }
+        mPrefs.edit().putString("slsk_shared_dir", dir == null ? "" : dir.trim()).apply();
     }
 
-    private void startLocalListenServer() {
-        mExecutor.submit(() -> {
-            try {
-                // Listen on any available port (0 = ephemeral)
-                mLocalListenServer = new ServerSocket(0);
-                mLocalListenPort = mLocalListenServer.getLocalPort();
-                Log.i(TAG, "Soulseek local peer listener bound to port " + mLocalListenPort);
-
-                while (!mLocalListenServer.isClosed()) {
+    private synchronized void startLocalListenServer() {
+        if (mLocalListenServer != null && !mLocalListenServer.isClosed()) return;
+        try {
+            final ServerSocket listener = new ServerSocket(0);
+            mLocalListenServer = listener;
+            mLocalListenPort = listener.getLocalPort();
+            mControlExecutor.submit(() -> {
+                while (!listener.isClosed()) {
                     try {
-                        Socket peerSocket = mLocalListenServer.accept();
-                        mExecutor.submit(() -> handleIncomingPeerSocket(peerSocket));
+                        Socket peerSocket = listener.accept();
+                        if (!mIsConnected || listener.isClosed()) { peerSocket.close(); continue; }
+                        peerSocket.setSoTimeout(10000);
+                        mIncomingSockets.add(peerSocket);
+                        try {
+                            mIncomingPool.execute(() -> {
+                                try { handleIncomingPeerSocket(peerSocket); }
+                                finally {
+                                    mIncomingSockets.remove(peerSocket);
+                                    try { peerSocket.close(); } catch (IOException ignored) {}
+                                }
+                            });
+                        } catch (java.util.concurrent.RejectedExecutionException busy) {
+                            mIncomingSockets.remove(peerSocket);
+                            peerSocket.close();
+                        }
+                        if (listener.isClosed()) peerSocket.close();
                     } catch (Exception e) {
-                        if (mLocalListenServer.isClosed()) break;
+                        if (listener.isClosed()) break;
                         Log.w(TAG, "Listen server accept error: " + e.getMessage());
                     }
                 }
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to bind local listen server: " + e.getMessage());
-            }
-        });
+            });
+        } catch (Exception e) {
+            try { if (mLocalListenServer != null) mLocalListenServer.close(); } catch (IOException ignored) {}
+            mLocalListenServer = null; mLocalListenPort = 0;
+            Log.e(TAG, "Failed to bind local listen server", e);
+        }
     }
 
     private void handleIncomingPeerSocket(Socket socket) {
@@ -291,17 +323,18 @@ public class SoulseekClient {
                 byte[] tokenBytes = new byte[4];
                 buf.get(tokenBytes);
                 String tokenHex = bytesToHex(tokenBytes);
-                Log.d(TAG, "Incoming PierceFirewall with token " + tokenHex);
+                Log.d(TAG, "Incoming firewall handshake");
             } else if (code == 1) {
                 // PeerInit
                 String username = readStr(buf);
                 String type = readStr(buf);
+                if(!validPeerUsername(username))return;
                 byte[] tokenBytes = new byte[4];
                 if (buf.remaining() >= 4) {
                     buf.get(tokenBytes);
                 }
                 String tokenHex = bytesToHex(tokenBytes);
-                Log.d(TAG, "Incoming PeerInit from " + username + " type=" + type + " token=" + tokenHex);
+                Log.d(TAG, "Incoming peer initialization");
 
                 if ("F".equalsIgnoreCase(type)) {
                     // Incoming file transfer stream!
@@ -311,7 +344,7 @@ public class SoulseekClient {
                     // Incoming peer message stream
                     socket.setSoTimeout(15000);
                     PeerConnection peerConn = new PeerConnection(socket, username);
-                    mActivePeers.put(username, peerConn);
+                    registerPeer(username,peerConn,mConnectionGeneration);
                     flushPendingDownloadsForPeer(username, peerConn);
                     peerConn.readLoopInline();
                     return;
@@ -323,102 +356,115 @@ public class SoulseekClient {
     }
 
     private void handleIncomingFileTransfer(Socket socket, InputStream in, String username, String initTokenHex) {
-        mExecutor.submit(() -> {
-            try {
-                socket.setSoTimeout(30000);
-                // Read 4-byte FileTransferInit (uint32 transfer token, no length prefix)
-                byte[] fileTokBytes = new byte[4];
-                String fileTokenHex = initTokenHex;
-                if (readExact(in, fileTokBytes) == 4) {
-                    fileTokenHex = bytesToHex(fileTokBytes);
-                }
-                streamIncomingFile(socket, in, username, fileTokenHex);
-            } catch (Exception e) {
-                Log.w(TAG, "File transfer error: " + e.getMessage());
-            } finally {
-                try { socket.close(); } catch (Exception ignored) {}
-            }
-        });
+        // Run inline: lifetime and resource usage remain bounded by the inbound pool.
+        try {
+            socket.setSoTimeout(30000);
+            byte[] fileTokBytes = new byte[4];
+            if (readExact(in, fileTokBytes) != 4) return;
+            streamIncomingFile(socket, in, username, bytesToHex(fileTokBytes));
+        } catch (Exception e) {
+            Log.w(TAG, "Incoming file transfer failed");
+        }
     }
 
     private void streamIncomingFile(Socket socket, InputStream in, String username, String tokenHex) throws IOException {
-        DownloadTransfer transfer = tokenHex != null ? mTransfersByToken.get(tokenHex) : null;
-        if (transfer == null) {
-            // Match by username
-            for (DownloadTransfer d : mTransfers.values()) {
-                if (d.username.equalsIgnoreCase(username) &&
-                        ("Connecting".equals(d.status) || "Queued".equals(d.status))) {
-                    transfer = d;
-                    break;
-                }
-            }
-        }
-
-        if (transfer == null || transfer.userCancelled) {
+        String key = transferKey(username, tokenHex);
+        DownloadTransfer transfer = key == null ? null : mTransfersByToken.get(key);
+        if (transfer == null || !claimTransfer(transfer, socket, tokenHex)) {
             socket.close();
             return;
         }
+        try {
+            // Send 8-byte LE FileOffset (0 or existing .part bytes)
+            long startOffset = 0;
+            File partFile = new File(transfer.partFilePath);
+            if (partFile.exists()) {
+                startOffset = partFile.length();
+            }
+            if (startOffset > transfer.size) throw new IOException("Invalid resume offset");
+            transfer.bytesDownloaded = startOffset;
+            OutputStream out = socket.getOutputStream();
+            byte[] offsetBuf = new byte[8];
+            ByteBuffer.wrap(offsetBuf).order(ByteOrder.LITTLE_ENDIAN).putLong(startOffset);
+            out.write(offsetBuf);
+            out.flush();
 
-        // Send 8-byte LE FileOffset (0 or existing .part bytes)
-        long startOffset = 0;
-        File partFile = new File(transfer.partFilePath);
-        if (partFile.exists()) {
-            startOffset = partFile.length();
-        }
-        transfer.bytesDownloaded = startOffset;
-        OutputStream out = socket.getOutputStream();
-        byte[] offsetBuf = new byte[8];
-        ByteBuffer.wrap(offsetBuf).order(ByteOrder.LITTLE_ENDIAN).putLong(startOffset);
-        out.write(offsetBuf);
-        out.flush();
+            // Stream raw file bytes into .part file
+            try (FileOutputStream fos = new FileOutputStream(partFile, startOffset > 0)) {
+                byte[] buffer = new byte[32768];
+                long lastTime = System.currentTimeMillis();
+                long lastBytes = startOffset;
 
-        transfer.status = "Transferring";
-        transfer.fileSocket = socket;
+                while (!transfer.userCancelled && !transfer.userPaused) {
+                    int read = in.read(buffer);
+                    if (read == -1) break; // EOF
+                    if (read > 0) {
+                        if (read > transfer.size - transfer.bytesDownloaded) throw new IOException("Peer exceeded advertised file size");
+                        fos.write(buffer, 0, read);
+                        transfer.bytesDownloaded += read;
 
-        // Stream raw file bytes into .part file
-        try (FileOutputStream fos = new FileOutputStream(partFile, startOffset > 0)) {
-            byte[] buffer = new byte[32768];
-            long lastTime = System.currentTimeMillis();
-            long lastBytes = startOffset;
+                        if (transfer.size > 0) {
+                            transfer.progressPct = (int) Math.min(99, (transfer.bytesDownloaded * 100) / transfer.size);
+                        }
 
-            while (!transfer.userCancelled && !transfer.userPaused) {
-                int read = in.read(buffer);
-                if (read == -1) break; // EOF
-                if (read > 0) {
-                    fos.write(buffer, 0, read);
-                    transfer.bytesDownloaded += read;
+                        long now = System.currentTimeMillis();
+                        if (now - lastTime >= 500) {
+                            double dt = (now - lastTime) / 1000.0;
+                            transfer.speed = (int) ((transfer.bytesDownloaded - lastBytes) / dt);
+                            lastTime = now;
+                            lastBytes = transfer.bytesDownloaded;
+                        }
 
-                    if (transfer.size > 0) {
-                        transfer.progressPct = (int) Math.min(99, (transfer.bytesDownloaded * 100) / transfer.size);
-                    }
-
-                    long now = System.currentTimeMillis();
-                    if (now - lastTime >= 500) {
-                        double dt = (now - lastTime) / 1000.0;
-                        transfer.speed = (int) ((transfer.bytesDownloaded - lastBytes) / dt);
-                        lastTime = now;
-                        lastBytes = transfer.bytesDownloaded;
-                    }
-
-                    if (transfer.size > 0 && transfer.bytesDownloaded >= transfer.size) {
-                        break;
+                        if (transfer.size > 0 && transfer.bytesDownloaded >= transfer.size) {
+                            break;
+                        }
                     }
                 }
+                fos.flush();
             }
-            fos.flush();
-        }
 
-        finalizeTransfer(transfer, partFile);
+            finalizeTransfer(transfer, partFile);
+        } catch (IOException | RuntimeException e) {
+            if (!transfer.userPaused && !transfer.userCancelled) transfer.status = "Error: file transfer interrupted";
+            throw e;
+        } finally { releaseTransfer(transfer, socket, key); }
     }
+
+    private static String transferKey(String username, String token) {
+        if (username == null || username.isEmpty() || username.length() > 256 || username.indexOf('\n') >= 0 || token == null || !token.matches("[0-9a-f]{8}")) return null;
+        return username.toLowerCase(Locale.ROOT) + "\n" + token;
+    }
+
+    private boolean claimTransfer(DownloadTransfer transfer, Socket socket, String token) {
+        synchronized (transfer) {
+            if (!mIsConnected || transfer.userCancelled || transfer.userPaused || transfer.fileSocket != null ||
+                    !"Connecting".equals(transfer.status) || !token.equals(transfer.transferToken) ||
+                    mTransfers.get(transfer.id) != transfer) return false;
+            transfer.fileSocket = socket;
+            transfer.status = "Transferring";
+            return true;
+        }
+    }
+
+    private void releaseTransfer(DownloadTransfer transfer, Socket socket, String key) {
+        synchronized (transfer) {
+            if (transfer.fileSocket == socket) {
+                transfer.fileSocket = null;
+                if (key != null) mTransfersByToken.remove(key, transfer);
+                transfer.transferToken = null;
+            }
+        }
+        try { socket.close(); } catch (IOException ignored) {}
+    }
+
 
     private void finalizeTransfer(DownloadTransfer transfer, File partFile) {
         if (transfer.userCancelled || transfer.userPaused) return;
 
-        if (transfer.size <= 0 || transfer.bytesDownloaded >= transfer.size) {
+        if (transfer.size > 0 && transfer.bytesDownloaded == transfer.size && partFile.length() == transfer.size) {
             File targetFile = new File(transfer.localFilePath);
             if (partFile.exists()) {
-                if (targetFile.exists()) targetFile.delete();
-                partFile.renameTo(targetFile);
+                if (targetFile.exists() || !partFile.renameTo(targetFile)) { transfer.status = "Error: destination exists or rename failed"; return; }
             }
             transfer.status = "Finished";
             transfer.progressPct = 100;
@@ -431,74 +477,81 @@ public class SoulseekClient {
             } catch (Exception e) {
                 Log.w(TAG, "MediaScanner error: " + e.getMessage());
             }
-        }
+        } else { transfer.status = "Error: incomplete download"; transfer.speed = 0; }
     }
 
     // =========================================================================
     // Soulseek Protocol Connection & Server Communication
     // =========================================================================
 
-    public synchronized boolean connect(String username, String password) {
-        if (mIsConnected && mCurrentUsername.equalsIgnoreCase(username)) {
-            return true;
+    public boolean connect(String username,String password){return connect(username,password,()->true);}
+    private boolean connect(String username, String password, java.util.function.BooleanSupplier allowed) {
+        if (username == null || username.trim().isEmpty() || username.length()>256 || password == null || password.isEmpty() || password.length()>1024) {
+            mLastError = "Valid username and password required"; return false;
         }
-
-        mIsConnecting = true;
-        mLastError = null;
-        mCurrentUsername = username != null ? username.trim() : "";
-        mCurrentPassword = password != null ? password.trim() : "";
-
-        // Save credentials
-        mPrefs.edit()
-                .putString("slsk_username", mCurrentUsername)
-                .putString("slsk_password", mCurrentPassword)
-                .apply();
-
-        closeServerConnection();
-
-        CountDownLatch loginLatch = new CountDownLatch(1);
+        final String user=username.trim(), pass=password;
+        final long generation;
+        final Socket socket=new Socket();
+        final CountDownLatch loginLatch = new CountDownLatch(1);
         final AtomicBoolean successResult = new AtomicBoolean(false);
-
-        mExecutor.submit(() -> {
+        synchronized(this) {
+            if(!allowed.getAsBoolean()){try{socket.close();}catch(IOException ignored){}return false;}
+            if (mIsConnected && mCurrentUsername.equalsIgnoreCase(user)) { try {socket.close();}catch(IOException ignored){} return true; }
+            disconnect(); generation=mConnectionGeneration;
+            mIsConnecting=true; mCurrentUsername=user; mCurrentPassword=pass; mLastError=null;
+            mPendingLoginLatch=loginLatch;
+            mServerSocket=socket; // disconnect can close the socket even while connect() blocks
+            mPrefs.edit().putString("slsk_username", user).remove("slsk_password").apply();
+            startLocalListenServer();
             try {
-                Log.i(TAG, "Connecting to Soulseek server " + SLSK_SERVER_HOST + ":" + SLSK_SERVER_PORT + "...");
-                Socket socket = new Socket();
-                socket.connect(new InetSocketAddress(SLSK_SERVER_HOST, SLSK_SERVER_PORT), 10000);
-                socket.setTcpNoDelay(true);
-                socket.setKeepAlive(true);
-
-                mServerSocket = socket;
-                mServerOut = socket.getOutputStream();
-                mServerIn = socket.getInputStream();
-
-                // Send Login Message (Code 1)
-                sendLoginMessage(mCurrentUsername, mCurrentPassword);
-
-                // Run server reader loop
-                runServerReaderLoop(loginLatch, successResult);
-            } catch (Exception e) {
-                Log.e(TAG, "Soulseek server connection failed: " + e.getMessage());
-                mLastError = e.getMessage();
-                mIsConnected = false;
-                mIsConnecting = false;
-                loginLatch.countDown();
-            }
-        });
-
-        try {
-            boolean done = loginLatch.await(7, TimeUnit.SECONDS);
-            if (!done) {
-                mLastError = "Connection timeout reaching server.slsknet.org";
-                return false;
-            }
-            return successResult.get();
-        } catch (InterruptedException e) {
-            return false;
+                mControlExecutor.execute(() -> {
+                    try {
+                        if(generation!=mConnectionGeneration)return;
+                        socket.connect(mTestServerAddress!=null?mTestServerAddress:new InetSocketAddress(SLSK_SERVER_HOST,SLSK_SERVER_PORT),10000);
+                        socket.setTcpNoDelay(true);socket.setKeepAlive(true);socket.setSoTimeout(10000);
+                        final InputStream in=socket.getInputStream(); final OutputStream out=socket.getOutputStream();
+                        synchronized(this){if(generation!=mConnectionGeneration||mServerSocket!=socket)return; mServerOut=out;}
+                        sendLoginMessage(user,pass,out);
+                        runServerReaderLoop(socket,in,generation,loginLatch,successResult);
+                    } catch(Exception e) {
+                        synchronized(this){if(generation==mConnectionGeneration&&mServerSocket==socket){disconnect();mLastError="Soulseek connection failed";}}
+                    } finally { try{socket.close();}catch(IOException ignored){} loginLatch.countDown(); }
+                });
+            } catch(java.util.concurrent.RejectedExecutionException busy){disconnect();mLastError="Connection workers busy";return false;}
+        }
+        boolean done=false;
+        try {done=loginLatch.await(10,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}
+        synchronized(this){
+            if(generation!=mConnectionGeneration)return false;
+            if(!done){disconnect();mLastError="Connection timed out";return false;}
+            return successResult.get()&&mIsConnected;
         }
     }
 
     public synchronized void disconnect() {
+        ++mConnectionGeneration; mIsConnected=false; mIsConnecting=false;
+        if(mPendingLoginLatch!=null){mPendingLoginLatch.countDown();mPendingLoginLatch=null;}
+        mControlExecutor.getQueue().clear();
         closeServerConnection();
+        for(Socket socket:mOutgoingSockets)try{socket.close();}catch(IOException ignored){}
+        mOutgoingSockets.clear();
+        mExecutor.getQueue().clear(); mPeerPool.getQueue().clear();
+        for (PeerConnection peer : mActivePeers.values()) try { peer.socket.close(); } catch (IOException ignored) {}
+        mActivePeers.clear();
+        for (DownloadTransfer transfer : mTransfers.values()) {
+            synchronized (transfer) {
+                if (!"Finished".equals(transfer.status) && !transfer.userCancelled) { transfer.userPaused = true; transfer.status = "Paused"; }
+                if (transfer.fileSocket == null) transfer.transferToken = null;
+                try { if (transfer.fileSocket != null) transfer.fileSocket.close(); } catch (IOException ignored) {}
+            }
+        }
+        mTransfersByToken.clear(); mPeerAddresses.clear(); mSearchResults.clear();
+        try { if (mLocalListenServer != null) mLocalListenServer.close(); } catch (Exception ignored) {}
+        mLocalListenServer = null;
+        mLocalListenPort = 0;
+        for (Socket socket : mIncomingSockets) {
+            try { socket.close(); } catch (IOException ignored) {}
+        }
         mIsConnected = false;
         mIsConnecting = false;
         mLastError = null;
@@ -519,11 +572,11 @@ public class SoulseekClient {
         } catch (Exception ignored) {}
         mServerSocket = null;
         mServerOut = null;
-        mServerIn = null;
+
         mIsConnected = false;
     }
 
-    private void sendLoginMessage(String username, String password) throws Exception {
+    private void sendLoginMessage(String username, String password, OutputStream out) throws Exception {
         MessageDigest md5 = MessageDigest.getInstance("MD5");
         byte[] hash = md5.digest((username + password).getBytes(StandardCharsets.UTF_8));
         StringBuilder hexHash = new StringBuilder();
@@ -547,7 +600,7 @@ public class SoulseekClient {
         buf.put(hBytes);
         buf.putInt(17); // minor
 
-        writeServer(buf.array());
+        out.write(buf.array()); out.flush();
     }
 
     private void sendSetStatus(int status) {
@@ -610,34 +663,40 @@ public class SoulseekClient {
 
     private void writeServer(byte[] data) throws IOException {
         synchronized (mServerWriteLock) {
-            if (mServerOut == null) {
+            final OutputStream out=mServerOut;
+            if (out == null) {
                 throw new IOException("Server output stream is closed");
             }
-            mServerOut.write(data);
-            mServerOut.flush();
+            out.write(data);
+            out.flush();
         }
     }
 
-    private void runServerReaderLoop(CountDownLatch loginLatch, AtomicBoolean successResult) {
+    private void runServerReaderLoop(Socket socket, InputStream in, long generation, CountDownLatch loginLatch, AtomicBoolean successResult) {
         try {
             byte[] lenBuf = new byte[4];
-            while (mServerSocket != null && !mServerSocket.isClosed()) {
-                if (readExact(mServerIn, lenBuf) < 4) break;
+            while (generation==mConnectionGeneration && !socket.isClosed()) {
+                if (readExact(in, lenBuf) < 4) break;
                 int msgLen = ByteBuffer.wrap(lenBuf).order(ByteOrder.LITTLE_ENDIAN).getInt();
                 if (msgLen < 4 || msgLen > 5242880) break; // sanity check
 
                 byte[] payload = new byte[msgLen];
-                if (readExact(mServerIn, payload) < msgLen) break;
+                if (readExact(in, payload) < msgLen) break;
 
                 ByteBuffer buf = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN);
                 int code = buf.getInt();
 
+                synchronized(this) {
+                if (generation!=mConnectionGeneration || mServerSocket!=socket) return;
+                if (!mIsConnected && code!=1) throw new IOException("Unexpected message before login");
                 switch (code) {
                     case 1: { // Login response
+                        if(mIsConnected)throw new IOException("Duplicate login response");
                         byte success = buf.get();
                         if (success == 1) {
                             String greet = readStr(buf);
                             Log.i(TAG, "Soulseek login successful! " + greet);
+                            socket.setSoTimeout(0);
                             mIsConnected = true;
                             mIsConnecting = false;
                             mLastError = null;
@@ -647,7 +706,7 @@ public class SoulseekClient {
                             if (mLocalListenPort > 0) {
                                 sendSetWaitPort(mLocalListenPort);
                             }
-                            sendSharedFoldersFiles(1, 1);
+                            sendSharedFoldersFiles(0, 0); // Upload serving is not implemented in this native client.
                             sendSetStatus(2); // online
 
                             loginLatch.countDown();
@@ -659,6 +718,7 @@ public class SoulseekClient {
                             mLastError = reason;
                             successResult.set(false);
                             loginLatch.countDown();
+                            return;
                         }
                         break;
                     }
@@ -667,8 +727,9 @@ public class SoulseekClient {
                         String user = readStr(buf);
                         String ipStr = unpackIp(buf);
                         int port = buf.getInt();
-                        Log.d(TAG, "Got peer address for " + user + ": " + ipStr + ":" + port);
-                        if (port > 0 && !"0.0.0.0".equals(ipStr)) {
+                        Log.d(TAG, "Peer address response received");
+                        if (PeerAddressPolicy.permitted(ipStr,port) && validPeerUsername(user)) {
+                            if(mPeerAddresses.size()>=2048)mPeerAddresses.clear();
                             mPeerAddresses.put(user, new PeerAddr(ipStr, port));
                         }
                         synchronized (mPeerAddresses) {
@@ -685,15 +746,16 @@ public class SoulseekClient {
                         byte[] tokenBytes = new byte[4];
                         buf.get(tokenBytes);
 
-                        if (port <= 0 || "0.0.0.0".equals(ipStr)) {
+                        if (!PeerAddressPolicy.permitted(ipStr,port) || !validPeerUsername(user)) {
                             break;
                         }
+                        if(mPeerAddresses.size()>=2048)mPeerAddresses.clear();
                         mPeerAddresses.put(user, new PeerAddr(ipStr, port));
 
                         if ("P".equalsIgnoreCase(type)) {
-                            mPeerPool.execute(() -> piercePeerConnection(user, ipStr, port, tokenBytes));
+                            try {mPeerPool.execute(() -> piercePeerConnection(user, ipStr, port, tokenBytes,generation));}catch(java.util.concurrent.RejectedExecutionException busy) { /* bounded peer queue */ }
                         } else if ("F".equalsIgnoreCase(type)) {
-                            mExecutor.submit(() -> pierceFileConnection(user, ipStr, port, tokenBytes));
+                            try {mExecutor.execute(() -> pierceFileConnection(user, ipStr, port, tokenBytes,generation));}catch(java.util.concurrent.RejectedExecutionException busy) { /* bounded peer queue */ }
                         }
                         break;
                     }
@@ -713,12 +775,12 @@ public class SoulseekClient {
                         // Ignore other server codes
                         break;
                 }
+                }
             }
         } catch (Exception e) {
             Log.w(TAG, "Server reader loop terminated: " + e.getMessage());
         } finally {
-            mIsConnected = false;
-            mIsConnecting = false;
+            synchronized(this){if(generation==mConnectionGeneration&&mServerSocket==socket){String error=mLastError;disconnect();mLastError=error;}}
             loginLatch.countDown();
         }
     }
@@ -738,25 +800,21 @@ public class SoulseekClient {
         return sb.length() > 0 ? sb.toString() : query.trim();
     }
 
-    public int search(String query) {
-        if (query == null || query.trim().isEmpty()) {
+    public synchronized int search(String query) {
+        if (!mIsConnected || query == null || query.length() > 1024 || query.trim().isEmpty()) {
             return 0;
         }
         final String cleanQuery = normalizeSearchQuery(query);
         int token = mTokenGenerator.incrementAndGet();
         // Prune oldest search caches if > 8 stored
-        if (mSearchResults.size() > 8) {
-            Integer oldestKey = mSearchResults.keys().nextElement();
+        if (mSearchResults.size() >= 8) {
+            Integer oldestKey = mSearchResults.keySet().stream().min(Integer::compareTo).orElse(null);
             if (oldestKey != null) mSearchResults.remove(oldestKey);
         }
         mSearchResults.put(token, Collections.synchronizedList(new ArrayList<>()));
-        mActiveSearchQueries.put(cleanQuery.toLowerCase(Locale.ROOT), token);
 
         mExecutor.submit(() -> {
             try {
-                if (!mIsConnected && !mCurrentUsername.isEmpty() && !mCurrentPassword.isEmpty()) {
-                    connect(mCurrentUsername, mCurrentPassword);
-                }
                 if (!mIsConnected) {
                     Log.w(TAG, "Cannot search: Soulseek client offline");
                     return;
@@ -775,16 +833,11 @@ public class SoulseekClient {
                 try {
                     writeServer(buf.array());
                 } catch (IOException ioEx) {
-                    Log.w(TAG, "Search write failed, reconnecting once: " + ioEx.getMessage());
+                    Log.w(TAG, "Search write failed; reconnect manually");
                     mIsConnected = false;
-                    if (!mCurrentUsername.isEmpty() && !mCurrentPassword.isEmpty() &&
-                            connect(mCurrentUsername, mCurrentPassword)) {
-                        writeServer(buf.array());
-                    } else {
-                        throw ioEx;
-                    }
+                    throw ioEx;
                 }
-                Log.i(TAG, "Broadcasted Soulseek search token=" + token + " query='" + cleanQuery + "'");
+                Log.d(TAG, "Soulseek search sent");
             } catch (Exception e) {
                 Log.e(TAG, "Search broadcast error: " + e.getMessage());
             }
@@ -822,9 +875,10 @@ public class SoulseekClient {
                     item.put("speed", r.speed);
                     item.put("speedFormatted", formatSpeedHuman(r.speed));
                     item.put("bitrate", r.bitrate != null ? r.bitrate : JSONObject.NULL);
+                    item.put("bitrateSource", r.bitrateSource != null ? r.bitrateSource : "unknown");
                     item.put("duration", r.duration != null ? r.duration : JSONObject.NULL);
-                    item.put("sampleRate", r.sampleRate != null ? r.sampleRate : 44100);
-                    item.put("bitDepth", r.bitDepth != null ? r.bitDepth : 16);
+                    item.put("sampleRate", r.sampleRate != null ? r.sampleRate : JSONObject.NULL);
+                    item.put("bitDepth", r.bitDepth != null ? r.bitDepth : JSONObject.NULL);
                     item.put("artistGuess", r.artistGuess != null ? r.artistGuess : "");
                     item.put("albumGuess", r.albumGuess != null ? r.albumGuess : "");
                     item.put("isLossless", r.isLossless);
@@ -856,11 +910,21 @@ public class SoulseekClient {
      * Outbound response to a server-relayed ConnectToPeer (Code 18) for a "P" stream.
      * Must send PierceFireWall: [uint32 length = 5][uint8 code = 0][uint32 pierceToken].
      */
-    private void piercePeerConnection(String username, String host, int port, byte[] tokenBytes) {
+    private synchronized Socket openOutgoingSocket(long generation) throws IOException {
+        if(!mIsConnected||generation!=mConnectionGeneration)throw new IOException("Connection no longer active");
+        if(mOutgoingSockets.size()>=48)throw new IOException("Peer socket limit reached");
+        Socket socket=new Socket();mOutgoingSockets.add(socket);return socket;
+    }
+    private synchronized void registerPeer(String username,PeerConnection peer,long generation)throws IOException{
+        if(generation!=mConnectionGeneration||!mIsConnected||peer.socket.isClosed())throw new IOException("Connection no longer active");
+        PeerConnection old=mActivePeers.put(username,peer);
+        if(old!=null&&old!=peer)try{old.socket.close();}catch(IOException ignored){}
+    }
+    private void piercePeerConnection(String username, String host, int port, byte[] tokenBytes,long generation) {
         Socket socket = null;
         try {
-            socket = new Socket();
-            socket.connect(new InetSocketAddress(host, port), 4500);
+            socket = openOutgoingSocket(generation);
+            socket.connect(PeerAddressPolicy.endpoint(host,port), 4500);
             socket.setTcpNoDelay(true);
             socket.setSoTimeout(15000);
 
@@ -874,14 +938,12 @@ public class SoulseekClient {
             out.flush();
 
             PeerConnection pc = new PeerConnection(socket, username);
-            mActivePeers.put(username, pc);
+            registerPeer(username,pc,generation);
             flushPendingDownloadsForPeer(username, pc);
             pc.readLoopInline();
         } catch (Exception e) {
-            if (socket != null) {
-                try { socket.close(); } catch (Exception ignored) {}
-            }
-        }
+            if (socket != null) try { socket.close(); } catch (Exception ignored) {}
+        } finally { if(socket!=null)mOutgoingSockets.remove(socket); }
     }
 
     /**
@@ -889,11 +951,11 @@ public class SoulseekClient {
      * Sends PierceFireWall (Code 0 + pierceToken), reads 4-byte FileTransferInit (transferToken),
      * sends 8-byte FileOffset, and streams raw audio bytes to disk.
      */
-    private void pierceFileConnection(String username, String host, int port, byte[] pierceTokenBytes) {
+    private void pierceFileConnection(String username, String host, int port, byte[] pierceTokenBytes,long generation) {
         Socket socket = null;
         try {
-            socket = new Socket();
-            socket.connect(new InetSocketAddress(host, port), 10000);
+            socket = openOutgoingSocket(generation);
+            socket.connect(PeerAddressPolicy.endpoint(host,port), 10000);
             socket.setTcpNoDelay(true);
             socket.setSoTimeout(30000);
 
@@ -918,6 +980,7 @@ public class SoulseekClient {
         } finally {
             if (socket != null) {
                 try { socket.close(); } catch (Exception ignored) {}
+                mOutgoingSockets.remove(socket);
             }
         }
     }
@@ -926,9 +989,10 @@ public class SoulseekClient {
      * Unsolicited direct outbound PeerInit (Code 1) connection initiated by us (e.g. for downloading).
      */
     private PeerConnection dialDirectPeerConnection(String username, String host, int port) {
+        Socket socket=null;long generation=mConnectionGeneration;
         try {
-            Socket socket = new Socket();
-            socket.connect(new InetSocketAddress(host, port), 5000);
+            socket = openOutgoingSocket(generation);
+            socket.connect(PeerAddressPolicy.endpoint(host,port), 5000);
             socket.setTcpNoDelay(true);
             socket.setSoTimeout(30000);
 
@@ -951,11 +1015,12 @@ public class SoulseekClient {
             out.flush();
 
             PeerConnection pc = new PeerConnection(socket, username);
-            mActivePeers.put(username, pc);
-            mExecutor.submit(pc::readLoopInline);
+            registerPeer(username,pc,generation);
+            mPeerPool.execute(pc::readLoopInline);
             return pc;
         } catch (Exception e) {
-            Log.d(TAG, "Direct peer connection to " + username + " failed: " + e.getMessage());
+            if(socket!=null){mOutgoingSockets.remove(socket);try{socket.close();}catch(IOException ignored){}PeerConnection active=mActivePeers.get(username);if(active!=null&&active.socket==socket)mActivePeers.remove(username,active);}
+            Log.d(TAG, "Direct peer connection failed");
             return null;
         }
     }
@@ -1033,11 +1098,13 @@ public class SoulseekClient {
             } finally {
                 try { socket.close(); } catch (Exception ignored) {}
                 mActivePeers.remove(username, this);
+                mOutgoingSockets.remove(socket);
             }
         }
     }
 
     private void handlePeerMessage(PeerConnection peer, int code, ByteBuffer buf, byte[] rawPayload) {
+        if (!mIsConnected || peer.socket.isClosed() || mActivePeers.get(peer.username)!=peer) return;
         switch (code) {
             case 9: { // FileSearchResult (Zlib Compressed)
                 try {
@@ -1064,13 +1131,17 @@ public class SoulseekClient {
                     long reportedSize = buf.remaining() >= 8 ? buf.getLong() : 0L;
                     // Peer is ready to upload the file we queued!
                     DownloadTransfer d = mTransfers.get(peer.username + ":" + file);
-                    if (d != null && !d.userCancelled && !d.userPaused) {
-                        if (reportedSize > 0 && d.size <= 0) {
-                            d.size = reportedSize;
+                    if (d != null && !d.userCancelled && !d.userPaused && reportedSize == d.size) {
+                        synchronized (d) {
+                            if (d.userCancelled || d.userPaused || d.fileSocket != null || !("Queued".equals(d.status) || "Connecting".equals(d.status))) break;
+                            String key = transferKey(peer.username, tokenHex);
+                            if (key == null) break;
+                            DownloadTransfer bound = mTransfersByToken.putIfAbsent(key, d);
+                            if (bound != null && bound != d) break;
+                            if (d.transferToken != null && !d.transferToken.equals(tokenHex)) mTransfersByToken.remove(transferKey(peer.username, d.transferToken), d);
+                            d.transferToken = tokenHex;
+                            d.status = "Connecting";
                         }
-                        d.transferToken = tokenHex;
-                        d.status = "Connecting";
-                        mTransfersByToken.put(tokenHex, d);
 
                         // Send Code 41 TransferResponse (allowed = 1); uploader will open "F" connection
                         ByteBuffer resp = ByteBuffer.allocate(4 + 4 + 1).order(ByteOrder.LITTLE_ENDIAN);
@@ -1090,11 +1161,12 @@ public class SoulseekClient {
                 boolean allowed = buf.get() == 1;
 
                 if (allowed) {
-                    DownloadTransfer d = mTransfersByToken.get(tokenHex);
+                    String key = transferKey(peer.username, tokenHex);
+                    DownloadTransfer d = key == null ? null : mTransfersByToken.get(key);
                     if (d != null) {
                         PeerAddr addr = mPeerAddresses.get(d.username);
                         if (addr != null && addr.port > 0) {
-                            mExecutor.submit(() -> startFileConnection(d, addr.host, addr.port, tokenHex));
+                            try {startFileConnection(d, addr.host, addr.port, tokenHex);}catch(java.util.concurrent.RejectedExecutionException busy){d.status="Busy: retry download";}
                         }
                     }
                 }
@@ -1105,9 +1177,10 @@ public class SoulseekClient {
                 String file = readStr(buf);
                 int place = buf.getInt();
                 DownloadTransfer d = mTransfers.get(peer.username + ":" + file);
-                if (d != null) {
-                    d.queuePosition = place;
-                    d.status = "Queued";
+                if (d != null) synchronized (d) {
+                    if (d.fileSocket == null && d.transferToken == null && !d.userCancelled && !d.userPaused && !"Finished".equals(d.status)) {
+                        d.queuePosition = Math.max(0, place); d.status = "Queued";
+                    }
                 }
                 break;
             }
@@ -1116,8 +1189,11 @@ public class SoulseekClient {
                 String file = readStr(buf);
                 String reason = readStr(buf);
                 DownloadTransfer d = mTransfers.get(peer.username + ":" + file);
-                if (d != null) {
-                    d.status = "Denied: " + reason;
+                if (d != null) synchronized (d) {
+                    if (d.fileSocket == null && !d.userCancelled && !d.userPaused && !"Finished".equals(d.status)) {
+                        if (d.transferToken != null) mTransfersByToken.remove(transferKey(d.username, d.transferToken), d);
+                        d.transferToken = null; d.status = "Denied: " + reason;
+                    }
                 }
                 break;
             }
@@ -1179,6 +1255,8 @@ public class SoulseekClient {
 
                 // Soulseek FileAttribute IDs: 0=bitrate, 1=duration, 2=vbr, 4=sampleRate, 5=bitDepth
                 Integer bitrate = attribs.get(0);
+                String bitrateSource = bitrate != null && bitrate > 0 ? "reported" : "unknown";
+                if ("unknown".equals(bitrateSource)) bitrate = null;
                 Integer duration = attribs.get(1);
                 Integer sampleRate = attribs.containsKey(4) ? attribs.get(4) : attribs.get(3);
                 Integer bitDepth = attribs.containsKey(5) ? attribs.get(5) : null;
@@ -1187,10 +1265,8 @@ public class SoulseekClient {
                     int calc = (int) Math.round((fileSize * 8.0) / (duration * 1000.0));
                     if (calc >= 32 && calc <= 9216) {
                         bitrate = calc;
+                        bitrateSource = "estimated";
                     }
-                }
-                if (isLossless && (bitrate == null || bitrate <= 0)) {
-                    bitrate = 1411;
                 }
 
                 String artistGuess = parts.length >= 3 ? parts[parts.length - 3] : (parts.length >= 2 ? parts[parts.length - 2] : "");
@@ -1203,6 +1279,7 @@ public class SoulseekClient {
                 r.extension = resolvedExt;
                 r.size = fileSize;
                 r.bitrate = bitrate;
+                r.bitrateSource = bitrateSource;
                 r.duration = duration;
                 r.sampleRate = sampleRate;
                 r.bitDepth = bitDepth;
@@ -1243,31 +1320,34 @@ public class SoulseekClient {
     }
 
     private byte[] inflateZlib(byte[] data, int offset, int length) {
+        Inflater inflater = new Inflater();
         try {
-            Inflater inflater = new Inflater();
             inflater.setInput(data, offset, length);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             byte[] buf = new byte[16384];
             while (!inflater.finished()) {
                 int count = inflater.inflate(buf);
-                if (count <= 0 && inflater.needsInput()) break;
+                if (count <= 0) return null;
+                if (baos.size() > 16 * 1024 * 1024 - count) return null;
                 baos.write(buf, 0, count);
             }
-            inflater.end();
             return baos.toByteArray();
         } catch (Exception e) {
             return null;
-        }
+        } finally { inflater.end(); }
     }
 
     // =========================================================================
     // File Downloading Implementation
     // =========================================================================
 
-    public DownloadTransfer enqueueDownload(String username, String virtualPath, long size) {
+    public synchronized DownloadTransfer enqueueDownload(String username, String virtualPath, long size) {
+        if (!mIsConnected) throw new IllegalStateException("Connect to Soulseek first");
+        if (username == null || username.isEmpty() || username.length() > 256 || username.matches(".*[\\p{Cntrl}].*") || virtualPath == null || virtualPath.length() > 4096 || size <= 0 || size > 20L * 1024 * 1024 * 1024) throw new IllegalArgumentException("Invalid transfer metadata");
+        if (mTransfers.size() >= 1000) throw new IllegalStateException("Transfer queue is full");
         final String transferId = username + ":" + virtualPath;
         DownloadTransfer existing = mTransfers.get(transferId);
-        if (existing != null && ("Transferring".equals(existing.status) || "Finished".equals(existing.status))) {
+        if (existing != null) {
             return existing;
         }
 
@@ -1275,9 +1355,21 @@ public class SoulseekClient {
         String[] parts = normPath.split("/");
         String filename = parts.length > 0 ? parts[parts.length - 1] : "track.mp3";
 
-        String downloadsDir = getDownloadsDir();
-        File localFile = new File(downloadsDir, filename);
-        File partFile = new File(downloadsDir, filename + ".part");
+        if (filename.isEmpty() || filename.equals(".") || filename.equals("..") || filename.length() > 180 || filename.matches(".*[\\p{Cntrl}:*?\"<>|].*") || filename.startsWith(".") || filename.endsWith(".") || filename.endsWith(" ")) throw new IllegalArgumentException("Unsafe peer filename");
+        int dot = filename.lastIndexOf('.');
+        if(dot < 0 || !AUDIO_EXTENSIONS.contains(filename.substring(dot+1).toLowerCase(Locale.ROOT))) throw new IllegalArgumentException("Only supported audio files can be downloaded");
+        File root;
+        File localFile;
+        File partFile;
+        try {
+            root = new File(getDownloadsDir()).getCanonicalFile();
+            if (!root.isDirectory() || root.getUsableSpace() < size) throw new IOException("Download folder unavailable or insufficient disk space");
+            String unique = java.util.UUID.randomUUID().toString().substring(0,8);
+            String safeName = filename.substring(0,dot) + "-" + unique + filename.substring(dot);
+            localFile = new File(root,safeName).getCanonicalFile();
+            partFile = new File(root,safeName + ".part").getCanonicalFile();
+            if (!root.equals(localFile.getParentFile()) || !root.equals(partFile.getParentFile()) || localFile.exists() || partFile.exists()) throw new IOException("Unsafe destination");
+        } catch(IOException e) { throw new IllegalArgumentException("Cannot reserve download destination",e); }
 
         DownloadTransfer transfer = new DownloadTransfer();
         transfer.id = transferId;
@@ -1292,11 +1384,12 @@ public class SoulseekClient {
 
         mTransfers.put(transferId, transfer);
 
-        mExecutor.submit(() -> initiatePeerDownload(transfer));
+        try { mExecutor.execute(() -> initiatePeerDownload(transfer)); } catch(java.util.concurrent.RejectedExecutionException busy){transfer.status="Busy: retry download";}
         return transfer;
     }
 
     private void initiatePeerDownload(DownloadTransfer transfer) {
+        if (!mIsConnected || transfer.userPaused || transfer.userCancelled || transfer.fileSocket != null) return;
         try {
             transfer.status = "Connecting";
             // 1. Resolve peer address
@@ -1313,8 +1406,7 @@ public class SoulseekClient {
             byte[] tokBytes = new byte[4];
             mRandom.nextBytes(tokBytes);
             String tokenHex = bytesToHex(tokBytes);
-            transfer.transferToken = tokenHex;
-            mTransfersByToken.put(tokenHex, transfer);
+            // This token is for connection negotiation, not an authorized file transfer.
 
             // Connect to peer directly if possible
             PeerConnection peerConn = mActivePeers.get(transfer.username);
@@ -1336,15 +1428,20 @@ public class SoulseekClient {
     }
 
     private void startFileConnection(DownloadTransfer transfer, String host, int port, String tokenHex) {
-        if (transfer.userCancelled || transfer.userPaused) return;
+        final long generation=mConnectionGeneration;
+        if (!PeerAddressPolicy.permitted(host,port)||!mIsConnected || transfer.userCancelled || transfer.userPaused) return;
 
         mExecutor.submit(() -> {
+            Socket fileSocket = null;
+            boolean claimed = false;
             try {
-                Log.i(TAG, "Opening file connection to " + host + ":" + port + " for " + transfer.filename);
-                Socket fileSocket = new Socket();
-                fileSocket.connect(new InetSocketAddress(host, port), 10000);
+                Log.i(TAG, "Opening authorized file connection");
+                fileSocket = openOutgoingSocket(generation);
+                if (!claimTransfer(transfer, fileSocket, tokenHex)) return;
+                claimed = true;
+                fileSocket.connect(PeerAddressPolicy.endpoint(host,port), 10000);
                 fileSocket.setTcpNoDelay(true);
-                transfer.fileSocket = fileSocket;
+                fileSocket.setSoTimeout(30000);
 
                 OutputStream out = fileSocket.getOutputStream();
                 InputStream in = fileSocket.getInputStream();
@@ -1369,14 +1466,13 @@ public class SoulseekClient {
                 // Send 8-byte LE offset (0 or existing bytes)
                 File partFile = new File(transfer.partFilePath);
                 long startOffset = partFile.exists() ? partFile.length() : 0;
+                if (startOffset > transfer.size) throw new IOException("Invalid resume offset");
                 transfer.bytesDownloaded = startOffset;
 
                 byte[] offBuf = new byte[8];
                 ByteBuffer.wrap(offBuf).order(ByteOrder.LITTLE_ENDIAN).putLong(startOffset);
                 out.write(offBuf);
                 out.flush();
-
-                transfer.status = "Transferring";
 
                 // Receive file bytes into .part file
                 try (FileOutputStream fos = new FileOutputStream(partFile, startOffset > 0)) {
@@ -1388,6 +1484,7 @@ public class SoulseekClient {
                         int read = in.read(buffer);
                         if (read == -1) break; // EOF
                         if (read > 0) {
+                            if (read > transfer.size - transfer.bytesDownloaded) throw new IOException("Peer exceeded advertised file size");
                             fos.write(buffer, 0, read);
                             transfer.bytesDownloaded += read;
 
@@ -1414,13 +1511,13 @@ public class SoulseekClient {
                 finalizeTransfer(transfer, partFile);
             } catch (Exception e) {
                 Log.w(TAG, "File connection error: " + e.getMessage());
-                if (!"Finished".equals(transfer.status)) {
+                if (claimed && !transfer.userPaused && !transfer.userCancelled && !"Finished".equals(transfer.status)) {
                     transfer.status = "Error: " + e.getMessage();
                 }
             } finally {
-                try {
-                    if (transfer.fileSocket != null) transfer.fileSocket.close();
-                } catch (Exception ignored) {}
+                if (claimed) releaseTransfer(transfer, fileSocket, transferKey(transfer.username, tokenHex));
+                else if (fileSocket != null) try { fileSocket.close(); } catch (IOException ignored) {}
+                if(fileSocket!=null)mOutgoingSockets.remove(fileSocket);
             }
         });
     }
@@ -1496,7 +1593,8 @@ public class SoulseekClient {
     // REST API Dispatcher (Serving WebView fetch calls)
     // =========================================================================
 
-    public String dispatchApi(String action, String bodyJson, String queryString) {
+    public String dispatchApi(String action,String bodyJson,String queryString){return dispatchApi(action,bodyJson,queryString,()->true);}
+    String dispatchApi(String action, String bodyJson, String queryString, java.util.function.BooleanSupplier allowed) {
         if (action == null) action = "status";
         Map<String, String> queryParams = parseQueryString(queryString);
 
@@ -1515,6 +1613,7 @@ public class SoulseekClient {
                     obj.put("downloads_dir", getDownloadsDir());
                     obj.put("shared_dir", getSharedDir());
                     obj.put("uploads_total", 0);
+                    obj.put("uploads_supported",false);
                     obj.put("downloads_total", mTransfers.size());
                     obj.put("error", mLastError);
                     obj.put("daemon_running", true);
@@ -1536,7 +1635,7 @@ public class SoulseekClient {
                     }
                     if (user.isEmpty() && queryParams.containsKey("username")) {
                         user = queryParams.get("username");
-                        pass = queryParams.getOrDefault("password", "");
+                        pass = ""; // credentials must arrive through the local bridge body, not a URL
                     }
                     if (user.isEmpty()) {
                         user = mCurrentUsername;
@@ -1549,7 +1648,7 @@ public class SoulseekClient {
                         return "{\"ok\": false, \"error\": \"Username and password are required.\"}";
                     }
 
-                    boolean ok = connect(user.trim(), pass != null ? pass.trim() : "");
+                    boolean ok = connect(user.trim(), pass != null ? pass : "",allowed);
                     JSONObject resp = new JSONObject();
                     resp.put("ok", ok);
                     resp.put("success", ok);
@@ -1574,7 +1673,7 @@ public class SoulseekClient {
                         if (!sDir.isEmpty()) setSharedDir(sDir);
 
                         if (!user.isEmpty()) {
-                            boolean ok = connect(user.trim(), pass);
+                            boolean ok = connect(user.trim(), pass,allowed);
                             JSONObject resp = new JSONObject();
                             resp.put("ok", ok);
                             resp.put("success", ok);
@@ -1612,7 +1711,7 @@ public class SoulseekClient {
                         resp.put("powered_on", false);
                         resp.put("connected", false);
                     } else {
-                        boolean ok = connect(mCurrentUsername, mCurrentPassword);
+                        boolean ok = connect(mCurrentUsername, mCurrentPassword,allowed);
                         resp.put("ok", ok);
                         resp.put("powered_on", ok);
                         resp.put("connected", ok);
@@ -1719,10 +1818,12 @@ public class SoulseekClient {
                     JSONObject body = new JSONObject(bodyJson != null && !bodyJson.isEmpty() ? bodyJson : "{}");
                     String id = body.optString("id");
                     DownloadTransfer d = mTransfers.get(id);
-                    if (d != null) {
-                        d.userPaused = true;
-                        d.status = "Paused";
-                        try { if (d.fileSocket != null) d.fileSocket.close(); } catch (Exception ignored) {}
+                    if (d != null) synchronized (d) {
+                        if (!"Finished".equals(d.status) && !d.userCancelled) {
+                            d.userPaused = true; d.status = "Paused";
+                            if (d.fileSocket == null && d.transferToken != null) { mTransfersByToken.remove(transferKey(d.username, d.transferToken), d); d.transferToken = null; }
+                            try { if (d.fileSocket != null) d.fileSocket.close(); } catch (Exception ignored) {}
+                        }
                     }
                     return "{\"ok\": true}";
                 }
@@ -1731,10 +1832,14 @@ public class SoulseekClient {
                     JSONObject body = new JSONObject(bodyJson != null && !bodyJson.isEmpty() ? bodyJson : "{}");
                     String id = body.optString("id");
                     DownloadTransfer d = mTransfers.get(id);
-                    if (d != null) {
-                        d.userPaused = false;
-                        d.status = "Queued";
-                        mExecutor.submit(() -> initiatePeerDownload(d));
+                    if (d != null && mIsConnected && !d.userCancelled && !"Finished".equals(d.status) && d.fileSocket == null) {
+                        synchronized (d) {
+                            if (d.fileSocket == null && !d.userCancelled && !"Finished".equals(d.status)) {
+                                if (d.transferToken != null) mTransfersByToken.remove(transferKey(d.username, d.transferToken), d);
+                                d.transferToken = null; d.userPaused = false; d.status = "Queued";
+                                try {mExecutor.execute(() -> initiatePeerDownload(d));}catch(java.util.concurrent.RejectedExecutionException busy){d.status="Busy: retry download";}
+                            }
+                        }
                     }
                     return "{\"ok\": true}";
                 }
@@ -1743,10 +1848,12 @@ public class SoulseekClient {
                     JSONObject body = new JSONObject(bodyJson != null && !bodyJson.isEmpty() ? bodyJson : "{}");
                     String id = body.optString("id");
                     DownloadTransfer d = mTransfers.get(id);
-                    if (d != null) {
-                        d.userCancelled = true;
-                        d.status = "Cancelled";
-                        try { if (d.fileSocket != null) d.fileSocket.close(); } catch (Exception ignored) {}
+                    if (d != null) synchronized (d) {
+                        if (!"Finished".equals(d.status)) {
+                            d.userCancelled = true; d.status = "Cancelled";
+                            if (d.fileSocket == null && d.transferToken != null) { mTransfersByToken.remove(transferKey(d.username, d.transferToken), d); d.transferToken = null; }
+                            try { if (d.fileSocket != null) d.fileSocket.close(); } catch (Exception ignored) {}
+                        }
                     }
                     return "{\"ok\": true}";
                 }
@@ -1754,7 +1861,11 @@ public class SoulseekClient {
                 case "clear_download": {
                     JSONObject body = new JSONObject(bodyJson != null && !bodyJson.isEmpty() ? bodyJson : "{}");
                     String id = body.optString("id");
-                    mTransfers.remove(id);
+                    DownloadTransfer d = mTransfers.get(id);
+                    if (d != null && d.fileSocket == null && (d.userCancelled || "Finished".equals(d.status) || d.status.startsWith("Error"))) {
+                        mTransfers.remove(id, d);
+                        if (d.transferToken != null) mTransfersByToken.remove(transferKey(d.username, d.transferToken), d);
+                    }
                     return "{\"ok\": true}";
                 }
 
@@ -1763,9 +1874,6 @@ public class SoulseekClient {
                 }
 
                 case "start_daemon": {
-                    if (!mIsConnected && !mCurrentUsername.isEmpty() && !mCurrentPassword.isEmpty()) {
-                        mExecutor.submit(() -> connect(mCurrentUsername, mCurrentPassword));
-                    }
                     return "{\"ok\": true, \"status\": \"running\"}";
                 }
 
@@ -1803,10 +1911,13 @@ public class SoulseekClient {
         return total;
     }
 
+    private static boolean validPeerUsername(String value){return value!=null&&!value.isEmpty()&&value.length()<=256&&!value.matches(".*[\\p{Cntrl}].*");}
+
     private static String readStr(ByteBuffer buf) {
-        if (buf.remaining() < 4) return "";
+        if (buf.remaining() < 4) throw new IllegalArgumentException("Truncated peer string");
         int len = buf.getInt();
-        if (len <= 0 || buf.remaining() < len) return "";
+        if (len == 0) return "";
+        if (len < 0 || len > 65536 || buf.remaining() < len) throw new IllegalArgumentException("Invalid peer string length");
         byte[] bytes = new byte[len];
         buf.get(bytes);
         return new String(bytes, StandardCharsets.UTF_8);

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/php/platform.php";
 // CachyMusic Audio Workstation - Router Script & Index Handler (Deny-by-default)
 //
 // Under `php -S` there is no .htaccess support, so every file below the project root would
@@ -13,6 +14,21 @@ function cachy_deny(int $code, string $msg): void {
     exit;
 }
 
+// This local-only distribution must not expose music, metadata or credentials over LAN.
+if (PHP_SAPI === 'cli-server' && !in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) {
+    cachy_deny(403, 'CachyMusic is local-only');
+}
+// Reject rebinding and cross-origin browser requests before any local API is reached.
+$host = strtolower($_SERVER['HTTP_HOST'] ?? '');
+if (!preg_match('/^(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]{1,5})?$/D',$host)) cachy_deny(403,'Untrusted host');
+$appToken=getenv('CACHYMUSIC_LOCAL_TOKEN');
+if($appToken && !hash_equals($appToken,$_SERVER['HTTP_X_CACHY_APP_TOKEN']??'')) cachy_deny(403,'Application authentication required');
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if ($origin !== '' && !in_array($origin,['http://'.$host,'https://'.$host],true)) cachy_deny(403,'Untrusted origin');
+if (in_array(strtolower($_SERVER['HTTP_SEC_FETCH_SITE'] ?? ''),['cross-site','same-site'],true)) cachy_deny(403,'Cross-origin request blocked');
+header('Referrer-Policy: no-referrer');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
 $rawPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 if (!is_string($rawPath) || $rawPath === '') $rawPath = '/';
 $uri = rawurldecode($rawPath);
@@ -77,7 +93,7 @@ if ($uri !== '/' && $ext !== '') {
     $root = realpath(__DIR__);
     // Must be an allowlisted, existing regular file that lives inside the project (blocks symlink escapes)
     if (!$isPublic || !in_array($ext, $publicExts, true) || $real === false || !is_file($real)
-        || $root === false || strncmp($real, $root . DIRECTORY_SEPARATOR, strlen($root) + 1) !== 0) {
+        || $root === false || !cachy_path_within($real, $root)) {
         cachy_deny(404, '404 Not Found: Asset does not exist');
     }
     if (in_array($ext, ['js', 'css', 'html'], true)) {

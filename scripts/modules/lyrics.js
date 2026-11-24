@@ -1,3 +1,4 @@
+import { uiIcon } from './icons.js';
 // CachyMusic - Synchronized LRC Lyrics Engine
 import { escapeHtml, safeStorage } from './utils.js';
 import { store } from './state.js';
@@ -64,7 +65,7 @@ import {
         if (!parsedLyrics || parsedLyrics.lines.length === 0) {
             lyricsContent.innerHTML = `
                 <div class="lyricsPlaceholder">
-                    <div class="lyricsPlaceholderIcon">♪</div>
+                    <div class="lyricsPlaceholderIcon">${uiIcon('music')}</div>
                     <p>No lyrics available for this track.</p>
                     <span>Lyrics can be embedded via the<br>USLT/LYRICS tag in your audio files or in a .lrc file.</span>
                 </div>

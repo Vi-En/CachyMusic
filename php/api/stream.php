@@ -47,6 +47,7 @@ $allowedRoots = [
 
 @require_once(__DIR__ . '/../database.php');
 
+$allowedRoots[] = realpath(cachy_data_dir() . '/downloads');
 $defaultDir = Storage::getDefaultDirectory();
 if ($defaultDir && is_dir($defaultDir)) {
     $realDef = realpath($defaultDir);
@@ -158,6 +159,10 @@ $mimeMap = [
     'opus' => 'audio/opus',
     'aac'  => 'audio/aac',
     'wma'  => 'audio/x-ms-wma',
+    'aiff' => 'audio/aiff',
+    'aif'  => 'audio/aiff',
+    'alac' => 'audio/mp4',
+    'mp4'  => 'audio/mp4',
 ];
 
 if (!isset($mimeMap[$ext])) {
@@ -169,7 +174,7 @@ if (!isset($mimeMap[$ext])) {
 $isPathAllowed = false;
 foreach ($allowedRoots as $allowedRoot) {
     if (!$allowedRoot) continue;
-    if ($realPath === $allowedRoot || strpos($realPath, rtrim($allowedRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR) === 0) {
+    if (cachy_path_within($realPath, $allowedRoot)) {
         $isPathAllowed = true;
         break;
     }
@@ -191,44 +196,13 @@ clearstatcache(true, $realPath);
 $mime = $mimeMap[$ext];
 $size = (int)filesize($realPath);
 
-// Optional on-the-fly FFmpeg transcode fallback for non-standard codecs (e.g. AC3/DTS/WMA wrapped in .flac/.m4a)
-if (isset($_GET['transcode']) && $_GET['transcode'] === '1') {
-    $ffmpegBin = cachy_find_binary('ffmpeg');
-    if ($ffmpegBin !== null) {
-        header("Content-Type: audio/mpeg");
-        header("Accept-Ranges: none");
-        header("Cache-Control: no-store");
-        http_response_code(200);
-        if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
-            exit;
-        }
-        $cmd = escapeshellarg($ffmpegBin) . ' -v error -i ' . escapeshellarg($realPath) . ' -vn -acodec libmp3lame -b:a 320k -f mp3 pipe:1 2>/dev/null';
-        $proc = @popen($cmd, 'r');
-        if (is_resource($proc)) {
-            while (!feof($proc)) {
-                if (connection_aborted() || connection_status() !== CONNECTION_NORMAL) {
-                    break;
-                }
-                $chunk = fread($proc, 65536);
-                if ($chunk === false || $chunk === '') {
-                    break;
-                }
-                echo $chunk;
-                if (ob_get_level() > 0) {
-        @ob_flush();
-    }
-    @flush();
-            }
-            @pclose($proc);
-            exit;
-        }
-    }
-}
+// Lossy fallback removed: never transcode a source silently.
+if (isset($_GET['transcode'])) { http_response_code(400); exit('Lossy compatibility conversion disabled.'); }
 
 if ($size <= 0) {
     header("Content-Type: $mime");
     header("Accept-Ranges: bytes");
-    header("Cache-Control: public, max-age=86400");
+    header("Cache-Control: no-store");
     header("Content-Length: 0");
     http_response_code(200);
     exit;
@@ -278,7 +252,7 @@ while (ob_get_level() > 0) {
 
 header("Content-Type: $mime");
 header("Accept-Ranges: bytes");
-header("Cache-Control: public, max-age=86400");
+header("Cache-Control: no-store");
 header("Content-Length: $length");
 
 if ($isRangeRequest || ($length < $size && $isRangeRequest)) {

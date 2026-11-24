@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CachyMusic v2.0.3 — Linux AppImage Builder
+# CachyMusic — Linux AppImage Builder
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VERSION="2.0.3"
+VERSION="3.0.0-dev.6.18"
 ARCH="${ARCH:-x86_64}"
 APPDIR="$PROJECT_ROOT/dist/CachyMusic.AppDir"
 OUT_APPIMAGE="$PROJECT_ROOT/dist/CachyMusic-${VERSION}-${ARCH}.AppImage"
@@ -17,7 +17,7 @@ cp -r "$PROJECT_ROOT/index.html" "$PROJECT_ROOT/index.php" \
       "$PROJECT_ROOT/manifest.json" "$PROJECT_ROOT/sw.js" \
       "$PROJECT_ROOT/schema.sql" "$PROJECT_ROOT/resources" \
       "$PROJECT_ROOT/scripts" "$PROJECT_ROOT/stylesheets" \
-      "$PROJECT_ROOT/php" "$PROJECT_ROOT/bin" \
+      "$PROJECT_ROOT/php" "$PROJECT_ROOT/bin" "$PROJECT_ROOT/server" "$PROJECT_ROOT/package.json" \
       "$APPDIR/usr/share/cachymusic/"
 
 rm -rf "$APPDIR/usr/share/cachymusic/resources/audio"

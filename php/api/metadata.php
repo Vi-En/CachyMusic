@@ -4,27 +4,13 @@ if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
 
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (!empty($origin)) {
-    $parsed = parse_url($origin);
-    $host = $parsed['host'] ?? '';
-    $serverHost = parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'), PHP_URL_HOST);
-    if (in_array($host, ['localhost', '127.0.0.1', '::1', 'appassets.androidplatform.net'], true) || $host === $serverHost) {
-        header("Access-Control-Allow-Origin: $origin");
-        header("Access-Control-Allow-Credentials: true");
-    }
-}
-
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
 header('Content-Type: application/json; charset=utf-8');
 require_once(__DIR__ . '/../database.php');
+require_once(__DIR__ . '/../flac_metadata.php');
+require_once(__DIR__ . '/../mp3_metadata.php');
+require_once(__DIR__ . '/../pcm_metadata.php');
+require_once(__DIR__ . '/../packet_metadata.php');
+function cm_meta_error(int $status,string $message): void { http_response_code($status); echo json_encode(['success'=>false,'message'=>$message]); exit; }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
@@ -58,10 +44,12 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    $raw = file_get_contents('php://input');
+    if (strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '')[0])) !== 'application/json') cm_meta_error(415,'JSON required');
+    $raw = file_get_contents('php://input', false, null, 0, 15 * 1024 * 1024 + 1);
+    if ($raw === false || strlen($raw)>15*1024*1024) cm_meta_error(413,'Request too large');
     $input = json_decode($raw, true);
     if (!is_array($input)) {
-        $input = $_POST;
+        cm_meta_error(400,'Invalid JSON');
     }
 
     $tid = isset($input['tid']) ? (int)$input['tid'] : 0;
@@ -72,64 +60,33 @@ if ($method === 'POST') {
     }
 
     $fields = [];
-    $allowed = ['title', 'artist', 'album', 'genre', 'year', 'track_num', 'lyrics'];
+    $allowed = ['title', 'artist', 'album', 'genre', 'year', 'track_num', 'lyrics', 'comment'];
     foreach ($allowed as $f) {
-        if (isset($input[$f])) {
-            $fields[$f] = $input[$f];
+        if (array_key_exists($f,$input)) {
+            $v=$input[$f]; if($v!==null && !is_string($v) && !is_int($v)) cm_meta_error(400,'Invalid field');
+            if(strlen((string)$v)>($f==='lyrics'?262144:4096)) cm_meta_error(400,'Field too long');
+            $fields[$f] = $v;
         }
     }
 
-    // Process imported or online-fetched cover artwork if provided
-    $coverData = $input['cover_data'] ?? null;
-    $coverSaved = false;
-    $rawBinary = null;
-    $coverMime = 'image/jpeg';
-
-    if (!empty($coverData) && is_string($coverData) && str_starts_with($coverData, 'data:image/')) {
-        if (preg_match('/^data:(image\/[a-zA-Z0-9\+\-\.]+);base64,(.+)$/', $coverData, $matches)) {
-            $coverMime = strtolower($matches[1]);
-            $decoded = base64_decode($matches[2], true);
-            if ($decoded && strlen($decoded) > 100) {
-                $rawBinary = $decoded;
-            }
-        }
-    }
-
-    if ($rawBinary !== null) {
-        $cacheDir = cachy_cache_dir() . DIRECTORY_SEPARATOR . 'covers';
-        if (!is_dir($cacheDir)) {
-            @mkdir($cacheDir, 0775, true);
-        }
-
-        $fullImgPath = $cacheDir . '/tid_' . $tid . '.img';
-        $mimePath = $cacheDir . '/tid_' . $tid . '.mime';
-        $thumbPath = $cacheDir . '/tid_' . $tid . '_thumb.jpg';
-
-        file_put_contents($fullImgPath, $rawBinary);
-        file_put_contents($mimePath, $coverMime);
-
-        // Generate thumbnail via ffmpeg if available or write raw
-        $thumbSaved = false;
-        $ffmpegBin = cachy_find_binary('ffmpeg');
-        if ($ffmpegBin !== null) {
-            $tmpIn = tempnam(sys_get_temp_dir(), 'cm_raw_');
-            file_put_contents($tmpIn, $rawBinary);
-            $tmpThumb = tempnam(sys_get_temp_dir(), 'cm_thm_') . '.jpg';
-            $tCmd = escapeshellarg($ffmpegBin) . " -y -v quiet -i " . escapeshellarg($tmpIn) . " -vf \"scale=200:200:force_original_aspect_ratio=decrease\" " . escapeshellarg($tmpThumb) . " 2>&1";
-            exec($tCmd, $tOut, $tRet);
-            if ($tRet === 0 && file_exists($tmpThumb) && filesize($tmpThumb) > 100) {
-                rename($tmpThumb, $thumbPath);
-                $thumbSaved = true;
-            }
-            if (file_exists($tmpIn)) @unlink($tmpIn);
-            if (file_exists($tmpThumb)) @unlink($tmpThumb);
-        }
-        if (!$thumbSaved) {
-            file_put_contents($thumbPath, $rawBinary);
-        }
-
-        $fields['has_cover'] = 1;
-        $coverSaved = true;
+    // Require an indexed track and validate artwork before writing anything.
+    $filePath = Storage::getTrackPath($tid);
+    if (!$filePath) cm_meta_error(404,'Track not found');
+    $coverData=$input['cover_data']??null; $coverSaved=false; $rawBinary=null; $info=null;
+    if ($coverData !== null) {
+        if(!is_string($coverData)||!preg_match('#^data:(image/(?:png|jpeg));base64,([A-Za-z0-9+/=]+)$#D',$coverData,$m)) cm_meta_error(400,'Unsupported artwork');
+        $rawBinary=base64_decode($m[2],true);
+        if($rawBinary===false||strlen($rawBinary)>10*1024*1024) cm_meta_error(400,'Invalid artwork size');
+        $info=@getimagesizefromstring($rawBinary);
+        if(!$info||$info['mime']!==$m[1]||$info[0]<1||$info[1]<1||$info[0]>8192||$info[1]>8192||$info[0]*$info[1]>16000000) cm_meta_error(400,'Invalid artwork dimensions');
+        $cacheDir=cachy_cache_dir().DIRECTORY_SEPARATOR.'covers';
+        if(!is_dir($cacheDir)&&!@mkdir($cacheDir,0700,true)) cm_meta_error(500,'Cannot save artwork');
+        // Existing cover endpoint reads these aliases. Invalidate thumbnails to avoid stale art.
+        $tmp=tempnam($cacheDir,'.cm-cover-');
+        if(!$tmp||file_put_contents($tmp,$rawBinary)!==strlen($rawBinary)||!rename($tmp,$cacheDir.'/tid_'.$tid.'.img')) {if($tmp)@unlink($tmp);cm_meta_error(500,'Cannot save artwork');}
+        if(file_put_contents($cacheDir.'/tid_'.$tid.'.mime',$info['mime'],LOCK_EX)===false)cm_meta_error(500,'Cannot save artwork type');
+        @unlink($cacheDir.'/tid_'.$tid.'_thumb.jpg');
+        $fields['has_cover']=1;$coverSaved=true;
     }
 
     $updatedTrack = Storage::updateTrackMetadata($tid, $fields);
@@ -144,79 +101,14 @@ if ($method === 'POST') {
         $updatedTrack['cover'] = 'php/api/cover.php?tid=' . $tid;
     }
 
-    // Attempt hardware physical file tag write if file is local and writable
-    $filePath = Storage::getTrackPath($tid);
-    $tagWriteAttempted = false;
-    $tagWriteSuccess = false;
-
-    $realPath = $filePath ? realpath($filePath) : false;
-    $allowedExts = ['flac', 'mp3', 'm4a', 'ogg', 'wav', 'aac', 'opus', 'aiff'];
-
-    if ($realPath && is_file($realPath) && is_writable($realPath)) {
-        $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
-        if (in_array($ext, $allowedExts, true)) {
-            $title = (string)($fields['title'] ?? $updatedTrack['title'] ?? '');
-            $artist = (string)($fields['artist'] ?? $updatedTrack['artist'] ?? '');
-            $album = (string)($fields['album'] ?? $updatedTrack['album'] ?? '');
-            $genre = (string)($fields['genre'] ?? $updatedTrack['genre'] ?? '');
-            $year = (string)($fields['year'] ?? $updatedTrack['year'] ?? '');
-            $trackNum = (string)($fields['track_num'] ?? $updatedTrack['track_num'] ?? '');
-            $escapedPath = escapeshellarg($realPath);
-
-            if ($ext === 'flac' && is_executable('/usr/bin/metaflac')) {
-                $tagWriteAttempted = true;
-                $cmd = "/usr/bin/metaflac " .
-                       "--remove-tag=TITLE " . escapeshellarg("--set-tag=TITLE=" . $title) . " " .
-                       "--remove-tag=ARTIST " . escapeshellarg("--set-tag=ARTIST=" . $artist) . " " .
-                       "--remove-tag=ALBUM " . escapeshellarg("--set-tag=ALBUM=" . $album) . " " .
-                       "--remove-tag=GENRE " . escapeshellarg("--set-tag=GENRE=" . $genre) . " " .
-                       "--remove-tag=DATE " . escapeshellarg("--set-tag=DATE=" . $year) . " " .
-                       "--remove-tag=TRACKNUMBER " . escapeshellarg("--set-tag=TRACKNUMBER=" . $trackNum) . " " .
-                       $escapedPath . " 2>&1";
-                exec($cmd, $out, $ret);
-                $tagWriteSuccess = ($ret === 0);
-
-                if ($rawBinary !== null) {
-                    $tmpCover = tempnam(sys_get_temp_dir(), 'cm_cov_') . ($coverMime === 'image/png' ? '.png' : '.jpg');
-                    file_put_contents($tmpCover, $rawBinary);
-                    $metaflacBin = cachy_find_binary('metaflac') ?: 'metaflac';
-                    $covCmd = escapeshellarg($metaflacBin) . " --remove --block-type=PICTURE --import-picture-from=" . escapeshellarg($tmpCover) . " " . $escapedPath . " 2>&1";
-                    exec($covCmd, $cOut, $cRet);
-                    @unlink($tmpCover);
-                }
-            } elseif (($ffmpegBin = cachy_find_binary('ffmpeg')) !== null) {
-                $tagWriteAttempted = true;
-                $tmpFile = tempnam(sys_get_temp_dir(), 'cm_tag_') . '.' . $ext;
-                $covParam = "";
-                $tmpCover = null;
-                if ($rawBinary !== null) {
-                    $tmpCover = tempnam(sys_get_temp_dir(), 'cm_cov_') . ($coverMime === 'image/png' ? '.png' : '.jpg');
-                    file_put_contents($tmpCover, $rawBinary);
-                    $covParam = "-i " . escapeshellarg($tmpCover) . " -map 0:a -map 1:v? -id3v2_version 3 -metadata:s:v title=\"Album cover\" -metadata:s:v comment=\"Cover (front)\" ";
-                } else {
-                    $covParam = "-map 0 ";
-                }
-
-                $cmd = escapeshellarg($ffmpegBin) . " -y -v quiet -i {$escapedPath} {$covParam}" .
-                       "-metadata " . escapeshellarg("title=" . $title) . " " .
-                       "-metadata " . escapeshellarg("artist=" . $artist) . " " .
-                       "-metadata " . escapeshellarg("album=" . $album) . " " .
-                       "-metadata " . escapeshellarg("genre=" . $genre) . " " .
-                       "-metadata " . escapeshellarg("date=" . $year) . " " .
-                       "-metadata " . escapeshellarg("track=" . $trackNum) . " " .
-                       "-codec copy " . escapeshellarg($tmpFile) . " 2>&1";
-                exec($cmd, $out, $ret);
-                if ($ret === 0 && file_exists($tmpFile) && filesize($tmpFile) > 1024) {
-                    rename($tmpFile, $realPath);
-                    $tagWriteSuccess = true;
-                } elseif (file_exists($tmpFile)) {
-                    @unlink($tmpFile);
-                }
-                if ($tmpCover && file_exists($tmpCover)) {
-                    @unlink($tmpCover);
-                }
-            }
-        }
+    // Only write to the original file following an explicit user request.
+    $tagWriteAttempted=false; $tagWriteSuccess=false;
+    $realPath=realpath($filePath);$dir=Storage::getDefaultDirectory();$root=$dir?realpath($dir):false;
+    if(($input['write_file']??false)===true && $realPath && $root && is_dir($root) && !is_link($filePath) && is_file($realPath) && is_writable($realPath)
+        && cachy_is_allowed_scan_path(dirname($realPath)) && str_starts_with(cachy_normalize_path($realPath),rtrim(cachy_normalize_path($root),'/').'/')
+        && in_array(strtolower(pathinfo($realPath,PATHINFO_EXTENSION)),['flac','mp3','wav','wave','aif','aiff','ogg','opus','oga','m4a','alac'],true)) {
+        $tagWriteAttempted=true;$writer=match(strtolower(pathinfo($realPath,PATHINFO_EXTENSION))){'flac'=>'cm_flac_rewrite','mp3'=>'cm_mp3_rewrite','ogg','opus','oga','m4a','alac'=>'cm_packet_rewrite',default=>'cm_pcm_tag_rewrite'};
+        $tagWriteSuccess=$writer($realPath,$fields,$rawBinary,$info);
     }
 
     echo json_encode([

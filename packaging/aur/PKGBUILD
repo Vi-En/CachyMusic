@@ -1,48 +1,35 @@
-# Maintainer: CachyOS / CachyMusic Team
 pkgname=cachymusic
-pkgver=2.0.3
+pkgver=3.0.0.dev6.18
 pkgrel=1
-pkgdesc="Self-contained audio workstation, 64-bit DSP player & standalone PWA with turntable deck"
+pkgdesc='Local-first music player with optional DSP and Soulseek'
 arch=('any')
-url="https://github.com/Vi-En/CachyMusic"
+url='https://github.com/Vi-En/CachyMusic'
 license=('GPL-3.0-or-later')
-depends=(
-    'php'
-    'python'
-    'python-gobject'
-    'libappindicator-gtk3'
-)
-optdepends=(
-    'php-sqlite: Faster WAL SQLite3 metadata cache backend (falls back automatically to atomic JSON)'
-    'python-dbus: Native Linux MPRIS2 media key & desktop OSD bridge'
-    'nicotine-plus: Headless Soulseek P2P network integration'
-    'nodejs: Standalone Soulseek microservice alternative'
-    'ffmpeg: Studio metadata and codec probing'
-    'pipewire: Low-latency integer clock rate switching'
-)
-source=(
-    "${pkgname}-${pkgver}.tar.gz"
-    "cachymusic.desktop"
-)
-sha256sums=(
-    'SKIP'
-    'SKIP'
-)
-
+depends=('php' 'python')
+optdepends=('chromium: standalone browser window and current Web Audio support'
+            'xdg-utils: default browser fallback'
+            'php-sqlite: SQLite library storage (JSON fallback available)'
+            'python-dbus: optional Linux MPRIS bridge'
+            'python-gobject: optional MPRIS and tray'
+            'gtk3: optional tray'
+            'libayatana-appindicator: optional tray'
+            'zenity: GTK native folder chooser'
+            'kdialog: KDE native folder chooser'
+            'nodejs: optional Soulseek (requires separately installed slsk-client)'
+            'ffmpeg: metadata and cover extraction'
+            'wireplumber: PipeWire system volume bridge'
+            'libpulse: PulseAudio volume bridge'
+            'alsa-utils: ALSA mixer fallback')
+source=("${pkgname}-${pkgver}.tar.gz")
+# Replaced with actual source hash by prepare-source.sh; template is not a release recipe.
+sha256sums=('SOURCE_SHA256')
 package() {
-    cd "${srcdir}"
-
-    install -dm755 "${pkgdir}/usr/share/cachymusic"
-    cp -r index.html index.php manifest.json sw.js schema.sql resources scripts stylesheets php bin "${pkgdir}/usr/share/cachymusic/"
-    if [ -f "package.json" ]; then cp package.json "${pkgdir}/usr/share/cachymusic/"; fi
-
-    # Launcher symlink
-    install -dm755 "${pkgdir}/usr/bin"
-    ln -sf "/usr/share/cachymusic/bin/cachymusic" "${pkgdir}/usr/bin/cachymusic"
-
-    # Desktop entry & Icon
-    install -Dm644 "${srcdir}/cachymusic.desktop" "${pkgdir}/usr/share/applications/cachymusic.desktop"
-    if [ -f "resources/images/icon-512.png" ]; then
-        install -Dm644 "resources/images/icon-512.png" "${pkgdir}/usr/share/icons/hicolor/512x512/apps/cachymusic.png"
-    fi
+    cd "${srcdir}/${pkgname}-${pkgver}"
+    install -dm755 "${pkgdir}/usr/share/cachymusic" "${pkgdir}/usr/bin"
+    cp -r index.html index.php manifest.json sw.js schema.sql LICENSE package.json resources scripts stylesheets php bin server "${pkgdir}/usr/share/cachymusic/"
+    chmod 755 "${pkgdir}/usr/share/cachymusic/bin/cachymusic"
+    ln -s /usr/share/cachymusic/bin/cachymusic "${pkgdir}/usr/bin/cachymusic"
+    install -Dm644 packaging/aur/cachymusic.desktop "${pkgdir}/usr/share/applications/cachymusic.desktop"
+    install -Dm644 resources/images/icon-512.png "${pkgdir}/usr/share/icons/hicolor/512x512/apps/cachymusic.png"
+    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }

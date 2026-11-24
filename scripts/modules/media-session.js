@@ -4,6 +4,7 @@ import { store } from './state.js';
 let lastPosSyncMs = 0;
 let lastNotifiedTrackKey = null;
 const rasterCoverCache = new Map();
+const rasterCoverRequests = new Map();
 
 function resolveRasterCover(coverUrl) {
     try {
@@ -23,7 +24,7 @@ function resolveRasterCover(coverUrl) {
 }
 
 function cacheRasterCoverEntry(key, dataUrl) {
-    if (!key || !dataUrl) return;
+    if (!key || !dataUrl || key.length>4096 || dataUrl.length>256*1024) return;
     if (rasterCoverCache.size >= 40) {
         const oldestKey = rasterCoverCache.keys().next().value;
         if (oldestKey) rasterCoverCache.delete(oldestKey);
@@ -34,12 +35,20 @@ function cacheRasterCoverEntry(key, dataUrl) {
 function rasterizeCoverToDataUrl(coverUrl) {
     if (!coverUrl || typeof document === 'undefined') return Promise.resolve(null);
     if (rasterCoverCache.has(coverUrl)) return Promise.resolve(rasterCoverCache.get(coverUrl));
-    return new Promise((resolve) => {
+    if (rasterCoverRequests.has(coverUrl)) return rasterCoverRequests.get(coverUrl);
+    if (rasterCoverRequests.size >= 4) return Promise.resolve(null);
+    const pending = new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        const timer = setTimeout(() => resolve(null), 2500);
-        img.onload = () => {
+        const finish = value => {
             clearTimeout(timer);
+            img.onload = null;
+            img.onerror = null;
+            img.removeAttribute('src');
+            resolve(value);
+        };
+        const timer = setTimeout(() => finish(null), 2500);
+        img.onload = () => {
             try {
                 const size = 256;
                 const canvas = document.createElement('canvas');
@@ -47,7 +56,7 @@ function rasterizeCoverToDataUrl(coverUrl) {
                 canvas.height = size;
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
-                    resolve(null);
+                    finish(null);
                     return;
                 }
                 const srcW = img.naturalWidth || size;
@@ -58,17 +67,16 @@ function rasterizeCoverToDataUrl(coverUrl) {
                 ctx.drawImage(img, (size - drawW) / 2, (size - drawH) / 2, drawW, drawH);
                 const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
                 cacheRasterCoverEntry(coverUrl, dataUrl);
-                resolve(dataUrl);
+                finish(dataUrl);
             } catch (_) {
-                resolve(null);
+                finish(null);
             }
         };
-        img.onerror = () => {
-            clearTimeout(timer);
-            resolve(null);
-        };
+        img.onerror = () => finish(null);
         img.src = coverUrl;
-    });
+    }).finally(() => rasterCoverRequests.delete(coverUrl));
+    rasterCoverRequests.set(coverUrl, pending);
+    return pending;
 }
 
 export class MediaSessionController {
@@ -163,7 +171,7 @@ export class MediaSessionController {
         this.maybeNotifyBackgroundTrack(track, resolvedCover);
 
         const needsRasterize = rawCover && typeof rawCover === 'string' && !rawCover.toLowerCase().endsWith('.svg')
-            && (rawCover.startsWith('blob:') || (!rawCover.startsWith('data:image/jpeg') && rawCover.startsWith('https://appassets.androidplatform.net/')));
+            && (rawCover.startsWith('blob:') || rawCover.startsWith('data:') || rawCover.startsWith('https://appassets.androidplatform.net/'));
         if (needsRasterize && !track._resolvedNotificationCover) {
             const trackKey = `${track.tid || track.id || track.filename}:${rawCover}`;
             rasterizeCoverToDataUrl(rawCover).then((dataUrl) => {
@@ -188,7 +196,8 @@ export class MediaSessionController {
             } catch (_) {}
         }
         this.updatePositionState(true);
-        const activeTrack = store.state.allTracks?.[store.state.currentTrackIndex] || store.state.currentTrack;
+        const s=store.state;
+        const activeTrack = s.isStandalonePlayback?s.standaloneTrackList?.[s.standaloneTrackIndex]:(s.allTracks?.[s.currentTrackIndex]||s.currentTrack);
         if (activeTrack) {
             this.syncAndroidNotification(activeTrack, playing);
         }
@@ -221,7 +230,8 @@ export class MediaSessionController {
             try {
                 const durMs = Math.round((this.handlers?.getDuration?.() || track?.duration || 0) * 1000);
                 const posMs = Math.round((this.handlers?.getPosition?.() || 0) * 1000);
-                const coverArg = track?._resolvedNotificationCover || resolveRasterCover(track?.cover) || track?.cover || '';
+                const resolved = track?._resolvedNotificationCover || resolveRasterCover(track?.cover) || '';
+                const coverArg = resolved.length<=256*1024 ? resolved : '';
                 window.AndroidBridge.updateMediaNotification(
                     track?.title || track?.filename || 'CachyMusic',
                     track?.artist || 'Unknown Artist',

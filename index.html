@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-presentation="artwork">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>CachyMusic: Audio Workstation</title>
-    <script src="scripts/theme-preload.js?v=2.0.3"></script>
-    <meta name="theme-color" content="#09090d">
+    <title>CachyMusic — Music player</title>
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: https://musicbrainz.org https://coverartarchive.org https://archive.org https://*.archive.org https://lrclib.net; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
+    <meta name="theme-color" content="#090e14">
+    <script src="scripts/theme-preload.js?v=3.0.0-dev.6.18-integrity-ux"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,7 +15,6 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="resources/images/icon-192.png">
     <link rel="icon" type="image/svg+xml" href="resources/images/music-hanzi.svg">
-    <link rel="preload" href="resources/fonts/NMSFuturaProBook_Kerned.ttf" as="font" type="font/ttf" crossorigin>
     <link rel="modulepreload" href="scripts/modules/utils.js">
     <link rel="modulepreload" href="scripts/modules/state.js">
     <link rel="modulepreload" href="scripts/modules/runtime-capabilities.js">
@@ -25,42 +26,8 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=2.0.3">
-    <script>
-        (function () {
-            var isNativeAndroid = window.AndroidBridge
-                && typeof window.AndroidBridge.isAndroid === 'function'
-                && window.AndroidBridge.isAndroid();
-            if (!('serviceWorker' in navigator)) return;
-            if (isNativeAndroid) {
-                navigator.serviceWorker.getRegistrations().then(function (registrations) {
-                    if (!registrations.length) return;
-                    return Promise.all(registrations.map(function (reg) {
-                        return reg.unregister();
-                    })).then(function () {
-                        window.location.reload();
-                    });
-                }).catch(function () {});
-                return;
-            }
-            window.addEventListener('load', function () {
-                if (window.caches) {
-                    caches.keys().then(function (keys) {
-                        keys.forEach(function (k) {
-                            if (k !== 'cachymusic-v2.0.3' && !k.startsWith('cachymusic-artwork-')) {
-                                caches.delete(k);
-                            }
-                        });
-                    }).catch(function () {});
-                }
-                navigator.serviceWorker.register('./sw.js?v=2.0.3').then(function (reg) {
-                    reg.update();
-                }).catch(function (err) {
-                    console.warn('[PWA] ServiceWorker registration failed:', err);
-                });
-            });
-        })();
-    </script>
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.6.18-integrity-ux">
+    <script src="scripts/pwa-init.js" defer></script>
 </head>
 <body class="view-player mobile-tab-player">
 
@@ -72,7 +39,7 @@
     <!-- Top Navigation Bar -->
     <header class="topBar">
         <div class="brand">
-            <span class="brandLogo">CACHYMUSIC</span>
+            <span class="brandLogo">CachyMusic</span>
             <div class="brandLiveMeter" id="brandLiveMeter" aria-hidden="true" title="Audio Engine Signal">
                 <span class="meterBar b1"></span>
                 <span class="meterBar b2"></span>
@@ -82,31 +49,31 @@
         </div>
 
         <div class="workspaceSwitcher" id="workspaceSwitcher">
-            <button type="button" class="wsTabBtn active" id="wsPlayerBtn" data-view="player" title="Workstation Player &amp; Turntable (Alt+P)">
-                <span class="wsLabel">PLAYER</span>
+            <button type="button" class="wsTabBtn active" id="wsPlayerBtn" data-view="player" title="Music Player (Alt+P)">
+                <span class="wsLabel">Player</span>
             </button>
             <button type="button" class="wsTabBtn" id="wsSoulseekBtn" data-view="soulseek" title="Soulseek / Nicotine+ Network (Alt+S)">
-                <span class="wsLabel">SEEK</span>
-                <span class="wsBadge" id="wsSoulseekBadge">●</span>
+                <span class="wsLabel">Soulseek</span>
+                <span class="wsBadge statusIndicator" id="wsSoulseekBadge" aria-hidden="true"></span>
             </button>
         </div>
 
         <div class="searchContainer" id="headerSearchContainer">
             <svg class="searchIcon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="trackSearch" placeholder="Search title, artist, album, genre..." autocomplete="off" aria-label="Search track library">
-            <button type="button" class="searchClearBtn" id="trackSearchClearBtn" title="Clear search" aria-label="Clear search" style="display: none;">✕</button>
+            <input type="text" id="trackSearch" placeholder="Search library" autocomplete="off" aria-label="Search track library">
+            <button type="button" class="searchClearBtn" id="trackSearchClearBtn" title="Clear search" aria-label="Clear search" style="display: none;"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             <kbd class="searchKbdShortcut" id="searchKbdShortcut" title="Press / to search library">/</kbd>
         </div>
 
         <div class="topActions">
             <button type="button" id="toggleFolderBtn" class="topBtn" title="Load Audio From Folder Path" aria-label="Folder Scan">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                <span class="desktopOnly">FOLDER SCAN</span>
-                <span class="mobileOnly">SCAN</span>
+                <span class="desktopOnly">Add music</span>
+                <span class="mobileOnly">Add music</span>
             </button>
-            <button type="button" id="topSettingsBtn" class="topBtn settingsQuickBtn" title="Studio Settings, Themes &amp; Audio Sources" aria-label="Studio Settings">
+            <button type="button" id="topSettingsBtn" class="topBtn settingsQuickBtn" title="Player Settings, Themes &amp; Audio Sources" aria-label="Player Settings">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                <span>SETTINGS</span>
+                <span>Settings</span>
             </button>
         </div>
     </header>
@@ -130,34 +97,10 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 <span>SCAN &amp; LOAD</span>
             </button>
-            <button type="button" id="closeFolderTrayBtn" class="folderTrayCloseBtn" title="Close Tray" aria-label="Close Tray">✕</button>
+            <button type="button" id="closeFolderTrayBtn" class="folderTrayCloseBtn" title="Close Tray" aria-label="Close Tray"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
         <div id="scanStatus" class="scanStatus"></div>
     </div>
-
-    <!-- Mobile View Switcher Tab Bar (Visible on mobile screens <= 768px) -->
-    <nav class="mobileTabBar" id="mobileTabBar" aria-label="Mobile View Navigation">
-        <button type="button" class="mobileTabBtn" data-target="playerDeck" id="mobilePlayerTabBtn">
-            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="2.5"></circle></svg>
-            <span class="mobileTabLabel">PLAYER</span>
-        </button>
-        <button type="button" class="mobileTabBtn" data-target="trackListPanel" id="mobileTracksTabBtn">
-            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-            <span class="mobileTabLabel">TRACKS</span>
-        </button>
-        <button type="button" class="mobileTabBtn" data-target="settingsPanel" id="mobileInfoTabBtn">
-            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            <span class="mobileTabLabel">INFO</span>
-        </button>
-        <button type="button" class="mobileTabBtn" data-target="soulseekWorkspace" id="mobileSoulseekTabBtn">
-            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <span class="mobileTabLabel">SEEK</span>
-        </button>
-        <button type="button" class="mobileTabBtn" data-target="settingsWorkspace" id="mobileSettingsTabBtn">
-            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-            <span class="mobileTabLabel">SETTINGS</span>
-        </button>
-    </nav>
 
     <!-- Main Player Grid Container -->
     <main class="gridContainer">
@@ -166,12 +109,12 @@
         <section class="panel settingsPanel" id="infoPanel">
             <div class="panelHeader infoPanelHeader">
                 <div class="infoPanelHeaderTitle">
-                    <h2>TRACK METADATA</h2>
-                    <span class="panelSub">ID3 &amp; AUDIO METRICS</span>
+                    <h2>Track details</h2>
+                    
                 </div>
                 <button type="button" class="actionBtn editMetaTriggerBtn" id="infoPanelEditMetaBtn" title="Edit Metadata for Current Track" aria-label="Edit Current Track Metadata">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                    <span>EDIT</span>
+                    <span>Edit</span>
                 </button>
             </div>
 
@@ -185,19 +128,19 @@
                 <!-- Turntable Platter RPM & Speed (Transferred back to Metadata Inspector) -->
                 <div class="settingsGroup" id="metaTurntableSpeedGroup">
                     <div class="settingsGroupHeader">
-                        <h3>TURNTABLE RPM &amp; SPEED</h3>
+                        <h3>Playback speed</h3>
                     </div>
                     <div class="speedSelector">
-                        <button type="button" class="speedBtn active" data-speed="1">1.0x (33 RPM)</button>
-                        <button type="button" class="speedBtn" data-speed="1.25">1.25x</button>
-                        <button type="button" class="speedBtn" data-speed="1.5">1.5x (45 RPM)</button>
-                        <button type="button" class="speedBtn" data-speed="2">2.0x (78 RPM)</button>
+                        <button type="button" class="speedBtn active" data-speed="1">1×</button>
+                        <button type="button" class="speedBtn" data-speed="1.25">1.25×</button>
+                        <button type="button" class="speedBtn" data-speed="1.5">1.5×</button>
+                        <button type="button" class="speedBtn" data-speed="2">2×</button>
                     </div>
                 </div>
 
                 <!-- Detailed Embedded Track Metadata -->
                 <div class="settingsGroup">
-                    <h3>EMBEDDED AUDIO DATA</h3>
+                    <h3>File information</h3>
                     <div class="metaGrid">
                         <div class="metaItem metaItemFull">
                             <span class="metaKey">TITLE</span>
@@ -248,11 +191,11 @@
                             <span class="metaVal" id="statSize">—</span>
                         </div>
                         <div class="metaItem">
-                            <span class="metaKey">DYNAMIC RANGE</span>
-                            <span class="metaVal" id="statDynamicRange">—</span>
+                            <span class="metaKey">TRACK DYNAMIC RANGE</span>
+                            <span class="metaVal" id="statDynamicRange">Not analyzed</span>
                         </div>
                         <div class="metaItem">
-                            <span class="metaKey">PEAK HEADROOM</span>
+                            <span class="metaKey" title="Recent source samples, before DSP; not a true-peak measurement">SOURCE SAMPLE PEAK</span>
                             <span class="metaVal" id="statPeakLevel">—</span>
                         </div>
                         <div class="metaItem metaItemFull">
@@ -265,7 +208,7 @@
         </section>
 
         <!-- Center Panel: The Turntable Deck & Now Playing -->
-        <section class="panel playerDeck mobileActive">
+        <section class="panel playerDeck mobileActive empty-deck">
 
             <!-- Turntable Stage: Embedded Artwork Backdrop Behind Vinyl Deck -->
             <div class="turntableStage" id="turntableStage">
@@ -287,7 +230,7 @@
                     <div class="lyricsScrollArea" id="lyricsScrollArea">
                         <div class="lyricsContent" id="lyricsContent">
                             <div class="lyricsPlaceholder" id="lyricsPlaceholder">
-                                <div class="lyricsPlaceholderIcon">♪</div>
+                                <div class="lyricsPlaceholderIcon"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13M9 18a3 2 0 1 1-6 0 3 2 0 0 1 6 0Zm12-2a3 2 0 1 1-6 0 3 2 0 0 1 6 0Z"/></svg></div>
                                 <p>No lyrics available for this track.</p>
                                 <span>Lyrics can be embedded via the<br>USLT/LYRICS tag in your audio files.</span>
                             </div>
@@ -309,12 +252,6 @@
                     <div class="turntableCenterVis" id="turntableCenterVis">
                         <canvas id="turntableCenterCanvas" class="turntableCenterCanvas"></canvas>
                     </div>
-
-                    <div class="toneArm" id="toneArm">
-                        <div class="armPivot"></div>
-                        <div class="armShaft"></div>
-                        <div class="armCartridge"></div>
-                    </div>
                 </div>
 
                 <!-- Player Deck Quick Controls (Metadata Inspector, Lyrics & Tracklist Toggles) -->
@@ -325,7 +262,7 @@
                             <line x1="12" y1="16" x2="12" y2="12"></line>
                             <line x1="12" y1="8" x2="12.01" y2="8"></line>
                         </svg>
-                        <span class="deckBtnLabel">METADATA</span>
+                        <span class="deckBtnLabel">Details</span>
                     </button>
                     <button type="button" id="lyricsToggleBtn" class="deckActionBtn lyricsToggleBtn" title="Toggle Lyrics View (L)" aria-label="Toggle Lyrics View">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -334,7 +271,7 @@
                             <line x1="16" y1="13" x2="8" y2="13"></line>
                             <line x1="16" y1="17" x2="8" y2="17"></line>
                         </svg>
-                        <span class="deckBtnLabel">LYRICS</span>
+                        <span class="deckBtnLabel">Lyrics</span>
                     </button>
                     <button type="button" id="tracklistToggleBtn" class="deckActionBtn tracklistToggleBtn active" title="Toggle Tracklist Panel (T)" aria-label="Toggle Tracklist Panel" aria-pressed="true">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -345,7 +282,7 @@
                             <line x1="3" y1="12" x2="3.01" y2="12"></line>
                             <line x1="3" y1="18" x2="3.01" y2="18"></line>
                         </svg>
-                        <span class="deckBtnLabel">TRACKS</span>
+                        <span class="deckBtnLabel">Library</span>
                     </button>
                 </div>
             </div>
@@ -355,8 +292,8 @@
                 <div class="metaBadgeRow" id="metaBadgeRow">
                     <span class="formatBadge" id="trackBadge" style="display: none;"></span>
                     <button type="button" id="signalPathBadgeBtn" class="signalPathBadge" title="Signal Path &amp; Audit">
-                        <span class="signalDot" id="deckSignalDot">●</span>
-                        <span id="signalPathLabel">DIRECT</span>
+                        <span class="signalDot" id="deckSignalDot" aria-hidden="true"></span>
+                        <span id="signalPathLabel">Not measured</span>
                     </button>
                 </div>
                 <h1 id="trackName" style="display: none;"></h1>
@@ -365,11 +302,11 @@
 
                 <!-- Empty State Prompt (Shown when no music directory is loaded yet) -->
                 <div class="playerEmptyPrompt" id="playerEmptyPrompt">
-                    <p class="playerEmptyTitle" id="playerEmptyTitle">No Music Directory Loaded</p>
-                    <p class="playerEmptySub" id="playerEmptySub">Choose your music folder to index and play tracks. In case of error, configure the folder manually in <strong>Settings &rarr; Library &amp; Folders</strong>.</p>
+                    <p class="playerEmptyTitle" id="playerEmptyTitle">Add your music</p>
+                    <p class="playerEmptySub" id="playerEmptySub">Choose a folder or import audio files to start listening.</p>
                     <div class="playerEmptyActions">
-                        <button type="button" id="playerChooseDirBtn" class="actionBtn primaryBtn">CHOOSE DIRECTORY</button>
-                        <button type="button" id="playerOpenDirSettingsBtn" class="actionBtn">MANUAL SETTINGS</button>
+                        <button type="button" id="playerChooseDirBtn" class="actionBtn primaryBtn">Choose music folder</button>
+                        <button type="button" id="playerOpenDirSettingsBtn" class="actionBtn">Library settings</button>
                     </div>
                     <p class="playerEmptyErrorHint" id="playerEmptyErrorHint" style="display: none;"></p>
                 </div>
@@ -378,7 +315,7 @@
             <!-- Scrubber Timeline -->
             <div class="timelineCon">
                 <span id="currentTime" class="timeLabel">0:00</span>
-                <div class="progressBarCon" id="progressCon">
+                <div class="progressBarCon" id="progressCon" role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true">
                     <div class="progressBar" id="progressBar">
                         <span class="progressPlayhead" id="progressPlayhead"></span>
                     </div>
@@ -423,30 +360,26 @@
                 </button>
             </div>
 
-            <!-- Volume and Level -->
-            <div class="volumeDeck">
-                <button type="button" id="muteBtn" class="muteBtn" title="Mute/Unmute (M)" aria-label="Mute or Unmute">
-                    <svg id="volumeIcon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                    </svg>
-                </button>
-                <input type="range" id="volumeSlider" min="0" max="1.5" step="0.01" value="0.8" class="volumeSlider" title="Volume &amp; Clean Amplification (0% - 150%) — Scroll or drag to adjust" aria-label="Master Volume">
-                <span id="volumeLevel" class="volumeLevel">80%</span>
-            </div>
-
-            <!-- Audio Equalizer & Studio DSP Workstation Launcher Strip -->
-            <div class="audioProcessingBar" id="audioProcessingBar">
-                <div class="eqDeckModule" id="eqDeckModule">
-                    <button type="button" class="eqDeckBtn" id="playerPeqBtn" data-target="peq" title="Open Interactive 10-Band Parametric Equalizer &amp; Studio DSP Workstation">
-                        <div class="eqDeckInfo">
-                            <span class="eqDeckTitle">STUDIO EQUALIZER &amp; DSP</span>
-                            <span class="eqDeckSub">10-BAND PEQ • HEADPHONE STAGING</span>
-                        </div>
-                        <div class="eqDeckBadges">
-                            <span class="eqDeckBadge" id="playerPeqBadge">10-BAND</span>
-                            <span class="eqDeckDspBadge" id="playerDspCountBadge" style="display: none;">0 DSP</span>
-                        </div>
+            <div class="deckAudioControls">
+                <canvas id="desktopSpectrumCanvas" class="desktopSpectrumCanvas" aria-label="Input spectrum" role="img"></canvas>
+                <div class="volumeDeck">
+                    <button type="button" id="muteBtn" class="muteBtn" title="Mute/Unmute (M)" aria-label="Mute or Unmute">
+                        <svg id="volumeIcon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                        </svg>
                     </button>
+                    <input type="range" id="volumeSlider" min="0" max="1.5" step="0.01" value="0.8" class="volumeSlider" title="Volume setting (0–150%)" aria-label="Master Volume">
+                    <span id="volumeLevel" class="volumeLevel">80%</span>
+                </div>
+                <div class="audioProcessingBar" id="audioProcessingBar">
+                    <div class="eqDeckModule" id="eqDeckModule">
+                        <button type="button" class="eqDeckBtn" id="playerPeqBtn" data-target="peq" title="Equalizer" aria-label="Open equalizer">
+                            <svg class="uiIcon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16M8 4v6m8-1v6m-5-1v6"/></svg>
+                            <span class="eqDeckTitle">Equalizer</span>
+                            <span class="eqDeckBadge" id="playerPeqBadge" hidden></span>
+                            <span class="eqDeckDspBadge" id="playerDspCountBadge" style="display: none;"></span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -458,32 +391,32 @@
         <section class="panel trackListPanel">
             <!-- Library / Playlist / Up Next Navigation Tabs -->
             <div class="libraryTabs">
-                <button type="button" class="libTab active" id="tabLibrary">LIBRARY</button>
-                <button type="button" class="libTab" id="tabPlaylists">PLAYLISTS</button>
-                <button type="button" class="libTab" id="tabQueue">UP NEXT <span class="queueCountBadge" id="queueCountBadge" style="display: none;">0</span></button>
+                <button type="button" class="libTab active" id="tabLibrary">Library</button>
+                <button type="button" class="libTab" id="tabPlaylists">Playlists</button>
+                <button type="button" class="libTab" id="tabQueue">Up next <span class="queueCountBadge" id="queueCountBadge" style="display: none;">0</span></button>
             </div>
 
             <!-- Instant Quality Format Filter Bar + Mobile Collapsible Sort & Tools Toggle -->
             <div class="quickFormatFilterBar" id="quickFormatFilterBar">
                 <div class="formatFilterPillsGroup">
-                    <button type="button" class="formatFilterPill active" data-filter="all">ALL</button>
-                    <button type="button" class="formatFilterPill" data-filter="hires" title="Filter for Hi-Res 24-bit/32-bit &amp; 96kHz+ tracks">HI-RES</button>
-                    <button type="button" class="formatFilterPill" data-filter="lossless" title="Filter for Lossless FLAC &amp; ALAC audio">LOSSLESS</button>
-                    <button type="button" class="formatFilterPill" data-filter="lossy" title="Filter for standard MP3 / AAC / OGG tracks">MP3 / AAC</button>
+                    <button type="button" class="formatFilterPill active" data-filter="all">All</button>
+                    <button type="button" class="formatFilterPill" data-filter="hires" title="Filter for Hi-Res 24-bit/32-bit &amp; 96kHz+ tracks">Hi-res</button>
+                    <button type="button" class="formatFilterPill" data-filter="lossless" title="Filter for Lossless FLAC &amp; ALAC audio">Lossless</button>
+                    <button type="button" class="formatFilterPill" data-filter="lossy" title="Filter for standard MP3 / AAC / OGG tracks">Lossy</button>
                 </div>
                 <button type="button" class="libraryToolsToggleBtn" id="libraryToolsToggleBtn" aria-expanded="false" aria-controls="libraryControls" title="Toggle Sort &amp; Library Actions">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
-                    <span>SORT &amp; TOOLS</span>
-                    <span class="toolsChevron" id="libraryToolsChevron">▾</span>
+                    <span>Sort &amp; tools</span>
+                    <span class="toolsChevron" id="libraryToolsChevron"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
                 </button>
             </div>
 
             <!-- Library View Controls -->
-            <div class="libraryControls mobileCollapsed" id="libraryControls">
+            <div class="libraryControls" hidden id="libraryControls">
                 <div class="sortContainer">
-                    <label for="sortSelect">SORT BY:</label>
+                    <label for="sortSelect">Sort by</label>
                     <select id="sortSelect" class="sortSelect">
-                        <option value="default">Default / ID</option>
+                        <option value="default">Library order</option>
                         <option value="title-asc">Title (A → Z)</option>
                         <option value="title-desc">Title (Z → A)</option>
                         <option value="artist-asc">Artist (A → Z)</option>
@@ -501,19 +434,19 @@
                         RESTORE (0)
                     </button>
                     <button type="button" id="quickNewPlaylistBtn" class="actionBtn" title="Create a New Playlist">
-                        + PLAYLIST
+                        New playlist
                     </button>
                     <button type="button" id="refreshTracksBtn" class="actionBtn" title="Rescan and Refresh Track Library">
-                        REFRESH
+                        Rescan
                     </button>
                     <button type="button" id="shufflePlayBtn" class="actionBtn" title="Shuffle Play Current List">
-                        SHUFFLE
+                        Shuffle
                     </button>
                     <button type="button" id="mobileScanFolderBtn" class="actionBtn mobileFolderBtn" title="Choose Music Directory / Folder">
-                        + FOLDER
+                        Add folder
                     </button>
                     <label for="localFileInput" class="actionBtn uploadBtn" id="localFileInputLabel" title="Open Audio Files (Standalone Playback)">
-                        OPEN FILE
+                        Open file
                     </label>
                     <input type="file" id="localFileInput" accept="audio/*,.mp3,.flac,.wav,.ogg,.m4a,.aac,.opus,.alac,.aiff" multiple style="display: none;" aria-label="Open Local Audio Files">
                 </div>
@@ -527,7 +460,7 @@
                 </div>
                 <div class="standaloneBannerActions">
                     <button type="button" id="standaloneResumeLibraryBtn" class="actionBtn standaloneResumeBtn" title="Return to Main Track Library">RESUME LIBRARY</button>
-                    <button type="button" id="standaloneCloseBtn" class="deleteBtn standaloneCloseBtn" title="Close Standalone File">✕</button>
+                    <button type="button" id="standaloneCloseBtn" class="deleteBtn standaloneCloseBtn" title="Close Standalone File" aria-label="Close standalone file"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                 </div>
             </div>
 
@@ -607,8 +540,8 @@
 
             <!-- Library Footer / Count -->
             <div class="libraryFooter">
-                <span id="trackCount" class="counter">0 TRACKS</span>
-                <span id="activeListLabel" class="activeListLabel">ALL TRACKS</span>
+                <span id="trackCount" class="counter">0 tracks</span>
+                <span id="activeListLabel" class="activeListLabel">All tracks</span>
             </div>
         </section>
     </main>
@@ -618,11 +551,11 @@
         <div class="slskModalCard">
             <div class="slskModalHeader">
                 <h3>SOULSEEK SETTINGS</h3>
-                <button type="button" class="closeBtn" id="slskCloseAccountModalBtn" aria-label="Close Settings">✕</button>
+                <button type="button" class="closeBtn" id="slskCloseAccountModalBtn" aria-label="Close Settings"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
-            <form id="slskAccountForm" class="slskModalBody" onsubmit="return false;">
+            <form id="slskAccountForm" class="slskModalBody">
                 <p class="slskModalDesc">
-                    Credentials are encrypted and securely stored in your local database. Soulseek is disconnected by default so your shared files are never exposed until you explicitly connect.
+                    Passwords are retained for this session only. Soulseek starts disconnected. Only authorize folders you have permission to share. Upload serving is not available in the current Android client.
                 </p>
                 <div class="slskFormGroup" id="slskModalHostGroup">
                     <label for="slskModalHost">REMOTE WORKSTATION HOST (MOBILE / LAN)</label>
@@ -694,123 +627,86 @@
             </div>
         </div>
 
-        <!-- Soulseek Controls & Search Panel (Desktop: normal flow, Mobile: swapped below results and collapsible) -->
-        <div class="slskControlsPanel is-collapsed" id="slskControlsPanel">
-            <!-- Mobile Sticky Collapsible Toggle Header (Mobile only) -->
-            <div class="slskPanelToggleBar" id="slskPanelToggleBar" title="Click to Expand or Collapse Search &amp; Filters">
-                <div class="slskToggleBarLeft">
-                    <span class="slskToggleIcon" aria-hidden="true">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    </span>
-                    <span class="slskToggleTitle">SEARCH &amp; FILTERS</span>
-                    <span class="slskToggleActiveFilter" id="slskMobileActiveFilter">ALL</span>
-                </div>
-                <div class="slskToggleBarRight">
-                    <div class="slskMiniStatus" id="slskMobileStatusDot" title="Soulseek Status">
-                        <span class="slskStatusDot"></span>
-                    </div>
-                    <button type="button" class="slskMiniTransfersBtn" id="slskMobileTransfersBtn" title="View Transfers">
-                        TRANSFERS (<span id="slskMobileTransferCount">0</span>)
-                    </button>
-                    <span class="slskToggleChevron" id="slskPanelToggleChevron">▲</span>
-                </div>
-            </div>
+        <!-- Mobile-first Soulseek search: essential query is always visible; filters and connection controls are optional. -->
+        <div class="slskControlsPanel is-collapsed" id="slskControlsPanel"><div class="slskSearchArea"><form class="slskSearchRow" id="slskSearchForm" novalidate="">
+<div class="slskSearchBox">
+<input aria-label="Search Soulseek P2P Network" autocomplete="off" enterkeyhint="search" id="slskSearchInput" inputmode="search" placeholder="Search tracks, artists, or albums" type="search"/>
+<button aria-label="Clear Search" class="slskClearBtn" id="slskSearchClearBtn" style="display: none;" title="Clear Search" type="button"><svg aria-hidden="true" class="uiIcon" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+</div>
+<select aria-label="Search Scope" class="slskModeSelect" id="slskSearchModeSelect" title="Soulseek Search Scope">
+<option selected="" value="global">Everyone</option>
+<option value="rooms">Rooms</option>
+<option value="buddies">Buddies</option>
+</select>
+<button class="actionBtn primaryBtn slskSubmitBtn" id="slskSearchSubmitBtn" type="submit">Search</button>
+</form><div class="slskPanelToggleBar"><button aria-controls="slskPanelCollapsible" aria-expanded="false" class="slskPanelToggleControl" id="slskPanelToggleBar" title="Expand or collapse search filters" type="button"><span class="slskToggleBarLeft"><span aria-hidden="true" class="slskToggleIcon">⚙</span><span class="slskToggleTitle">Filters</span><span class="slskToggleActiveFilter" id="slskMobileActiveFilter">All</span></span><span aria-hidden="true" class="slskToggleChevron" id="slskPanelToggleChevron">⌄</span></button><div class="slskPanelQuickActions"><span aria-label="Soulseek connection status" class="slskMiniStatus" id="slskMobileStatusDot" title="Soulseek network status"><span class="slskStatusDot"></span></span><button class="slskMiniTransfersBtn" id="slskMobileTransfersBtn" title="View transfers" type="button">Transfers (<span id="slskMobileTransferCount">0</span>)</button></div></div><div class="slskPanelCollapsible" id="slskPanelCollapsible"><div class="slskFilterRow">
+<div class="slskFilterGroup" id="slskFilterChips" role="group" aria-label="File format filters">
+<button aria-pressed="true" class="slskChip active" data-filter="all" type="button">All formats</button>
+<button aria-pressed="false" class="slskChip" data-filter="flac" type="button">Lossless</button>
+<button aria-pressed="false" class="slskChip" data-filter="320" type="button">Lossless / 320+</button>
+<button aria-pressed="false" class="slskChip" data-filter="slots" type="button">Free slots</button>
 
-            <div class="slskPanelCollapsible" id="slskPanelCollapsible">
-                <!-- Soulseek Top Toolbar -->
-                <div class="slskToolbar">
-                    <div class="slskBrand">
-                        <button type="button" id="slskPowerBtn" class="actionBtn slskPowerBtn" title="Connect / Disconnect Soulseek Network (Disconnects and stops sharing files)" aria-label="Toggle Soulseek Network Connection">
-                            <svg class="powerIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-                            <span id="slskPowerBtnText">CONNECT</span>
-                        </button>
-                        <span class="slskLogo">SOULSEEK</span>
-                        <span class="slskBadge" id="slskBadge">NICOTINE+</span>
-                        <div class="slskStatusPill" id="slskStatusPill" title="Soulseek Network Status">
-                            <span class="slskStatusDot" id="slskStatusDot"></span>
-                            <span class="slskStatusText" id="slskStatusText">Connecting...</span>
-                        </div>
-                    </div>
-
-                    <div class="slskQuickStats" id="slskQuickStats">
-                        <span class="slskStatItem" id="slskUserItem"><strong id="slskUsername">Not logged in</strong></span>
-                        <button type="button" class="slskDirPill" id="slskChangeDirBtn" title="Click to Change Soulseek Download Folder">
-                            <span id="slskDownloadsPathText">./downloads</span>
-                        </button>
-                        <button type="button" class="slskDirPill" id="slskChangeSharedDirBtn" title="Click to Change Shareable Folder (Available for peers to download)">
+</div><button aria-controls="slskTextFiltersCon" aria-expanded="false" class="slskFilterToggleBtn" id="slskTextFilterToggleBtn" title="More Text Filters" type="button">Text filters<span aria-hidden="true" class="slskDisclosureChevron">⌄</span></button>
+<div class="slskTextFiltersCon" id="slskTextFiltersCon">
+<div class="slskTextFilterItem">
+<label class="slskFilterLabel" for="slskIncludeFilterInput">Include Text:</label>
+<div class="slskFilterInputWrap">
+<input autocomplete="off" id="slskIncludeFilterInput" placeholder="Filter terms to include..." type="text"/>
+<button aria-label="Clear include filter" class="slskInFilterClearBtn" id="slskIncludeFilterClearBtn" style="display: none;" title="Clear include filter" type="button"><svg aria-hidden="true" class="uiIcon" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+</div>
+</div>
+<div class="slskTextFilterItem">
+<label class="slskFilterLabel" for="slskExcludeFilterInput">Exclude Text:</label>
+<div class="slskFilterInputWrap">
+<input autocomplete="off" id="slskExcludeFilterInput" placeholder="Filter terms to exclude..." type="text"/>
+<button aria-label="Clear exclude filter" class="slskInFilterClearBtn" id="slskExcludeFilterClearBtn" style="display: none;" title="Clear exclude filter" type="button"><svg aria-hidden="true" class="uiIcon" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18"></path></svg></button>
+</div>
+</div>
+</div>
+</div><div class="slskSuggestedRow" id="slskSuggestedRow" style="display: none;">
+<div class="slskSuggestedHeader">
+<span class="slskSuggestedLabel">SUGGESTIONS:</span>
+<div class="slskSuggestedChips" id="slskSuggestedChips"></div>
+<button class="slskClearSubBtn" id="slskClearSubFilterBtn" style="display: none;" title="Clear Sub-filter" type="button"><svg aria-hidden="true" class="uiIcon" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18"></path></svg> RESET</button>
+</div>
+</div><button aria-controls="slskToolbar" aria-expanded="false" class="slskConnectionToggleBtn" id="slskConnectionToggleBtn" type="button">Connection &amp; folders<span aria-hidden="true" class="slskDisclosureChevron">⌄</span></button><div class="slskToolbar" id="slskToolbar">
+<div class="slskBrand">
+<button aria-label="Toggle Soulseek Network Connection" class="actionBtn slskPowerBtn" id="slskPowerBtn" title="Connect / Disconnect Soulseek Network (Disconnects and stops sharing files)" type="button">
+<svg aria-hidden="true" class="powerIcon" fill="none" height="14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewbox="0 0 24 24" width="14"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" x2="12" y1="2" y2="12"></line></svg>
+<span id="slskPowerBtnText">CONNECT</span>
+</button>
+<span class="slskLogo">SOULSEEK</span>
+<span class="slskBadge" id="slskBadge">NICOTINE+</span>
+<div class="slskStatusPill" id="slskStatusPill" title="Soulseek Network Status">
+<span class="slskStatusDot" id="slskStatusDot"></span>
+<span class="slskStatusText" id="slskStatusText">Connecting...</span>
+</div>
+</div>
+<div class="slskQuickStats" id="slskQuickStats">
+<span class="slskStatItem" id="slskUserItem"><strong id="slskUsername">Not logged in</strong></span>
+<button class="slskDirPill" id="slskChangeDirBtn" title="Click to Change Soulseek Download Folder" type="button">
+<span id="slskDownloadsPathText">./downloads</span>
+</button>
+<button class="slskDirPill" id="slskChangeSharedDirBtn" title="Click to Change Shareable Folder (Available for peers to download)" type="button">
                             SHARE: <span id="slskSharedPathText">./shared</span>
-                        </button>
-                        <button type="button" class="actionBtn slskSyncDirBtn" id="slskSyncCurrentDirBtn" title="Set Soulseek Downloads to Match Your Current Music Player Folder">
+</button>
+<button class="actionBtn slskSyncDirBtn" id="slskSyncCurrentDirBtn" title="Set Soulseek Downloads to Match Your Current Music Player Folder" type="button">
                             SYNC WITH PLAYER DIR
                         </button>
-                    </div>
-
-                    <div class="slskToolbarActions">
-                        <button type="button" id="slskAccountBtn" class="actionBtn slskAccountBtn" title="Soulseek Account &amp; Directory Settings" aria-label="Soulseek Settings">
-                            <svg class="slskAccountIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                            <span class="slskAccountBtnText">SETTINGS</span>
-                        </button>
-                        <button type="button" id="slskRefreshStatusBtn" class="actionBtn" title="Refresh Connection Status">
+</div>
+<div class="slskToolbarActions">
+<button aria-label="Soulseek Settings" class="actionBtn slskAccountBtn" id="slskAccountBtn" title="Soulseek Account &amp; Directory Settings" type="button">
+<svg aria-hidden="true" class="slskAccountIcon" fill="none" height="13" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24" width="13"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+<span class="slskAccountBtnText">Settings</span>
+</button>
+<button class="actionBtn" id="slskRefreshStatusBtn" title="Refresh Connection Status" type="button">
                             REFRESH
                         </button>
-                        <button type="button" id="slskToggleTransfersBtn" class="actionBtn primaryBtn" title="View Active &amp; Completed Transfers">
+<button class="actionBtn primaryBtn" id="slskToggleTransfersBtn" title="View Active &amp; Completed Transfers" type="button">
                             TRANSFERS (<span id="slskTransferCount">0</span>)
                         </button>
-                    </div>
-                </div>
-
-                <!-- Soulseek Search & Filter Header -->
-                <div class="slskSearchArea">
-                    <form class="slskSearchRow" id="slskSearchForm" action="javascript:void(0);" novalidate>
-                        <div class="slskSearchBox">
-                            <input type="search" id="slskSearchInput" enterkeyhint="search" inputmode="search" placeholder="Search track, artist, album, genre on Soulseek network..." autocomplete="off" aria-label="Search Soulseek P2P Network">
-                            <button type="button" id="slskSearchClearBtn" class="slskClearBtn" title="Clear Search" aria-label="Clear Search" style="display: none;">✕</button>
-                        </div>
-                        <select id="slskSearchModeSelect" class="slskModeSelect" title="Soulseek Search Scope" aria-label="Search Scope">
-                            <option value="global" selected>GLOBAL</option>
-                            <option value="rooms">ROOMS</option>
-                            <option value="buddies">BUDDIES</option>
-                        </select>
-                        <button type="submit" id="slskSearchSubmitBtn" class="actionBtn primaryBtn slskSubmitBtn">SEARCH</button>
-                    </form>
-
-                    <div class="slskFilterRow">
-                        <div class="slskFilterGroup" id="slskFilterChips">
-                            <button type="button" class="slskChip active" data-filter="all">ALL FORMATS</button>
-                            <button type="button" class="slskChip" data-filter="flac">FLAC ONLY (LOSSLESS)</button>
-                            <button type="button" class="slskChip" data-filter="320">320 KBPS MP3</button>
-                            <button type="button" class="slskChip" data-filter="slots">FREE SLOTS ONLY</button>
-                            <button type="button" class="slskFilterToggleBtn" id="slskTextFilterToggleBtn" title="More Text Filters">FILTERS ▾</button>
-                        </div>
-                        <div class="slskTextFiltersCon" id="slskTextFiltersCon">
-                            <div class="slskTextFilterItem">
-                                <label for="slskIncludeFilterInput" class="slskFilterLabel">Include Text:</label>
-                                <div class="slskFilterInputWrap">
-                                    <input type="text" id="slskIncludeFilterInput" placeholder="Filter terms to include..." autocomplete="off">
-                                    <button type="button" id="slskIncludeFilterClearBtn" class="slskInFilterClearBtn" style="display: none;" title="Clear include filter" aria-label="Clear include filter">✕</button>
-                                </div>
-                            </div>
-                            <div class="slskTextFilterItem">
-                                <label for="slskExcludeFilterInput" class="slskFilterLabel">Exclude Text:</label>
-                                <div class="slskFilterInputWrap">
-                                    <input type="text" id="slskExcludeFilterInput" placeholder="Filter terms to exclude..." autocomplete="off">
-                                    <button type="button" id="slskExcludeFilterClearBtn" class="slskInFilterClearBtn" style="display: none;" title="Clear exclude filter" aria-label="Clear exclude filter">✕</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Dynamic Suggested Filters (Albums, Tracks, Folders from results) -->
-                    <div class="slskSuggestedRow" id="slskSuggestedRow" style="display: none;">
-                        <div class="slskSuggestedHeader">
-                            <span class="slskSuggestedLabel">SUGGESTIONS:</span>
-                            <div class="slskSuggestedChips" id="slskSuggestedChips"></div>
-                            <button type="button" class="slskClearSubBtn" id="slskClearSubFilterBtn" style="display: none;" title="Clear Sub-filter">✕ RESET</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+</div>
+</div></div></div></div>
 
         <!-- Soulseek Main Results Container -->
         <div class="slskResultsCon">
@@ -818,27 +714,27 @@
             <div class="slskResultsHeader" id="slskResultsHeader">
                 <div class="col colTrack sortable" data-sort="filename" title="Sort by Filename (A-Z)">
                     <span>FILE &amp; PATH</span>
-                    <span class="sortIndicator">↕</span>
+                    <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
                 <div class="col colFormat sortable" data-sort="format" title="Sort by Format">
                     <span>FORMAT</span>
-                    <span class="sortIndicator">↕</span>
+                    <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
                 <div class="col colBitrate sortable" data-sort="bitrate" title="Sort by Bitrate">
                     <span>BITRATE</span>
-                    <span class="sortIndicator">↕</span>
+                    <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
                 <div class="col colSize sortable" data-sort="size" title="Sort by File Size">
                     <span>SIZE</span>
-                    <span class="sortIndicator">↕</span>
+                    <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
                 <div class="col colPeer sortable active desc" data-sort="speed" title="Sort by Peer Upload Speed">
                     <span>PEER / SPEED</span>
-                    <span class="sortIndicator">▼</span>
+                    <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
                 </div>
                 <div class="col colQueue sortable" data-sort="slots" title="Sort by Queue / Free Slots">
                     <span>QUEUE</span>
-                    <span class="sortIndicator">↕</span>
+                    <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
                 <div class="col colAction">
                     <span>ACTION</span>
@@ -849,34 +745,22 @@
             <div class="slskResultsList" id="slskResultsList">
                 <!-- Initial Welcome / Idle State -->
                 <div class="slskPlaceholder" id="slskPlaceholder">
-                    <div class="slskRadarGraphic">
-                        <div class="radarRing r1"></div>
-                        <div class="radarRing r2"></div>
-                        <div class="radarSweep"></div>
-                    </div>
-                    <h3>SOULSEEK P2P NETWORK</h3>
-                    <p>Search millions of high-fidelity tracks directly from peer collections without leaving CachyMusic.</p>
-                    <div class="slskSampleTags">
-                        <span>Try searching:</span>
-                        <button type="button" class="sampleTagBtn" data-query="OneRepublic FLAC">OneRepublic FLAC</button>
-                        <button type="button" class="sampleTagBtn" data-query="Daft Punk Discovery">Daft Punk Discovery</button>
-                        <button type="button" class="sampleTagBtn" data-query="Interstellar Soundtrack">Interstellar Soundtrack</button>
-                        <button type="button" class="sampleTagBtn" data-query="Bad Apple FLAC">Bad Apple FLAC</button>
-                    </div>
+                    <h3>Find music on Soulseek</h3>
+                    <p>Search by artist, album or track. Add a format to narrow your search.</p>
                 </div>
 
                 <!-- Searching Spinner (Hidden by default) -->
                 <div class="slskSearchingState" id="slskSearchingState" style="display: none;">
-                    <div class="slskSpinner"></div>
-                    <h3 id="slskSearchingTitle">Querying Soulseek Network...</h3>
-                    <p>Collecting peer search responses. Results stream in live.</p>
+                    
+                    <h3 id="slskSearchingTitle">Searching Soulseek…</h3>
+                    <p>Waiting for responses from peers.</p>
                 </div>
             </div>
 
             <!-- Results Summary Footer -->
             <div class="slskResultsFooter">
-                <span id="slskResultCount">0 RESULTS FOUND</span>
-                <span id="slskActiveSearchMeta" class="slskActiveSearchMeta">IDLE</span>
+                <span id="slskResultCount">0 results</span>
+                <span id="slskActiveSearchMeta" class="slskActiveSearchMeta">Idle</span>
             </div>
         </div>
 
@@ -887,7 +771,7 @@
                     <button type="button" id="slskBackToResultsBtn" class="actionBtn slskBackToResultsBtn" title="Return to Soulseek Search Results">
                         ← RESULTS
                     </button>
-                    <span class="drawerArrow" id="slskDrawerArrow" style="display: none;" aria-hidden="true">▲</span>
+                    <span class="drawerArrow" id="slskDrawerArrow" style="display: none;" aria-hidden="true"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></span>
                     <strong class="slskDrawerTitleText"><span class="desktopOnly">SOULSEEK </span>TRANSFERS</strong>
                     <span class="counter" id="slskTransfersSummary">0 Active</span>
                 </div>
@@ -899,7 +783,7 @@
                         <span class="desktopOnly">SYNC ALL TO LIBRARY</span>
                         <span class="mobileOnly">SYNC ALL</span>
                     </button>
-                    <button type="button" id="slskCloseDrawerBtn" class="closeBtn" title="Return to Results" aria-label="Return to Results" style="display: none;">✕</button>
+                    <button type="button" id="slskCloseDrawerBtn" class="closeBtn" title="Return to Results" aria-label="Return to Results" style="display: none;"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                 </div>
             </div>
             <div class="slskTransfersBody" id="slskTransfersBody">
@@ -914,62 +798,84 @@
     <section class="settingsWorkspace" id="settingsWorkspace" style="display: none;">
         <div class="settingsHubHeader">
             <div class="settingsHubHeaderLeft">
-                <span class="settingsBadge">SYSTEM &amp; AUDIO CONFIGURATION</span>
-                <h2>STUDIO SETTINGS &amp; PREFERENCES</h2>
-                <p class="settingsSubtitle">Select a category below to configure the DSP engine, visual themes, local music directories, or timers.</p>
+                <h2>Settings</h2>
             </div>
             <div class="settingsHubHeaderRight">
                 <button type="button" class="actionBtn settingsReturnBtn" id="settingsReturnBtn" title="Return to Player (Alt+P)">
-                    RETURN TO PLAYER
+                    Return to player
                 </button>
             </div>
         </div>
 
         <!-- Settings Category Sub-Navigation Bar (Focused 2-Column Sub-Groupings) -->
+        <div class="settingsSearch">
+            <input id="settingsSearchInput" type="search" placeholder="Search settings" autocomplete="off" aria-label="Find a setting" aria-describedby="settingsSearchStatus">
+            <span id="settingsSearchStatus" role="status"></span>
+        </div>
         <nav class="settingsCategoryNav" id="settingsCategoryNav" aria-label="Settings Categories">
-            <button type="button" class="settingsCatBtn active" data-cat="audio">AUDIO</button>
-            <button type="button" class="settingsCatBtn" data-cat="visual">THEMES &amp; VISUALIZER</button>
-            <button type="button" class="settingsCatBtn" data-cat="library">LIBRARY &amp; FOLDERS</button>
-            <button type="button" class="settingsCatBtn" data-cat="system">SLEEP TIMER</button>
-            <button type="button" class="settingsCatBtn" data-cat="all">ALL OVERVIEW</button>
+            <button type="button" class="settingsCatBtn active" data-cat="audio">Audio</button>
+            <button type="button" class="settingsCatBtn" data-cat="visual">Appearance</button>
+            <button type="button" class="settingsCatBtn" data-cat="library">Library</button>
+            <button type="button" class="settingsCatBtn" data-cat="system">Sleep timer</button>
+            <button type="button" class="settingsCatBtn" data-cat="privacy">Privacy</button>
+            <button type="button" class="settingsCatBtn" data-cat="all">All settings</button>
         </nav>
 
         <div class="settingsLayoutGrid" id="settingsLayoutGrid" data-active-cat="audio">
             <!-- COLUMN 1: PRIMARY SUB-GROUP CARDS -->
             <div class="settingsCol" id="settingsColAudio" data-settings-col="audio">
+                <section class="settingsSectionPanel" data-settings-cat="privacy" style="display:none;">
+                    <div class="settingsSectionHeader"><h3 class="settingsSectionTitle">Privacy &amp; network</h3></div>
+                    <div class="settingsPanelContent privacyNotice">
+                        <h4>Local by design</h4><p>Your library, settings and playback remain on this device. No analytics, advertising or remote crash reports. Online metadata, artwork and lyrics searches are deliberate exceptions; only the selected query is sent to the provider.</p>
+                        <h4>Soulseek is optional</h4><p>Connecting to Soulseek discloses your IP address, account, search requests and selected shared files to the network. Share and download only material you have permission to distribute or obtain. Disconnect when finished.</p>
+                        <h4>Hosted PWA</h4><p>Installation and browser-managed application updates may contact the host for application files. Local music and settings are not sent to that host. Use the packaged app or a local server for device-only operation.</p>
+                    </div>
+                </section>
                 <!-- AUDIO SUB-CARD A: CORE AUDIO & PRECISION -->
                 <div class="settingsSectionPanel" id="settingsPanelAudioDsp" data-settings-cat="audio">
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
                             <span class="settingsSectionBadge">AUDIO</span>
-                            <h3 class="settingsSectionTitle">PRECISION &amp; SIGNAL CHAIN</h3>
+                            <h3 class="settingsSectionTitle">Playback &amp; audio engine</h3>
                         </div>
                     </div>
 
                     <div class="settingsPanelContent">
-                        <!-- 1. Signal Path Metrics -->
+                        <div class="settingsRowItem" id="settingsRowAndroidNative" hidden>
+                            <label class="settingsRowTitle" for="androidNativeMode">Android native playback <input type="checkbox" role="switch" id="androidNativeMode"></label>
+                            <p class="settingsRowDesc">Play in the background at normal speed. DSP and lossless gapless use the regular player.</p>
+                        </div>
+                        <div class="settingsRowItem" id="settingsRowContinuousPcm">
+                            <label class="settingsRowTitle" for="continuousPcmMode">Continuous lossless playback <input type="checkbox" role="switch" id="continuousPcmMode"></label>
+                            <p class="settingsRowDesc">Prebuffer compatible lossless tracks. Applies from the next track; gaps remain possible.</p>
+                        </div>
+                        <details class="settingsAdvancedDetails" id="settingsAdvancedAudio">
+                            <summary class="settingsAdvancedSummary"><span class="settingsAdvancedSummaryText"><strong>Advanced signal processing</strong><small>Precision, dithering, buffers, diagnostic tools</small></span><span class="settingsAdvancedChevron" aria-hidden="true">⌄</span></summary>
+                            <div class="settingsAdvancedContent">
+<!-- 1. Signal Path Metrics -->
                         <div class="settingsRowItem" id="settingsCardDsp">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">SIGNAL CHAIN TELEMETRY<button type="button" class="settingHintBtn" title="Shows real-time information about sound quality, volume headroom, and audio stream." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">Local signal diagnostics<button type="button" class="settingHintBtn" title="Shows real-time information about sound quality, volume headroom, and audio stream." aria-label="Feature explanation">!</button></h4>
                                 </div>
                             </div>
                             <div class="settingsDspMetricsGrid">
                                 <div class="settingsDspMetricItem">
                                     <span class="settingsDspKey">AUDIO ENGINE</span>
-                                    <span class="settingsDspVal" id="settingsDspEngineVal">64-Bit Worklet / 32-Bit Decode</span>
+                                    <span class="settingsDspVal" id="settingsDspEngineVal">Not initialized</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
                                     <span class="settingsDspKey">HEADROOM</span>
-                                    <span class="settingsDspVal" id="settingsDspHeadroomVal">Dynamic True-Peak</span>
+                                    <span class="settingsDspVal" id="settingsDspHeadroomVal">Waiting for playback</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
                                     <span class="settingsDspKey">BUFFER LATENCY</span>
-                                    <span class="settingsDspVal" id="settingsDspLatencyVal">Direct Hardware</span>
+                                    <span class="settingsDspVal" id="settingsDspLatencyVal">Checking output</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
                                     <span class="settingsDspKey">CROSSFEED &amp; EQ</span>
-                                    <span class="settingsDspVal" id="settingsDspEqVal">Linear Bypass</span>
+                                    <span class="settingsDspVal" id="settingsDspEqVal">Not initialized</span>
                                 </div>
                             </div>
                             <button type="button" id="settingsTabOpenSignalAuditBtn" class="actionBtn primaryBtn settingsFullWidthBtn signalPathAuditBtn">
@@ -996,16 +902,16 @@
                         <div class="settingsRowItem" id="settingsRowDither">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">DITHERING &amp; NOISE SHAPING<button type="button" class="settingHintBtn" title="Smooths digital quantization when sending audio to your speakers, IEMs, or DAC. Psychoacoustic shaping unlocks automatically when an external DAC/IEM/Hi-Res device is detected or paired." aria-label="Feature explanation">!</button></h4>
-                                    <p class="settingsRowDesc" id="settingsDetectedDacBadge">Output: Scanning audio interface...</p>
+                                    <h4 class="settingsRowTitle">DITHERING &amp; NOISE SHAPING<button type="button" class="settingHintBtn" title="Adds dither at the software quantization stage. This does not establish physical output bit depth." aria-label="Feature explanation">!</button></h4>
+                                    <p class="settingsRowDesc" id="settingsDetectedDacBadge">Physical output not verified</p>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsDitherPill">TPDF FLAT</span>
+                                <span class="settingsEnginePill" id="settingsDitherPill">TPDF</span>
                             </div>
                             <div class="settingsOptionToggles">
-                                <button type="button" class="actionBtn ditherModeBtn" data-dither="off">OFF (TRUNCATE)</button>
-                                <button type="button" class="actionBtn ditherModeBtn active" data-dither="tpdf">TPDF FLAT</button>
-                                <button type="button" class="actionBtn ditherModeBtn" id="dacShapedDitherBtn" data-dither="shaped" title="Requires connected USB DAC, IEM dongle, or Hi-Res audio interface" disabled>PSYCHOACOUSTIC (DAC ONLY)</button>
-                                <button type="button" class="actionBtn" id="settingsScanDacBtn" title="Scan for connected USB DACs, IEM dongles (e.g. Moondrop May), headphones, or external speakers">SCAN / PAIR DAC</button>
+                                <button type="button" class="actionBtn ditherModeBtn" data-dither="off">Off (no added dither)</button>
+                                <button type="button" class="actionBtn ditherModeBtn active" data-dither="tpdf">TPDF</button>
+                                <button type="button" class="actionBtn ditherModeBtn" id="dacShapedDitherBtn" data-dither="shaped" title="Noise shaping at the software quantization stage">Noise-shaped</button>
+                                <button type="button" class="actionBtn" id="settingsScanDacBtn" title="Detect the connected audio output">Check outputs</button>
                             </div>
                         </div>
 
@@ -1013,13 +919,13 @@
                         <div class="settingsRowItem" id="settingsRowBuffer">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">BUFFER &amp; LATENCY<button type="button" class="settingHintBtn" title="Low-latency makes buttons react faster, while Stable buffer prevents audio stuttering on busy systems." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">BUFFER &amp; LATENCY<button type="button" class="settingHintBtn" title="Set the Web Audio buffer preference. Low latency favors responsiveness. Stable favors uninterrupted playback. Actual latency depends on the device and browser." aria-label="Feature explanation">!</button></h4>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsBufferPill">PLAYBACK (~100ms)</span>
+                                <span class="settingsEnginePill" id="settingsBufferPill">STABLE</span>
                             </div>
                             <div class="settingsOptionToggles">
-                                <button type="button" class="actionBtn bufferLatencyBtn" data-latency="interactive">LOW-LATENCY (~15ms)</button>
-                                <button type="button" class="actionBtn bufferLatencyBtn active" data-latency="playback">STABLE (~100ms)</button>
+                                <button type="button" class="actionBtn bufferLatencyBtn" data-latency="interactive">LOW LATENCY</button>
+                                <button type="button" class="actionBtn bufferLatencyBtn active" data-latency="playback">STABLE</button>
                             </div>
                         </div>
 
@@ -1027,7 +933,7 @@
                         <div class="settingsRowItem" id="settingsRowDebugMode">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">AUDIO DIAGNOSTICS &amp; DEBUG MODE<button type="button" class="settingHintBtn" title="Opens a movable, on-screen window showing live telemetry, decoder events, and audio health." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">AUDIO DIAGNOSTICS &amp; DEBUG MODE<button type="button" class="settingHintBtn" title="Opens a movable, on-screen window showing local diagnostics, decoder events, and audio health." aria-label="Feature explanation">!</button></h4>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsDebugPill">DISABLED</span>
                             </div>
@@ -1037,16 +943,19 @@
                             </div>
                         </div>
 
+                                                    </div>
+                        </details>
+
                         <!-- 6. Settings Confirmation & Apply Action -->
                         <div class="settingsRowItem settingsApplyRow" id="settingsRowApplyAudio">
                             <div class="settingsApplyBar">
                                 <button type="button" id="settingsApplyAudioBtn" class="actionBtn primaryBtn settingsApplyBtn">
-                                    APPLY AUDIO SETTINGS
+                                    Apply audio settings
                                 </button>
                                 <button type="button" id="settingsDiscardAudioBtn" class="actionBtn" style="display: none;">
                                     DISCARD PENDING
                                 </button>
-                                <span class="settingsApplyStatus" id="settingsApplyAudioStatus">All audio settings synced &amp; active.</span>
+                                <span class="settingsApplyStatus" id="settingsApplyAudioStatus">Saved audio preferences match the controls. Processing depends on the active playback mode.</span>
                             </div>
                         </div>
                     </div>
@@ -1056,16 +965,16 @@
                 <div class="settingsSectionPanel" id="settingsPanelThemesVis" data-settings-cat="visual" style="display: none;">
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
-                            <h3 class="settingsSectionTitle">ACTIVE THEME &amp; PALETTE</h3>
+                            <h3 class="settingsSectionTitle">Theme &amp; palette</h3>
                         </div>
                     </div>
 
                     <div class="settingsPanelContent">
                         <div class="settingsRowItem" id="settingsCardThemes">
-                            <button type="button" id="settingsTabOpenThemeModalBtn" class="settingsThemePickerBtn" title="Open Theme Overhaul Selector">
+                            <button type="button" id="settingsTabOpenThemeModalBtn" class="settingsThemePickerBtn" title="Choose theme">
                                 <div class="settingsThemePickerInfo">
                                     <span class="settingsThemePickerSub">ACTIVE THEME</span>
-                                    <span class="settingsThemePickerCurrent" id="settingsTabCurrentThemeBadge">DEFAULT STUDIO HI-FI</span>
+                                    <span class="settingsThemePickerCurrent" id="settingsTabCurrentThemeBadge">Studio</span>
                                 </div>
                                 <span class="settingsThemePickerAction">CHANGE THEME</span>
                             </button>
@@ -1078,11 +987,11 @@
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
                             <span class="settingsSectionBadge">STORAGE</span>
-                            <h3 class="settingsSectionTitle">LOCAL LIBRARY &amp; FOLDERS</h3>
+                            <h3 class="settingsSectionTitle">Local library &amp; folders</h3>
                         </div>
                     </div>
                     <div class="settingsPanelContent" id="settingsCardFolders" data-settings-item-cat="library">
-                        <div class="settingsFolderInputRow">
+                        <div class="settingsFolderInputRow" data-host-only="php">
                             <input type="text" id="settingsTabFolderPathInput" class="settingsInput" placeholder="/path/to/music/folder" aria-label="Audio directory path">
                             <button type="button" id="settingsTabBrowseBtn" class="actionBtn" title="Choose folder from your computer">BROWSE...</button>
                             <button type="button" id="settingsTabScanBtn" class="actionBtn primaryBtn" title="Scan directory and load tracks">SCAN &amp; LOAD</button>
@@ -1102,9 +1011,9 @@
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
                             <span class="settingsSectionBadge">AUTOMATION</span>
-                            <h3 class="settingsSectionTitle">SLEEP TIMER</h3>
+                            <h3 class="settingsSectionTitle">Sleep timer</h3>
                         </div>
-                        <p class="settingsSectionDesc">Logarithmic volume fade-out gently lowers output before pausing playback.</p>
+                        <p class="settingsSectionDesc">Fade volume before pausing.</p>
                     </div>
 
                     <div class="settingsPanelContent">
@@ -1112,7 +1021,7 @@
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
                                     <h4 class="settingsRowTitle">QUICK COUNTDOWN PRESETS</h4>
-                                    <p class="settingsRowDesc">Select a countdown duration or pause automatically at the end of the track.</p>
+                                    <p class="settingsRowDesc">Pause after a set time or at the end of the track.</p>
                                 </div>
                                 <span class="settingsSleepBadge" id="settingsTabSleepStatusBadge">INACTIVE</span>
                             </div>
@@ -1139,9 +1048,9 @@
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
                             <span class="settingsSectionBadge">DAC &amp; ACOUSTICS</span>
-                            <h3 class="settingsSectionTitle">HARDWARE &amp; STAGE FILTERS</h3>
+                            <h3 class="settingsSectionTitle">Hardware &amp; stage filters</h3>
                         </div>
-                        <p class="settingsSectionDesc">Direct PipeWire/ALSA DAC volume bridge, ultrasonic filtering, and speaker stage DSP.</p>
+                        <p class="settingsSectionDesc">System volume and optional audio filters.</p>
                     </div>
 
                     <div class="settingsPanelContent">
@@ -1149,8 +1058,8 @@
                         <div class="settingsRowItem" id="settingsRowHwGain">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">HARDWARE ANALOG GAIN (DAC BRIDGE)</h4>
-                                    <p class="settingsRowDesc">Locks digital stream at 0 dBFS and controls physical DAC volume directly.</p>
+                                    <h4 class="settingsRowTitle">SYSTEM VOLUME CONTROL</h4>
+                                    <p class="settingsRowDesc">Uses the operating system volume control instead of the player’s digital volume. Does not guarantee analog DAC gain.</p>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsHardwareGainPill">UNAVAILABLE</span>
                             </div>
@@ -1167,17 +1076,17 @@
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
                                     <h4 class="settingsRowTitle">ULTRASONIC IMD FILTER</h4>
-                                    <p class="settingsRowDesc">Attenuates out-of-band ultrasonic noise to prevent amplifier intermodulation.</p>
+                                    <p class="settingsRowDesc">Attenuates ultrasonic content when the graph sample rate permits it.</p>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsUltrasonicPill">ACTIVE (32 kHz)</span>
+                                <span class="settingsEnginePill" id="settingsUltrasonicPill">BYPASS</span>
                             </div>
                             <div class="settingsOptionToggles settingsInlineControls">
-                                <button type="button" id="settingsUltrasonicToggleBtn" class="actionBtn toggleActiveBtn active">
-                                    <span class="toggleDot active" id="settingsUltrasonicDot" style="display:none;"></span>
-                                    <span id="settingsUltrasonicText">ULTRASONIC FILTER: ON</span>
+                                <button type="button" id="settingsUltrasonicToggleBtn" class="actionBtn toggleActiveBtn">
+                                    <span class="toggleDot" id="settingsUltrasonicDot" style="display:none;"></span>
+                                    <span id="settingsUltrasonicText">ULTRASONIC FILTER: OFF</span>
                                 </button>
                                 <select id="settingsUltrasonicCutoffSelect" class="settingsSelect" aria-label="Ultrasonic Filter Cutoff">
-                                    <option value="24000">24 kHz (Redbook / CD)</option>
+                                    <option value="24000">24 kHz (Extended Bandwidth)</option>
                                     <option value="32000" selected>32 kHz (Balanced)</option>
                                     <option value="40000">40 kHz (Hi-Res Audio)</option>
                                     <option value="48000">48 kHz (Ultra-Wide)</option>
@@ -1206,7 +1115,7 @@
                         <div class="settingsRowItem" id="settingsRowBgNotifications">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">BACKGROUND TRACK NOTIFICATIONS (OPT-IN)</h4>
+                                    <h4 class="settingsRowTitle">Background track notifications</h4>
                                     <p class="settingsRowDesc">Send desktop/PWA OS track-change notifications when playback advances in the background.</p>
                                 </div>
                             </div>
@@ -1223,7 +1132,7 @@
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
                                     <h4 class="settingsRowTitle">PLAYBACK DIAGNOSTICS &amp; DEBUG LOG</h4>
-                                    <p class="settingsRowDesc">Real-time decoder events, stream status, format specs &amp; skip telemetry.</p>
+                                    <p class="settingsRowDesc">Record decoder and playback events for troubleshooting.</p>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsAudioDebugPill">DECODER ACTIVE</span>
                             </div>
@@ -1260,16 +1169,17 @@
                 <div class="settingsSectionPanel" id="settingsPanelVisualizer" data-settings-cat="visual" style="display: none;">
                     <div class="settingsSectionHeader">
                         <div class="settingsSectionTitleRow">
-                            <h3 class="settingsSectionTitle">VISUALIZER</h3>
+                            <h3 class="settingsSectionTitle">Visualizer</h3>
                         </div>
                     </div>
 
                     <div class="settingsPanelContent">
                         <div class="settingsRowItem" id="settingsCardVis">
                             <div class="visSelectorGrid">
-                                <button type="button" class="visModeBtn active" data-mode="wave">LIQUID WAVE</button>
-                                <button type="button" class="visModeBtn" data-mode="dash">SEGMENTED BARS</button>
-                                <button type="button" class="visModeBtn" data-mode="thematic">THEMATIC CORE</button>
+                                <button type="button" class="visModeBtn active" data-mode="artwork">Album artwork</button>
+                                <button type="button" class="visModeBtn" data-mode="wave">Liquid wave</button>
+                                <button type="button" class="visModeBtn" data-mode="dash">Segmented bars</button>
+                                <button type="button" class="visModeBtn" data-mode="thematic">Theme visualizer</button>
                             </div>
                         </div>
                     </div>
@@ -1312,7 +1222,7 @@
             </div>
             <div class="miniScrubberRow">
                 <span class="miniTime" id="miniCurrentTime">0:00</span>
-                <div class="miniProgressBarCon" id="miniProgressCon">
+                <div class="miniProgressBarCon" id="miniProgressCon" role="slider" tabindex="0" aria-label="Mini player playback position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true">
                     <div class="miniProgressBar" id="miniProgressBar">
                         <div class="progressPlayhead"></div>
                     </div>
@@ -1328,13 +1238,33 @@
                         <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
                     </svg>
                 </button>
-                <input type="range" id="miniVolumeSlider" min="0" max="1" step="0.01" value="0.8" class="volumeSlider" title="Volume" aria-label="Mini Player Volume">
+                <input type="range" id="miniVolumeSlider" min="0" max="1.5" step="0.01" value="0.8" class="volumeSlider" title="Volume" aria-label="Mini Player Volume">
             </div>
             <button type="button" class="miniDeckReturnBtn" id="miniDeckReturnBtn" title="Return to Player (Alt+P)">
                 OPEN PLAYER
             </button>
         </div>
     </aside>
+
+    <!-- Compact workspace navigation -->
+    <nav class="mobileTabBar" id="mobileTabBar" aria-label="Workspaces">
+        <button type="button" class="mobileTabBtn" data-target="playerDeck" id="mobilePlayerTabBtn">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="2.5"></circle></svg>
+            <span class="mobileTabLabel">Now playing</span>
+        </button>
+        <button type="button" class="mobileTabBtn" data-target="trackListPanel" id="mobileTracksTabBtn">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+            <span class="mobileTabLabel">Library</span>
+        </button>
+        <button type="button" class="mobileTabBtn" data-target="soulseekWorkspace" id="mobileSoulseekTabBtn">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span class="mobileTabLabel">Soulseek</span>
+        </button>
+        <button type="button" class="mobileTabBtn" data-target="settingsWorkspace" id="mobileSettingsTabBtn">
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <span class="mobileTabLabel">Settings</span>
+        </button>
+    </nav>
 
     <!-- Mobile & Desktop Track Options Action Sheet / Modal -->
     <div class="modalBackdrop trackMenuBackdrop" id="trackActionMenuModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="trackMenuTitle">
@@ -1349,7 +1279,7 @@
                         <span class="trackMenuDurationPill" id="trackMenuDurationPill">3:44</span>
                     </div>
                 </div>
-                <button type="button" class="closeModalBtn trackMenuCloseBtn" id="closeTrackMenuBtn" aria-label="Close track options">✕</button>
+                <button type="button" class="closeModalBtn trackMenuCloseBtn" id="closeTrackMenuBtn" aria-label="Close track options"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
             <div class="trackMenuItemsList" id="trackMenuItemsList">
                 <button type="button" class="trackMenuItemBtn" id="trackMenuPlayNextBtn">
@@ -1414,7 +1344,7 @@
                         <p class="metaEditorSubtitle">Edit embedded audio tags and library attributes</p>
                     </div>
                 </div>
-                <button type="button" id="closeMetaEditorModalBtn" class="closeModalBtn" aria-label="Close Metadata Editor">✕</button>
+                <button type="button" id="closeMetaEditorModalBtn" class="closeModalBtn" aria-label="Close Metadata Editor"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
 
             <div class="metaEditorBody">
@@ -1440,44 +1370,26 @@
                         <div class="metaEditorCoverActions">
                             <button type="button" class="metaEditorCoverActionBtn" id="metaEditorBrowseCoverBtn">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                                <span>Choose Image</span>
-                            </button>
-                            <button type="button" class="metaEditorCoverActionBtn onlineFinderBtn" id="metaEditorFindOnlineBtn">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                                <span>Find Online</span>
+                                <span>Choose image</span>
                             </button>
                             <button type="button" class="metaEditorCoverActionBtn revertBtn" id="metaEditorRevertCoverBtn" style="display: none;">
-                                ✕ Revert
+                                <svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg> Revert
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Online Cover Art Finder Card -->
-                <div class="metaEditorOnlineCard" id="metaEditorOnlineCard" style="display: none;">
-                    <div class="metaEditorOnlineHeader">
-                        <div class="metaEditorOnlineBadge">
-                            <span class="onlineDot" aria-hidden="true"></span>
-                            <span id="metaEditorOnlineStatus">ONLINE ARTWORK FINDER</span>
-                        </div>
-                        <button type="button" class="metaEditorOnlineCloseBtn" id="metaEditorOnlineCloseBtn" aria-label="Close Finder">✕</button>
+                <section class="metadataLookup" aria-labelledby="metadataLookupTitle">
+                    <h4 id="metadataLookupTitle">Identify &amp; find artwork</h4>
+                    <p>Search with the title, artist and album fields below. No requests are made until you choose a search.</p>
+                    <div class="metadataLookupActions">
+                        <button type="button" class="actionBtn" id="metaFindBtn">Find matches</button>
+                        <button type="button" class="actionBtn" id="metaLyricsBtn">Find lyrics</button>
+                        <button type="button" class="actionBtn" id="metaLookupCancelBtn" hidden>Cancel search</button>
                     </div>
-                    <div class="metaEditorOnlineSearchCon">
-                        <input type="text" id="metaEditorOnlineSearchInput" class="metaEditorOnlineInput" placeholder="Search by Artist / Album / Title..." autocomplete="off">
-                        <button type="button" id="metaEditorOnlineSearchSubmitBtn" class="metaEditorOnlineSearchBtn">SEARCH</button>
-                    </div>
-                    <div class="metaEditorOnlineContent" id="metaEditorOnlineContent" style="display: none;">
-                        <img id="metaEditorOnlinePreview" src="" alt="Found Artwork" class="metaEditorOnlinePreview">
-                        <div class="metaEditorOnlineDetails">
-                            <div class="metaEditorOnlineTitle" id="metaEditorOnlineTitle"></div>
-                            <div class="metaEditorOnlineArtist" id="metaEditorOnlineArtist"></div>
-                            <div class="metaEditorOnlineRes" id="metaEditorOnlineRes">600 × 600 HD (iTunes / Apple Music)</div>
-                            <button type="button" class="metaEditorApplyCoverBtn" id="metaEditorApplyCoverBtn">✓ APPLY ARTWORK</button>
-                        </div>
-                    </div>
-                    <div class="metaEditorOnlineMessage" id="metaEditorOnlineMessage" style="display: none;"></div>
-                </div>
-
+                    <p id="metaLookupStatus" role="status" aria-live="polite"></p>
+                    <div id="metaLookupResults" class="metadataLookupResults"></div>
+                </section>
                 <!-- Confirmation Card for Metadata Changes -->
                 <div class="metaEditorConfirmCard" id="metaEditorConfirmCard" style="display: none;">
                     <div class="metaEditorConfirmHeader">
@@ -1486,18 +1398,18 @@
                         </span>
                         <div class="metaEditorConfirmInfo">
                             <h4 class="metaEditorConfirmTitle">CONFIRM METADATA EDITS</h4>
-                            <p class="metaEditorConfirmDesc" id="metaEditorConfirmDesc">Are you sure you want to write these tags to disk and update your library?</p>
+                            <p class="metaEditorConfirmDesc" id="metaEditorConfirmDesc">Review changes to your local library. Supported desktop FLAC files can also be updated.</p>
                         </div>
                     </div>
                     <div class="metaEditorConfirmSummary" id="metaEditorConfirmSummary"></div>
                     <div class="metaEditorConfirmActions">
                         <button type="button" class="actionBtn metaEditorConfirmCancelBtn" id="metaEditConfirmCancelBtn">GO BACK</button>
-                        <button type="button" class="actionBtn primaryBtn metaEditorConfirmProceedBtn" id="metaEditConfirmProceedBtn">YES, WRITE &amp; SAVE</button>
+                        <button type="button" class="actionBtn primaryBtn metaEditorConfirmProceedBtn" id="metaEditConfirmProceedBtn">SAVE CHANGES</button>
                     </div>
                 </div>
 
                 <!-- Editable Form Fields -->
-                <form class="metaEditorForm" id="metaEditorForm" action="javascript:void(0);" novalidate>
+                <form class="metaEditorForm" id="metaEditorForm" novalidate>
                     <div class="metaEditorFormGrid">
                         <div class="metaEditorField metaFieldFull">
                             <label for="metaEditTitle" class="metaEditorLabel">TRACK TITLE</label>
@@ -1543,6 +1455,17 @@
                         </div>
                     </div>
 
+                    <div class="metaEditorField metaFieldFull metadataLyricsField">
+                        <label for="metaEditLyrics" class="metaEditorLabel">Lyrics (plain text or LRC)</label>
+                        <textarea id="metaEditLyrics" class="metaEditorInput" rows="6" maxlength="65536" placeholder="Paste lyrics or import an LRC file"></textarea>
+                        <label for="metaLyricsFile" class="metaEditorLabel">Import lyrics file</label>
+                        <input id="metaLyricsFile" type="file" accept=".lrc,.txt,text/plain">
+                    </div>
+                    <div class="metadataLookupActions">
+                        <button type="button" class="actionBtn" id="metaExportFlacBtn">Export tagged audio copy</button>
+                    </div>
+                    <label class="metadataWriteHint" id="metaWriteFileRow" hidden><input type="checkbox" id="metaWriteFile"> Also embed changes into original audio file (FLAC, MP3, WAV, AIFF, Ogg Vorbis, Opus or M4A/ALAC). Unchecked by default.</label>
+                    <p class="metadataWriteHint">Save updates the local library. Supported desktop files may be modified explicitly. Browser imports may export a tagged FLAC or MP3 copy without re-encoding. Android file writing is not enabled.</p>
                     <div class="metaEditorStatus" id="metaEditorStatus" style="display: none;"></div>
 
                     <div class="metaEditorActions">
@@ -1559,7 +1482,7 @@
         <div class="modalCard">
             <div class="modalHeader">
                 <h3>ADD TO PLAYLIST</h3>
-                <button type="button" id="closeModalBtn" class="closeModalBtn" aria-label="Close modal">✕</button>
+                <button type="button" id="closeModalBtn" class="closeModalBtn" aria-label="Close modal"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
             <p id="modalTrackTitle" class="modalTrackTitle">Track Title</p>
             <div class="modalPlaylistList" id="modalPlaylistList">
@@ -1577,10 +1500,10 @@
         <div class="modalCard batchAddSongsCard">
             <div class="modalHeader">
                 <div class="batchAddHeaderTitle">
-                    <span class="batchAddHeaderIcon">🎵</span>
+                    <span class="batchAddHeaderIcon"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13M9 18a3 2 0 1 1-6 0 3 2 0 0 1 6 0Zm12-2a3 2 0 1 1-6 0 3 2 0 0 1 6 0Z"/></svg></span>
                     <h3 id="batchAddModalTitle">ADD SONGS TO PLAYLIST</h3>
                 </div>
-                <button type="button" id="closeBatchAddModalBtn" class="closeModalBtn" title="Close song picker" aria-label="Close modal">✕</button>
+                <button type="button" id="closeBatchAddModalBtn" class="closeModalBtn" title="Close song picker" aria-label="Close modal"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
             <p class="batchAddSubtitle">Search your track library and tap "+" to instantly add songs to this playlist:</p>
             <div class="batchAddSearchBar">
@@ -1597,31 +1520,64 @@
     </div>
 
     <!-- Studio Parametric Equalizer (PEQ) Workstation Modal -->
-    <div class="modalBackdrop" id="peqModal" style="display: none;">
+    <div class="modalBackdrop" id="peqModal" role="dialog" aria-modal="true" aria-labelledby="peqTitle" style="display: none;">
         <div class="modalCard peqModalCard">
             <div class="modalHeader">
                 <div class="peqHeaderTitle">
                     <div>
-                        <h3>STUDIO EQUALIZER &amp; DSP WORKSTATION</h3>
-                        <span class="peqHeaderSub">10-BAND ISO BIQUAD ENGINE • DYNAMIC ENHANCERS • HEADPHONE STAGING</span>
+                        <h3 id="peqTitle">Equalizer</h3>
                     </div>
                 </div>
                 <div class="peqHeaderActions">
                     <button type="button" id="peqBypassToggleBtn" class="actionBtn peqBypassBtn" title="Toggle Equalizer Bypass">
                         <span class="peqBypassText" id="peqBypassStatusText">ACTIVE</span>
                     </button>
-                    <button type="button" id="peqResetBtn" class="actionBtn peqResetBtn" title="Reset all bands to 0.0 dB">RESET FLAT</button>
-                    <button type="button" id="closePeqModalBtn" class="closeModalBtn" title="Close Equalizer" aria-label="Close Equalizer">✕</button>
+                    <button type="button" id="peqResetBtn" class="actionBtn peqResetBtn" title="Reset all bands to 0.0 dB">Reset</button>
+                    <button type="button" id="closePeqModalBtn" class="closeModalBtn" title="Close Equalizer" aria-label="Close Equalizer"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                 </div>
             </div>
 
             <!-- Real-Time Frequency Response Curve Display -->
             <div class="peqCanvasContainer">
-                <canvas id="peqCurveCanvas" class="peqCurveCanvas" width="900" height="190"></canvas>
-                <div class="peqCanvasOverlay">
-                    <span class="peqDbLabel top">+15 dB</span>
-                    <span class="peqDbLabel mid">0 dB</span>
-                    <span class="peqDbLabel bot">-15 dB</span>
+                <canvas id="peqSpectrumCanvas" class="peqSpectrumCanvas" aria-hidden="true"></canvas>
+                <canvas id="peqCurveCanvas" class="peqCurveCanvas" role="img" aria-label="Calculated equalizer gain response from 20 Hz to 20 kHz" width="900" height="190"></canvas>
+
+            </div>
+
+            <div class="peqGraphLegend"><span>EQ response · ±15 dB</span><span id="peqSpectrumStatus">Spectrum · paused</span></div>
+            <div class="peqFadersGrid" id="peqFadersGrid" role="group" aria-label="Equalizer bands"></div>
+
+            <!-- Toolbar Row: Presets & AutoEq Import -->
+            <div class="peqToolbarRow">
+                <div class="peqPresetGroup">
+                    <span class="peqToolbarLabel">Preset</span>
+                    <select id="peqPresetSelect" class="peqSelect" aria-label="Equalizer Presets">
+                        <option value="flat">Flat (Studio Monitor)</option>
+                        <option value="harman_in_ear">Harman Target (In-Ear / IEM)</option>
+                        <option value="harman_over_ear">Harman Target (Over-Ear)</option>
+                        <option value="vocal">Vocal Presence &amp; Clarity</option>
+                        <option value="bass_slam">Bass Slam &amp; Sub-Bass 808</option>
+                        <option value="acoustic">Acoustic &amp; Classical Air</option>
+                        <option value="treble_shimmer">Treble Shimmer &amp; Cymbals</option>
+                        <option value="vinyl_warmth">Analog Vinyl Warmth</option>
+                        <option value="electronic">Electronic &amp; Club Energy</option>
+                        <option value="oratory_hd600">Sennheiser HD600 (Oratory1990)</option>
+                    </select>
+                </div>
+                <div class="peqAutoEqGroup">
+                    <button type="button" id="peqAutoEqOpenBtn" class="actionBtn peqAutoEqBtn" title="Import custom parametric EQ or AutoEq profile">
+                        Import AutoEQ
+                    </button>
+                </div>
+            </div>
+
+            <!-- AutoEq Drawer (Collapsible) -->
+            <div class="peqAutoEqDrawer" id="peqAutoEqDrawer" style="display: none;">
+                <textarea id="peqAutoEqInput" class="peqAutoEqTextarea" placeholder="Paste AutoEq or Oratory1990 filter text (e.g. 'Filter 1: ON PK Fc 105 Hz Gain 3.5 dB Q 1.41')..."></textarea>
+                <div class="peqAutoEqDrawerActions">
+                    <button type="button" id="peqAutoEqApplyBtn" class="actionBtn primaryBtn">APPLY COMPENSATION</button>
+                    <button type="button" id="peqAutoEqCancelBtn" class="actionBtn">CANCEL</button>
+                    <span class="peqAutoEqHint">Calculates least-squares parametric mapping across all 10 biquads.</span>
                 </div>
             </div>
 
@@ -1629,8 +1585,7 @@
             <div class="peqDspStrip" id="peqDspStrip">
                 <div class="peqDspHeader">
                     <div class="peqDspTitleGroup">
-                        <span class="peqSectionBadge">STUDIO DSP</span>
-                        <h4 class="peqDspTitle">ACOUSTIC ENHANCERS &amp; HEADPHONE STAGING</h4>
+                        <h4 class="peqDspTitle">Sound effects</h4>
                     </div>
                     <span class="peqDspSummaryPill" id="peqDspActiveSummary">ALL BYPASSED</span>
                 </div>
@@ -1655,7 +1610,7 @@
                         <span class="peqDspName">TREBLE</span>
                         <span class="peqDspSpec">+3.0 dB</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerLimiterBtn" data-target="limiter" title="Toggle Dedicated Brickwall Peak Limiter (-0.6 dBFS True-Peak Ceiling &amp; Anti-Clipping)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerLimiterBtn" data-target="limiter" title="Toggle stereo-linked lookahead limiter (4x peak estimation; -0.6 dBFS sample ceiling)">
                         <span class="dspDot"></span>
                         <span class="peqDspName">LIMITER</span>
                         <span class="peqDspSpec">-0.6 dBFS</span>
@@ -1702,44 +1657,6 @@
                 </div>
             </div>
 
-            <!-- Toolbar Row: Presets & AutoEq Import -->
-            <div class="peqToolbarRow">
-                <div class="peqPresetGroup">
-                    <span class="peqToolbarLabel">ACOUSTIC PRESET:</span>
-                    <select id="peqPresetSelect" class="peqSelect" aria-label="Equalizer Presets">
-                        <option value="flat">Flat (Studio Monitor)</option>
-                        <option value="harman_in_ear">Harman Target (In-Ear / IEM)</option>
-                        <option value="harman_over_ear">Harman Target (Over-Ear)</option>
-                        <option value="vocal">Vocal Presence &amp; Clarity</option>
-                        <option value="bass_slam">Bass Slam &amp; Sub-Bass 808</option>
-                        <option value="acoustic">Acoustic &amp; Classical Air</option>
-                        <option value="treble_shimmer">Treble Shimmer &amp; Cymbals</option>
-                        <option value="vinyl_warmth">Analog Vinyl Warmth</option>
-                        <option value="electronic">Electronic &amp; Club Energy</option>
-                        <option value="oratory_hd600">Sennheiser HD600 (Oratory1990)</option>
-                    </select>
-                </div>
-                <div class="peqAutoEqGroup">
-                    <button type="button" id="peqAutoEqOpenBtn" class="actionBtn peqAutoEqBtn" title="Import custom parametric EQ or AutoEq profile">
-                        IMPORT AUTOEQ PROFILE
-                    </button>
-                </div>
-            </div>
-
-            <!-- AutoEq Drawer (Collapsible) -->
-            <div class="peqAutoEqDrawer" id="peqAutoEqDrawer" style="display: none;">
-                <textarea id="peqAutoEqInput" class="peqAutoEqTextarea" placeholder="Paste AutoEq or Oratory1990 filter text (e.g. 'Filter 1: ON PK Fc 105 Hz Gain 3.5 dB Q 1.41')..."></textarea>
-                <div class="peqAutoEqDrawerActions">
-                    <button type="button" id="peqAutoEqApplyBtn" class="actionBtn primaryBtn">APPLY COMPENSATION</button>
-                    <button type="button" id="peqAutoEqCancelBtn" class="actionBtn">CANCEL</button>
-                    <span class="peqAutoEqHint">Calculates least-squares parametric mapping across all 10 biquads.</span>
-                </div>
-            </div>
-
-            <!-- 10-Band Vertical Faders Strip -->
-            <div class="peqFadersGrid" id="peqFadersGrid">
-                <!-- Dynamically populated or rendered with 10 tactile faders -->
-            </div>
         </div>
     </div>
 
@@ -1748,14 +1665,14 @@
         <div class="modalCard signalPathCard">
             <div class="modalHeader">
                 <div class="signalPathHeaderTitle">
-                    <span class="signalDot" id="auditQualityDot">●</span>
+                    <span class="signalDot" id="auditQualityDot" aria-hidden="true"></span>
                     <h3>SIGNAL PATH &amp; AUDIT</h3>
                 </div>
-                <button type="button" id="closeSignalPathModalBtn" class="closeModalBtn" title="Close Signal Path &amp; Audit" aria-label="Close Signal Path &amp; Audit">✕</button>
+                <button type="button" id="closeSignalPathModalBtn" class="closeModalBtn" title="Close Signal Path &amp; Audit" aria-label="Close Signal Path &amp; Audit"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
             <div class="signalPathSummary">
-                <div class="signalQualityBadge" id="auditQualityBadge">32-BIT FLOAT DECODE</div>
-                <p id="auditQualityDesc">Browser decodes audio into 32-bit IEEE 754 floating-point PCM. Select a track or adjust DSP settings to inspect live pipeline stages.</p>
+                <div class="signalQualityBadge" id="auditQualityBadge">Graph not confirmed</div>
+                <p id="auditQualityDesc">Select a track to inspect confirmed graph routing and configured effects. Physical output is not verified.</p>
             </div>
 
             <div class="auditStageChain" id="auditStageChain">
@@ -1765,39 +1682,39 @@
                 </div>
                 <div class="auditStageRow">
                     <span class="auditStageKey">DECODER OUTPUT</span>
-                    <span class="auditStageVal" id="auditStageDecode">32-Bit IEEE 754 Float (Web Audio Standard)</span>
+                    <span class="auditStageVal" id="auditStageDecode">Unavailable</span>
                 </div>
                 <div class="auditStageRow">
                     <span class="auditStageKey">DSP WORKLET &amp; EQ</span>
-                    <span class="auditStageVal" id="auditStageDsp">64-Bit Double-Float Worklet (Bypass)</span>
+                    <span class="auditStageVal" id="auditStageDsp">Graph not confirmed</span>
                 </div>
                 <div class="auditStageRow">
                     <span class="auditStageKey">OUTPUT &amp; DITHER</span>
-                    <span class="auditStageVal" id="auditStageOutput">Psychoacoustic Noise Shaping (&gt;18 kHz)</span>
+                    <span class="auditStageVal" id="auditStageOutput">Hardware output unverified</span>
                 </div>
             </div>
             
             <div class="signalMetricsGrid">
                 <div class="metricCard">
                     <div class="metricCardHeader">
-                        <span class="metricLabel">DYNAMIC HEADROOM</span>
-                        <span class="metricVal" id="auditMetricHeadroom">0.0 dB (Unity)</span>
+                        <span class="metricLabel">CONFIGURED PREAMP</span>
+                        <span class="metricVal" id="auditMetricHeadroom">Not measured</span>
                     </div>
-                    <p class="metricExplanation" id="auditMetricHeadroomDesc">Pre-amp attenuation and safety margin below digital clipping ceiling (0 dBFS) based on active EQ boosts and volume.</p>
+                    <p class="metricExplanation" id="auditMetricHeadroomDesc">Configured preamp trim is not a measurement of remaining clipping margin.</p>
                 </div>
                 <div class="metricCard">
                     <div class="metricCardHeader">
                         <span class="metricLabel">ESTIMATED LATENCY</span>
-                        <span class="metricVal" id="auditMetricLatency">~100 ms (Stable)</span>
+                        <span class="metricVal" id="auditMetricLatency">Unavailable</span>
                     </div>
-                    <p class="metricExplanation" id="auditMetricLatencyDesc">Hardware audio buffer roundtrip response time from Web Audio context to physical DAC/speaker output.</p>
+                    <p class="metricExplanation" id="auditMetricLatencyDesc">Browser-reported graph latency components, when available; not measured physical round-trip latency.</p>
                 </div>
                 <div class="metricCard">
                     <div class="metricCardHeader">
                         <span class="metricLabel">PIPELINE PRECISION</span>
-                        <span class="metricVal" id="auditMetricPrecision">32-Bit Decode / 64-Bit DSP</span>
+                        <span class="metricVal" id="auditMetricPrecision">Unavailable</span>
                     </div>
-                    <p class="metricExplanation" id="auditMetricPrecisionDesc">Web Audio decodes to 32-bit IEEE 754 float; active AudioWorklet stage computes biquads and dithering in 64-bit double float.</p>
+                    <p class="metricExplanation" id="auditMetricPrecisionDesc">Frame format and configured processing precision, not physical DAC bit depth.</p>
                 </div>
             </div>
         </div>
@@ -1813,7 +1730,7 @@
                     </span>
                     <h3>SLEEP TIMER</h3>
                 </div>
-                <button type="button" id="closeSleepTimerModalBtn" class="closeModalBtn" title="Close Sleep Timer" aria-label="Close Sleep Timer">✕</button>
+                <button type="button" id="closeSleepTimerModalBtn" class="closeModalBtn" title="Close Sleep Timer" aria-label="Close Sleep Timer"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
             <p class="sleepTimerDesc">
                 Automatically pauses playback with a gentle 12-second exponential volume fade-out so you drift into sleep without being startled by abrupt silence.
@@ -1851,24 +1768,15 @@
     </div>
 
     <!-- Theme Switching Loading Screen -->
-    <div class="modalBackdrop themeLoadingBackdrop" id="themeLoadingOverlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="themeLoadingTitle">
-        <div class="modalCard themeLoadingCard">
-            <div class="themeLoadingSpinner" aria-hidden="true"></div>
-            <h3 class="themeLoadingTitle" id="themeLoadingTitle">APPLYING THEME...</h3>
-            <p class="themeLoadingStatus" id="themeLoadingStatusText">Configuring workstation palette &amp; visual engine...</p>
-        </div>
-    </div>
-
-    <!-- Overhaul Theme Settings Modal -->
-    <div class="modalBackdrop" id="themeModal" style="display: none;">
+    <div class="modalBackdrop" id="themeModal" role="dialog" aria-modal="true" aria-label="Themes" style="display: none;">
         <div class="modalCard themeModalCard">
             <div class="modalHeader">
                 <div class="themeModalHeaderTitle">
                     <h3>THEME OVERHAUL</h3>
                 </div>
-                <button type="button" id="closeThemeModalBtn" class="closeModalBtn" title="Close Theme Settings" aria-label="Close Theme Settings">✕</button>
+                <button type="button" id="closeThemeModalBtn" class="closeModalBtn" title="Close Theme Settings" aria-label="Close Theme Settings"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
-            <p class="themeModalSubtitle">Select a visual theme overhaul categorized by universe, aesthetic, and architectural style:</p>
+            <p class="themeModalSubtitle">Choose a theme. Playback controls stay in familiar positions.</p>
             
             <div class="themeModalScrollArea" id="themeModalScrollArea">
                 <div class="themeColumnsContainer" id="themeColumnsContainer">
@@ -1876,108 +1784,94 @@
                     <div class="themeCategoryGroup" data-category="scifi">
                     <div class="themeCategoryHeader">
                         <div class="themeCategoryHeading">
-                            <h4>NO MAN'S SKY &amp; PROCEDURAL WORLDS</h4>
+                            <h4>Colour &amp; character</h4>
                         </div>
                         <span class="themeCategoryCount">7 THEMES</span>
                     </div>
-                    <p class="themeCategoryLead">Procedural galaxies, deep space anomalies, planetary warp fields, and sentinel interfaces.</p>
+                    <p class="themeCategoryLead">Seven expressive designs, each with its own visualizer.</p>
                     <div class="themeModalGrid">
                         <button type="button" class="themeSelectCard" data-theme="nms">
-                            <span class="themeCardPreview themePreviewNms">
-                                <span class="previewDot" style="background: #ff1744; box-shadow: 0 0 8px #ff1744;"></span>
-                                <span class="previewDot" style="background: #06080f; border: 1px solid #ff1744;"></span>
-                                <span class="previewDot" style="background: #00e5ff; box-shadow: 0 0 6px #00e5ff;"></span>
+                            <span class="themeCardPreview" data-theme="nms" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">The Atlas</span>
+                                    <span class="themeCardTitle">Crimson</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">The Crimson Atlas Core, Analysis Visor HUD, Warp Seeker &amp; Space Anomaly Terminal</span>
+                                <span class="themeCardDesc">Red instrument glass and a faceted, reactive core.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="solar-eclipse">
-                            <span class="themeCardPreview themePreviewEclipse">
-                                <span class="previewDot" style="background: #00f0ff; box-shadow: 0 0 8px #00f0ff;"></span>
-                                <span class="previewDot" style="background: #ff007f; box-shadow: 0 0 8px #ff007f;"></span>
-                                <span class="previewDot" style="background: #090d1e; border: 1px solid #00f0ff;"></span>
+                            <span class="themeCardPreview" data-theme="solar-eclipse" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Planetary Warp</span>
+                                    <span class="themeCardTitle">Orbit</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Curved Lightspeed Warp Orbit, Ringed World, Solar Corona &amp; Cyan Platter Rings</span>
+                                <span class="themeCardDesc">Deep blue, orbital rings and a luminous planet.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="euclid-horizon">
-                            <span class="themeCardPreview themePreviewEuclid">
-                                <span class="previewDot" style="background: #fbbf24; box-shadow: 0 0 8px #fbbf24;"></span>
-                                <span class="previewDot" style="background: #14b8a6; box-shadow: 0 0 8px #14b8a6;"></span>
-                                <span class="previewDot" style="background: #e11d48; box-shadow: 0 0 6px #e11d48;"></span>
+                            <span class="themeCardPreview" data-theme="euclid-horizon" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Space Station</span>
+                                    <span class="themeCardTitle">Station</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Orbital Space Station Dock, Stargate Dial Halo, Teal Haze &amp; Floating Monolith</span>
+                                <span class="themeCardDesc">Warm metal, architectural lines and a docking ring.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="alien-paradise">
-                            <span class="themeCardPreview themePreviewParadise">
-                                <span class="previewDot" style="background: #ff2a70; box-shadow: 0 0 8px #ff2a70;"></span>
-                                <span class="previewDot" style="background: #00ced1; box-shadow: 0 0 8px #00ced1;"></span>
-                                <span class="previewDot" style="background: #facc15; box-shadow: 0 0 6px #facc15;"></span>
+                            <span class="themeCardPreview" data-theme="alien-paradise" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Alien Paradise</span>
+                                    <span class="themeCardTitle">Bloom</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">70s Retro Sci-Fi, Hot Fuchsia Flora, Turquoise Skies, Atlas Spire &amp; Golden Canopies</span>
+                                <span class="themeCardDesc">Retro pink and turquoise with organic, fluid forms.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="abyssal-void">
-                            <span class="themeCardPreview themePreviewAbyssal">
-                                <span class="previewDot" style="background: #00ffaa; box-shadow: 0 0 8px #00ffaa;"></span>
-                                <span class="previewDot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
-                                <span class="previewDot" style="background: #020707; border: 1px solid #00ffaa;"></span>
+                            <span class="themeCardPreview" data-theme="abyssal-void" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Emeril Drive</span>
+                                    <span class="themeCardTitle">Jade</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Emeril Hyperdrive Engine, Radiant Emerald Crescent, Gas Giant &amp; Starlight Beams</span>
+                                <span class="themeCardDesc">Deep green with a crescent and a radial instrument dial.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="dissonance">
-                            <span class="themeCardPreview themePreviewDissonance">
-                                <span class="previewDot" style="background: #a855f7; box-shadow: 0 0 8px #a855f7;"></span>
-                                <span class="previewDot" style="background: #d946ef; box-shadow: 0 0 8px #d946ef;"></span>
-                                <span class="previewDot" style="background: #0a0515; border: 1px solid #a855f7;"></span>
+                            <span class="themeCardPreview" data-theme="dissonance" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Dissonance</span>
+                                    <span class="themeCardTitle">Amethyst</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Corrupted Sentinel Worlds, Purple Haze, Luminous Atlantideum &amp; Sentinel Interceptor</span>
+                                <span class="themeCardDesc">Violet light, faceted crystal and angular detailing.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="sentinel">
-                            <span class="themeCardPreview themePreviewSentinel">
-                                <span class="previewDot" style="background: #ffffff; box-shadow: 0 0 8px #ffffff;"></span>
-                                <span class="previewDot" style="background: #00e5ff; box-shadow: 0 0 8px #00e5ff;"></span>
-                                <span class="previewDot" style="background: #ff3d00; box-shadow: 0 0 8px #ff3d00;"></span>
+                            <span class="themeCardPreview" data-theme="sentinel" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Sentinel</span>
+                                    <span class="themeCardTitle">Alloy</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Planetary Defense Policing Bots, Combat Drones, 5-Star Wanted HUD &amp; Sentinel Pillars</span>
+                                <span class="themeCardDesc">Brushed metal, precise divisions and twin radiator banks.</span>
                             </span>
                         </button>
                     </div>
@@ -1987,24 +1881,22 @@
                 <div class="themeCategoryGroup" data-category="studio">
                     <div class="themeCategoryHeader">
                         <div class="themeCategoryHeading">
-                            <h4>STUDIO HI-FI &amp; PRECISION ACOUSTICS</h4>
+                            <h4>Classic</h4>
                         </div>
                         <span class="themeCategoryCount">1 THEME</span>
                     </div>
-                    <p class="themeCategoryLead">Mastering console layout, precision industrial matte deck, calibrated for maximum contrast and legibility.</p>
+                    <p class="themeCategoryLead">A familiar hi-fi instrument.</p>
                     <div class="themeModalGrid">
                         <button type="button" class="themeSelectCard active" data-theme="default">
-                            <span class="themeCardPreview themePreviewDefault">
-                                <span class="previewDot" style="background: #ffffff;"></span>
-                                <span class="previewDot" style="background: #000000; border: 1px solid #ffffff;"></span>
-                                <span class="previewDot" style="background: #00e5ff;"></span>
+                            <span class="themeCardPreview" data-theme="default" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Default Studio Hi-Fi</span>
+                                    <span class="themeCardTitle">Studio</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Audiophile Noir, Brutalist High-Contrast &amp; Precision Industrial Turntable Deck</span>
+                                <span class="themeCardDesc">Brushed metal, clean controls and a silver record dial.</span>
                             </span>
                         </button>
                     </div>
@@ -2014,66 +1906,58 @@
                 <div class="themeCategoryGroup" data-category="minimalist">
                     <div class="themeCategoryHeader">
                         <div class="themeCategoryHeading">
-                            <h4>MINIMALIST EDITIONS</h4>
+                            <h4>Minimal</h4>
                         </div>
                         <span class="themeCategoryCount">4 THEMES</span>
                     </div>
-                    <p class="themeCategoryLead">Zero clutter, stark architectural lines, high-contrast monospace typographic clarity, and mobile-optimized layouts.</p>
+                    <p class="themeCategoryLead">Four quiet, typography-led designs.</p>
                     <div class="themeModalGrid">
                         <button type="button" class="themeSelectCard" data-theme="minimalist-light">
-                            <span class="themeCardPreview themePreviewBrutalistLight">
-                                <span class="previewDot" style="background: #ffffff; border: 1.5px solid #000000;"></span>
-                                <span class="previewDot" style="background: #000000;"></span>
-                                <span class="previewDot" style="background: #71717a; border: 1px solid #000000;"></span>
+                            <span class="themeCardPreview" data-theme="minimalist-light" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Minimalist (Light)</span>
+                                    <span class="themeCardTitle">Paper</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Architectural High-Contrast Paper, Monolithic Layout, Zero Clutter &amp; Stark Lines</span>
+                                <span class="themeCardDesc">White editorial layout and an ink spectrum.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="minimalist-dark">
-                            <span class="themeCardPreview themePreviewBrutalistDark">
-                                <span class="previewDot" style="background: #09090b; border: 1.5px solid #ffffff;"></span>
-                                <span class="previewDot" style="background: #ffffff;"></span>
-                                <span class="previewDot" style="background: #27272a; border: 1.5px solid #ffffff;"></span>
+                            <span class="themeCardPreview" data-theme="minimalist-dark" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Minimalist (Dark)</span>
+                                    <span class="themeCardTitle">Graphite</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Monolithic Matte Obsidian, Wireframe Geometry, Zero Clutter &amp; Stark White Lines</span>
+                                <span class="themeCardDesc">Matte charcoal and a segmented meter.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="minimalist-warm">
-                            <span class="themeCardPreview themePreviewMinimalistWarm">
-                                <span class="previewDot" style="background: #faf8f5; border: 1.5px solid #d97706;"></span>
-                                <span class="previewDot" style="background: #1c1917;"></span>
-                                <span class="previewDot" style="background: #d97706;"></span>
+                            <span class="themeCardPreview" data-theme="minimalist-warm" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Minimalist (Warm Paper)</span>
+                                    <span class="themeCardTitle">Sleeve</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Nordic Warm Alabaster Ivory, Deep Umber Typography &amp; Terracotta Amber Accents</span>
+                                <span class="themeCardDesc">Warm paper, serif type and a printed record label.</span>
                             </span>
                         </button>
                         <button type="button" class="themeSelectCard" data-theme="minimalist-obsidian">
-                            <span class="themeCardPreview themePreviewMinimalistObsidian">
-                                <span class="previewDot" style="background: #000000; border: 1.5px solid #38bdf8;"></span>
-                                <span class="previewDot" style="background: #ffffff;"></span>
-                                <span class="previewDot" style="background: #38bdf8;"></span>
+                            <span class="themeCardPreview" data-theme="minimalist-obsidian" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
                             </span>
                             <span class="themeCardContent">
                                 <span class="themeCardHeading">
-                                    <span class="themeCardTitle">Minimalist (Obsidian OLED)</span>
+                                    <span class="themeCardTitle">Midnight</span>
                                     <span class="themeActivePill">ACTIVE</span>
                                 </span>
-                                <span class="themeCardDesc">Pitch-Black OLED 0-Watt Background, Pure Platinum White &amp; Electric Ice Cyan</span>
+                                <span class="themeCardDesc">True black with sparse cyan lines and a radial spectrum.</span>
                             </span>
                         </button>
                     </div>
@@ -2096,7 +1980,7 @@
             <div class="debugHudActions">
                 <button type="button" id="debugHudClearBtn" class="debugHudActionBtn" title="Clear log">CLEAR</button>
                 <button type="button" id="debugHudCopyBtn" class="debugHudActionBtn" title="Copy log to clipboard">COPY</button>
-                <button type="button" id="debugHudCloseBtn" class="debugHudActionBtn danger" title="Close Debug HUD">✕</button>
+                <button type="button" id="debugHudCloseBtn" class="debugHudActionBtn danger" title="Close Debug HUD" aria-label="Close debug log"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
         </div>
         <div class="debugHudBody">

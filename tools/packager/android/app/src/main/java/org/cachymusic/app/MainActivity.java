@@ -1,6 +1,7 @@
 package org.cachymusic.app;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
@@ -35,8 +36,6 @@ import android.util.Log;
 import android.util.Size;
 import android.view.KeyEvent;
 import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -52,6 +51,7 @@ import androidx.webkit.WebViewAssetLoader;
 import android.content.res.AssetFileDescriptor;
 import android.os.ParcelFileDescriptor;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
@@ -62,24 +62,32 @@ import java.io.FileOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Set;
 import android.provider.OpenableColumns;
 
 @SuppressWarnings("deprecation")
 public class MainActivity extends Activity {
     private static final String TAG = "CachyMusic";
+
+    private static long parseRangeLimit(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException overflow) {
+            return Long.MAX_VALUE;
+        }
+    }
     private static final String PREFS_NAME = "cachymusic_prefs";
     private static final String CACHED_LIB_FILE = "cached_library.json";
     private static final String STANDALONE_URL = "https://appassets.androidplatform.net/index.html";
@@ -92,10 +100,42 @@ public class MainActivity extends Activity {
     private WebViewAssetLoader assetLoader;
     private String currentUrl = STANDALONE_URL;
     private volatile boolean isScanCancelled = false;
+    private final Handler webViewHandler = new Handler(Looper.getMainLooper());
+    private final java.util.concurrent.ExecutorService scanExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.atomic.AtomicBoolean scanInProgress = new java.util.concurrent.atomic.AtomicBoolean();
+
+    private void startLibraryScan(Runnable task) {
+        if (activityDestroyed || !scanInProgress.compareAndSet(false, true)) return;
+        isScanCancelled = false;
+        try {
+            scanExecutor.execute(() -> {
+                try {
+                    if (!activityDestroyed) task.run();
+                } finally {
+                    scanInProgress.set(false);
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException closed) {
+            scanInProgress.set(false);
+        }
+    }
+
+    private void postToWebView(Runnable task) {
+        if (activityDestroyed) return;
+        webViewHandler.post(() -> {
+            if (!activityDestroyed && webView != null) task.run();
+        });
+    }
+
     private BroadcastReceiver mediaCommandReceiver;
     private AudioManager audioManager;
     private AudioDeviceCallback audioDeviceCallback;
 
+    private final java.util.concurrent.ThreadPoolExecutor soulseekRpcPool = new java.util.concurrent.ThreadPoolExecutor(2,4,15,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(16),new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+    private final java.util.concurrent.ThreadPoolExecutor soulseekControlPool = new java.util.concurrent.ThreadPoolExecutor(1,1,0,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(4),new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+    private volatile boolean activityDestroyed=false;
+    private final java.util.concurrent.atomic.AtomicLong soulseekRpcEpoch=new java.util.concurrent.atomic.AtomicLong();
+    private boolean validSoulseekRpc(String action,String body,String query){return action!=null&&action.matches("[a-z_]{1,32}")&&body!=null&&body.length()<=262144&&query!=null&&query.length()<=4096;}
     public class AndroidBridge {
         @JavascriptInterface
         public boolean isAndroid() {
@@ -132,6 +172,41 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String getSavedTheme() {
+            return getSharedPreferences("cachymusic_prefs", MODE_PRIVATE).getString("appearance_theme", "");
+        }
+
+        @JavascriptInterface
+        public void saveTheme(String theme) {
+            if (activityDestroyed || theme == null || !theme.matches("[a-z-]{1,32}")) return;
+            SharedPreferences preferences = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE);
+            if (!theme.equals(preferences.getString("appearance_theme", ""))) {
+                // Persist before returning from the WebView bridge so closing the app keeps the selection.
+                preferences.edit().putString("appearance_theme", theme).commit();
+            }
+        }
+
+        @JavascriptInterface
+        public void setThemeChrome(String hex) {
+            if (activityDestroyed || hex == null || !hex.matches("#[0-9a-fA-F]{6}")) return;
+            int color = android.graphics.Color.parseColor(hex);
+            boolean light = android.graphics.Color.luminance(color) > 0.5;
+            runOnUiThread(() -> {
+                if (activityDestroyed) return;
+                getWindow().setStatusBarColor(color);
+                getWindow().setNavigationBarColor(color);
+                View decor = getWindow().getDecorView();
+                int flags = decor.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (Build.VERSION.SDK_INT >= 26) {
+                    flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                    if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                }
+                decor.setSystemUiVisibility(flags);
+            });
+        }
+
+        @JavascriptInterface
         public void setSoulseekHost(String host) {
             SharedPreferences sp = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE);
             sp.edit().putString("slsk_host", host != null ? host.trim() : "").apply();
@@ -144,8 +219,22 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public String callSoulseekApi(String action, String bodyJson, String queryString) {
-            return SoulseekClient.getInstance(getApplicationContext()).dispatchApi(action, bodyJson, queryString);
+        public boolean enqueueSoulseekApi(String id,String action,String bodyJson,String queryString){
+            if(activityDestroyed||id==null||!id.matches("[A-Za-z0-9-]{1,64}")||!validSoulseekRpc(action,bodyJson,queryString))return false;
+            // Disconnect must remain available even while an authentication request blocks a worker.
+            boolean control="logout".equals(action);
+            if("power".equals(action))try{control="off".equals(new JSONObject(bodyJson).optString("state"));}catch(Exception ignored){}
+            final boolean isControl=control;final long epoch=isControl?soulseekRpcEpoch.incrementAndGet():soulseekRpcEpoch.get();
+            final java.util.concurrent.Executor executor=isControl?soulseekControlPool:soulseekRpcPool;
+            try{executor.execute(()->{
+                if(activityDestroyed)return;
+                String result=!isControl&&epoch!=soulseekRpcEpoch.get()?"{\"ok\":false,\"error\":\"Request cancelled\"}":SoulseekClient.getInstance(getApplicationContext()).dispatchApi(action,bodyJson,queryString,()->!activityDestroyed&&epoch==soulseekRpcEpoch.get());
+                final String response=result!=null&&result.length()<=2*1024*1024?result:"{\"ok\":false,\"error\":\"Response exceeds budget\"}";
+                runOnUiThread(()->{
+                    if(activityDestroyed||webView==null||!isTrustedPlaybackPage(webView.getUrl()))return;
+                    webView.evaluateJavascript("window.__cachySoulseekResult && window.__cachySoulseekResult("+JSONObject.quote(id)+","+JSONObject.quote(response)+")",null);
+                });
+            });return true;}catch(java.util.concurrent.RejectedExecutionException busy){return false;}
         }
 
         @JavascriptInterface
@@ -162,7 +251,7 @@ public class MainActivity extends Activity {
                 int curVol = am != null ? am.getStreamVolume(AudioManager.STREAM_MUSIC) : maxVol;
                 boolean muted = am != null && am.isStreamMute(AudioManager.STREAM_MUSIC);
                 payload.put("success", true);
-                payload.put("available", am != null);
+                payload.put("available", am != null && !am.isVolumeFixed());
                 payload.put("backend", payload.optBoolean("isUsbDac", false) ? "android-usb-dac" : "android-audiomanager");
                 payload.put("volume", Math.max(0.0, Math.min(1.0, (double) curVol / (double) maxVol)));
                 payload.put("muted", muted || curVol == 0);
@@ -178,7 +267,7 @@ public class MainActivity extends Activity {
         public boolean setHardwareStreamVolume(double normalizedVol) {
             try {
                 AudioManager am = audioManager != null ? audioManager : (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-                if (am == null) return false;
+                if (am == null || am.isVolumeFixed()) return false;
                 int maxVol = Math.max(1, am.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
                 double clamped = Math.max(0.0, Math.min(1.0, normalizedVol));
                 int targetIdx = (int) Math.round(clamped * maxVol);
@@ -207,14 +296,84 @@ public class MainActivity extends Activity {
             }
         }
 
+        // Native transport accepts only URI identities from the indexed local library.
+        @JavascriptInterface public String nativePlaybackStatus(){return MediaPlaybackService.nativeStatus();}
+        @JavascriptInterface public boolean nativePlaybackSupportsQueue() { return true; }
+        @JavascriptInterface public boolean nativePlaybackSupportsShuffle() { return true; }
+        @JavascriptInterface public String nativePlaybackRegisterShuffle(String token, String raw) {
+            return registerPlaybackCatalog(token, raw, NativePlaybackOrder.CatalogKind.SHUFFLE);
+        }
+        @JavascriptInterface public String nativePlaybackRegisterOrdered(String token, String raw) {
+            return registerPlaybackCatalog(token, raw, NativePlaybackOrder.CatalogKind.ORDERED);
+        }
+        @JavascriptInterface public String nativePlaybackRegisterQueue(String token, String raw) {
+            return registerPlaybackCatalog(token, raw, NativePlaybackOrder.CatalogKind.QUEUE);
+        }
+        private String registerPlaybackCatalog(String token, String raw, NativePlaybackOrder.CatalogKind kind) {
+            if (activityDestroyed || token == null || !token.matches("[A-Za-z0-9-]{1,64}")
+                    || raw == null || raw.length() > NativePlaybackOrder.MAX_CATALOG_LENGTH) return "";
+            try {
+                JSONObject catalog = new JSONObject(raw);
+                boolean shuffle = kind == NativePlaybackOrder.CatalogKind.SHUFFLE;
+                boolean queued = kind == NativePlaybackOrder.CatalogKind.QUEUE;
+                JSONArray items = catalog.getJSONArray(shuffle ? "shuffleTracks" : "tracks");
+                int limit = queued ? NativePlaybackOrder.MAX_QUEUE_CATALOG_TRACKS : NativePlaybackOrder.MAX_CATALOG_TRACKS;
+                if (items.length() > limit) return "";
+                Map<String, String> indexSnapshot = indexedMedia;
+                Set<String> seen = new HashSet<>();
+                ArrayList<NativePlaybackOrder.Track> tracks = new ArrayList<>();
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.getJSONObject(i);
+                    String uri = item.getString("uri");
+                    String queueId = queued ? item.getString("queueId") : "";
+                    if (queued && !queueId.matches("[A-Za-z0-9-]{1,64}")) return "";
+                    if (uri.length() <= 8192 && indexSnapshot.containsKey(uri) && seen.add(queued ? queueId : uri)) {
+                        tracks.add(new NativePlaybackOrder.Track(uri, boundedText(item.optString("title"), "CachyMusic"),
+                                boundedText(item.optString("artist"), "Unknown Artist"), boundedText(item.optString("album"), ""),
+                                safeNotificationCover(item.optString("cover")), queueId));
+                    } else if (!shuffle) return "";
+                }
+                if (activityDestroyed) return "";
+                return MediaPlaybackService.registerPlaybackCatalog(token, tracks, kind,
+                        catalog.optBoolean(shuffle ? "shuffleComplete" : "complete") && tracks.size() == items.length());
+            } catch (JSONException ex) {
+                return "";
+            }
+        }
+        @JavascriptInterface public boolean nativePlaybackLoad(String token,String raw,String title,String artist,String album,String cover,long position,double gain){
+            return nativePlaybackLoadWithOrder(token,raw,title,artist,album,cover,position,gain,"");
+        }
+        @JavascriptInterface public boolean nativePlaybackLoadWithOrder(String token,String raw,String title,String artist,String album,String cover,long position,double gain,String order){
+            if(activityDestroyed||token==null||!token.matches("[A-Za-z0-9-]{1,64}")||raw==null||raw.length()>8192||!isIndexedMedia(raw)||!Double.isFinite(gain))return false;
+            Intent i=new Intent(MainActivity.this,MediaPlaybackService.class).setAction(MediaPlaybackService.ACTION_NATIVE_LOAD);
+            i.putExtra("token",token).putExtra("uri",raw).putExtra("title",boundedText(title,"CachyMusic")).putExtra("artist",boundedText(artist,"Unknown Artist")).putExtra("album",boundedText(album,"")).putExtra("cover",safeNotificationCover(cover)).putExtra("position",Math.max(0,position)).putExtra("gain",(float)Math.max(0,Math.min(1,gain)));
+            i.putExtra("order", approvedPlaybackOrder(order));
+            try{if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);return true;}catch(Exception ex){return false;}
+        }
+        @JavascriptInterface public boolean nativePlaybackSetOrder(String token, int revision, String order) {
+            if (activityDestroyed || token == null || !token.matches("[A-Za-z0-9-]{1,64}") || revision < 0) return false;
+            Intent intent = new Intent(MainActivity.this, MediaPlaybackService.class)
+                    .setAction(MediaPlaybackService.ACTION_NATIVE_ORDER)
+                    .putExtra("token", token).putExtra("revision", revision)
+                    .putExtra("order", approvedPlaybackOrder(order));
+            try { startService(intent); return true; } catch (Exception ex) { return false; }
+        }
+        @JavascriptInterface public boolean nativePlaybackCommand(String token,String cmd,long position,double gain){
+            if(activityDestroyed||token==null||!token.matches("[A-Za-z0-9-]{1,64}")||cmd==null||!cmd.matches("play|pause|seek|stop|gain|next|prev")||!Double.isFinite(gain))return false;
+            Intent i=new Intent(MainActivity.this,MediaPlaybackService.class).setAction(MediaPlaybackService.ACTION_NATIVE_COMMAND);
+            i.putExtra("token",token).putExtra("cmd",cmd).putExtra("position",Math.max(0,position)).putExtra("gain",(float)Math.max(0,Math.min(1,gain)));
+            try{startService(i);return true;}catch(Exception ex){return false;}
+        }
+
         @JavascriptInterface
         public void updateMediaNotification(String title, String artist, String album, String coverUrl, boolean isPlaying, long durationMs, long positionMs) {
+            if(MediaPlaybackService.ownsNative())return;
             Intent svc = new Intent(MainActivity.this, MediaPlaybackService.class);
             svc.setAction(MediaPlaybackService.ACTION_UPDATE);
-            svc.putExtra("title", title != null ? title : "CachyMusic");
-            svc.putExtra("artist", artist != null ? artist : "Unknown Artist");
-            svc.putExtra("album", album != null ? album : "");
-            svc.putExtra("cover", coverUrl != null ? coverUrl : "");
+            svc.putExtra("title", boundedText(title,"CachyMusic"));
+            svc.putExtra("artist", boundedText(artist,"Unknown Artist"));
+            svc.putExtra("album", boundedText(album,""));
+            svc.putExtra("cover", safeNotificationCover(coverUrl));
             svc.putExtra("isPlaying", isPlaying);
             svc.putExtra("durationMs", durationMs);
             svc.putExtra("positionMs", positionMs);
@@ -231,6 +390,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void stopMediaNotification() {
+            if(MediaPlaybackService.ownsNative())return;
             try {
                 Intent svc = new Intent(MainActivity.this, MediaPlaybackService.class);
                 svc.setAction(MediaPlaybackService.ACTION_STOP_SERVICE);
@@ -241,11 +401,120 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean isTrustedPlaybackPage(String raw){try{Uri u=Uri.parse(raw);return "https".equals(u.getScheme())&&"appassets.androidplatform.net".equals(u.getHost())&&u.getPort()==-1&&u.getUserInfo()==null&&"/index.html".equals(u.getPath());}catch(Exception e){return false;}}
+    private static String boundedText(String value,String fallback){return value==null?fallback:value.substring(0,Math.min(1024,value.length()));}
+    private Bundle approvedPlaybackOrder(String raw) {
+        if (raw == null || raw.isEmpty() || raw.length() > NativePlaybackOrder.MAX_JSON_LENGTH) return null;
+        try {
+            JSONObject order = new JSONObject(raw);
+            JSONArray items = order.getJSONArray("tracks");
+            int index = order.getInt("index");
+            if (index < 0 || index >= items.length() || items.length() > NativePlaybackOrder.MAX_TRACKS) return null;
+            boolean queued = order.optBoolean("queued");
+            if (queued && index != 0) return null;
+            ArrayList<Bundle> tracks = new ArrayList<>();
+            Map<String, String> indexSnapshot = indexedMedia;
+            Set<String> seen = new HashSet<>();
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.getJSONObject(i);
+                String uri = item.getString("uri");
+                if (uri.length() > 8192 || !indexSnapshot.containsKey(uri)) {
+                    if (queued && i > 0) break;
+                    return null;
+                }
+                String queueId = "";
+                if (queued && i > 0) {
+                    queueId = item.getString("queueId");
+                    if (!queueId.matches("[A-Za-z0-9-]{1,64}") || !seen.add(queueId)) return null;
+                } else if (!queued && !seen.add(uri)) {
+                    return null;
+                }
+                tracks.add(playbackTrack(item, uri, queueId));
+            }
+            Bundle result = new Bundle();
+            result.putParcelableArrayList("tracks", tracks);
+            result.putInt("index", index);
+            result.putBoolean("complete", order.optBoolean("complete"));
+            result.putBoolean("repeatAll", order.optBoolean("repeatAll"));
+            result.putBoolean("repeatOne", order.optBoolean("repeatOne"));
+            result.putBoolean("queued", queued);
+            result.putBoolean("queueComplete", order.optBoolean("queueComplete") && tracks.size() == items.length());
+            String catalogId = order.optString("shuffleCatalogId");
+            if (catalogId.matches("[a-f0-9-]{36}")) result.putString("shuffleCatalogId", catalogId);
+            String orderedCatalogId = order.optString("orderedCatalogId");
+            if (!queued && orderedCatalogId.matches("[a-f0-9-]{36}")) result.putString("orderedCatalogId", orderedCatalogId);
+            String queueCatalogId = order.optString("queueCatalogId");
+            if (queued && tracks.size() > 1 && queueCatalogId.matches("[a-f0-9-]{36}")) {
+                result.putString("queueCatalogId", queueCatalogId);
+                result.putString("queueCatalogHead", tracks.get(1).getString("queueId"));
+            }
+            JSONArray shuffleItems = order.optJSONArray("shuffleTracks");
+            if (shuffleItems != null) {
+                if (shuffleItems.length() > NativePlaybackOrder.MAX_TRACKS) return null;
+                ArrayList<Bundle> shuffleTracks = new ArrayList<>();
+                seen.clear();
+                for (int i = 0; i < shuffleItems.length(); i++) {
+                    JSONObject item = shuffleItems.getJSONObject(i);
+                    String uri = item.getString("uri");
+                    if (uri.length() <= 8192 && indexSnapshot.containsKey(uri) && seen.add(uri)) {
+                        shuffleTracks.add(playbackTrack(item, uri, ""));
+                    }
+                }
+                result.putParcelableArrayList("shuffleTracks", shuffleTracks);
+                result.putBoolean("shuffleComplete", order.optBoolean("shuffleComplete")
+                        && shuffleTracks.size() == shuffleItems.length());
+            }
+            return result;
+        } catch (JSONException ex) {
+            return null;
+        }
+    }
+    private Bundle playbackTrack(JSONObject item, String uri, String queueId) {
+        Bundle track = new Bundle();
+        track.putString("uri", uri);
+        track.putString("title", boundedText(item.optString("title"), "CachyMusic"));
+        track.putString("artist", boundedText(item.optString("artist"), "Unknown Artist"));
+        track.putString("album", boundedText(item.optString("album"), ""));
+        track.putString("cover", safeNotificationCover(item.optString("cover")));
+        track.putString("queueId", queueId);
+        return track;
+    }
+    private String safeNotificationCover(String raw){
+        if(raw==null||raw.length()>256*1024)return "";
+        if(raw.startsWith("data:image/jpeg;base64,")||raw.startsWith("data:image/png;base64,"))return raw;
+        try{
+            Uri u=Uri.parse(raw);
+            if(!"https".equals(u.getScheme())||!"appassets.androidplatform.net".equals(u.getHost())||u.getPort()!=-1||u.getUserInfo()!=null)return "";
+            String path=u.getPath();
+            if("/android-media-art".equals(path)&&isIndexedMedia(u.getQueryParameter("uri")))return raw;
+            if("/resources/images/icon-192.png".equals(path)||"/resources/images/icon-512.png".equals(path))return raw;
+        }catch(Exception ignored){}
+        return "";
+    }
+
     private String getSavedSoulseekHost() {
         SharedPreferences sp = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE);
         return sp.getString("slsk_host", "");
     }
 
+    // Only media explicitly indexed through MediaStore or SAF may be read by the UI.
+    private volatile Map<String, String> indexedMedia = java.util.Collections.emptyMap();
+    private void updateIndexedMedia(JSONArray tracks) {
+        Map<String,String> next=new HashMap<>();
+        if(tracks!=null) for(int i=0;i<tracks.length();i++) {
+            JSONObject row=tracks.optJSONObject(i); if(row==null) continue;
+            Uri source=Uri.parse(row.optString("src", ""));
+            if(!source.isHierarchical())continue;
+            String raw=source.getQueryParameter("uri");
+            if(raw!=null && "content".equals(Uri.parse(raw).getScheme())) next.put(raw, source.getQueryParameter("mime"));
+        }
+        indexedMedia=java.util.Collections.unmodifiableMap(next);
+        mediaSizeCache.evictAll();flacPatchesCache.evictAll();artworkCache.evictAll();
+    }
+    private boolean isIndexedMedia(String raw) { return raw!=null && indexedMedia.containsKey(raw); }
+    private WebResourceResponse forbiddenMedia() {
+        return new WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", new HashMap<>(), new ByteArrayInputStream(new byte[0]));
+    }
     private void saveLibraryCacheJson(JSONArray tracksArray, String directoryName) {
         try {
             JSONObject root = new JSONObject();
@@ -259,6 +528,7 @@ public class MainActivity extends Activity {
                 fos.write(bytes);
                 fos.flush();
             }
+            updateIndexedMedia(tracksArray);
             if (prefs != null) {
                 prefs.edit().putString("last_directory", directoryName != null ? directoryName : "").apply();
             }
@@ -270,7 +540,7 @@ public class MainActivity extends Activity {
     private String readLibraryCacheJson() {
         try {
             File cacheFile = new File(getFilesDir(), CACHED_LIB_FILE);
-            if (!cacheFile.exists() || cacheFile.length() == 0) return "";
+            if (!cacheFile.exists() || cacheFile.length() == 0 || cacheFile.length()>64L*1024*1024) return "";
             byte[] buf = new byte[(int) cacheFile.length()];
             try (FileInputStream fis = new FileInputStream(cacheFile)) {
                 int read = 0;
@@ -287,12 +557,23 @@ public class MainActivity extends Activity {
         }
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+    private void registerMediaCommandReceiver() {
+        IntentFilter filter = new IntentFilter(MediaPlaybackService.BROADCAST_MEDIA_COMMAND);
+        String permission = MediaPlaybackService.MEDIA_COMMAND_PERMISSION;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(mediaCommandReceiver, filter, permission, null, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            // Android 12 and older use the app's signature permission to restrict senders.
+            registerReceiver(mediaCommandReceiver, filter, permission, null);
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-
+        try { String cached=readLibraryCacheJson(); if(!cached.isEmpty())updateIndexedMedia(new JSONObject(cached).optJSONArray("tracks")); }
+        catch(Exception ignored) {}
         mediaCommandReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -310,10 +591,10 @@ public class MainActivity extends Activity {
                         jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.pauseAudio();";
                         break;
                     case "next":
-                        jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.nextTrack();";
+                        jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.nextTrack(true, false);";
                         break;
                     case "prev":
-                        jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.prevTrack();";
+                        jsCall = "window.__cachyMusic && window.__cachyMusic.player && window.__cachyMusic.player.prevTrack(false);";
                         break;
                     case "seek":
                         double seekSec = seekMs / 1000.0;
@@ -323,15 +604,10 @@ public class MainActivity extends Activity {
                         return;
                 }
                 final String finalJs = jsCall;
-                webView.post(() -> webView.evaluateJavascript(finalJs, null));
+                postToWebView(() -> webView.evaluateJavascript(finalJs, null));
             }
         };
-        IntentFilter filter = new IntentFilter(MediaPlaybackService.BROADCAST_MEDIA_COMMAND);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(mediaCommandReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(mediaCommandReceiver, filter);
-        }
+        registerMediaCommandReceiver();
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         // Ensure standalone mobile operation: no remote workstation host needed
@@ -349,7 +625,7 @@ public class MainActivity extends Activity {
         }
 
         webView = new WebView(this);
-        webView.setBackgroundColor(0xFF0A0B0E);
+        webView.setBackgroundColor(getColor(R.color.player_background));
         
         // Suppress native Android OS scrollbar overlays that cut across web contents
         webView.setHorizontalScrollBarEnabled(false);
@@ -371,16 +647,16 @@ public class MainActivity extends Activity {
         s.setDatabaseEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setAllowFileAccess(true);
+        s.setAllowFileAccess(false);
         s.setAllowContentAccess(true);
-        s.setAllowFileAccessFromFileURLs(true);
-        s.setAllowUniversalAccessFromFileURLs(true);
+        s.setAllowFileAccessFromFileURLs(false);
+        s.setAllowUniversalAccessFromFileURLs(false);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
 
         // Register AndroidBridge for native folder directory picking and MediaStore queries
         webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
@@ -390,7 +666,7 @@ public class MainActivity extends Activity {
             audioDeviceCallback = new AudioDeviceCallback() {
                 private void notifyWebAudioDevicesChanged() {
                     if (webView != null) {
-                        webView.post(() -> webView.evaluateJavascript(
+                        postToWebView(() -> webView.evaluateJavascript(
                                 "if (window.__cachyMusic && window.__cachyMusic.engine && window.__cachyMusic.engine.checkDacCapabilities) { window.__cachyMusic.engine.checkDacCapabilities(); }",
                                 null
                         ));
@@ -422,23 +698,26 @@ public class MainActivity extends Activity {
                 try {
                     Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("*/*");
-                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
-                        "audio/*",
-                        "application/ogg",
-                        "application/x-flac",
-                        "audio/flac",
-                        "audio/mp3",
-                        "audio/wav",
-                        "audio/m4a",
-                        "audio/aac",
-                        "audio/opus"
-                    });
-                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-                    startActivityForResult(Intent.createChooser(intent, "Select Audio Tracks"), FILECHOOSER_RESULTCODE);
+                    String[] requested = fileChooserParams.getAcceptTypes();
+                    boolean image = false, text = false;
+                    if (requested != null) for (String value : requested) {
+                        if (value == null) continue;
+                        for (String type : value.split(",")) {
+                            type = type.trim().toLowerCase(java.util.Locale.ROOT);
+                            if (type.startsWith("image/")) image = true;
+                            if (type.startsWith("text/") || type.equals(".lrc") || type.equals(".txt")) text = true;
+                        }
+                    }
+                    // Some providers label FLAC/AIFF and other valid audio as application/octet-stream.
+                    // The frontend validates selected files; do not hide those files in the system picker.
+                    intent.setType(image ? "image/*" : "*/*");
+                    if (image) intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/png", "image/jpeg", "image/webp"});
+                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                    startActivityForResult(Intent.createChooser(intent, image ? "Select artwork" : text ? "Select lyrics" : "Select audio files"), FILECHOOSER_RESULTCODE);
                 } catch (ActivityNotFoundException e) {
                     uploadMessage = null;
-                    return false;
+                    filePathCallback.onReceiveValue(null);
+                    return true;
                 }
                 return true;
             }
@@ -447,31 +726,49 @@ public class MainActivity extends Activity {
         // WebViewClient intercepting local asset requests, local media streams, and mock API calls
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri target = request.getUrl();
+                return !("https".equals(target.getScheme()) && "appassets.androidplatform.net".equals(target.getHost()));
+            }
+
+            @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
+                if (!("https".equals(uri.getScheme()) && "appassets.androidplatform.net".equals(uri.getHost()))) {
+                    String host = uri.getHost(), endpoint = uri.getPath();
+                    boolean allowed = "https".equals(uri.getScheme()) && uri.getPort() == -1 && "GET".equals(request.getMethod()) && !request.isForMainFrame() && host != null && endpoint != null && (
+                        ("musicbrainz.org".equals(host) && endpoint.startsWith("/ws/2/recording")) ||
+                        ("lrclib.net".equals(host) && "/api/search".equals(endpoint)) ||
+                        ("coverartarchive.org".equals(host) && endpoint.startsWith("/release/")) ||
+                        (("archive.org".equals(host) || host.endsWith(".archive.org")) && endpoint.contains("/items/")));
+                    if (allowed) return null; // browser fetch still enforces CSP, TLS and CORS
+                    return new WebResourceResponse("text/plain", "UTF-8", 403, "Forbidden", new HashMap<>(), new ByteArrayInputStream(new byte[0]));
+                }
                 String path = uri.getPath();
 
                 // 1. Direct local audio streaming & artwork resolution via ContentResolver
-                if (path != null && path.startsWith("/android-media-art")) {
+                if ("/android-media-art".equals(path)) {
                     String uriParam = uri.getQueryParameter("uri");
+                    if (!isIndexedMedia(uriParam) || !"GET".equals(request.getMethod())) return forbiddenMedia();
                     if (uriParam != null) {
-                        byte[] art = resolveTrackArtworkBytes(MainActivity.this, Uri.parse(uriParam));
+                        byte[] art = loadBoundedArtwork(uriParam, "1".equals(uri.getQueryParameter("thumb")));
                         if (art != null && art.length > 0) {
                             return new WebResourceResponse("image/jpeg", null, new ByteArrayInputStream(art));
                         }
                     }
                 }
 
-                if (path != null && path.startsWith("/android-media")) {
+                if ("/android-media".equals(path)) {
                     if (request != null && "OPTIONS".equalsIgnoreCase(request.getMethod())) {
                         Map<String, String> corsHeaders = new HashMap<>();
-                        corsHeaders.put("Access-Control-Allow-Origin", "*");
+                        corsHeaders.put("Access-Control-Allow-Origin", "https://appassets.androidplatform.net");
                         corsHeaders.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
                         corsHeaders.put("Access-Control-Allow-Headers", "*");
                         return new WebResourceResponse("text/plain", "UTF-8", 200, "OK", corsHeaders,
                                 new ByteArrayInputStream(new byte[0]));
                     }
                     String uriParam = uri.getQueryParameter("uri");
+                    if (!isIndexedMedia(uriParam) || !("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod()))) return forbiddenMedia();
                     if (uriParam != null) {
                         try {
                             Uri mediaUri = Uri.parse(uriParam);
@@ -498,15 +795,7 @@ public class MainActivity extends Activity {
                                 new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
                     }
                     if (path.contains("soulseek.php")) {
-                        // 100% Standalone Native Android Soulseek Client
-                        String action = uri.getQueryParameter("action");
-                        String json = SoulseekClient.getInstance(getApplicationContext()).dispatchApi(action, "{}", uri.getQuery());
-                        Map<String, String> respHeaders = new HashMap<>();
-                        respHeaders.put("Access-Control-Allow-Origin", "*");
-                        respHeaders.put("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-                        respHeaders.put("Content-Type", "application/json; charset=utf-8");
-                        return new WebResourceResponse("application/json", "UTF-8", 200, "OK", respHeaders,
-                                new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8)));
+                        return forbiddenMedia(); // native Soulseek RPC only; no actions via URL/query
                     }
                     if (path.contains("hardware_volume.php")) {
                         String json = "{\"success\": true, \"available\": false, \"supported\": false, \"backend\": \"android-unsupported\"}";
@@ -521,7 +810,8 @@ public class MainActivity extends Activity {
                 }
 
                 // Default asset loader
-                return assetLoader.shouldInterceptRequest(uri);
+                WebResourceResponse asset = assetLoader.shouldInterceptRequest(uri);
+                return asset != null ? asset : new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", new HashMap<>(), new ByteArrayInputStream(new byte[0]));
             }
 
             @Override
@@ -636,8 +926,7 @@ public class MainActivity extends Activity {
     }
 
     private void scanDocumentFolderAsync(Uri treeUri) {
-        isScanCancelled = false;
-        new Thread(() -> {
+        startLibraryScan(() -> {
             try {
                 DocumentFile pickedDir = DocumentFile.fromTreeUri(this, treeUri);
                 if (pickedDir == null) return;
@@ -646,7 +935,7 @@ public class MainActivity extends Activity {
                 if (folderName == null) folderName = "Selected Folder";
                 final String fName = folderName;
 
-                new Handler(Looper.getMainLooper()).post(() -> {
+                postToWebView(() -> {
                     String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanProgress) { window.__cachyMusic.android.onScanProgress(0, 0, " + JSONObject.quote(fName) + ", 0); }";
                     webView.evaluateJavascript(js, null);
                 });
@@ -661,7 +950,7 @@ public class MainActivity extends Activity {
                 }
 
                 if (isScanCancelled) {
-                    new Handler(Looper.getMainLooper()).post(() -> {
+                    postToWebView(() -> {
                         webView.evaluateJavascript("if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanCancelled) { window.__cachyMusic.android.onScanCancelled(); }", null);
                     });
                     return;
@@ -690,7 +979,7 @@ public class MainActivity extends Activity {
                             etaSec = (int) Math.max(0, Math.ceil((total - count) / (rate * 1000.0)));
                         }
                         final int finalEta = etaSec;
-                        new Handler(Looper.getMainLooper()).post(() -> {
+                        postToWebView(() -> {
                             String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanProgress) { window.__cachyMusic.android.onScanProgress("
                                     + count + ", " + total + ", " + JSONObject.quote(fName) + ", " + finalEta + "); }";
                             webView.evaluateJavascript(js, null);
@@ -699,7 +988,7 @@ public class MainActivity extends Activity {
                 }
 
                 if (isScanCancelled) {
-                    new Handler(Looper.getMainLooper()).post(() -> {
+                    postToWebView(() -> {
                         webView.evaluateJavascript("if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanCancelled) { window.__cachyMusic.android.onScanCancelled(); }", null);
                     });
                     return;
@@ -715,7 +1004,7 @@ public class MainActivity extends Activity {
                 }
 
                 final String jsonString = tracksArray.toString();
-                new Handler(Looper.getMainLooper()).post(() -> {
+                postToWebView(() -> {
                     String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onTracksDiscovered) { window.__cachyMusic.android.onTracksDiscovered("
                             + jsonString + ", " + JSONObject.quote(fName) + "); }";
                     webView.evaluateJavascript(js, null);
@@ -723,7 +1012,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 Log.e(TAG, "Folder scan error: " + e.getMessage(), e);
             }
-        }).start();
+        });
     }
 
     private void discoverAudioFilesFast(Uri treeUri, String parentDocId, String albumDefault, List<DiscoveredAudioItem> items, int depth) {
@@ -932,16 +1221,40 @@ public class MainActivity extends Activity {
         return normalizeMimeType(defaultMime != null ? defaultMime : "audio/mpeg");
     }
 
-    private final Map<String, Map<Long, Byte>> flacPatchesCache = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<String, Long> mediaSizeCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final android.util.LruCache<String, Map<Long, Byte>> flacPatchesCache = new android.util.LruCache<>(2048) {
+        @Override protected int sizeOf(String key, Map<Long, Byte> value) { return Math.max(1, value.size()); }
+    };
+    private final android.util.LruCache<String, Long> mediaSizeCache = new android.util.LruCache<>(512);
 
+    private final android.util.LruCache<String,byte[]> artworkCache=new android.util.LruCache<String,byte[]>(8*1024*1024) {
+        @Override protected int sizeOf(String key,byte[] value){return value.length;}
+    };
+    private byte[] loadBoundedArtwork(String raw, boolean thumb) {
+        String key=raw+(thumb?":96":":768");byte[] hit=artworkCache.get(key);if(hit!=null)return hit;
+        byte[] input=resolveTrackArtworkBytes(this,Uri.parse(raw));if(input==null||input.length>10*1024*1024)return null;
+        android.graphics.BitmapFactory.Options bounds=new android.graphics.BitmapFactory.Options();bounds.inJustDecodeBounds=true;
+        android.graphics.BitmapFactory.decodeByteArray(input,0,input.length,bounds);
+        if(bounds.outWidth<=0||bounds.outHeight<=0||bounds.outWidth>8192||bounds.outHeight>8192||(long)bounds.outWidth*bounds.outHeight>16000000L)return null;
+        int max=thumb?96:768, sample=1;while(Math.max(bounds.outWidth,bounds.outHeight)/sample>max*2)sample*=2;
+        android.graphics.BitmapFactory.Options options=new android.graphics.BitmapFactory.Options();options.inSampleSize=sample;
+        Bitmap bitmap=android.graphics.BitmapFactory.decodeByteArray(input,0,input.length,options);if(bitmap==null)return null;
+        Bitmap scaled=bitmap;try{float ratio=Math.min(1f,(float)max/Math.max(bitmap.getWidth(),bitmap.getHeight()));
+            if(ratio<1)scaled=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*ratio)),Math.max(1,Math.round(bitmap.getHeight()*ratio)),true);
+            ByteArrayOutputStream out=new ByteArrayOutputStream();scaled.compress(Bitmap.CompressFormat.JPEG,86,out);byte[] result=out.toByteArray();artworkCache.put(key,result);return result;
+        }finally{if(scaled!=bitmap)scaled.recycle();bitmap.recycle();}
+    }
     public static byte[] resolveTrackArtworkBytes(Context ctx, Uri mediaUri) {
         if (ctx == null || mediaUri == null) return null;
-        try (MediaMetadataRetriever mmr = new MediaMetadataRetriever()) {
-            mmr.setDataSource(ctx, mediaUri);
-            byte[] art = mmr.getEmbeddedPicture();
-            if (art != null && art.length > 0) {
-                return art;
+        try {
+            MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+            try {
+                mmr.setDataSource(ctx, mediaUri);
+                byte[] art = mmr.getEmbeddedPicture();
+                if (art != null && art.length > 0 && art.length <= 10*1024*1024) {
+                    return art;
+                }
+            } finally {
+                mmr.release();
             }
         } catch (Exception ignored) {}
 
@@ -1051,7 +1364,8 @@ public class MainActivity extends Activity {
                 if (r == 4 && magic[0] == 'f' && magic[1] == 'L' && magic[2] == 'a' && magic[3] == 'C') {
                     long offset = 4;
                     byte[] hdr = new byte[4];
-                    while (offset < 16 * 1024 * 1024) {
+                    byte[] scratch = new byte[16384];
+                    for (int blocks = 0; blocks < 4096 && offset < 16 * 1024 * 1024; blocks++) {
                         int hr = is.read(hdr);
                         if (hr < 4) break;
                         boolean isLast = (hdr[0] & 0x80) != 0;
@@ -1066,8 +1380,8 @@ public class MainActivity extends Activity {
                         while (skipped < len) {
                             long s = is.skip(len - skipped);
                             if (s <= 0) {
-                                int toRead = (int) Math.min(len - skipped, 16384);
-                                int bRead = is.read(new byte[toRead]);
+                                int toRead = (int) Math.min(len - skipped, scratch.length);
+                                int bRead = is.read(scratch, 0, toRead);
                                 if (bRead <= 0) break;
                                 s = bRead;
                             }
@@ -1090,16 +1404,14 @@ public class MainActivity extends Activity {
         private long remaining;
         private final ParcelFileDescriptor pfd;
         private final AssetFileDescriptor afd;
-        private final RandomAccessFile raf;
         private final Map<Long, Byte> patches;
         private long currentPos;
 
-        public LimitedInputStream(InputStream in, long limit, ParcelFileDescriptor pfd, AssetFileDescriptor afd, RandomAccessFile raf, long startPos, Map<Long, Byte> patches) {
+        public LimitedInputStream(InputStream in, long limit, ParcelFileDescriptor pfd, AssetFileDescriptor afd, long startPos, Map<Long, Byte> patches) {
             super(in);
             this.remaining = Math.max(0, limit);
             this.pfd = pfd;
             this.afd = afd;
-            this.raf = raf;
             this.currentPos = startPos;
             this.patches = patches;
         }
@@ -1164,9 +1476,6 @@ public class MainActivity extends Activity {
             try {
                 super.close();
             } finally {
-                if (raf != null) {
-                    try { raf.close(); } catch (Exception ignored) {}
-                }
                 if (pfd != null) {
                     try { pfd.close(); } catch (Exception ignored) {}
                 }
@@ -1179,14 +1488,13 @@ public class MainActivity extends Activity {
 
     private InputStream createSeekableStream(File directFile, ParcelFileDescriptor pfd, AssetFileDescriptor afd, Uri uri, long start, long length, Map<Long, Byte> patches) {
         if (directFile != null) {
+            FileInputStream fis = null;
             try {
-                RandomAccessFile raf = new RandomAccessFile(directFile, "r");
-                if (start > 0) {
-                    raf.seek(start);
-                }
-                InputStream is = Channels.newInputStream(raf.getChannel());
-                return new LimitedInputStream(is, length, null, null, raf, start, patches);
+                fis = new FileInputStream(directFile);
+                if (start > 0) fis.getChannel().position(start);
+                return new LimitedInputStream(fis, length, null, null, start, patches);
             } catch (Exception e) {
+                if (fis != null) { try { fis.close(); } catch (IOException ignored) {} }
                 Log.w(TAG, "directFile seek failed: " + e.getMessage());
             }
         }
@@ -1197,7 +1505,7 @@ public class MainActivity extends Activity {
                     android.system.Os.lseek(pfd.getFileDescriptor(), start, android.system.OsConstants.SEEK_SET);
                 }
                 FileInputStream fis = new ParcelFileDescriptor.AutoCloseInputStream(pfd);
-                return new LimitedInputStream(fis, length, pfd, null, null, start, patches);
+                return new LimitedInputStream(fis, length, pfd, null, start, patches);
             } catch (Throwable e) {
                 Log.w(TAG, "pfd Os.lseek fallback: " + e.getMessage());
                 try {
@@ -1205,7 +1513,7 @@ public class MainActivity extends Activity {
                     if (start > 0) {
                         fis.getChannel().position(start);
                     }
-                    return new LimitedInputStream(fis, length, pfd, null, null, start, patches);
+                    return new LimitedInputStream(fis, length, pfd, null, start, patches);
                 } catch (Exception e2) {
                     try { pfd.close(); } catch (Exception ignored) {}
                 }
@@ -1218,7 +1526,7 @@ public class MainActivity extends Activity {
                 if (start > 0) {
                     fis.getChannel().position(afd.getStartOffset() + start);
                 }
-                return new LimitedInputStream(fis, length, null, afd, null, start, patches);
+                return new LimitedInputStream(fis, length, null, afd, start, patches);
             } catch (Exception e) {
                 Log.w(TAG, "afd seek failed: " + e.getMessage());
                 try { afd.close(); } catch (Exception ignored) {}
@@ -1243,7 +1551,7 @@ public class MainActivity extends Activity {
                         skipped += s;
                     }
                 }
-                return new LimitedInputStream(is, length, null, null, null, start, patches);
+                return new LimitedInputStream(is, length, null, null, start, patches);
             }
         } catch (Exception e) {
             Log.e(TAG, "InputStream fallback failed: " + e.getMessage());
@@ -1255,7 +1563,7 @@ public class MainActivity extends Activity {
         try {
             if (request != null && "OPTIONS".equalsIgnoreCase(request.getMethod())) {
                 Map<String, String> corsHeaders = new HashMap<>();
-                corsHeaders.put("Access-Control-Allow-Origin", "*");
+                corsHeaders.put("Access-Control-Allow-Origin", "https://appassets.androidplatform.net");
                 corsHeaders.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
                 corsHeaders.put("Access-Control-Allow-Headers", "*");
                 return new WebResourceResponse("text/plain", "UTF-8", 204, "No Content", corsHeaders, new ByteArrayInputStream(new byte[0]));
@@ -1264,29 +1572,37 @@ public class MainActivity extends Activity {
             String nameParam = requestUri != null ? requestUri.getQueryParameter("name") : null;
             String mimeParam = requestUri != null ? requestUri.getQueryParameter("mime") : null;
             String sizeParam = requestUri != null ? requestUri.getQueryParameter("size") : null;
-            String pathParam = requestUri != null ? requestUri.getQueryParameter("path") : null;
+            // Ignore path parameters: only a previously indexed content URI can be opened.
+            String pathParam = null;
 
             long totalSize = -1;
-            if (sizeParam != null && !sizeParam.isEmpty()) {
-                try {
-                    totalSize = Long.parseLong(sizeParam);
-                } catch (NumberFormatException ignored) {}
-            }
+            // Do not trust the query-string size; obtain real provider length below.
             String mediaKey = (mediaUri != null) ? mediaUri.toString() : (pathParam != null ? pathParam : "");
             if (totalSize <= 0 && !mediaKey.isEmpty()) {
                 Long cachedSz = mediaSizeCache.get(mediaKey);
                 if (cachedSz != null && cachedSz > 0) totalSize = cachedSz;
             }
 
-            String mime = (mimeParam != null && !mimeParam.isEmpty() && !mimeParam.equals("application/octet-stream"))
-                    ? mimeParam
-                    : fastDetectMime(nameParam, null);
+            String mime = indexedMedia.get(mediaUri.toString());
+            if(mime==null || !mime.startsWith("audio/"))mime="application/octet-stream";
             mime = normalizeMimeType(mime);
 
             Map<String, String> requestHeaders = request != null ? request.getRequestHeaders() : null;
             String rangeHeader = requestHeaders != null ? requestHeaders.get("Range") : null;
             if (rangeHeader == null && requestHeaders != null) {
                 rangeHeader = requestHeaders.get("range");
+            }
+            String pcmStart = requestUri.getQueryParameter("pcmStart");
+            String pcmEnd = requestUri.getQueryParameter("pcmEnd");
+            boolean pcmRead = pcmStart != null || pcmEnd != null;
+            if (pcmRead) {
+                if (rangeHeader != null || pcmStart == null || pcmEnd == null
+                        || !pcmStart.matches("[0-9]{1,15}") || !pcmEnd.matches("[0-9]{1,15}")) {
+                    return forbiddenMedia();
+                }
+                long bytes = Long.parseLong(pcmEnd) - Long.parseLong(pcmStart) + 1;
+                if (bytes <= 0 || bytes > 4L * 1024 * 1024) return forbiddenMedia();
+                rangeHeader = "bytes=" + pcmStart + "-" + pcmEnd;
             }
             boolean isHead = request != null && "HEAD".equalsIgnoreCase(request.getMethod());
 
@@ -1348,9 +1664,14 @@ public class MainActivity extends Activity {
             if (totalSize > 0 && !mediaKey.isEmpty()) {
                 mediaSizeCache.put(mediaKey, totalSize);
             }
+            if (pcmRead && totalSize <= 0) {
+                if (pfd != null) pfd.close();
+                if (afd != null) afd.close();
+                return forbiddenMedia();
+            }
 
             if (rangeHeader != null) rangeHeader = rangeHeader.trim();
-            if (totalSize > 0 && rangeHeader != null && rangeHeader.toLowerCase(Locale.ROOT).startsWith("bytes=")) {
+            if (totalSize > 0 && rangeHeader != null && rangeHeader.matches("(?i)bytes=[0-9]*-[0-9]*") && !rangeHeader.equalsIgnoreCase("bytes=-")) {
                 String byteRange = rangeHeader.substring(rangeHeader.indexOf('=') + 1).trim();
                 long start = 0;
                 long end = totalSize - 1;
@@ -1360,13 +1681,12 @@ public class MainActivity extends Activity {
                     String startStr = byteRange.substring(0, dash).trim();
                     String endStr = byteRange.substring(dash + 1).trim();
 
-                    if (startStr.isEmpty() && !endStr.isEmpty()) {
-                        long suffix = Long.parseLong(endStr);
+                    if (startStr.isEmpty()) {
+                        long suffix = parseRangeLimit(endStr);
                         start = Math.max(0, totalSize - suffix);
-                        end = totalSize - 1;
                     } else {
-                        if (!startStr.isEmpty()) start = Long.parseLong(startStr);
-                        if (!endStr.isEmpty()) end = Long.parseLong(endStr);
+                        start = parseRangeLimit(startStr);
+                        if (!endStr.isEmpty()) end = parseRangeLimit(endStr);
                     }
                 }
 
@@ -1377,7 +1697,7 @@ public class MainActivity extends Activity {
                     Map<String, String> errHeaders = new HashMap<>();
                     errHeaders.put("Content-Range", "bytes */" + totalSize);
                     errHeaders.put("Accept-Ranges", "bytes");
-                    errHeaders.put("Access-Control-Allow-Origin", "*");
+                    errHeaders.put("Access-Control-Allow-Origin", "https://appassets.androidplatform.net");
                     errHeaders.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
                     errHeaders.put("Access-Control-Allow-Headers", "*");
                     return new WebResourceResponse(mime, null, 416, "Range Not Satisfiable", errHeaders,
@@ -1388,8 +1708,8 @@ public class MainActivity extends Activity {
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Accept-Ranges", "bytes");
                 headers.put("Content-Range", "bytes " + start + "-" + end + "/" + totalSize);
-                headers.put("Content-Length", String.valueOf(contentLength));
-                headers.put("Access-Control-Allow-Origin", "*");
+                if (pcmRead || isHead) headers.put("Content-Length", String.valueOf(contentLength));
+                headers.put("Access-Control-Allow-Origin", "https://appassets.androidplatform.net");
                 headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
                 headers.put("Access-Control-Allow-Headers", "*");
                 headers.put("Cache-Control", "no-cache");
@@ -1401,8 +1721,12 @@ public class MainActivity extends Activity {
                             new ByteArrayInputStream(new byte[0]));
                 }
 
-                Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
-                InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri, start, contentLength, patches);
+                Map<Long, Byte> patches = (!pcmRead && mime != null && mime.contains("flac"))
+                        ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
+                // WebView skips to the requested offset for an HTTP Range header.
+                // Decoder reads carry offsets in the URL and need an explicit seek.
+                InputStream is = createSeekableStream(directFile, pfd, afd, mediaUri,
+                        pcmRead ? start : 0, pcmRead ? contentLength : end + 1, patches);
                 if (is == null) {
                     Log.e(TAG, "Failed to create seekable stream for: " + mediaUri);
                     return null;
@@ -1417,7 +1741,7 @@ public class MainActivity extends Activity {
             if (totalSize > 0) {
                 headers.put("Content-Length", String.valueOf(totalSize));
             }
-            headers.put("Access-Control-Allow-Origin", "*");
+            headers.put("Access-Control-Allow-Origin", "https://appassets.androidplatform.net");
             headers.put("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
             headers.put("Access-Control-Allow-Headers", "*");
             headers.put("Cache-Control", "no-cache");
@@ -1543,7 +1867,7 @@ public class MainActivity extends Activity {
                     + "&name=" + encodedName
                     + "&mime=" + encodedMime
                     + "&size=" + size
-                    + (rawPath != null && !rawPath.isEmpty() ? "&path=" + URLEncoder.encode(rawPath, "UTF-8") : "");
+                   ;
 
             obj.put("id", "android_" + System.currentTimeMillis() + "_" + Math.abs(uri.hashCode()));
             obj.put("filename", filename);
@@ -1567,8 +1891,7 @@ public class MainActivity extends Activity {
     }
 
     private void scanMediaStoreAsync() {
-        isScanCancelled = false;
-        new Thread(() -> {
+        startLibraryScan(() -> {
             try {
                 long scanStartTime = System.currentTimeMillis();
                 Uri musicUri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
@@ -1641,7 +1964,7 @@ public class MainActivity extends Activity {
                                     + "&name=" + encodedName
                                     + "&mime=" + encodedMime
                                     + "&size=" + size
-                                    + (rawPath != null && !rawPath.isEmpty() ? "&path=" + URLEncoder.encode(rawPath, "UTF-8") : "");
+                                   ;
 
                             JSONObject obj = new JSONObject();
                             obj.put("id", "android_" + id);
@@ -1670,7 +1993,7 @@ public class MainActivity extends Activity {
                                     etaSec = (int) Math.ceil((totalRows - count) / (rate * 1000.0));
                                 }
                                 final int finalEta = etaSec;
-                                new Handler(Looper.getMainLooper()).post(() -> {
+                                postToWebView(() -> {
                                     String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanProgress) { window.__cachyMusic.android.onScanProgress(" + count + ", " + totalRows + ", 'Device Music Library', " + finalEta + "); }";
                                     webView.evaluateJavascript(js, null);
                                 });
@@ -1680,7 +2003,7 @@ public class MainActivity extends Activity {
                 }
 
                 if (isScanCancelled) {
-                    new Handler(Looper.getMainLooper()).post(() -> {
+                    postToWebView(() -> {
                         webView.evaluateJavascript("if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onScanCancelled) { window.__cachyMusic.android.onScanCancelled(); }", null);
                     });
                     return;
@@ -1694,7 +2017,7 @@ public class MainActivity extends Activity {
                     saveLibraryCacheJson(tracksArray, "Device Music Library");
                 }
                 final String jsonString = tracksArray.toString();
-                new Handler(Looper.getMainLooper()).post(() -> {
+                postToWebView(() -> {
                     String js = "if (window.__cachyMusic && window.__cachyMusic.android && window.__cachyMusic.android.onTracksDiscovered) { window.__cachyMusic.android.onTracksDiscovered("
                             + jsonString + ", 'Device Music Library'); }";
                     webView.evaluateJavascript(js, null);
@@ -1702,7 +2025,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 Log.e(TAG, "MediaStore scan error: " + e.getMessage(), e);
             }
-        }).start();
+        });
     }
 
     private JSONObject buildAudioDevicesPayload() {
@@ -1861,6 +2184,13 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        activityDestroyed = true;
+        isScanCancelled = true;
+        scanExecutor.shutdownNow();
+        webViewHandler.removeCallbacksAndMessages(null);
+        soulseekRpcEpoch.incrementAndGet();
+        soulseekRpcPool.shutdownNow();
+        soulseekControlPool.shutdownNow();
         if (audioManager != null && audioDeviceCallback != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             try {
                 audioManager.unregisterAudioDeviceCallback(audioDeviceCallback);
@@ -1874,8 +2204,25 @@ public class MainActivity extends Activity {
             mediaCommandReceiver = null;
         }
         try {
-            stopService(new Intent(this, MediaPlaybackService.class));
+            if(!MediaPlaybackService.ownsNative())stopService(new Intent(this, MediaPlaybackService.class));
         } catch (Exception ignored) {}
+        if (uploadMessage != null) {
+            uploadMessage.onReceiveValue(null);
+            uploadMessage = null;
+        }
+        WebView closingView = webView;
+        webView = null;
+        if (closingView != null) {
+            closingView.stopLoading();
+            closingView.removeJavascriptInterface("AndroidBridge");
+            if (closingView.getParent() instanceof android.view.ViewGroup) {
+                ((android.view.ViewGroup) closingView.getParent()).removeView(closingView);
+            }
+            closingView.destroy();
+        }
+        mediaSizeCache.evictAll();
+        flacPatchesCache.evictAll();
+        artworkCache.evictAll();
         super.onDestroy();
     }
 

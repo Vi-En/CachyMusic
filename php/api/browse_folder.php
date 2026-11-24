@@ -40,28 +40,26 @@ if ($osFamily === 'Darwin' || PHP_OS === 'Darwin') {
 
 // 2. Windows Native Folder Picker via PowerShell FolderBrowserDialog
 if ($osFamily === 'Windows' || strncasecmp(PHP_OS, 'WIN', 3) === 0) {
-    $psScript = '[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null; ' .
-                '$f = New-Object System.Windows.Forms.FolderBrowserDialog; ' .
-                '$f.Description = "Select Music Folder"; ';
-    if (!empty($initialDir) && is_dir($initialDir)) {
-        $psScript .= '$f.SelectedPath = ' . escapeshellarg($initialDir) . '; ';
+    $ps = cachy_find_binary('powershell') ?: (getenv('SystemRoot') . '/System32/WindowsPowerShell/v1.0/powershell.exe');
+    $psScript = '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); Add-Type -AssemblyName System.Windows.Forms; ' .
+                '$f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = "Select Music Folder"; ';
+    if ($initialDir !== '' && is_dir($initialDir)) {
+        $psScript .= '$f.SelectedPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(' . chr(39) . base64_encode($initialDir) . chr(39) . ')); ';
     }
-    $psScript .= 'if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }';
-
-    $psCmd = 'powershell.exe -NoProfile -NonInteractive -Command ' . escapeshellarg($psScript);
-    $output = trim(shell_exec($psCmd) ?? '');
-    if (!empty($output) && is_dir($output)) {
+    $psScript .= 'if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Write($f.SelectedPath) }';
+    $result = is_file($ps) ? cachy_run_args([$ps, '-NoProfile', '-STA', '-Command', $psScript]) : null;
+    $output = trim($result ?? '');
+    if ($output !== '' && is_dir($output)) {
         Storage::setDefaultDirectory($output);
-        echo json_encode([
-            'success' => true,
-            'directory' => $output
-        ]);
-        exit;
+        echo json_encode(['success'=>true,'directory'=>$output]);
+    } else {
+        echo json_encode(['success'=>false, 'cancelled'=>$result !== null, 'fallback'=>$result === null]);
     }
+    exit;
 }
 
 // 3. Linux / BSD: Try zenity first (standard GTK dialog across GNOME, XFCE, Hyprland, etc.)
-$zenity = trim(shell_exec('which zenity 2>/dev/null') ?? '');
+$zenity = cachy_find_binary('zenity') ?? '';
 if (!empty($zenity) && file_exists($zenity)) {
     $cmd = escapeshellcmd($zenity) . ' --file-selection --directory --title=' . escapeshellarg('Select Music Folder');
     if (!empty($initialDir) && is_dir($initialDir)) {

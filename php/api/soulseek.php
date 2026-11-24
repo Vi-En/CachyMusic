@@ -9,10 +9,11 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS
 }
 
 $NICOTINE_HOST = '127.0.0.1';
-$NICOTINE_PORT = 12339;
+$NICOTINE_PORT = (int)(getenv('CACHYMUSIC_SOULSEEK_PORT') ?: 12339);
 $NICOTINE_BASE_URL = "http://$NICOTINE_HOST:$NICOTINE_PORT";
 
 function get_project_downloads_dir() {
+    if(getenv('CACHYMUSIC_PACKAGED')==='1'){ $d=cachy_data_dir().DIRECTORY_SEPARATOR.'downloads'; if(!is_dir($d))@mkdir($d,0700,true);return $d; }
     $projectDir = realpath(__DIR__ . '/../../');
     $localDownloads = $projectDir . DIRECTORY_SEPARATOR . 'downloads';
     if (!is_dir($localDownloads) && is_writable($projectDir)) {
@@ -29,71 +30,15 @@ $DOWNLOADS_DIR = get_project_downloads_dir();
 
 @require_once(__DIR__ . '/../database.php');
 
-function get_soulseek_secret_key() {
-    $keyFile = cachy_data_dir() . DIRECTORY_SEPARATOR . '.auth_secret';
-    $read = function () use ($keyFile) {
-        if (is_file($keyFile) && filesize($keyFile) >= 32) {
-            $k = @file_get_contents($keyFile);
-            if ($k !== false && strlen($k) >= 32) return substr($k, 0, 32);
-        }
-        return null;
-    };
-    if (($k = $read()) !== null) return $k;
-
-    $dir = dirname($keyFile);
-    if (!is_dir($dir)) @mkdir($dir, 0750, true);
-    $entropy = random_bytes(32);
-    $old = umask(0177);
-    $fh = @fopen($keyFile, 'x');
-    umask($old);
-    if ($fh) {
-        fwrite($fh, $entropy);
-        fflush($fh);
-        fclose($fh);
-        @chmod($keyFile, 0600);
-        return $entropy;
-    }
-    for ($i = 0; $i < 20; $i++) {
-        if (($k = $read()) !== null) return $k;
-        usleep(25000);
-    }
-    return $entropy;
-}
-
 function is_safe_soulseek_directory($dir) {
     if (!is_string($dir) || empty(trim($dir))) return false;
     $trimmed = trim($dir);
-    if (strpos($trimmed, "\0") !== false || strpos($trimmed, '..') !== false) return false;
-    $disallowed = ['/etc', '/bin', '/sbin', '/usr', '/var', '/sys', '/proc', '/dev', '/boot', '/root'];
-    $normalized = rtrim(str_replace('\\', '/', $trimmed), '/');
-    if ($normalized === '' || $normalized === '/') return false;
-    foreach ($disallowed as $bad) {
-        if ($normalized === $bad || strpos($normalized, $bad . '/') === 0) return false;
-    }
-    $userHome = getenv('HOME') ?: ($_SERVER['HOME'] ?? '');
-    if (empty($userHome) && function_exists('posix_getpwuid') && function_exists('posix_getuid')) {
-        $pw = @posix_getpwuid(posix_getuid());
-        $userHome = $pw['dir'] ?? '';
-    }
-    $projectRoot = realpath(__DIR__ . '/../../');
-    $safeRoots = array_filter([$userHome, $projectRoot, '/mnt', '/media', '/run/media', '/storage', '/sdcard', '/data']);
+    if (strpos($trimmed, "\0") !== false) return false;
     $real = realpath($trimmed);
-    if ($real !== false) {
-        foreach ($safeRoots as $root) {
-            $rootNorm = rtrim($root, '/');
-            if ($real === $rootNorm || strpos($real, $rootNorm . '/') === 0) return true;
-        }
-        return false;
-    }
-    $parent = dirname($trimmed);
-    $realParent = realpath($parent);
-    if ($realParent !== false) {
-        foreach ($safeRoots as $root) {
-            $rootNorm = rtrim($root, '/');
-            if ($realParent === $rootNorm || strpos($realParent, $rootNorm . '/') === 0) return true;
-        }
-    }
-    return false;
+    if ($real !== false) return is_dir($real) && cachy_is_allowed_scan_path($real);
+    $parent = realpath(dirname($trimmed));
+    return $parent !== false && cachy_is_allowed_scan_path($parent)
+        && !in_array(basename($trimmed), ['.', '..'], true);
 }
 
 function sanitize_soulseek_directory($candidate, $fallback) {
@@ -101,51 +46,6 @@ function sanitize_soulseek_directory($candidate, $fallback) {
         return $candidate;
     }
     return $fallback;
-}
-
-function encrypt_soulseek_secret($plainText) {
-    if (empty($plainText)) return '';
-    $key = get_soulseek_secret_key();
-    if (in_array('aes-256-gcm', openssl_get_cipher_methods(), true)) {
-        $iv = random_bytes(12);
-        $tag = '';
-        $cipherText = openssl_encrypt($plainText, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag, '', 16);
-        if ($cipherText !== false && strlen($tag) === 16) {
-            return 'gcm:' . base64_encode($iv . $tag . $cipherText);
-        }
-    }
-    $iv = random_bytes(16);
-    $cipherText = openssl_encrypt($plainText, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
-    return base64_encode($iv . $cipherText);
-}
-
-function decrypt_soulseek_secret($encryptedBase64) {
-    if (empty($encryptedBase64)) return '';
-    $key = get_soulseek_secret_key();
-    if (str_starts_with($encryptedBase64, 'gcm:')) {
-        $raw = base64_decode(substr($encryptedBase64, 4), true);
-        if ($raw === false || strlen($raw) <= 28) return '';
-        $iv = substr($raw, 0, 12);
-        $tag = substr($raw, 12, 16);
-        $cipherText = substr($raw, 28);
-        $decrypted = openssl_decrypt($cipherText, 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag);
-        return $decrypted !== false ? $decrypted : '';
-    }
-    $raw = base64_decode($encryptedBase64, true);
-    if ($raw === false || strlen($raw) <= 16) return '';
-    $iv = substr($raw, 0, 16);
-    $cipherText = substr($raw, 16);
-
-    // 1. Try local machine secret key (legacy AES-256-CBC migration)
-    $decrypted = openssl_decrypt($cipherText, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
-    if ($decrypted !== false && !empty($decrypted)) {
-        return $decrypted;
-    }
-
-    // 2. Legacy salt fallback for older saved credentials
-    $legacyKey = hash('sha256', 'CachyMusic-Soulseek-Secret-Salt-9942', true);
-    $legacyDecrypted = openssl_decrypt($cipherText, 'aes-256-cbc', $legacyKey, OPENSSL_RAW_DATA, $iv);
-    return $legacyDecrypted ?: '';
 }
 
 function get_db_soulseek_account() {
@@ -160,27 +60,9 @@ function ensure_standalone_service_running() {
 
     $logDir = cachy_cache_dir();
 
-    // 1. Standardize on Nicotine+ headless daemon (cross-platform binary discovery)
-    $nicotineBin = cachy_find_binary('nicotine');
-    if ($nicotineBin !== null) {
-        $userHome = cachy_home_dir();
-        $nicoCfg = $userHome . DIRECTORY_SEPARATOR . '.config' . DIRECTORY_SEPARATOR . 'nicotine' . DIRECTORY_SEPARATOR . 'config';
-        if (file_exists($nicoCfg)) {
-            $cfgContent = @file_get_contents($nicoCfg);
-            if ($cfgContent !== false && strpos($cfgContent, 'auto_connect_startup = True') !== false) {
-                $cfgContent = preg_replace('/auto_connect_startup\s*=\s*True/', 'auto_connect_startup = False', $cfgContent);
-                @file_put_contents($nicoCfg, $cfgContent);
-            }
-        }
-        cachy_spawn_detached($nicotineBin, ['-n'], $logDir . DIRECTORY_SEPARATOR . 'nicotine-daemon.log');
-        for ($i = 0; $i < 15; $i++) {
-            usleep(200000);
-            $check = @call_nicotine_api('GET', '/health', null, 1);
-            if ($check['ok']) return true;
-        }
-    }
-
-    // 2. Fallback to standalone Node.js Soulseek microservice
+    // Packaged desktop launches the integrated child itself. Never modify or launch Nicotine+.
+    if(getenv('CACHYMUSIC_PACKAGED')==='1' || getenv('CACHYMUSIC_MANAGED_SERVICES')==='1') return false;
+    // Legacy developer mode may start the included service with an already installed Node runtime.
     $projectDir = realpath(__DIR__ . '/../../');
     $serviceScript = $projectDir . DIRECTORY_SEPARATOR . 'server' . DIRECTORY_SEPARATOR . 'soulseek-service.js';
     $nodeBin = cachy_find_binary('node');
@@ -199,12 +81,16 @@ function call_nicotine_api($method, $path, $payload = null, $timeout = 4) {
     global $NICOTINE_BASE_URL;
     $url = $NICOTINE_BASE_URL . $path;
 
+    if (getenv('CACHYMUSIC_SOULSEEK_DISABLED') === '1' || !function_exists('curl_init')) {
+        return ['ok'=>false, 'code'=>503, 'error'=>'Soulseek service or PHP cURL is unavailable'];
+    }
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 2);
 
-    $headers = ['Content-Type: application/json'];
+    $headers = ['Content-Type: application/json','X-Cachy-Local: 1'];
+    if($token=getenv('CACHYMUSIC_SOULSEEK_TOKEN')) $headers[]='X-Cachy-Token: '.$token;
 
     if ($method === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
@@ -236,20 +122,17 @@ switch ($action) {
     case 'status':
         $dbAcc = get_db_soulseek_account();
         $dbUser = $dbAcc['username'] ?? '';
-        $dbHasPassword = !empty($dbAcc['password']);
-        $dbPoweredOn = !empty($dbAcc['is_powered_on']);
+        
 
         // Only auto-start the service on passive status poll if user previously left Soulseek powered on
-        if ($dbPoweredOn) {
-            ensure_standalone_service_running();
-        }
+
 
         $statusRes = call_nicotine_api('GET', '/status', null, 2);
         $statusData = $statusRes['ok'] ? ($statusRes['data'] ?? []) : [];
         $connected = !empty($statusData['connected']);
         $connecting = !empty($statusData['connecting']);
 
-        $isPowered = ($connected || $connecting || $dbPoweredOn);
+        $isPowered = ($connected || $connecting);
         $loginUser = !empty($statusData['login_username']) && $statusData['login_username'] !== 'Not logged in'
             ? $statusData['login_username']
             : ($dbUser ?: 'Not configured');
@@ -262,9 +145,9 @@ switch ($action) {
 
         $nicShareDir = $statusData['shared_dir'] ?? '';
         $dbShareDir = $dbAcc['shared_dir'] ?? '';
-        $activeShareDir = is_safe_soulseek_directory($nicShareDir)
+        $activeShareDir = ($statusRes['ok'] && $nicShareDir==='') ? '' : (is_safe_soulseek_directory($nicShareDir)
             ? $nicShareDir
-            : (is_safe_soulseek_directory($dbShareDir) ? $dbShareDir : $DOWNLOADS_DIR);
+            : (is_safe_soulseek_directory($dbShareDir) ? $dbShareDir : ''));
 
         // Auto-heal poisoned or unauthorized directory paths in Storage and Nicotine+
         if ((!empty($dbDownDir) && !is_safe_soulseek_directory($dbDownDir)) || (!empty($dbShareDir) && !is_safe_soulseek_directory($dbShareDir))) {
@@ -283,19 +166,19 @@ switch ($action) {
         echo json_encode([
             'ok' => true,
             'daemon_running' => $statusRes['ok'],
-            'client' => 'nicotine-plus',
+            'client' => 'cachymusic-integrated',
             'connected' => $connected,
             'connecting' => $connecting,
             'powered_on' => $isPowered,
-            'has_credentials' => (!empty($dbUser) && $dbHasPassword) || ($loginUser !== 'Not configured' && $loginUser !== 'Not logged in'),
+            'has_credentials' => !empty($statusData['has_credentials']),
             'login_username' => $loginUser,
             'login_status' => $connected ? 2 : ($connecting ? 1 : 0),
             'uploads_total' => $statusData['uploads_total'] ?? 0,
             'downloads_total' => $statusData['downloads_total'] ?? 0,
             'downloads_dir' => $activeDownDir,
             'shared_dir' => $activeShareDir,
-            'standalone' => false,
-            'nicotine' => true,
+            'standalone' => true,
+            'nicotine' => false,
             'error' => $statusData['error'] ?? null,
             'raw' => $statusData
         ]);
@@ -306,8 +189,8 @@ switch ($action) {
         echo json_encode([
             'ok' => $started,
             'daemon_running' => $started,
-            'client' => 'nicotine-plus',
-            'message' => $started ? 'Nicotine+ service is running.' : 'Could not launch Nicotine+ service.'
+            'client' => 'cachymusic-integrated',
+            'message' => $started ? 'Integrated Soulseek service is running.' : 'Integrated Soulseek service is unavailable.'
         ]);
         exit;
 
@@ -339,14 +222,8 @@ switch ($action) {
             $nicUser = $nicData['username'] ?? '';
             $nicHasPass = !empty($nicData['hasPassword']);
 
-            $username = !empty($dbAcc['username']) ? $dbAcc['username'] : $nicUser;
-            $plainPassword = '';
-
-            if (!empty($dbAcc['password'])) {
-                $plainPassword = decrypt_soulseek_secret($dbAcc['password']);
-            }
-
-            if (empty($plainPassword) && !$nicHasPass && empty($username)) {
+            $username = $nicUser;
+            if (!$nicHasPass || empty($username)) {
                 echo json_encode([
                     'ok' => false,
                     'powered_on' => false,
@@ -356,13 +233,12 @@ switch ($action) {
             }
 
             $safeDown = sanitize_soulseek_directory($dbAcc['downloads_dir'] ?? '', $DOWNLOADS_DIR);
-            $safeShare = sanitize_soulseek_directory($dbAcc['shared_dir'] ?? '', $DOWNLOADS_DIR);
+            $safeShare = sanitize_soulseek_directory($dbAcc['shared_dir'] ?? '', '');
             call_nicotine_api('POST', '/directory', ['directory' => $safeDown]);
             call_nicotine_api('POST', '/shared_directory', ['directory' => $safeShare]);
 
             $powerPayload = ['state' => 'on'];
             if (!empty($username)) $powerPayload['username'] = $username;
-            if (!empty($plainPassword)) $powerPayload['password'] = $plainPassword;
 
             $loginRes = call_nicotine_api('POST', '/power', $powerPayload, 12);
 
@@ -400,7 +276,7 @@ switch ($action) {
                 'powered_on' => true,
                 'connected' => true,
                 'username' => $username,
-                'message' => 'Connected to Soulseek network via Nicotine+!'
+                'message' => 'Connected to Soulseek network!'
             ]);
             exit;
         }
@@ -420,7 +296,7 @@ switch ($action) {
             $nicData = $accRes['ok'] ? ($accRes['data'] ?? []) : [];
 
             $uname = !empty($dbAcc['username']) ? $dbAcc['username'] : ($nicData['username'] ?? '');
-            $hasPass = !empty($dbAcc['password']) || !empty($nicData['hasPassword']);
+            $hasPass = !empty($nicData['hasPassword']);
             $nicDown = $nicData['downloads_dir'] ?? '';
             $dbDown = $dbAcc['downloads_dir'] ?? '';
             $downDir = is_safe_soulseek_directory($nicDown)
@@ -431,13 +307,13 @@ switch ($action) {
             $dbShare = $dbAcc['shared_dir'] ?? '';
             $shareDir = is_safe_soulseek_directory($nicShare)
                 ? $nicShare
-                : (is_safe_soulseek_directory($dbShare) ? $dbShare : $DOWNLOADS_DIR);
+                : (is_safe_soulseek_directory($dbShare) ? $dbShare : '');
 
             echo json_encode([
                 'ok' => true,
                 'username' => $uname,
                 'hasPassword' => $hasPass,
-                'is_powered_on' => !empty($dbAcc['is_powered_on']) || !empty($nicData['powered_on']),
+                'is_powered_on' => !empty($nicData['powered_on']),
                 'downloads_dir' => $downDir,
                 'shared_dir' => $shareDir
             ]);
@@ -453,32 +329,25 @@ switch ($action) {
             $downloadsDir = $DOWNLOADS_DIR;
         }
         if (!empty($sharedDir) && !is_safe_soulseek_directory($sharedDir)) {
-            $sharedDir = $downloadsDir ?: $DOWNLOADS_DIR;
+            $sharedDir = '';
         }
 
         $dbAcc = get_db_soulseek_account();
         $plainPassword = $password;
-        $encPassword = '';
-
-        if (empty($password)) {
-            if (!empty($dbAcc['password']) && !empty($username) && $username === ($dbAcc['username'] ?? '')) {
-                $plainPassword = decrypt_soulseek_secret($dbAcc['password']);
-                $encPassword = $dbAcc['password'];
-            } else {
-                echo json_encode(['ok' => false, 'error' => 'Username and password are required.']);
-                exit;
+        if ($password === '') {
+            $live = call_nicotine_api('GET','/account');
+            $account = $live['ok'] ? ($live['data'] ?? []) : [];
+            if (empty($account['hasPassword']) || $username !== ($account['username'] ?? '')) {
+                echo json_encode(['ok'=>false,'error'=>'Username and password are required.']); exit;
             }
-        } else {
-            $encPassword = encrypt_soulseek_secret($password);
-            $plainPassword = $password;
         }
 
         $curDown = sanitize_soulseek_directory($downloadsDir ?: ($dbAcc['downloads_dir'] ?? ''), $DOWNLOADS_DIR);
-        $curShare = sanitize_soulseek_directory($sharedDir ?: ($dbAcc['shared_dir'] ?? ''), $curDown);
+        $curShare = sanitize_soulseek_directory($sharedDir, '');
 
         Storage::saveSoulseekAccount([
             'username' => $username,
-            'password' => $encPassword,
+            'password' => '',
             'is_powered_on' => 1,
             'downloads_dir' => $curDown,
             'shared_dir' => $curShare
@@ -492,14 +361,14 @@ switch ($action) {
             echo json_encode([
                 'ok' => false,
                 'powered_on' => false,
-                'error' => 'Soulseek daemon is offline (port 12339). Nicotine+ background service is not running on the host machine.',
+                'error' => 'Integrated Soulseek service is unavailable.',
                 'reason' => 'daemon_offline'
             ]);
             exit;
         }
 
         if (!empty($curDown)) call_nicotine_api('POST', '/directory', ['directory' => $curDown]);
-        if (!empty($curShare)) call_nicotine_api('POST', '/shared_directory', ['directory' => $curShare]);
+        call_nicotine_api('POST', '/shared_directory', ['directory' => $curShare]);
 
         $res = call_nicotine_api('POST', '/power', [
             'state' => 'on',
@@ -535,7 +404,7 @@ switch ($action) {
             'ok' => true,
             'username' => $username,
             'powered_on' => true,
-            'message' => 'Credentials saved in database and connected!'
+            'message' => 'Connected. Password kept in session memory only.'
         ]);
         exit;
 
@@ -571,22 +440,15 @@ switch ($action) {
 
     case 'shared_directory':
     case 'config/shared_directory':
-        $raw = file_get_contents('php://input');
-        $input = json_decode($raw, true) ?? $_POST;
-        $newDir = trim($input['directory'] ?? $input['shared_dir'] ?? '');
-        if (!empty($newDir)) {
-            if (!is_safe_soulseek_directory($newDir)) {
-                $newDir = $DOWNLOADS_DIR;
-            }
-            $curAcc = Storage::getSoulseekAccount();
-            $curAcc['shared_dir'] = $newDir;
-            Storage::saveSoulseekAccount($curAcc);
-            call_nicotine_api('POST', '/shared_directory', ['directory' => $newDir]);
-        } else {
-            $newDir = $DOWNLOADS_DIR;
-        }
-        echo json_encode(['ok' => true, 'shared_dir' => $newDir]);
-        exit;
+        $raw = file_get_contents('php://input',false,null,0,16384);
+        $input = json_decode($raw,true) ?? [];
+        $newDir = trim((string)($input['directory'] ?? $input['shared_dir'] ?? ''));
+        if($newDir!=='' && !is_safe_soulseek_directory($newDir)) {http_response_code(400);echo json_encode(['ok'=>false,'error'=>'Invalid shared directory']);exit;}
+        $curAcc = Storage::getSoulseekAccount();
+        $curAcc['shared_dir'] = $newDir;
+        Storage::saveSoulseekAccount($curAcc);
+        call_nicotine_api('POST','/shared_directory',['directory'=>$newDir]);
+        echo json_encode(['ok'=>true,'shared_dir'=>$newDir]);exit;
 
     case 'search':
         $raw = file_get_contents('php://input');
@@ -669,28 +531,17 @@ switch ($action) {
 
             $isLossless = in_array($ext, ['flac', 'wav', 'alac', 'aiff']);
 
-            // Calculate bitrate from size and duration if attribute is missing
-            if (($bitrate === null || $bitrate <= 0) && $sizeBytes > 0 && $duration > 0) {
-                $calcBitrate = (int)round(($sizeBytes * 8) / ($duration * 1000));
-                if ($calcBitrate > 0 && $calcBitrate <= 9216) {
-                    $bitrate = $calcBitrate;
+            // Reported bitrate or an explicitly labelled file-size estimate.
+            $bitrateSource = ($bitrate !== null && $bitrate > 0) ? 'reported' : 'unknown';
+            if ($bitrateSource === 'unknown') {
+                $bitrate = null;
+                if ($sizeBytes > 0 && $duration > 0) {
+                    $calcBitrate = (int)round(($sizeBytes * 8) / ($duration * 1000));
+                    if ($calcBitrate > 0 && $calcBitrate <= 9216) {
+                        $bitrate = $calcBitrate;
+                        $bitrateSource = 'estimated';
+                    }
                 }
-            }
-
-            // Fallback: parse bitrate markers from file name or path (e.g. 320kbps, [320], 256k)
-            if ($bitrate === null || $bitrate <= 0) {
-                if (preg_match('/\b(320|256|224|192|160|128|96|64)\s*(?:kbps|k)?\b/i', $normalizedPath, $m)) {
-                    $bitrate = (int)$m[1];
-                } elseif (preg_match('/\bV0\b/i', $normalizedPath)) {
-                    $bitrate = 245;
-                } elseif (preg_match('/\bV2\b/i', $normalizedPath)) {
-                    $bitrate = 190;
-                }
-            }
-
-            // For lossless without calculated bitrate, set 1411 (Standard CD 16-bit 44.1kHz)
-            if ($isLossless && ($bitrate === null || $bitrate <= 0)) {
-                $bitrate = 1411;
             }
 
             // Clean title & artist guess from folder structure and filename
@@ -710,6 +561,7 @@ switch ($action) {
                 'speed' => (int)($item['upload_speed'] ?? 0),
                 'speedFormatted' => format_speed_human((int)($item['upload_speed'] ?? 0)),
                 'bitrate' => $bitrate,
+                'bitrateSource' => $bitrateSource,
                 'duration' => $duration,
                 'sampleRate' => $sampleRate,
                 'bitDepth' => $bitDepth,
@@ -1083,7 +935,7 @@ switch ($action) {
             'size' => format_size_human($fileSize),
             'cover' => $meta['cover'] ?? null,
             'hasCover' => !empty($meta['cover']),
-            'src' => 'php/api/stream.php?path=' . urlencode($realPath)
+            'src' => $tid ? ('php/api/stream.php?tid=' . $tid) : ('php/api/stream.php?path=' . urlencode($realPath))
         ];
 
         echo json_encode([

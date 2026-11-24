@@ -1,21 +1,23 @@
 {
   "name": "cachymusic",
-  "version": "2.0.3",
-  "description": "A self-contained audio player and workstation with a turntable deck and studio DSP.",
+  "version": "3.0.0-dev.6.18",
+  "description": "Local-first music player with optional DSP and Soulseek",
   "main": "server/soulseek-service.js",
   "scripts": {
-    "start": "PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:8000 index.php",
+    "start": "php -S 127.0.0.1:8000 index.php",
     "soulseek": "node server/soulseek-service.js"
   },
   "keywords": [
     "music-player",
-    "audio-workstation",
     "dsp",
     "soulseek"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
-    "slsk-client": "^2.0.2"
+    "slsk-client": "2.0.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

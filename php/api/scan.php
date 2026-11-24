@@ -73,20 +73,20 @@ if ($isDirectScanRequest) {
     }
 
     // 2. Persist to DefaultDirectory
-    Storage::setDefaultDirectory($realDir);
+    if (($json['preserveDirectory'] ?? false) !== true) Storage::setDefaultDirectory($realDir);
 
     // 3. Load existing cached tracks for instant lookup
     $cachedTracks = Storage::getCachedTracks($realDir);
 
     // 4. Scan directory for audio files (with batching & recursion depth limits)
-    $AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus', 'wma'];
+    $AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'oga', 'flac', 'm4a', 'aac', 'opus', 'wma', 'aiff', 'aif', 'alac', 'mp4'];
     $tracks = [];
     $MAX_TRACKS = 25000;
 
     try {
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($realDir, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST
+            RecursiveIteratorIterator::SELF_FIRST, RecursiveIteratorIterator::CATCH_GET_CHILD
         );
         $iterator->setMaxDepth(12);
     } catch (Exception $e) {
@@ -189,7 +189,7 @@ if ($isDirectScanRequest) {
             'lyrics'      => $meta['lyrics'] ?? null,
             'replayGain'  => $meta['replayGain'] ?? null,
             'replayPeak'  => $meta['replayPeak'] ?? null,
-            'src'         => 'php/api/stream.php?path=' . urlencode($fullPath)
+            'src'         => $tid ? ('php/api/stream.php?tid=' . $tid) : ('php/api/stream.php?path=' . urlencode($fullPath))
         ];
     }
     Storage::commitBatch();
@@ -285,7 +285,7 @@ function extract_actual_audio_metadata($path, $ext, $fileSize) {
     $hasFfprobe = false;
     $ffprobeBin = cachy_find_binary('ffprobe');
     if ($ffprobeBin !== null) {
-        $probeOut = @shell_exec(escapeshellarg($ffprobeBin) . " -v quiet -print_format json -show_format -show_streams " . escapeshellarg($path) . " 2>/dev/null");
+        $probeOut = cachy_run_args([$ffprobeBin, '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', $path]);
         if ($probeOut && strlen($probeOut) > 10) {
             $probeData = json_decode($probeOut, true);
             if ($probeData && (isset($probeData['format']) || isset($probeData['streams']))) {

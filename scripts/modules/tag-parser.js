@@ -1,3 +1,5 @@
+import { readMp4Movie } from './mp4-tag-writer.js';
+import { readOggHeaders } from './ogg-tag-writer.js';
 // CachyMusic - Zero-Dependency Client-Side Binary Audio Metadata & Artwork Parser
 // Supports FLAC, MP3 (ID3v1 + ID3v2.2/2.3/2.4), OGG Vorbis, Opus, WAV (RIFF/INFO/ID3), and M4A/MP4/ALAC.
 import { formatFileSize } from './utils.js';
@@ -366,28 +368,43 @@ function parseWav(uint8, view, meta) {
     }
 }
 
-async function parseOggOpus(file, uint8, view, meta) {
-    const packets = [];
-    let pos = 0;
-    let firstGranuleSr = 0;
-    while (pos + 27 <= uint8.length && packets.length < 2) {
-        if (uint8[pos] !== 0x4F || uint8[pos + 1] !== 0x67 || uint8[pos + 2] !== 0x67 || uint8[pos + 3] !== 0x53) break;
-        const numSegs = uint8[pos + 26];
-        if (pos + 27 + numSegs > uint8.length) break;
-        let pageBodyLen = 0;
-        for (let i = 0; i < numSegs; i++) pageBodyLen += uint8[pos + 27 + i];
-        const bodyStart = pos + 27 + numSegs;
-        if (bodyStart + pageBodyLen > uint8.length) break;
-        packets.push(uint8.subarray(bodyStart, bodyStart + pageBodyLen));
-        pos = bodyStart + pageBodyLen;
+// Walk the container chunk table using small random reads rather than scanning PCM bytes.
+async function parsePcmContainerMetadata(file, meta) {
+    const dec=new TextDecoder('ascii'), head=new Uint8Array(await file.slice(0,12).arrayBuffer());
+    const wav=dec.decode(head.subarray(0,4))==='RIFF'&&dec.decode(head.subarray(8,12))==='WAVE';
+    const aiff=dec.decode(head.subarray(0,4))==='FORM'&&dec.decode(head.subarray(8,12))==='AIFF';
+    if(!wav&&!aiff)return;
+    const end=new DataView(head.buffer).getUint32(4,wav)+8;
+    if(end>file.size||end<12)return;
+    meta.format=wav?'WAV':'AIFF';
+    let pos=12,rate=0,dataSize=0,frames=0,tag=null,steps=0;
+    const deadline=Date.now()+5000;
+    while(pos+8<=end&&++steps<=4096&&Date.now()<deadline){
+        const h=new Uint8Array(await file.slice(pos,pos+8).arrayBuffer());if(h.length!==8)break;
+        const id=dec.decode(h.subarray(0,4)),n=new DataView(h.buffer).getUint32(4,wav),start=pos+8,next=start+n+(n&1);
+        if(next>end)break;
+        if(wav&&id==='fmt '&&n>=16){const v=new DataView(await file.slice(start,start+16).arrayBuffer());meta.channels=v.getUint16(2,true);meta.sampleRate=v.getUint32(4,true);rate=v.getUint32(8,true);meta.bitDepth=v.getUint16(14,true);}
+        else if(wav&&id==='data')dataSize=n;
+        else if(aiff&&id==='COMM'&&n>=18){const v=new DataView(await file.slice(start,start+18).arrayBuffer());meta.channels=v.getUint16(0);frames=v.getUint32(2);meta.bitDepth=v.getUint16(6);const exp=v.getUint16(8),hi=v.getUint32(10),lo=v.getUint32(14);if(exp>0&&exp<0x7fff&&hi>=0x80000000){const sr=(hi/2**31+lo/2**63)*2**(exp-16383);if(Number.isFinite(sr)&&sr>=1&&sr<=768000)meta.sampleRate=sr;}}
+        else if(id.toLowerCase()==='id3 '&&n>=10&&n<=32*1024*1024+10&&!tag){tag=new Uint8Array(await file.slice(start,start+n).arrayBuffer());}
+        else if(aiff&&['NAME','AUTH','ANNO'].includes(id)&&n<=65536){const value=new TextDecoder('latin1').decode(await file.slice(start,start+n).arrayBuffer()).replace(/\0+$/,'').trim();const key={NAME:'title',AUTH:'artist',ANNO:'comment'}[id];if(!meta[key])meta[key]=value;}
+        pos=next;
     }
+    if(wav&&rate>0){meta.bitrate=Math.round(rate*8/1000);if(dataSize)meta.duration=dataSize/rate;}
+    if(aiff&&meta.sampleRate>0){meta.duration=frames/meta.sampleRate;meta.bitrate=Math.round(meta.sampleRate*meta.channels*meta.bitDepth/1000);}
+    if(tag)parseId3v2Tag(tag,new DataView(tag.buffer),0,meta);
+}
 
+async function parseOggOpus(file, uint8, view, meta) {
+    const {packets}=await readOggHeaders(file);
+    let firstGranuleSr = 0, preSkip = 0;
     if (packets.length >= 1) {
         const p0 = packets[0];
         const hdrStr = new TextDecoder('ascii').decode(p0.subarray(0, 8));
         if (hdrStr === 'OpusHead') {
             meta.format = 'OPUS';
             meta.channels = p0[9];
+            preSkip = new DataView(p0.buffer,p0.byteOffset,p0.byteLength).getUint16(10,true);
             meta.sampleRate = 48000;
             firstGranuleSr = 48000;
         } else if (p0.length >= 29 && p0[0] === 0x01 && new TextDecoder('ascii').decode(p0.subarray(1, 7)) === 'vorbis') {
@@ -425,7 +442,7 @@ async function parseOggOpus(file, uint8, view, meta) {
                     const high = tdv.getUint32(i + 10, true);
                     const granule = high * 4294967296 + low;
                     if (granule > 0 && high !== 0xFFFFFFFF) {
-                        meta.duration = Math.round((granule / firstGranuleSr) * 100) / 100;
+                        meta.duration = Math.round((Math.max(0, granule - preSkip) / firstGranuleSr) * 100) / 100;
                         if (meta.duration > 0 && !meta.bitrate) {
                             meta.bitrate = Math.round((file.size * 8) / meta.duration / 1000);
                         }
@@ -437,7 +454,8 @@ async function parseOggOpus(file, uint8, view, meta) {
     }
 }
 
-function parseMp4Atoms(uint8, view, start, end, meta, dec) {
+function parseMp4Atoms(uint8, view, start, end, meta, dec, depth=0) {
+    if(depth>24)return;
     let pos = start;
     while (pos + 8 <= end) {
         let size = view.getUint32(pos, false);
@@ -454,9 +472,9 @@ function parseMp4Atoms(uint8, view, start, end, meta, dec) {
         const payloadEnd = pos + size;
 
         if (type === 'moov' || type === 'trak' || type === 'mdia' || type === 'minf' || type === 'stbl' || type === 'udta' || type === 'ilst') {
-            parseMp4Atoms(uint8, view, payloadStart, payloadEnd, meta, dec);
+            parseMp4Atoms(uint8, view, payloadStart, payloadEnd, meta, dec, depth+1);
         } else if (type === 'meta' && payloadStart + 4 <= payloadEnd) {
-            parseMp4Atoms(uint8, view, payloadStart + 4, payloadEnd, meta, dec);
+            parseMp4Atoms(uint8, view, payloadStart + 4, payloadEnd, meta, dec, depth+1);
         } else if (type === 'mvhd' && payloadStart + 20 <= payloadEnd) {
             const ver = uint8[payloadStart];
             if (ver === 0 && payloadStart + 20 <= payloadEnd) {
@@ -539,11 +557,15 @@ export async function parseAudioFileMetadata(file) {
             parseFlac(uint8, view, file.size, meta);
         } else if (ext === 'wav' || (uint8[0] === 0x52 && uint8[1] === 0x49 && uint8[2] === 0x46 && uint8[3] === 0x46)) {
             parseWav(uint8, view, meta);
+            await parsePcmContainerMetadata(file,meta);
+        } else if (['aif','aiff'].includes(ext) || asciiDec.decode(uint8.subarray(0,4))==='FORM') {
+            await parsePcmContainerMetadata(file,meta);
         } else if (ext === 'ogg' || ext === 'opus' || (uint8[0] === 0x4F && uint8[1] === 0x67 && uint8[2] === 0x67 && uint8[3] === 0x53)) {
             await parseOggOpus(file, uint8, view, meta);
         } else if (['m4a', 'mp4', 'aac', 'alac'].includes(ext) || (uint8.length >= 8 && asciiDec.decode(uint8.subarray(4, 8)) === 'ftyp')) {
             meta.format = ext === 'alac' ? 'ALAC' : 'M4A';
-            parseMp4Atoms(uint8, view, 0, uint8.length, meta, asciiDec);
+            const {bytes}=await readMp4Movie(file);
+            parseMp4Atoms(bytes, new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength), 0, bytes.length, meta, asciiDec);
             if (meta.duration > 0 && !meta.bitrate && file.size > 0) {
                 meta.bitrate = Math.round((file.size * 8) / meta.duration / 1000);
             }

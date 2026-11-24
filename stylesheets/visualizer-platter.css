@@ -1,0 +1,7 @@
+/* Circular mode only. Artwork-only retains its full original aspect ratio. */
+:root[data-presentation="thematic"] .turntableCon { isolation: isolate; }
+:root[data-presentation="thematic"] .vinylTurntable { box-shadow: none; border: 1px solid var(--border-medium); animation: none; }
+:root[data-presentation="thematic"] .vinylTurntable.spinning,
+:root[data-presentation="thematic"] .turntableCon.spinning .vinylTurntable { animation: none; }
+:root[data-presentation="thematic"] .turntableCenterVis { z-index: 3; overflow: hidden; }
+:root[data-presentation="thematic"] .turntableCenterCanvas { display: block; }

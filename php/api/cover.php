@@ -100,7 +100,8 @@ if (!empty($slskAcc['shared_dir'])) {
     if ($slskShare && is_dir($slskShare)) $allowedRoots[] = $slskShare;
 }
 
-$userHome = getenv('HOME') ?: ($_SERVER['HOME'] ?? (getenv('USER') ? '/home/' . getenv('USER') : ''));
+$userHome = cachy_home_dir();
+$allowedRoots[] = realpath(cachy_data_dir() . "/downloads");
 if ($userHome) {
     if (is_dir($userHome . '/Music/Main')) {
         $mainMusic = realpath($userHome . '/Music/Main');
@@ -120,7 +121,7 @@ $allowedRoots = array_values(array_unique(array_filter($allowedRoots)));
 if (!empty($fullPath)) {
     $isPathAllowed = false;
     foreach ($allowedRoots as $root) {
-        if ($root && ($fullPath === $root || strpos($fullPath, rtrim($root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR) === 0)) {
+        if ($root && cachy_path_within($fullPath, $root)) {
             $isPathAllowed = true;
             break;
         }
@@ -147,8 +148,8 @@ $cacheMime = $cacheDir . '/' . $cacheHash . '.mime';
 if (file_exists($cacheFull) && filesize($cacheFull) > 0) {
     // Generate thumbnail if missing
     if (!file_exists($cacheThumb) || filesize($cacheThumb) === 0) {
-        $thumbCmd = "ffmpeg -y -v quiet -i " . escapeshellarg($cacheFull) . " -vf \"scale=128:128:force_original_aspect_ratio=decrease\" -q:v 3 -f image2 " . escapeshellarg($cacheThumb) . " 2>/dev/null";
-        @exec($thumbCmd);
+        $thumbTool = cachy_find_binary('ffmpeg');
+        if ($thumbTool) cachy_run_args([$thumbTool, '-y', '-v', 'quiet', '-i', $cacheFull, '-vf', 'scale=128:128:force_original_aspect_ratio=decrease', '-q:v', '3', '-f', 'image2', $cacheThumb]);
     }
     // Link by tid for future fast-path hits
     if ($tid > 0) {
@@ -241,7 +242,7 @@ function extract_php_embedded_cover($audioPath) {
 
 // 1. Try ffmpeg extraction when present, else pure-PHP binary artwork fallback
 $ffmpegBin = cachy_find_binary('ffmpeg');
-$imgBytes = $ffmpegBin ? @shell_exec(escapeshellarg($ffmpegBin) . " -v quiet -i " . escapeshellarg($fullPath) . " -an -c:v copy -f image2 - 2>/dev/null") : null;
+$imgBytes = $ffmpegBin ? cachy_run_args([$ffmpegBin, '-v', 'quiet', '-i', $fullPath, '-an', '-c:v', 'copy', '-f', 'image2', '-']) : null;
 if (!$imgBytes || strlen($imgBytes) <= 100) {
     $imgBytes = extract_php_embedded_cover($fullPath);
 }
@@ -257,8 +258,8 @@ if ($imgBytes && strlen($imgBytes) > 100) {
 
     // Generate lightweight 128x128 thumbnail if ffmpeg is present
     if ($ffmpegBin) {
-        $thumbCmd = escapeshellarg($ffmpegBin) . " -y -v quiet -i " . escapeshellarg($cacheFull) . " -vf \"scale=128:128:force_original_aspect_ratio=decrease\" -q:v 3 -f image2 " . escapeshellarg($cacheThumb) . " 2>/dev/null";
-        @exec($thumbCmd);
+        $thumbTool = cachy_find_binary('ffmpeg');
+        if ($thumbTool) cachy_run_args([$thumbTool, '-y', '-v', 'quiet', '-i', $cacheFull, '-vf', 'scale=128:128:force_original_aspect_ratio=decrease', '-q:v', '3', '-f', 'image2', $cacheThumb]);
     }
 
     // Link by tid for fast-path
@@ -299,8 +300,8 @@ foreach ($commonCovers as $cc) {
 
         // Generate thumbnail if ffmpeg is present
         if ($ffmpegBin) {
-            $thumbCmd = escapeshellarg($ffmpegBin) . " -y -v quiet -i " . escapeshellarg($cacheFull) . " -vf \"scale=128:128:force_original_aspect_ratio=decrease\" -q:v 3 -f image2 " . escapeshellarg($cacheThumb) . " 2>/dev/null";
-            @exec($thumbCmd);
+            $thumbTool = cachy_find_binary('ffmpeg');
+        if ($thumbTool) cachy_run_args([$thumbTool, '-y', '-v', 'quiet', '-i', $cacheFull, '-vf', 'scale=128:128:force_original_aspect_ratio=decrease', '-q:v', '3', '-f', 'image2', $cacheThumb]);
         }
 
         if ($tid > 0) {

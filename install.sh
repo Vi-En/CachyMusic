@@ -17,9 +17,9 @@ echo "Project Path: $APP_DIR"
 # 1. Check prerequisites
 echo ""
 echo "[1/5] Checking prerequisites..."
-if ! command -v php >/dev/null 2>&1; then
-    echo "  [ERROR] PHP is required but not found in PATH."
-    echo "          Please install PHP (e.g. 'sudo pacman -S php' or 'sudo apt install php')."
+if ! command -v php >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
+    echo "  [ERROR] PHP and Python 3 are required in PATH."
+    echo "          Please install PHP (e.g. 'sudo pacman -S php python' or 'sudo apt install php python3')."
     exit 1
 fi
 echo "  ✓ PHP detected ($(php -v | head -n1 | cut -d' ' -f1-2))"
@@ -77,15 +77,14 @@ Version=1.0
 Type=Application
 Name=CachyMusic
 GenericName=Audio Workstation & Player
-Comment=Cross-platform zero-dependency audio player and workstation
-Exec=$BIN_TARGET/cachymusic %U
+Comment=Local-first music player
+Exec="$BIN_TARGET/cachymusic"
 Icon=cachymusic
 Terminal=false
 StartupNotify=true
 StartupWMClass=cachymusic
 Categories=AudioVideo;Audio;Player;Music;
 Keywords=audio;music;player;workstation;soulseek;cachy;
-MimeType=audio/mpeg;audio/flac;audio/ogg;audio/wav;audio/x-wav;audio/mp4;audio/aac;
 EOF
 chmod +x "$DESKTOP_FILE"
 echo "  ✓ Created desktop entry at $DESKTOP_FILE"
@@ -109,7 +108,7 @@ echo "========================================================"
 echo "You can now launch CachyMusic in three ways:"
 echo "  1. App Launcher: Search for 'CachyMusic' in your desktop menu / rofi / dmenu"
 echo "  2. Terminal:     Run 'cachymusic' from anywhere"
-echo "  3. In-App PWA:   Open http://localhost:8000 and click 'INSTALL APP'"
+echo "  3. In-App PWA:   Open http://127.0.0.1:8000 and click 'INSTALL APP'"
 echo ""
 echo "To uninstall anytime, simply run: ./uninstall.sh"
 echo "========================================================"

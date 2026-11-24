@@ -10,13 +10,13 @@ android {
         applicationId "org.cachymusic.app"
         minSdk 24
         targetSdk 34
-        versionCode 23
-        versionName "2.0.3"
+        versionCode 44
+        versionName "3.0.0-dev.6.18"
     }
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            // Release APK is unsigned unless explicitly signed by the maintainer.
         }
     }
     compileOptions {
@@ -24,8 +24,8 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     lint {
-        abortOnError false
-        checkReleaseBuilds false
+        abortOnError true
+        checkReleaseBuilds true
     }
 }
 
@@ -36,7 +36,7 @@ dependencies {
 
 tasks.register('syncWorkstationAssets', Sync) {
     from("${project.rootDir}/../../..") {
-        include 'index.html', 'manifest.json'
+        include 'index.html', 'manifest.json', 'sw.js', 'LICENSE'
         include 'stylesheets/**'
         include 'scripts/**'
         include 'resources/**'

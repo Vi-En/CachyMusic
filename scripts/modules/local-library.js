@@ -3,25 +3,56 @@ import { getRuntime } from './runtime-capabilities.js';
 
 const DB_NAME = 'cachymusic_idb_v2';
 const LEGACY_DB_NAME = 'cachymusic_idb_v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const OPFS_DIR_NAME = 'cachymusic-audio';
 
+let activePwaDb = null;
+let openingPwaDb = null;
+function closePwaDb() {
+    const opened = activePwaDb;
+    activePwaDb = null;
+    if (opened) opened.close();
+    // A pagehide can arrive before an asynchronous open completes.
+    if (openingPwaDb) void openingPwaDb.then(db => {
+        if (db !== opened) db.close();
+        if (activePwaDb === db) activePwaDb = null;
+    }).catch(() => {});
+}
+if (typeof window !== 'undefined') window.addEventListener('pagehide', closePwaDb);
+
 function openPwaDb() {
-    return new Promise((resolve, reject) => {
-        if (typeof window === 'undefined' || !window.indexedDB) {
-            return reject(new Error('IndexedDB unavailable'));
-        }
+    if (activePwaDb) return Promise.resolve(activePwaDb);
+    if (openingPwaDb) return openingPwaDb;
+    if (typeof window === 'undefined' || !window.indexedDB) return Promise.reject(new Error('IndexedDB unavailable'));
+    const operation = new Promise((resolve, reject) => {
         const req = window.indexedDB.open(DB_NAME, DB_VERSION);
         req.onupgradeneeded = (e) => {
             const db = e.target.result;
             if (!db.objectStoreNames.contains('library')) db.createObjectStore('library', { keyPath: 'key' });
             if (!db.objectStoreNames.contains('handles')) db.createObjectStore('handles', { keyPath: 'key' });
             if (!db.objectStoreNames.contains('playlists')) db.createObjectStore('playlists', { keyPath: 'plid' });
+            if (!db.objectStoreNames.contains('tracks')) db.createObjectStore('tracks', {keyPath:'storageKey'});
+            if (!db.objectStoreNames.contains('artwork')) db.createObjectStore('artwork', {keyPath:'key'});
             if (!db.objectStoreNames.contains('overrides')) db.createObjectStore('overrides', { keyPath: 'trackKey' });
         };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        req.onsuccess = () => {
+            const db = req.result;
+            db.onversionchange = () => {
+                // An incoming schema upgrade must not be blocked by our idle page.
+                db.close();
+                if (activePwaDb === db) activePwaDb = null;
+            };
+            db.onclose = () => { if (activePwaDb === db) activePwaDb = null; };
+            activePwaDb = db;
+            resolve(db);
+        };
+        req.onerror = () => reject(req.error || new Error('IndexedDB open failed'));
     });
+    openingPwaDb = operation;
+    void operation.finally(() => {
+        if (openingPwaDb === operation) openingPwaDb = null;
+    }).catch(() => {});
+    return operation;
 }
 
 function openLegacyIdb() {
@@ -52,19 +83,30 @@ async function getOpfsRootDir() {
 export async function writeFileToOpfs(fileKey, fileOrBlob) {
     const dir = await getOpfsRootDir();
     if (!dir || !fileOrBlob) return null;
-    const safeKey = fileKey.replace(/[^A-Za-z0-9._-]/g, '_').slice(-180);
+    // A fresh UUID avoids destructive collisions, including duplicate file names.
+    if (!globalThis.crypto?.randomUUID) return null;
+    const safeKey = 'audio-' + crypto.randomUUID();
+    let writable = null;
     try {
         const handle = await dir.getFileHandle(safeKey, { create: true });
-        if (typeof handle.createWritable === 'function') {
-            const writable = await handle.createWritable();
-            await writable.write(fileOrBlob);
-            await writable.close();
-            return safeKey;
-        }
+        if (typeof handle.createWritable !== 'function') throw new Error('OPFS writable stream unavailable');
+        writable = await handle.createWritable();
+        await writable.write(fileOrBlob);
+        await writable.close();
+        return safeKey;
     } catch (e) {
+        // A partially created file is ours, not the user's source audio. Never
+        // leave it occupying offline storage after a failed import.
+        try { await writable?.abort?.(); } catch (_) {}
+        try { await dir.removeEntry(safeKey); } catch (_) {}
         console.warn('[OPFS] writeFileToOpfs failed, falling back to IDB blob:', e);
+        return null;
     }
-    return null;
+}
+
+async function removeCreatedOpfsKey(key) {
+    if (!key || !key.startsWith('audio-')) return;
+    try { const dir = await getOpfsRootDir(); await dir?.removeEntry(key); } catch (_) {}
 }
 
 export async function readFileFromOpfs(opfsKey) {
@@ -80,12 +122,21 @@ export async function readFileFromOpfs(opfsKey) {
 }
 
 export async function saveDirectoryHandle(handle) {
-    if (!handle) return;
+    if (!handle) return false;
     try {
         const db = await openPwaDb();
-        const tx = db.transaction('handles', 'readwrite');
-        tx.objectStore('handles').put({ key: 'active_dir', handle, savedAt: Date.now() });
-    } catch (_) {}
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('handles', 'readwrite');
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error || new Error('Directory handle save failed'));
+            tx.onabort = () => reject(tx.error || new Error('Directory handle save aborted'));
+            tx.objectStore('handles').put({ key: 'active_dir', handle, savedAt: Date.now() });
+        });
+        return true;
+    } catch (error) {
+        console.warn('[LocalLibrary] Directory access could not be persisted:', error);
+        return false;
+    }
 }
 
 export async function loadSavedDirectoryHandle() {
@@ -102,7 +153,15 @@ export async function loadSavedDirectoryHandle() {
     }
 }
 
-export async function saveLibraryToLocalDb(tracks, directoryName) {
+let librarySaveTail = Promise.resolve();
+export function saveLibraryToLocalDb(tracks, directoryName) {
+    const run = librarySaveTail.then(() => performLibrarySave(tracks, directoryName));
+    librarySaveTail = run.then(() => {}, () => {});
+    return run;
+}
+
+async function performLibrarySave(tracks, directoryName) {
+    const newOpfsCopies = [];
     try {
         const db = await openPwaDb();
         const storableTracks = [];
@@ -127,6 +186,8 @@ export async function saveLibraryToLocalDb(tracks, directoryName) {
                 format: t.format,
                 size: t.size,
                 cover: t.cover,
+                coverThumb:t.coverThumb || null,
+                coverKey:t.coverKey || null,
                 lyrics: t.lyrics || null,
                 replayGain: t.replayGain ?? null,
                 replayPeak: t.replayPeak ?? null,
@@ -135,37 +196,63 @@ export async function saveLibraryToLocalDb(tracks, directoryName) {
                 fileBlob: null
             };
             // Store Blob only if neither server stream nor OPFS key is present
-            if (!storable.src && !storable.opfsKey && t._fileBlob) {
-                const opfsKey = await writeFileToOpfs(t.fullPath || t.filename || t.id, t._fileBlob);
+            if (!storable.src && !storable.opfsKey && (t._fileBlob || t.fileBlob)) {
+                const opfsKey = await writeFileToOpfs(t.fullPath || t.filename || t.id, t._fileBlob || t.fileBlob);
                 if (opfsKey) {
                     storable.opfsKey = opfsKey;
                     t.opfsKey = opfsKey;
+                    newOpfsCopies.push({track:t,key:opfsKey});
                 } else {
-                    storable.fileBlob = t._fileBlob;
+                    storable.fileBlob = t._fileBlob || t.fileBlob;
                 }
             }
             storableTracks.push(storable);
         }
 
         await new Promise((resolve, reject) => {
-            const tx = db.transaction('library', 'readwrite');
-            tx.objectStore('library').put({
-                key: 'active_library',
-                directoryName: directoryName || '',
-                tracks: storableTracks,
-                updatedAt: Date.now()
-            });
-            tx.oncomplete = resolve;
-            tx.onerror = () => reject(tx.error);
+            const tx=db.transaction(['library','tracks','artwork'],'readwrite');
+            const records=tx.objectStore('tracks'), artwork=tx.objectStore('artwork');
+            records.clear();artwork.clear();
+            const seenArt=new Set();
+            for(let i=0;i<storableTracks.length;i++) {
+                const t=storableTracks[i];
+                if(t.coverKey&&t.cover&&t.coverThumb){
+                    if(!seenArt.has(t.coverKey)){artwork.put({key:t.coverKey,cover:t.cover,coverThumb:t.coverThumb});seenArt.add(t.coverKey);}
+                    delete t.cover;delete t.coverThumb;
+                }
+                records.put({...t,storageKey:i});
+            }
+            tx.objectStore('library').put({key:'active_library_v2',directoryName:directoryName||'',count:storableTracks.length,updatedAt:Date.now()});
+            // Preserve the previous-format record as a migration backup, never overwrite it.
+            tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
         });
+        return true;
     } catch (e) {
+        // The DB transaction did not commit. Roll back only OPFS files created
+        // by this attempt; preserve all pre-existing files and the old library.
+        for (const {track,key} of newOpfsCopies) {
+            if (track.opfsKey === key) track.opfsKey = null;
+            await removeCreatedOpfsKey(key);
+        }
         console.warn('[LocalLibrary] IndexedDB save skipped:', e);
+        return false;
     }
 }
 
 export async function loadLibraryFromLocalDb() {
     try {
         const db = await openPwaDb();
+        const normalized=await new Promise((resolve,reject)=>{
+            const tx=db.transaction(['library','tracks','artwork'],'readonly');
+            const manifest=tx.objectStore('library').get('active_library_v2');
+            const records=tx.objectStore('tracks').getAll();const art=tx.objectStore('artwork').getAll();
+            tx.oncomplete=()=>{
+                if(!manifest.result){resolve(null);return;}
+                const map=new Map(art.result.map(a=>[a.key,a]));
+                resolve({directoryName:manifest.result.directoryName,tracks:records.result.map(({storageKey,...t})=>({...t,...(map.has(t.coverKey)?{cover:map.get(t.coverKey).cover,coverThumb:map.get(t.coverKey).coverThumb}:{})}))});
+            };tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+        });
+        if(normalized)return hydrateLocalTracks(normalized);
         const data = await new Promise((resolve) => {
             const tx = db.transaction('library', 'readonly');
             const req = tx.objectStore('library').get('active_library');
@@ -173,19 +260,29 @@ export async function loadLibraryFromLocalDb() {
             req.onerror = () => resolve(null);
         });
         if (data && Array.isArray(data.tracks) && data.tracks.length > 0) {
-            return await hydrateLocalTracks(data);
+            const hydrated=await hydrateLocalTracks(data);
+            // The old record remains untouched; failure leaves it available for the next launch.
+            if(hydrated.tracks.length===data.tracks.length)await saveLibraryToLocalDb(hydrated.tracks, hydrated.directoryName);
+            return hydrated;
         }
 
         // Legacy v1 DB migration read
         const legacyDb = await openLegacyIdb();
-        const legacyData = await new Promise((resolve) => {
-            const tx = legacyDb.transaction('library', 'readonly');
-            const req = tx.objectStore('library').get('active_library');
-            req.onsuccess = () => resolve(req.result || null);
-            req.onerror = () => resolve(null);
-        });
+        let legacyData;
+        try {
+            legacyData = await new Promise((resolve) => {
+                const tx = legacyDb.transaction('library', 'readonly');
+                const req = tx.objectStore('library').get('active_library');
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => resolve(null);
+            });
+        } finally {
+            legacyDb.close();
+        }
         if (legacyData && Array.isArray(legacyData.tracks) && legacyData.tracks.length > 0) {
-            return await hydrateLocalTracks(legacyData);
+            const hydrated=await hydrateLocalTracks(legacyData);
+            if(hydrated.tracks.length===legacyData.tracks.length)await saveLibraryToLocalDb(hydrated.tracks, hydrated.directoryName);
+            return hydrated;
         }
         return null;
     } catch (_) {
@@ -199,39 +296,39 @@ async function hydrateLocalTracks(data) {
     const restored = [];
     for (const t of data.tracks) {
         let src = t.src;
+        if (src && !rt.hasPhpBackend && !rt.isAndroidNative && !/^(blob:|data:audio\/)/i.test(src)) src = null;
+        if (src && !rt.hasPhpBackend && t.src.includes('php/api/stream.php')) src = null;
+        // Do not open OPFS files or allocate object URLs until selected for playback.
         let fileBlob = t.fileBlob || null;
-        if (!src && t.opfsKey) {
-            const opfsFile = await readFileFromOpfs(t.opfsKey);
-            if (opfsFile) {
-                fileBlob = opfsFile;
-                src = URL.createObjectURL(opfsFile);
-            }
-        } else if (!src && fileBlob) {
-            src = URL.createObjectURL(fileBlob);
-        }
-        // Only surface PHP stream tracks when PHP backend is active (or Android native/blob tracks)
-        if (!src && t.src && t.src.includes('php/api/stream.php') && !rt.hasPhpBackend) {
-            continue;
-        }
+        // Do not restore unavailable backend tracks or request their old remote URLs.
+        if (!src && !t.opfsKey && !fileBlob) continue;
         const key = String(t.tid || t.id || t.fullPath || t.filename);
         const ov = overrides.get(key);
+        const restoredTrack = {...t, ...(ov || {})};
+        if (!rt.hasPhpBackend && !rt.isAndroidNative && restoredTrack.cover && !/^(data:image\/|blob:|(?:\.\/)?resources\/images\/)/i.test(restoredTrack.cover)) {
+            restoredTrack.cover = 'resources/images/default.svg';
+        }
         restored.push({
-            ...t,
-            ...(ov || {}),
-            src: src || t.src || null,
+            ...restoredTrack,
+            src: src || null,
             _fileBlob: fileBlob
         });
     }
-    return restored.length > 0 ? { directoryName: data.directoryName || '', tracks: restored } : null;
+    return { directoryName: data.directoryName || '', directory: data.directoryName || '', tracks: restored };
 }
 
 export async function saveMetadataOverride(trackKey, fields) {
-    if (!trackKey) return;
+    if (!trackKey) return false;
     try {
         const db = await openPwaDb();
-        const tx = db.transaction('overrides', 'readwrite');
-        tx.objectStore('overrides').put({ trackKey: String(trackKey), ...fields, updatedAt: Date.now() });
-    } catch (_) {}
+        await new Promise((resolve,reject)=>{
+            const tx=db.transaction('overrides','readwrite'), object=tx.objectStore('overrides');
+            const old=object.get(String(trackKey));
+            old.onsuccess=()=>object.put({...old.result, trackKey:String(trackKey), ...fields, updatedAt:Date.now()});
+            tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+        });
+        return true;
+    } catch (_) {return false;}
 }
 
 export async function loadAllMetadataOverrides() {
@@ -255,13 +352,22 @@ export async function loadAllMetadataOverrides() {
 export async function saveLocalPlaylists(playlists) {
     try {
         const db = await openPwaDb();
-        const tx = db.transaction('playlists', 'readwrite');
-        const os = tx.objectStore('playlists');
-        os.clear();
-        for (const pl of playlists) {
-            os.put(pl);
-        }
-    } catch (_) {}
+        // Await transaction COMMIT, not merely request scheduling. Callers can
+        // now distinguish persistent success from quota/abort failures.
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('playlists', 'readwrite');
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error || new Error('Playlist save failed'));
+            tx.onabort = () => reject(tx.error || new Error('Playlist save aborted'));
+            const os = tx.objectStore('playlists');
+            os.clear();
+            for (const pl of playlists) os.put(pl);
+        });
+        return true;
+    } catch (error) {
+        console.warn('[LocalLibrary] Playlist persistence failed:', error);
+        return false;
+    }
 }
 
 export async function loadLocalPlaylists() {

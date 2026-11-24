@@ -1,0 +1,123 @@
+/* CachyMusic: targeted ergonomics and visual hierarchy (no animation loops or assets). */
+.slskResultPagination {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 12px; padding: 17px 12px 22px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-1);
+}
+.slskShowMoreBtn {
+  min-height: 46px; padding: 10px 20px; border-radius: 12px;
+  border: 1px solid var(--border-medium); background: var(--bg-surface-2);
+  color: var(--text-primary); font: inherit; font-weight: 700; cursor: pointer;
+}
+.slskShowMoreBtn:hover { border-color: var(--accent-color); }
+.slskShowMoreBtn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 3px; }
+.slskPaginationSummary { color: var(--text-secondary); font-size: .76rem; font-variant-numeric: tabular-nums; }
+/* Settings categories are a compact, one-row navigational rail, not six large tiles. */
+@media (max-width: 768px) {
+  .settingsWorkspace .settingsCategoryNav {
+    display: flex; flex-wrap: nowrap; justify-content: flex-start;
+    gap: 7px; overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x proximity; overscroll-behavior-inline: contain;
+    padding: 4px 0 12px; margin: 0;
+    scrollbar-width: thin; scrollbar-color: var(--border-medium) transparent;
+  }
+  .settingsWorkspace .settingsCatBtn {
+    flex: 0 0 auto; min-width: max-content; max-width: none;
+    min-height: 44px; padding-inline: 17px; white-space: nowrap;
+    border-radius: 999px; scroll-snap-align: start;
+    font-size: .86rem; line-height: 1.2;
+  }
+  .settingsWorkspace .settingsSearch { margin-bottom: 3px; }
+  .settingsWorkspace .settingsSectionPanel { padding: 13px; }
+  .settingsWorkspace .settingsRowItem { padding-block: 13px; }
+  .settingsWorkspace .settingsRowHeader { gap: 10px; }
+  .soulseekWorkspace .slskResultRow .slskResultTitle,
+  .soulseekWorkspace .slskResultRow .slskResultPath,
+  .soulseekWorkspace .slskTransferName { overflow-wrap: anywhere; }
+  .soulseekWorkspace .slskResultPagination { position: relative; }
+  .soulseekWorkspace .slskShowMoreBtn { flex: 1 1 100%; }
+  .soulseekWorkspace .slskPaginationSummary { text-align: center; }
+}
+/* Higher-contrast hierarchy on ordinary devices; distinct theme families share ergonomics. */
+.settingsWorkspace .settingsSectionTitle { letter-spacing: -.012em; }
+.settingsWorkspace .settingsRowDesc { max-width: 65ch; }
+.settingsWorkspace .settingsRowTitle { line-height: 1.35; }
+:root[data-theme="nms"] .settingsCategoryNav { border-bottom: 3px double var(--border-bold); }
+:root[data-theme="nms"] :is(.settingsCatBtn,.mobileTabBtn,.slskShowMoreBtn) { border-radius: 2px; }
+:root[data-theme="solar-eclipse"] .settingsSectionPanel { border-radius: 22px; }
+:root[data-theme="solar-eclipse"] :is(.mobileTabBtn,.slskSearchArea,.slskShowMoreBtn) { border-radius: 999px; }
+:root[data-theme="euclid-horizon"] :is(.settingsCatBtn,.slskSearchArea,.slskShowMoreBtn,.slskResultRow) { border-radius: 0; }
+:root[data-theme="euclid-horizon"] .settingsCategoryNav { border-bottom: 2px solid var(--accent-color); }
+:root[data-theme="alien-paradise"] :is(.settingsCatBtn,.slskShowMoreBtn) { border-radius: 18px 7px 18px 7px; }
+:root[data-theme="abyssal-void"] .settingsCategoryNav { border-bottom: 1px dashed var(--border-bold); }
+:root[data-theme="abyssal-void"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 0; border-inline-start: 3px solid var(--accent-color); }
+:root[data-theme="dissonance"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 2px 15px 2px 15px; }
+:root[data-theme="sentinel"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 3px; border-width: 2px; }
+:root[data-theme="minimalist-light"] :is(.slskShowMoreBtn,.settingsCatBtn),
+:root[data-theme="minimalist-dark"] :is(.slskShowMoreBtn,.settingsCatBtn),
+:root[data-theme="minimalist-obsidian"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 0; box-shadow: none; }
+:root[data-theme="minimalist-warm"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 16px; }
+@media (prefers-reduced-motion: reduce) { .settingsWorkspace .settingsCategoryNav { scroll-behavior: auto; } }
+
+/* Advanced controls stay available without being the default home-screen contents. */
+.settingsAdvancedDetails { display: block; min-width: 0; border-top: 1px solid var(--border-subtle); }
+.settingsAdvancedSummary {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    min-height: 65px; padding: 12px 14px; cursor: pointer; list-style: none;
+    color: var(--text-primary); border-radius: 10px;
+}
+.settingsAdvancedSummary::-webkit-details-marker { display: none; }
+.settingsAdvancedSummary:hover { background: var(--bg-surface-2); }
+.settingsAdvancedSummary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; }
+.settingsAdvancedSummaryText { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.settingsAdvancedSummaryText strong { font-size: .9rem; }
+.settingsAdvancedSummaryText small { font-size: .78rem; line-height: 1.4; color: var(--text-secondary); }
+.settingsAdvancedChevron { color: var(--text-secondary); font-size: 1.35rem; transition: transform .15s ease; }
+.settingsAdvancedDetails[open] .settingsAdvancedChevron { transform: rotate(180deg); }
+.settingsAdvancedContent { display: grid; grid-template-columns: minmax(0, 1fr); }
+.settingsAdvancedContent .settingsRowItem { min-width: 0; }
+@media (max-width: 768px) {
+    .settingsAdvancedSummary { padding-inline: 10px; }
+    .settingsAdvancedContent .settingsDspMetricsGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { .settingsAdvancedChevron { transition: none; } }
+
+/* Results show primary data first; metadata collapses into one scannable strip on phones. */
+.soulseekWorkspace .slskResultRow .col { min-width: 0; overflow-wrap: anywhere; }
+.soulseekWorkspace .slskResultTitle { display: block; font-size: .875rem; font-weight: 650; line-height: 1.35; color: var(--text-primary); }
+.soulseekWorkspace .slskResultPath { display: block; font-size: .75rem; line-height: 1.4; margin-top: 3px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.soulseekWorkspace .slskActionCell { display: flex; flex-direction: column; gap: 5px; }
+.soulseekWorkspace .slskActionCell button { min-width: 0; min-height: 36px; border: 1px solid var(--quiet-line); border-radius: var(--control-radius); font-size: .75rem; line-height: 1.25; padding: 4px; }
+.soulseekWorkspace .slskActionCell .slskPlayBtn { background: var(--quiet-fill); color: var(--text-primary); }
+.soulseekWorkspace .slskResultsFooter > span { min-width: 0; overflow-wrap: anywhere; }
+
+.soulseekWorkspace .slskCompactMeta { display: contents; }
+@media (max-width: 768px) {
+  .soulseekWorkspace .slskResultRow { grid-template-columns: minmax(0,1fr) minmax(96px,auto); gap: 7px 9px; padding: 12px; align-items: start; }
+  .soulseekWorkspace .slskResultRow .colTrack { grid-column: 1; grid-row: 1; }
+  .soulseekWorkspace .slskResultRow .slskCompactMeta {
+    display: flex; grid-column: 1; grid-row: 2; min-width: 0;
+    align-items: center; justify-content: flex-start; flex-wrap: wrap;
+    gap: 4px 10px; font-variant-numeric: tabular-nums;
+  }
+  .soulseekWorkspace .slskResultRow .slskCompactMeta .col {
+    display: inline-flex; gap: 4px; flex: none; min-width: 0; max-width: 100%;
+    align-items: center; line-height: 1.45; font-size: .72rem;
+    color: var(--text-secondary);
+  }
+  .soulseekWorkspace .slskResultRow .colAction {
+    grid-column: 2; grid-row: 1 / span 2; min-width: 0;
+    align-self: center; justify-content: center;
+  }
+  .soulseekWorkspace .slskResultRow .slskCompactMeta .colPeer { max-width: 100%; }
+  .soulseekWorkspace .slskResultRow .slskCompactMeta .slskPeerUser {
+    display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .soulseekWorkspace .slskResultRow .slskActionCell button { width: 100%; min-height: 44px; padding-inline: 8px; line-height: 1.2; }
+}
+@media (max-width: 360px) {
+  .soulseekWorkspace .slskResultRow { grid-template-columns: minmax(0,1fr) 98px; gap: 6px; padding: 10px 8px; }
+  .soulseekWorkspace .slskResultRow .slskCompactMeta { gap: 3px 8px; }
+  .soulseekWorkspace .slskResultRow .slskCompactMeta .col { font-size: .68rem; }
+}

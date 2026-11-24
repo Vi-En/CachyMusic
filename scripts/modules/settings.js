@@ -15,9 +15,12 @@ import {
     // =========================================================================
     function setSleepTimer(minutes) {
         const s = store.state;
+        const mins = Number(minutes);
+        if (minutes !== 'end' && (!Number.isSafeInteger(mins) || mins <= 0 || !Number.isSafeInteger(mins * 60000))) return;
         cancelSleepTimer(false);
         if (minutes === 'end') {
             s.sleepTimerMode = 'end';
+            store.emit('playback:sleep-mode-change');
             s.sleepTimerRemainingSec = 0;
             if (sleepTimerLabel) sleepTimerLabel.textContent = 'Sleep: End';
             if (sleepStatusRemaining) sleepStatusRemaining.textContent = 'Pauses at end of current track';
@@ -35,12 +38,10 @@ import {
             return;
         }
 
-        const mins = parseInt(minutes, 10);
-        if (isNaN(mins) || mins <= 0) return;
-
         s.sleepTimerMode = 'countdown';
         s.sleepTimerRemainingSec = mins * 60;
-        s.sleepTimerOriginalVolume = s.currentVolumeValue;
+        const deadline = Date.now() + mins * 60000;
+        let lastRemaining = s.sleepTimerRemainingSec;
 
         updateSleepTimerStatusUi();
         if (sleepStatusCard) sleepStatusCard.style.display = 'flex';
@@ -50,8 +51,10 @@ import {
         showToast(`Sleep timer set: ${mins} minute${mins === 1 ? '' : 's'}`);
         closeSleepTimerModal();
 
-        s.sleepTimerInterval = setInterval(() => {
-            s.sleepTimerRemainingSec--;
+        const tick = () => {
+            s.sleepTimerRemainingSec = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+            if (s.sleepTimerRemainingSec === lastRemaining) return;
+            lastRemaining = s.sleepTimerRemainingSec;
             updateSleepTimerStatusUi();
 
             // Audiophile 12-second logarithmic gentle fade-out
@@ -63,17 +66,13 @@ import {
             }
 
             if (s.sleepTimerRemainingSec <= 0) {
-                clearInterval(s.sleepTimerInterval);
-                s.sleepTimerInterval = null;
                 store.emit('playback:pause');
-                if (s.sleepTimerOriginalVolume !== null) {
-                    store.emit('audio:set-volume', { volume: s.sleepTimerOriginalVolume, persist: true });
-                    s.sleepTimerOriginalVolume = null;
-                }
                 cancelSleepTimer(false);
                 showToast('Sleep timer finished: Playback paused.');
             }
-        }, 1000);
+        };
+        s.sleepTimerTick = tick;
+        s.sleepTimerInterval = setInterval(tick, 1000);
     }
 
     function updateSleepTimerStatusUi() {
@@ -96,11 +95,14 @@ import {
             clearInterval(s.sleepTimerInterval);
             s.sleepTimerInterval = null;
         }
+        s.sleepTimerTick = null;
         if (s.sleepTimerOriginalVolume !== null) {
-            store.emit('audio:set-volume', { volume: s.sleepTimerOriginalVolume, persist: true });
+            store.emit('audio:set-volume', { volume: s.sleepTimerOriginalVolume, persist: false });
             s.sleepTimerOriginalVolume = null;
         }
+        const endedMode = s.sleepTimerMode === 'end';
         s.sleepTimerMode = null;
+        if (endedMode) store.emit('playback:sleep-mode-change');
         s.sleepTimerRemainingSec = 0;
         if (sleepTimerLabel) sleepTimerLabel.textContent = 'SLEEP TIMER';
         if (sleepStatusCard) sleepStatusCard.style.display = 'none';
@@ -114,6 +116,10 @@ import {
         if (settingsTabCancelSleepBtn) settingsTabCancelSleepBtn.style.display = 'none';
         if (showFeedback) showToast('Sleep timer cancelled');
     }
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) store.state.sleepTimerTick?.();
+    });
 
     function openSleepTimerModal() {
         if (sleepTimerModal) sleepTimerModal.style.display = 'flex';
@@ -160,6 +166,17 @@ import {
         if (disableBtn) disableBtn.classList.toggle('active', !s.debugModeActive);
 
         if (s.debugModeActive) {
+            const logList = document.getElementById('debugHudLogList');
+            if (logList) {
+                const entries = s.audioPlaybackDebugLogs.slice(-50).map(text => {
+                    const row = document.createElement('div');
+                    row.className = 'debugHudLogEntry';
+                    row.textContent = text;
+                    return row;
+                });
+                logList.replaceChildren(...entries);
+                logList.scrollTop = logList.scrollHeight;
+            }
             refreshDebugHudTelemetry();
         }
     }
@@ -185,7 +202,7 @@ import {
         if (logs.length > 80) logs.shift();
 
         const logList = document.getElementById('debugHudLogList');
-        if (logList) {
+        if (logList && store.state.debugModeActive) {
             const row = document.createElement('div');
             row.className = `debugHudLogEntry ${level}`;
             row.textContent = entryText;
@@ -197,7 +214,7 @@ import {
         }
 
         const logBox = document.getElementById('settingsAudioDebugLog');
-        if (logBox) {
+        if (logBox && store.state.currentWorkspace === 'settings') {
             logBox.textContent = logs.join('\n');
             logBox.scrollTop = logBox.scrollHeight;
         }
@@ -229,11 +246,11 @@ import {
         }
         if (html5El) {
             if (s.isSoftwareDecoding && s.activeDecodedBuffer) {
-                const cur = s.softwarePlaybackOffset + (s.audioContext && !s.isSoftwarePaused ? (s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0);
+                const cur = Math.max(0,s.softwarePlaybackOffset + (s.audioContext && !s.isSoftwarePaused && s.softwarePlaybackStartTime>0 ? Math.max(0,s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0));
                 const dur = s.activeDecodedBuffer.duration;
                 const state = s.isSoftwarePaused ? 'PAUSED' : 'PLAYING';
                 html5El.textContent = `SOFTWARE ENGINE • ${state} (${cur.toFixed(1)}s / ${dur.toFixed(1)}s) • 32-bit Float PCM`;
-                html5El.title = `Decoded: ${s.activeDecodedBuffer.sampleRate}Hz, ${s.activeDecodedBuffer.numberOfChannels}ch, Web Audio Buffer`;
+                html5El.title = `Decoded: ${s.activeDecodedBuffer.sampleRate}Hz, ${s.activeDecodedBuffer.numberOfChannels}ch, ${s.activeDecodedBuffer.streaming ? "bounded PCM streaming" : "Web Audio Buffer"}`;
             } else if (s.isSoftwareDecoding) {
                 html5El.textContent = 'SOFTWARE ENGINE • DECOMPRESSING BITSTREAM...';
                 html5El.title = 'Decoding FLAC/audio container into 32-bit Float PCM buffer...';
@@ -260,16 +277,6 @@ import {
     }
 
     function logAudioPlaybackEvent(level, msg, meta = {}) {
-        const logs = store.state.audioPlaybackDebugLogs;
-        const time = new Date().toLocaleTimeString();
-        const entry = `[${time}] [${level.toUpperCase()}] ${msg}`;
-        logs.push(entry);
-        if (logs.length > 50) logs.shift();
-        const logBox = document.getElementById('settingsAudioDebugLog');
-        if (logBox) {
-            logBox.textContent = logs.join('\n');
-            logBox.scrollTop = logBox.scrollHeight;
-        }
         appendDebugTelemetry(`[${level.toUpperCase()}] ${msg}`, level);
         updateAudioDiagnosticsUi(meta);
     }
@@ -328,29 +335,13 @@ import {
         refreshDebugHudTelemetry();
     }
 
-    function showThemeLoadingOverlay(themeName) {
-        const overlay = document.getElementById('themeLoadingOverlay');
-        const title = document.getElementById('themeLoadingTitle');
-        const sub = document.getElementById('themeLoadingSubtitle');
-        if (!overlay) return;
-        if (title) title.textContent = 'APPLYING THEME...';
-        if (sub) sub.textContent = `Configuring palette: ${themeName.toUpperCase()}`;
-        overlay.style.display = 'flex';
-        overlay.style.opacity = '1';
-        setTimeout(() => {
-            overlay.style.opacity = '0';
-            overlay.style.transition = 'opacity 0.25s ease';
-            setTimeout(() => {
-                overlay.style.display = 'none';
-                overlay.style.opacity = '1';
-                overlay.style.transition = '';
-            }, 250);
-        }, 320);
-    }
-
-    store.subscribe('theme:loading', ({ detail }) => {
-        if (detail && detail.themeName) showThemeLoadingOverlay(detail.themeName);
+    store.subscribe('workspace:change', ({ detail }) => {
+        if (detail?.viewName !== 'settings') return;
+        const logBox = document.getElementById('settingsAudioDebugLog');
+        if (logBox) logBox.textContent = store.state.audioPlaybackDebugLogs.join('\n');
+        updateAudioDiagnosticsUi();
     });
+
     store.subscribe('telemetry:log', ({ detail }) => {
         if (detail) logAudioPlaybackEvent(detail.level || 'info', detail.msg || '', detail.meta || {});
     });
@@ -366,7 +357,6 @@ import {
         refreshDebugHudTelemetry,
         setDebugMode,
         setSleepTimer,
-        showThemeLoadingOverlay,
         updateAudioDiagnosticsUi,
         updateDebugHudState,
         updateSleepTimerStatusUi

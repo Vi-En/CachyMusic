@@ -1,0 +1,9 @@
+<resources>
+    <color name="player_background">#101215</color>
+    <color name="player_system_bars">#191C20</color>
+    <style name="CachyMusicTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/player_background</item>
+        <item name="android:statusBarColor">@color/player_system_bars</item>
+        <item name="android:navigationBarColor">@color/player_system_bars</item>
+    </style>
+</resources>

@@ -31,8 +31,9 @@ export async function detectRuntimeCapabilities(forceRefresh = false) {
     let hasPhpBackend = false;
     let phpOsFamily = null;
     let lanUrl = null;
+    let mprisBridge = false, hardwareGain = false;
 
-    if (!isAndroidNative && typeof fetch === 'function' && typeof window !== 'undefined' && window.location.protocol !== 'file:') {
+    if (!isAndroidNative && typeof fetch === 'function' && typeof window !== 'undefined' && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)) {
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
         const timer = controller ? setTimeout(() => controller.abort(), 900) : null;
         try {
@@ -50,6 +51,8 @@ export async function detectRuntimeCapabilities(forceRefresh = false) {
                         hasPhpBackend = true;
                         phpOsFamily = data.osFamily || null;
                         lanUrl = data.lanUrl || null;
+                        mprisBridge = data.mprisBridge === true;
+                        hardwareGain = data.hardwareGain === true;
                     }
                 }
             }
@@ -81,12 +84,12 @@ export async function detectRuntimeCapabilities(forceRefresh = false) {
         hasAudioWorklet: typeof window !== 'undefined' && Boolean(window.AudioWorkletNode),
         hasMediaSession: typeof navigator !== 'undefined' && 'mediaSession' in navigator,
         hasNotifications: typeof window !== 'undefined' && 'Notification' in window,
-        hasMprisBridge: hasPhpBackend && resolvedOs === 'linux',
-        hasHardwareGain: isAndroidNative || hasPhpBackend,
+        hasMprisBridge: hasPhpBackend && resolvedOs === 'linux' && mprisBridge,
+        hasHardwareGain: isAndroidNative || (hasPhpBackend && resolvedOs === 'linux' && hardwareGain),
         getSoulseekHost: () => {
-            if (isAndroidNative) return '';
+            if (isAndroidNative || !hasPhpBackend) return '';
             const h = safeStorage.getItem('cachymusic_slsk_host') || '';
-            return h.trim().replace(/\/+$/, '');
+            return h.trim().replace(/\/+$/, '') === window.location.origin ? window.location.origin : ''; 
         }
     };
 
@@ -126,7 +129,7 @@ export function getRuntime() {
         hasNotifications: typeof window !== 'undefined' && 'Notification' in window,
         hasMprisBridge: false,
         hasHardwareGain: isAndroidNative,
-        getSoulseekHost: () => (safeStorage.getItem('cachymusic_slsk_host') || '').trim().replace(/\/+$/, '')
+        getSoulseekHost: () => ''
     };
 }
 
@@ -138,10 +141,17 @@ export function applyRuntimeUiAdaptation(runtime = getRuntime()) {
         || document.getElementById('settingsHwGainToggleBtn')?.closest('.settingsRowItem, .settingsControlRow, .settingsCard, .settingRow')
         || document.getElementById('settingsHardwareGainCard');
     if (hwGainRow) {
-        const showHwGain = Boolean(runtime.hasHardwareGain || runtime.isAndroidNative || runtime.hasPhpBackend);
+        const showHwGain = Boolean(runtime.hasHardwareGain);
         hwGainRow.style.display = showHwGain ? '' : 'none';
     }
 
+    if(runtime.isAndroidNative){
+        const share=document.getElementById('slskModalSharedDir');
+        if(share){share.disabled=true;share.placeholder='Android uploads are not implemented';const label=document.querySelector('label[for="slskModalSharedDir"]');if(label)label.textContent='Sharing (not available on Android yet)';}
+        const sync=document.getElementById('slskModalSyncSharePlayerDirBtn');if(sync)sync.disabled=true;
+        const btn=document.getElementById('slskChangeSharedDirBtn');if(btn)btn.disabled=true;
+        const text=document.getElementById('slskSharedPathText');if(text)text.textContent='Uploads unavailable';
+    }
     // 2. Android Device Music button: adapt cleanly on non-Android platforms so there are zero dead buttons
     const scanDeviceBtn = document.getElementById('settingsScanDeviceMusicBtn');
     if (scanDeviceBtn) {
@@ -188,6 +198,6 @@ export function applyRuntimeUiAdaptation(runtime = getRuntime()) {
         chooseBtn.textContent = runtime.isIOS ? 'IMPORT AUDIO FILES' : 'CHOOSE MUSIC FOLDER';
     }
     if (emptySub && !runtime.hasPhpBackend) {
-        emptySub.innerHTML = 'Import a music folder or audio files from your device to build your offline Hi-Fi library.';
+        emptySub.textContent = 'Choose a folder or import audio files from your device.';
     }
 }

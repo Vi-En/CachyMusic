@@ -1,6 +1,22 @@
+import {findTrackIndex, findSavedTrackIndex, rememberTrack} from './track-session.js';
+import {resolveTrackFormat} from './signal-path-model.js';
+import {renderSignalPath} from './signal-path-ui.js';
+import {createMprisClient} from './mpris-client.js';
+import {updateMarqueeText, recomputeMarquees} from './player-marquee.js';
+import {renderTrackMetadata, applyArtworkToDeck} from './player-presentation.js';
+import {
+    NativeTransport, identifyQueueEntries, indexedSource,
+    removeConsumedQueueEntries, restoreNativeQueue, saveNativeQueue
+} from './android-native-playback.js';
+import { inspectFlac } from './flac-reader.js';
+import { PcmRangeSource } from './pcm-range.js';
+import { inspectPcm } from './pcm-reader.js';
+import { PcmStream } from './pcm-stream.js';
+import { nextPcmCandidate, sameCandidate, canScheduleSuccessor } from './pcm-transition.js';
+import { resolveTrackSource, resolveLocalFile, releaseInactiveSources } from './local-source.js';
+import { DecodeBudgetError, MAX_COMPRESSED_BYTES, MAX_PCM_BYTES, validateDecodeBudget, readBoundedAudio } from './decode-budget.js';
 // CachyMusic - Core Audio Player, Software Decoder & Gapless Transport
 import {
-    formatFileSize,
     formatTime,
     getValidSampleRate,
     safeStorage,
@@ -11,19 +27,9 @@ import { hasActiveDsp, store } from './state.js';
 import {
     albumName,
     artistName,
-    auditMetricHeadroom,
-    auditMetricLatency,
-    auditQualityBadge,
-    auditQualityDesc,
-    auditQualityDot,
     bgDisc,
-    coverArtPreview,
     coverBadge,
     currentTimeEl,
-    deckArtworkAmbient,
-    deckArtworkBackdrop,
-    deckSignalDot,
-    getActiveTheme,
     miniCurrentTime,
     miniProgressBar,
     miniTotalDuration,
@@ -31,26 +37,9 @@ import {
     progressBar,
     repeatBtn,
     shuffleBtn,
-    signalPathBadgeBtn,
-    signalPathLabel,
     standaloneBanner,
     standaloneBannerTitle,
-    statAlbum,
-    statArtist,
-    statBitDepth,
-    statBitrate,
-    statChannels,
-    statDacStream,
-    statFormat,
-    statGenre,
-    statPath,
-    statSampleRate,
-    statSize,
-    statTitle,
-    statTrack,
-    statYear,
     tabPlaylists,
-    toneArm,
     totalDurationEl,
     trackBadge,
     trackList,
@@ -58,251 +47,282 @@ import {
     updateEmptyPlayerState,
     updateMiniPlayerInfo,
     updateMiniPlayerPlayState,
-    vinylArt,
     vinylTurntable,
     volumeIcon
 } from './ui-elements.js';
 import { updateActiveLyric, updateLyricsDisplay } from './lyrics.js';
-import { updateAmbientLighting } from './themes.js';
 import { appendDebugTelemetry, cancelSleepTimer, logAudioPlaybackEvent } from './settings.js';
-import { ensureAudioEngineForSampleRate, getOrCreateAudioSourceNode, setVolume, updateAudioRouting } from './audio-engine.js';
+import { getConfirmedAudioRoute, audioBufferChangePending, ensureAudioEngineForSampleRate, getOrCreateAudioSourceNode, resumeAudioGraph, setVolume, updateAudioRouting } from './audio-engine.js';
 import { getRuntime } from './runtime-capabilities.js';
 import { mediaSessionController } from './media-session.js';
-import { normalizeGenre } from './tag-parser.js';
 
-let mprisSyncHook = null;
-
-function initMprisBridge() {
-    if (!getRuntime().hasMprisBridge) return;
+// Native playback explicitly opts out of Web Audio effects. A single transport owns sound.
+const androidNative = typeof window!=='undefined'&&typeof window.AndroidBridge?.nativePlaybackLoad==='function'?new NativeTransport(window.AndroidBridge):null;
+let nativePoll=null,nativeReleasing=null,nativeEndedToken='',nativeLastGain=null,nativeWarningToken='',nativeLoadOffset=0;
+let nativeOrderInputs = [];
+let nativeQueueEdits = 0;
+let nativeRecoveryToken = '';
+let nativeAttemptGeneration = -1;
+const NATIVE_QUEUE_STORAGE = 'cachymusic_android_session_queue';
+function canUseAndroidDecoder(track) {
     const s = store.state;
-    let lastReportedStatus = '';
-    let lastReportedTitle = '';
-    let lastReportedPos = -1;
-
-    function getCurrentPlaybackTiming() {
-        const track = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
-            ? s.standaloneTrackList[s.standaloneTrackIndex]
-            : s.allTracks[s.currentTrackIndex];
-        if (s.isSoftwareDecoding && s.activeDecodedBuffer) {
-            const pos = s.softwarePlaybackOffset + (!s.isSoftwarePaused && s.audioContext ? (s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0);
-            return {
-                track,
-                isPlaying: !s.isSoftwarePaused,
-                position: Math.max(0, pos),
-                duration: s.activeDecodedBuffer.duration || (track ? track.duration : 0) || 0,
-                volume: s.currentVolumeValue
-            };
-        }
-        const a = s.audio;
-        return {
-            track,
-            isPlaying: Boolean(a && !a.paused && !a.ended),
-            position: a ? (a.currentTime || 0) : 0,
-            duration: (a && a.duration && isFinite(a.duration)) ? a.duration : ((track ? track.duration : 0) || 0),
-            volume: a ? a.volume : s.currentVolumeValue
-        };
+    return androidNative && Boolean(indexedSource(track)) && !hasActiveDsp()
+        && (s.currentPlaybackSpeed || 1) === 1
+        && safeStorage.getItem('cachymusic_continuous_pcm') !== 'true';
+}
+function nativeEligible(track) {
+    return canUseAndroidDecoder(track) && (safeStorage.getItem('cachymusic_android_native') === 'true'
+        || (nativeRecoveryToken && nativeRecoveryToken === androidNative.token));
+}
+function nativeGain(){const s=store.state;return s.audio?.muted?0:s.isHardwareGain?1:Math.max(0,Math.min(1,s.currentVolumeValue));}
+function nativePosition(){return androidNative?.active?Number(androidNative.read()?.position||0)/1000:null;}
+function nativeDuration(){return androidNative?.active?Number(androidNative.read()?.duration||0)/1000:null;}
+function reconcileNativeQueue(status) {
+    if (!androidNative?.supportsQueue) return;
+    const s = store.state;
+    const remaining = removeConsumedQueueEntries(s.playQueue, status?.consumedQueueIds);
+    if (remaining === s.playQueue) return;
+    s.playQueue = remaining;
+    store.emit('library:update-queue', { fromNative: true });
+}
+function rememberNativeQueue(token) {
+    if (androidNative.supportsQueue) safeStorage.setItem(NATIVE_QUEUE_STORAGE, saveNativeQueue(token, store.state.playQueue));
+}
+function nativeOrderKey(status) {
+    const s = store.state;
+    return [status.token, status.revision, s.allTracks[s.currentTrackIndex], s.allTracks, s.allTracks.length,
+        s.displayedTracks, s.displayedTracks.length, s.playQueue, s.playQueue.length, nativeQueueEdits, s.isShuffle, s.repeatMode, s.sleepTimerMode === 'end'];
+}
+function refreshNativeOrder(status = androidNative?.read()) {
+    if (!androidNative?.supportsOrder || nativeReleasing || !status || status.state === 'stopped') return;
+    if (status.token === nativeRecoveryToken) return;
+    reconcileNativeQueue(status);
+    const s = store.state;
+    if (nativeOrderKey(status).every((value, i) => value === nativeOrderInputs[i])) return;
+    if (androidNative.supportsQueue) {
+        s.playQueue = identifyQueueEntries(s.playQueue);
+        rememberNativeQueue(status.token);
     }
+    if (['unconfirmed', 'error'].includes(status.state)) return;
+    const index = indexedSource(s.allTracks[s.currentTrackIndex]) === status.uri
+        ? s.currentTrackIndex : s.allTracks.findIndex(track => indexedSource(track) === status.uri);
+    if (index < 0) return;
+    const order = s.sleepTimerMode !== 'end' && nativeEligible(s.allTracks[index])
+        ? androidNative.buildOrder(index === s.currentTrackIndex ? s : { ...s, currentTrackIndex: index }, status.token, nativeQueueEdits)
+        : null;
+    if (androidNative.setOrder(status, order)) nativeOrderInputs = nativeOrderKey(status);
+}
+function updateShuffleButton() {
+    if (!shuffleBtn) return;
+    const { isShuffle } = store.state;
+    shuffleBtn.classList.toggle('active', isShuffle);
+    shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
+}
 
-    function reportState(force = false) {
-        const info = getCurrentPlaybackTiming();
-        const track = info.track;
-        const status = info.isPlaying ? 'Playing' : (info.position > 0 ? 'Paused' : 'Stopped');
-        const pos = Math.floor(info.position || 0);
-        const title = track ? (track.title || track.filename || '') : '';
-
-        if (!force && status === lastReportedStatus && title === lastReportedTitle && Math.abs(pos - lastReportedPos) < 2) {
+function syncNativeTrack(status) {
+    const s = store.state;
+    if (!status?.uri || status.uri === indexedSource(s.allTracks[s.currentTrackIndex])) return true;
+    const index = s.allTracks.findIndex(track => indexedSource(track) === status.uri);
+    if (index >= 0) loadTrack(index, false, status.position / 1000, status);
+    else stopNative().then(stopped => { if (stopped) syncPlayPauseUI(false, true); });
+    return index >= 0;
+}
+function stopNative(){
+    if(!androidNative)return Promise.resolve(true);
+    if(nativeReleasing)return nativeReleasing;
+    const token = androidNative.token || androidNative.snapshot()?.token;
+    nativeReleasing = androidNative.stop().then(ok => {
+        if (ok) {
+            const stopped = androidNative.snapshot();
+            if (token && stopped?.token === token && stopped.state === 'stopped') {
+                reconcileNativeQueue(stopped);
+                if (androidNative.supportsQueue) safeStorage.removeItem(NATIVE_QUEUE_STORAGE);
+            }
+            clearInterval(nativePoll);
+            nativePoll = null;
+            nativeLastGain = null;
+            nativeOrderInputs = [];
+        } else showToast('Native playback has not confirmed stop. Try again before changing tracks.');
+        return ok;
+    }).finally(() => { nativeReleasing = null; });
+    return nativeReleasing;
+}
+function startNativePoll(){
+    if(nativePoll)return;
+    let savedPositionKey = '';
+    const tick=()=>{
+        if(nativeReleasing||!androidNative?.active)return;
+        const v=androidNative.read(),s=store.state;if(!v)return;
+        if(v.state==='stopped'){
+            reconcileNativeQueue(v);
+            if (androidNative.supportsQueue) safeStorage.removeItem(NATIVE_QUEUE_STORAGE);
+            androidNative.token='';androidNative.last=null;clearInterval(nativePoll);nativePoll=null;nativeOrderInputs=[];
+            syncPlayPauseUI(false,true);updateSignalPathUi(s.allTracks[s.currentTrackIndex]);return;
+        }
+        reconcileNativeQueue(v);
+        if (!syncNativeTrack(v)) return;
+        const track=s.allTracks[s.currentTrackIndex];
+        const position=Number(v.position||0)/1000,duration=Number(v.duration||0)/1000||track?.duration||0;
+        if(v.state==='error'&&!nativeEligible(track)){loadTrack(s.currentTrackIndex,false,position);return;}
+        if(v.state==='unconfirmed'||v.state==='error'){
+            syncPlayPauseUI(false);
+            if (nativeWarningToken !== v.token) {
+                nativeWarningToken = v.token;
+                showToast(v.token === nativeRecoveryToken ? 'Android could not decode this file.'
+                    : 'Native playback unavailable. Disable Native Android playback and retry.');
+            }
             return;
         }
-
-        lastReportedStatus = status;
-        lastReportedTitle = title;
-        lastReportedPos = pos;
-
-        const payload = {
-            status,
-            position: info.position || 0,
-            duration: info.duration || 0,
-            title: track ? (track.title || track.filename || 'Unknown') : 'CachyMusic',
-            artist: track ? (track.artist || 'Unknown Artist') : 'CachyOS',
-            album: track ? (track.album || '') : '',
-            artUrl: track && track.cover ? ((track.cover.startsWith('http') || track.cover.startsWith('data:')) ? track.cover : window.location.origin + '/' + track.cover) : '',
-            coverPath: track && track.cover ? track.cover : '',
-            volume: info.volume,
-            shuffle: s.isShuffle,
-            repeat: s.repeatMode
-        };
-
-        fetch('php/api/mpris_state.php?action=update_state', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        }).catch(() => {});
-    }
-
-    mprisSyncHook = reportState;
-
-    let isPollingCommands = false;
-    let consecutiveIdlePolls = 0;
-    async function pollCommands() {
-        if (isPollingCommands) {
-            setTimeout(pollCommands, 500);
-            return;
+        if(!nativeEligible(track)){
+            // Preserve the current position before returning to the DSP-capable backend.
+            const playing=v.state==='playing'||v.state==='loading'||v.state==='seeking';
+            loadTrack(s.currentTrackIndex,playing,position);return;
         }
-        isPollingCommands = true;
-        try {
-            const res = await fetch('php/api/mpris_state.php?action=get_command');
-            if (res.ok) {
-                const data = await res.json();
-                if (data && data.command) {
-                    consecutiveIdlePolls = 0;
-                    const cmd = data.command;
-                    const info = getCurrentPlaybackTiming();
-                    if (cmd === 'PlayPause') {
-                        if (info.isPlaying) pauseAudio();
-                        else playAudio(true);
-                    } else if (cmd === 'Play') {
-                        playAudio(true);
-                    } else if (cmd === 'Pause') {
-                        pauseAudio();
-                    } else if (cmd === 'Stop') {
-                        pauseAudio();
-                        seekAudio(0);
-                    } else if (cmd === 'Next') {
-                        nextTrack();
-                    } else if (cmd === 'Previous') {
-                        prevTrack();
-                    } else if (cmd === 'Seek' && typeof data.offset === 'number') {
-                        seekAudio(Math.max(0, info.position + data.offset));
-                    } else if (cmd === 'SeekTo' && typeof data.position === 'number') {
-                        seekAudio(Math.max(0, data.position));
-                    } else if (cmd === 'SetVolume' && typeof data.volume === 'number') {
-                        setVolume(Math.max(0, Math.min(1.5, data.volume)), true);
-                    } else if (cmd === 'ToggleShuffle') {
-                        s.isShuffle = !s.isShuffle;
-                        if (shuffleBtn) {
-                            shuffleBtn.classList.toggle('active', s.isShuffle);
-                            shuffleBtn.setAttribute('title', s.isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
-                        }
-                    } else if (cmd === 'SetShuffle' && typeof data.shuffle === 'boolean') {
-                        s.isShuffle = data.shuffle;
-                        if (shuffleBtn) {
-                            shuffleBtn.classList.toggle('active', s.isShuffle);
-                            shuffleBtn.setAttribute('title', s.isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
-                        }
-                    } else if (cmd === 'SetLoopStatus' && typeof data.loopStatus === 'string') {
-                        const ls = data.loopStatus.toLowerCase();
-                        if (ls === 'track') s.repeatMode = 'one';
-                        else if (ls === 'playlist') s.repeatMode = 'all';
-                        else s.repeatMode = 'off';
-                        updateRepeatUI();
-                    }
-                    reportState(true);
-                } else {
-                    consecutiveIdlePolls++;
-                }
-            }
-        } catch (_) {
-            consecutiveIdlePolls += 2;
-        } finally {
-            isPollingCommands = false;
-            let nextDelay = 350;
-            if (document.hidden) {
-                nextDelay = 1200;
-            } else if (consecutiveIdlePolls > 10) {
-                nextDelay = 1200;
-            } else if (consecutiveIdlePolls > 3) {
-                nextDelay = 700;
-            }
-            setTimeout(pollCommands, nextDelay);
+        refreshNativeOrder(v);
+        const gain=nativeGain();if(gain!==nativeLastGain&&androidNative.command('gain',0,gain))nativeLastGain=gain;
+        updatePlaybackProgress(position,duration);
+        if(totalDurationEl)totalDurationEl.textContent=formatTime(duration);if(miniTotalDuration)miniTotalDuration.textContent=formatTime(duration);
+        if(v.state==='playing'||v.state==='paused'||v.state==='ended'){
+            if (v.state !== 'ended') s.userExplicitlyPaused = v.state === 'paused';
+            syncPlayPauseUI(v.state==='playing');
         }
-    }
-
-    setTimeout(pollCommands, 500);
+        if(v.state!=='ended')nativeEndedToken='';
+        const endKey = `${v.token}:${v.revision ?? 0}`;
+        if (v.state === 'ended' && nativeEndedToken !== endKey) {
+            nativeEndedToken = endKey;
+            if (s.sleepTimerMode === 'end') {
+                s.userExplicitlyPaused = true;
+                cancelSleepTimer(false);
+                showToast('Sleep timer: End of track reached. Playback paused.');
+            } else if (s.repeatMode === 'one') androidNative.command('play');
+            else if (!v.shuffleExhausted || !s.isShuffle || s.repeatMode !== 'off' || s.playQueue.length) nextTrack(false);
+        }
+        const second = Math.floor(position);
+        const positionKey = `${endKey}:${second}`;
+        if (second > 0 && second % 5 === 0 && positionKey !== savedPositionKey) {
+            savedPositionKey = positionKey;
+            try { safeStorage.setItem('cachymusic_last_track_time', position.toFixed(2)); } catch (_) {}
+        }
+    };
+    nativePoll=setInterval(tick,250);tick();
 }
-
-function updateMarqueeText(el, text) {
-    if (!el) return;
-    el.title = text || '';
-    el.innerHTML = '';
-    const span = document.createElement('span');
-    span.className = 'marqueeContent';
-    span.textContent = text || '';
-    el.appendChild(span);
-
-    requestAnimationFrame(() => {
-        if (!el.isConnected) return;
-        const overflow = span.scrollWidth - el.clientWidth;
-        if (overflow > 6) {
-            el.classList.add('isMarquee');
-            const duration = Math.max(6, Math.min(22, Math.round(overflow / 24) + 4));
-            span.style.setProperty('--marquee-overflow', `${Math.ceil(overflow) + 8}px`);
-            span.style.setProperty('--marquee-duration', `${duration}s`);
-        } else {
-            el.classList.remove('isMarquee');
-            span.style.removeProperty('--marquee-overflow');
-            span.style.removeProperty('--marquee-duration');
-        }
-    });
+let mprisClient = null;
+function initMprisBridge() {
+    if (!getRuntime().hasMprisBridge || mprisClient) return;
+    mprisClient = createMprisClient({state: store.state, actions: {
+        softwarePosition, pauseAudio, playAudio, seekAudio, nextTrack, prevTrack,
+        setVolume, updateShuffleButton, refreshNativeOrder, updateRepeatUI
+    }});
+    mprisClient.start();
 }
-
-function recomputeMarquees() {
-    [trackName, artistName, albumName].forEach(el => {
-        if (!el) return;
-        const span = el.querySelector('.marqueeContent');
-        if (!span) return;
-        const overflow = span.scrollWidth - el.clientWidth;
-        if (overflow > 6) {
-            el.classList.add('isMarquee');
-            const duration = Math.max(6, Math.min(22, Math.round(overflow / 24) + 4));
-            span.style.setProperty('--marquee-overflow', `${Math.ceil(overflow) + 8}px`);
-            span.style.setProperty('--marquee-duration', `${duration}s`);
-        } else {
-            el.classList.remove('isMarquee');
-            span.style.removeProperty('--marquee-overflow');
-            span.style.removeProperty('--marquee-duration');
-        }
-    });
-}
-
-if (typeof window !== 'undefined') {
-    if (window.ResizeObserver) {
-        const metaBox = document.querySelector('.trackMeta');
-        if (metaBox) {
-            const ro = new ResizeObserver(() => recomputeMarquees());
-            ro.observe(metaBox);
-        }
-    }
-    window.addEventListener('resize', () => recomputeMarquees(), { passive: true });
-}
+function mprisSyncHook(force) { mprisClient?.reportState(force); }
 
 let currentPlayRequestId = 0;
 let currentTrackGeneration = 0;
+let explicitTransportVersion = 0;
+export function playbackIntentVersion() { return `${currentTrackGeneration}:${currentPlayRequestId}:${explicitTransportVersion}`; }
+let mediaElementGeneration = -1;
 let activeLoadedMetadataHandler = null;
 let playPendingTimeout = null;
 let noDataStallTimer = null;
+let removeNoDataListener = null;
 let seekStallTimer = null;
 let lastPositionStateUpdate = 0;
 let activeDecodeAbortController = null;
 const softwareBufferCache = new Map();
-
-function isAndroidFlacHazard(track) {
-    if (!track) return false;
-    const rt = getRuntime();
-    const onAndroid = Boolean(rt && rt.isAndroidNative)
-        || (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || ''));
-    if (!onAndroid) return false;
-    const fmt = (track.format || '').toUpperCase();
-    const fname = (track.filename || '').toLowerCase();
-    const src = (track.src || '').toLowerCase();
-    return fmt === 'FLAC' || fname.endsWith('.flac') || src.includes('mime=audio%2fflac') || src.includes('.flac');
+let trackLoadToken = 0;
+let pcmStream = null;
+let pcmFile = null;
+let pendingPcm = null;
+function continuousPcmEnabled(){return store.state.sleepTimerMode!=='end' && safeStorage.getItem('cachymusic_continuous_pcm')==='true' && (store.state.currentPlaybackSpeed||1)===1;}
+function pcmExtension(track,file){return /\.(wav|wave|aif|aiff|flac)$/i.test(track?.filename||file?.name||'');}
+function shouldStreamAndroidFlac(track) {
+    const s = store.state;
+    return androidNative && indexedSource(track) && /\.flac$/i.test(track.filename || '')
+        && hasActiveDsp() && (s.currentPlaybackSpeed || 1) === 1 && typeof Worker === 'function';
 }
+function cancelPcmSuccessor(){const old=pendingPcm;pendingPcm=null;old?.stream?.stop();}
+function stopPcmStream(){cancelPcmSuccessor();const old=pcmStream;pcmStream=null;old?.stop();}
+function softwarePosition(){const s=store.state;return pcmStream?.started?pcmStream.position():Math.max(0, s.softwarePlaybackOffset+(!s.isSoftwarePaused&&s.audioContext&&s.softwarePlaybackStartTime>0&&!s.activeDecodedBuffer?.streaming?Math.max(0,s.audioContext.currentTime-s.softwarePlaybackStartTime):0));}
+async function preparePcmInput(track,localFile){
+    const file=localFile===undefined?await resolveLocalFile(track):localFile;
+    if(!pcmExtension(track,file))return null;
+    let input=file;
+    if(!input){let src=track.src||'';if(src.startsWith('../'))src=src.substring(3);
+        const rangeSrc=/^\d+$/.test(String(track.tid||''))&&/(?:^|\/)php\/api\/stream\.php\?/.test(src)?`php/api/stream.php?tid=${track.tid}`:src;
+        input=await PcmRangeSource.open(rangeSrc);}
+    const format=await (/\.flac$/i.test(track.filename||file?.name||'')?inspectFlac:inspectPcm)(input);
+    return {file:input instanceof PcmRangeSource?input.descriptor():input,format};
+}
+function makePcmStream(file,format){
+    const s=store.state;
+    const stream=new PcmStream(s.audioContext,s.softwareSourceGainNode,file,format,{
+        onStart:(anchor,offset)=>{if(pcmStream!==stream)return;s.softwarePlaybackStartTime=anchor;s.softwarePlaybackOffset=offset;s.isSoftwarePaused=false;syncPlayPauseUI(true);startSoftwareProgressLoop();},
+        onProgress:()=>{if(pcmStream===stream)checkPcmSuccessor(stream);},
+        onEnd:()=>{if(pcmStream!==stream){if(pendingPcm?.stream===stream)cancelPcmSuccessor();return;}if(adoptPcmSuccessor())return;pcmStream=null;onSoftwarePlaybackEnded();},
+        onError:(error,position)=>{if(pcmStream!==stream){if(pendingPcm?.stream===stream)cancelPcmSuccessor();return;}cancelPcmSuccessor();pcmStream=null;s.softwarePlaybackOffset=Math.max(s.softwarePlaybackOffset,position);s.softwarePlaybackStartTime=0;s.isSoftwarePaused=true;s.userExplicitlyPaused=true;cancelSoftwareProgressLoop();syncPlayPauseUI(false);showCachyToast('PCM playback interrupted',error.message,'error');}
+    });
+    return stream;
+}
+function checkPcmSuccessor(current){
+    if(!pendingPcm&&current.endTime-current.ctx.currentTime>5)return;
+    const s=store.state,candidate=continuousPcmEnabled()&&!audioBufferChangePending()?nextPcmCandidate(s):null;
+    if(pendingPcm&&!sameCandidate(pendingPcm.candidate,candidate))cancelPcmSuccessor();
+    if(!candidate||!pcmExtension(candidate.track)||current.endTime-current.ctx.currentTime>5)return;
+    if(!pendingPcm&&!sameCandidate(current.lastAttempt,candidate)){
+        current.lastAttempt=candidate;
+        const job={candidate,current,stream:null};pendingPcm=job;
+        (async()=>{
+            const result=await preparePcmInput(candidate.track);
+            if(!result||pendingPcm!==job||pcmStream!==current)return;
+            job.file=result.file;job.format=result.format;job.stream=makePcmStream(job.file,job.format);
+            await job.stream.prepare(0);
+            if(pendingPcm!==job||pcmStream!==current){job.stream.stop();return;}
+            checkPcmSuccessor(current);
+        })().catch(()=>{if(pendingPcm===job)cancelPcmSuccessor();});
+    }
+    if(pendingPcm?.stream&&canScheduleSuccessor(current,pendingPcm.stream)){
+        try{pendingPcm.stream.startPrepared(current.endTime,{notify:false});}catch(_){cancelPcmSuccessor();}
+    }
+}
+function adoptPcmSuccessor(){
+    const s=store.state,job=pendingPcm;
+    if(!job?.stream?.started||job.stream.closed||audioBufferChangePending()||!continuousPcmEnabled()||!sameCandidate(job.candidate,nextPcmCandidate(s))){cancelPcmSuccessor();return false;}
+    pendingPcm=null;pcmStream=job.stream;pcmFile=job.file;
+    const {track,index,queue}=job.candidate;
+    ++trackLoadToken;++currentTrackGeneration;++currentPlayRequestId;
+    if(queue){s.playQueue.shift();store.emit('library:update-queue');}
+    s.currentTrackIndex=index;s.currentTrack=track;s.activeDecodedBuffer=job.format;track.duration=job.format.duration;
+    s.softwarePlaybackStartTime=pcmStream.anchor;s.softwarePlaybackOffset=0;s.isSoftwarePaused=false;s.trackPlaybackRetryCount=0;
+    rememberTrack(safeStorage, track);
+    store.emit('track:change',{track,index});
+    updateMarqueeText(trackName,track.title||track.filename||'Unknown');updateMarqueeText(artistName,track.artist||'Unknown');updateMarqueeText(albumName,track.album?`Album: ${track.album}`:'Album: Unknown');
+    updateTrackBadgeUi(track);applyArtworkToDeck(track.cover||'resources/images/default.svg',Boolean(track.cover&&!track.cover.includes('default.svg')));
+    applyTrackMetadataToDom(track,false);updateSignalPathUi(track);updateMiniPlayerInfo(track);updateLyricsDisplay(track);
+    if(totalDurationEl)totalDurationEl.textContent=formatTime(track.duration);if(miniTotalDuration)miniTotalDuration.textContent=formatTime(track.duration);
+    updatePlaybackProgress(pcmStream.position(),track.duration);mediaSessionController.updateMetadata(track);mediaSessionController.updatePositionState(true);
+    store.emit('library:render-window',{preserveScroll:true});mprisSyncHook(true);
+    startSoftwareProgressLoop();return true;
+}
+function startPcmPlayback(){
+    const s=store.state, format=s.activeDecodedBuffer;
+    stopPcmStream();
+    if(!pcmFile||!format?.streaming||!s.audioContext)return;
+    if(!s.softwareSourceGainNode||s.softwareSourceGainNode.context!==s.audioContext)s.softwareSourceGainNode=s.audioContext.createGain();
+    updateAudioRouting();
+    const stream=makePcmStream(pcmFile,format);
+    pcmStream=stream;s.softwarePlaybackStartTime=0;s.isSoftwarePaused=false;
+    const quickStart = Boolean(androidNative && indexedSource(s.currentTrack));
+    stream.start(s.softwarePlaybackOffset, quickStart).catch(err=>stream.fail(err));
+}
+
 
 function shouldPreferSoftwareDecoder(track, cleanSrc = '') {
     const s = store.state;
     if (!track) return false;
-    return s.alwaysSoftwareDecodeUrls.has(cleanSrc)
+    return (continuousPcmEnabled()&&typeof Worker==='function'&&pcmExtension(track)) || s.alwaysSoftwareDecodeUrls.has(cleanSrc)
         || (track.src && s.alwaysSoftwareDecodeUrls.has(track.src))
-        || isAndroidFlacHazard(track);
+        ; // Native streaming first, including Android FLAC.
 }
 
 function abortActiveSoftwareFetch() {
@@ -318,10 +338,9 @@ function cacheSoftwareAudioBuffer(cacheKey, decodedBuffer) {
         softwareBufferCache.delete(cacheKey);
     }
     softwareBufferCache.set(cacheKey, decodedBuffer);
-    // Keep at most 2 decoded PCM AudioBuffers (~60-90MB max headroom) for instant prev/next replay on mobile
-    while (softwareBufferCache.size > 2) {
-        const oldestKey = softwareBufferCache.keys().next().value;
-        softwareBufferCache.delete(oldestKey);
+    const totalBytes = () => [...softwareBufferCache.values()].reduce((n,b)=>n+b.length*b.numberOfChannels*4,0);
+    while (softwareBufferCache.size && totalBytes() > MAX_PCM_BYTES) {
+        softwareBufferCache.delete(softwareBufferCache.keys().next().value);
     }
 }
 
@@ -337,69 +356,39 @@ function clearNoDataStallTimer() {
         clearTimeout(noDataStallTimer);
         noDataStallTimer = null;
     }
+    removeNoDataListener?.();
+    removeNoDataListener = null;
+}
+
+function rememberSoftwareDecoder(source) {
+    if (!source) return;
+    const urls = store.state.alwaysSoftwareDecodeUrls;
+    urls.delete(source);
+    urls.add(source);
+    if (urls.size > 256) urls.delete(urls.values().next().value);
 }
 
 function applyTrackMetadataToDom(track, isStandalone = false) {
-    const s = store.state;
-    s.currentInspectedTrack = track;
-    if (statTitle) statTitle.textContent = track.title ? track.title : (isStandalone ? (track.filename || 'Standalone Audio') : 'Unknown');
-    if (statArtist) statArtist.textContent = track.artist ? track.artist : (isStandalone ? 'External File' : 'Unknown');
-    if (statAlbum) statAlbum.textContent = track.album ? track.album : (isStandalone ? 'Standalone File' : 'Unknown');
-    if (statGenre) statGenre.textContent = normalizeGenre(track.genre) || 'N/A';
-    if (statYear) statYear.textContent = track.year ? track.year.toString() : 'N/A';
-    if (statTrack) statTrack.textContent = track.track ? track.track.toString() : 'N/A';
-    if (statBitrate) statBitrate.textContent = track.bitrate ? `${track.bitrate} kbps` : 'N/A';
-    if (statSampleRate) statSampleRate.textContent = track.sampleRate ? `${track.sampleRate} Hz` : 'N/A';
-    if (statBitDepth) {
-        const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
-        statBitDepth.textContent = bd ? `${bd}-Bit` : 'N/A';
-        statBitDepth.style.color = 'inherit';
-    }
-    updateDacStatusUi();
-    if (statChannels) {
-        statChannels.textContent = track.channels === 2 ? 'Stereo' : (track.channels === 1 ? 'Mono' : (track.channels ? `${track.channels} ch` : 'N/A'));
-    }
-    if (statFormat) statFormat.textContent = track.format ? track.format.toUpperCase() : 'N/A';
-    if (statSize) statSize.textContent = formatFileSize(track.size);
-    if (statPath) {
-        statPath.textContent = track.filename ? track.filename : (isStandalone ? 'Standalone File' : 'N/A');
-        statPath.title = track.fullPath || track.filename || 'N/A';
-    }
-}
-
-function applyArtworkToDeck(coverSrc, hasCustomCover) {
-    const fallback = 'resources/images/default.svg';
-    if (deckArtworkBackdrop) {
-        deckArtworkBackdrop.onerror = () => { deckArtworkBackdrop.onerror = null; deckArtworkBackdrop.src = fallback; };
-        deckArtworkBackdrop.src = coverSrc;
-        deckArtworkBackdrop.style.opacity = hasCustomCover ? '0.28' : '0.04';
-    }
-    if (deckArtworkAmbient) {
-        deckArtworkAmbient.onerror = () => { deckArtworkAmbient.onerror = null; deckArtworkAmbient.src = fallback; };
-        deckArtworkAmbient.src = coverSrc;
-        deckArtworkAmbient.style.opacity = hasCustomCover ? '0.35' : '0';
-    }
-    if (vinylArt) {
-        vinylArt.onerror = () => { vinylArt.onerror = null; vinylArt.src = fallback; };
-        vinylArt.src = coverSrc;
-    }
-    if (coverArtPreview) {
-        coverArtPreview.onerror = () => { coverArtPreview.onerror = null; coverArtPreview.src = fallback; };
-        coverArtPreview.src = coverSrc;
-    }
-    updateAmbientLighting(coverSrc);
+    renderTrackMetadata(track, isStandalone, updateDacStatusUi);
 }
 
 // Load Track by Index in allTracks
-async function loadTrack(index, autoPlay = true, initialTime = 0) {
+async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = null, useMediaElement = false) {
     const s = store.state;
     if (!s.allTracks[index]) return;
+    const loadToken=++trackLoadToken, loadPlayId=++currentPlayRequestId;
+    if(adoptNative){androidNative?.adopt(adoptNative);}else if(!await stopNative()||loadToken!==trackLoadToken)return;
+    if (!autoPlay && !adoptNative) s.userExplicitlyPaused = true;
+    currentTrackGeneration++;
+    if(activeLoadedMetadataHandler&&s.audio)s.audio.removeEventListener('loadedmetadata',activeLoadedMetadataHandler);
+    if(s.audio){s.audio.pause();s.audio.removeAttribute("src");s.audio.load();}
+    if(s.secondaryAudio){s.secondaryAudio.pause();s.secondaryAudio.removeAttribute("src");s.secondaryAudio.load();}
+    s.preloadedNextTrackIndex=-1;
     s.currentTrackIndex = index;
     s.trackPlaybackRetryCount = 0;
     stopSoftwarePlayback();
     s.activeDecodedBuffer = null;
     s.isSoftwareDecoding = false;
-    currentPlayRequestId++;
     s.isPlayPending = false;
     s.pendingSoftwareSeekSec = null;
     clearNoDataStallTimer();
@@ -416,24 +405,24 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
     const track = s.allTracks[s.currentTrackIndex];
     s.currentTrack = track;
 
-    if (track) {
-        try {
-            if (track.tid) safeStorage.setItem('cachymusic_last_track_tid', track.tid.toString());
-            if (track.fullPath) safeStorage.setItem('cachymusic_last_track_path', track.fullPath);
-            if (track.filename) safeStorage.setItem('cachymusic_last_track_filename', track.filename);
-            if (track.id) safeStorage.setItem('cachymusic_last_track_id', track.id.toString());
-            if (track.title) safeStorage.setItem('cachymusic_last_track_title', track.title);
-        } catch (_) {}
-    }
+    if (track) rememberTrack(safeStorage, track);
 
-    let trackSrc = track.src || '';
+    let trackSrc = adoptNative ? track.src : await resolveTrackSource(track);
+    if(loadToken!==trackLoadToken)return;
+    releaseInactiveSources(trackSrc);
+    if(!trackSrc){syncPlayPauseUI(false);showToast('Music file unavailable. Reimport or relink it.');return;}
     if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
 
-    const isKnownSoftware = shouldPreferSoftwareDecoder(track, trackSrc);
+    const prefersSoftware = shouldPreferSoftwareDecoder(track, trackSrc);
+    const streamFlac = !useMediaElement && shouldStreamAndroidFlac(track);
+    const isKnownSoftware = prefersSoftware || streamFlac;
     const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
-    await ensureAudioEngineForSampleRate(targetRate);
+    const refreshBuffer = !nativeEligible(track) && audioBufferChangePending();
+    if (!adoptNative && (refreshBuffer || !(autoPlay && (isKnownSoftware || nativeEligible(track))))) {
+        await ensureAudioEngineForSampleRate(targetRate, refreshBuffer);
+    }
 
-    if (s.currentTrackIndex !== index) return;
+    if (loadToken!==trackLoadToken || s.currentTrackIndex !== index) return;
 
     store.emit('track:change', { track, index });
 
@@ -454,7 +443,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
 
         currentTrackGeneration++;
         audio._trackGeneration = currentTrackGeneration;
-        if (!isKnownSoftware && trackSrc) {
+        if ((!isKnownSoftware || !autoPlay) && trackSrc) {
             audio.src = trackSrc;
             audio._isFreshTrackLoad = true;
             try { audio.load(); } catch (_) {}
@@ -466,13 +455,18 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
             } catch (_) {}
         }
     }
+    if (useMediaElement) mediaElementGeneration = currentTrackGeneration;
 
     const targetTime = (typeof initialTime === 'number' && !isNaN(initialTime) && initialTime > 0) ? initialTime : 0;
-    if (audio && targetTime > 0 && audio.readyState >= 1) {
+    nativeLoadOffset=targetTime;
+    if (audio && !adoptNative && targetTime > 0 && audio.readyState >= 1) {
         try { audio.currentTime = targetTime; } catch (_) {}
     }
-    if (targetTime === 0) {
-        try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
+    {
+        try {
+            if (targetTime > 0) safeStorage.setItem('cachymusic_last_track_time', targetTime.toFixed(2));
+            else safeStorage.removeItem('cachymusic_last_track_time');
+        } catch (_) {}
     }
 
     const applyTargetTime = () => {
@@ -508,7 +502,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
         try { audio.removeEventListener('loadedmetadata', activeLoadedMetadataHandler); } catch (_) {}
     }
     activeLoadedMetadataHandler = applyTargetTime;
-    if (audio && !isKnownSoftware && trackSrc) {
+    if (audio && !adoptNative && (!isKnownSoftware || !autoPlay) && trackSrc) {
         audio.addEventListener('loadedmetadata', applyTargetTime, { once: true });
     }
 
@@ -536,10 +530,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
     applyTrackMetadataToDom(track, false);
 
     store.emit('library:render-window', { preserveScroll: true });
-    const displayedIdx = s.displayedTracks.findIndex(t => (
-        (track.id && t.id) ? t.id === track.id :
-        ((track.tid && t.tid) ? t.tid === track.tid : t.filename === track.filename)
-    ));
+    const displayedIdx = findTrackIndex(s.displayedTracks, track);
     if (displayedIdx !== -1 && trackList) {
         const activeEl = trackList.querySelector(`.trackItem[data-index="${displayedIdx}"]`);
         if (activeEl) {
@@ -567,6 +558,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
     }
     if (totalDurationEl) totalDurationEl.textContent = formatTime(track.duration);
     if (miniTotalDuration) miniTotalDuration.textContent = formatTime(track.duration);
+    updatePlaybackProgress(targetTime,track.duration);
     updateMiniPlayerInfo(track);
     updateLyricsDisplay(track);
     if (targetTime > 0 && s.isLyricsView) {
@@ -574,11 +566,12 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
     }
 
     mediaSessionController.updateMetadata(track);
-    if (mprisSyncHook) mprisSyncHook(true);
+    mprisSyncHook(true);
 
+    if(adoptNative){syncPlayPauseUI(adoptNative.state==='playing',true);startNativePoll();updateSignalPathUi(track);return;}
     if (isKnownSoftware) {
-        if (autoPlay) {
-            playWithSoftwareDecoder(track, initialTime);
+        if (autoPlay && loadPlayId===currentPlayRequestId) {
+            playWithSoftwareDecoder(track, initialTime, streamFlac && !prefersSoftware);
         } else {
             s.pendingSoftwareSeekSec = initialTime > 0 ? initialTime : null;
             s.isSoftwarePaused = true;
@@ -587,7 +580,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0) {
         return;
     }
 
-    if (autoPlay) {
+    if (autoPlay && loadPlayId===currentPlayRequestId) {
         playAudio();
     } else {
         pauseAudio();
@@ -637,7 +630,13 @@ async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
         s.standaloneTrackIndex = 0;
     }
     if (!track) return;
-
+    const loadToken=++trackLoadToken, loadPlayId=++currentPlayRequestId;
+    if(!await stopNative()||loadToken!==trackLoadToken)return;
+    currentTrackGeneration++;
+    if(activeLoadedMetadataHandler&&s.audio)s.audio.removeEventListener('loadedmetadata',activeLoadedMetadataHandler);abortActiveSoftwareFetch();stopSoftwarePlayback();s.activeDecodedBuffer=null;
+    if(s.audio){s.audio.pause();s.audio.removeAttribute('src');s.audio.load();}
+    if(s.secondaryAudio){s.secondaryAudio.pause();s.secondaryAudio.removeAttribute('src');s.secondaryAudio.load();}
+    s.preloadedNextTrackIndex=-1;
     s.isStandalonePlayback = true;
     s.currentTrack = track;
     updateStandaloneBannerUi(true, track);
@@ -651,19 +650,23 @@ async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
         s.softwarePlaybackRaf = null;
     }
 
-    let trackSrc = track.src || '';
+    let trackSrc = await resolveTrackSource(track);
+    if(loadToken!==trackLoadToken)return;
+    releaseInactiveSources(trackSrc);
+    if(!trackSrc){syncPlayPauseUI(false);showToast('Music file unavailable. Reimport or relink it.');return;}
     if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
     const isKnownSoftware = shouldPreferSoftwareDecoder(track, trackSrc);
     const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
-    await ensureAudioEngineForSampleRate(targetRate);
+    await ensureAudioEngineForSampleRate(targetRate, audioBufferChangePending());
 
+    if(loadToken!==trackLoadToken)return;
     store.emit('track:change', { track, index: s.standaloneTrackIndex });
 
     const audio = s.audio;
     if (audio) {
         currentTrackGeneration++;
         audio._trackGeneration = currentTrackGeneration;
-        if (!isKnownSoftware && trackSrc) {
+        if ((!isKnownSoftware || !autoPlay) && trackSrc) {
             audio.src = trackSrc;
             audio._isFreshTrackLoad = true;
             try { audio.load(); } catch (_) {}
@@ -706,10 +709,10 @@ async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
     updateLyricsDisplay(track);
 
     mediaSessionController.updateMetadata(track);
-    if (mprisSyncHook) mprisSyncHook(true);
+    mprisSyncHook(true);
 
     if (isKnownSoftware) {
-        if (autoPlay) {
+        if (autoPlay && loadPlayId===currentPlayRequestId) {
             playWithSoftwareDecoder(track, 0);
         } else {
             s.isSoftwarePaused = true;
@@ -718,7 +721,7 @@ async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
         return;
     }
 
-    if (autoPlay) {
+    if (autoPlay && loadPlayId===currentPlayRequestId) {
         playAudio();
     } else {
         pauseAudio();
@@ -732,9 +735,10 @@ function syncPlayPauseUI(playing, force = false) {
     if (!force && s.lastSyncedPlayingState === playing) return;
     s.lastSyncedPlayingState = playing;
     s.isPlaying = playing;
+    store.emit('audio:spectrum-refresh');
 
     mediaSessionController.syncPlaybackState(playing);
-    if (mprisSyncHook) mprisSyncHook(true);
+    mprisSyncHook(true);
 
     if (playPauseBtn) {
         playPauseBtn.setAttribute('title', playing ? 'Pause (Space)' : 'Play (Space)');
@@ -746,7 +750,6 @@ function syncPlayPauseUI(playing, force = false) {
         vinylTurntable.classList.toggle('thematicFidelity', isThematicActive);
         vinylTurntable.classList.toggle('spinning', playing);
     }
-    if (toneArm) toneArm.classList.toggle('active', playing);
     if (bgDisc) bgDisc.classList.toggle('fast', playing && isThematicActive);
 
     updateMiniPlayerPlayState(playing);
@@ -767,6 +770,7 @@ function syncPlayPauseUI(playing, force = false) {
 
 function updateRepeatUI() {
     const s = store.state;
+    refreshNativeOrder();
     if (!repeatBtn) return;
     safeStorage.setItem('cachymusic_repeat_mode', s.repeatMode);
 
@@ -806,6 +810,8 @@ function updateRepeatUI() {
 function seekAudio(targetSec) {
     const s = store.state;
     if (typeof targetSec !== 'number' || !Number.isFinite(targetSec)) return;
+    nativeLoadOffset=Math.max(0,targetSec);
+    if(androidNative?.active){androidNative.command('seek',targetSec);updatePlaybackProgress(targetSec,nativeDuration());return;}
     const track = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
         ? s.standaloneTrackList[s.standaloneTrackIndex]
         : s.allTracks[s.currentTrackIndex];
@@ -831,7 +837,7 @@ function seekAudio(targetSec) {
     clearSeekStallTimer();
 
     if (shouldKeepPlaying && s.audioContext && s.audioContext.state === 'suspended') {
-        s.audioContext.resume().catch(() => {});
+        resumeAudioGraph().catch(() => {});
     }
 
     try {
@@ -840,7 +846,7 @@ function seekAudio(targetSec) {
 
     updatePlaybackProgress(clamped, Number.isFinite(dur) ? dur : 0);
     mediaSessionController.updatePositionState(true);
-    if (mprisSyncHook) mprisSyncHook(true);
+    mprisSyncHook(true);
 
     if (shouldKeepPlaying) {
         if (audio.paused) {
@@ -853,37 +859,63 @@ function seekAudio(targetSec) {
             if (seekGen !== currentTrackGeneration) return;
             if (s.userExplicitlyPaused || s.isSoftwareDecoding || s.audio !== audio || !track) return;
             const stillStalled = audio.seeking || audio.readyState < 3 || audio.paused;
-            if (stillStalled) {
-                logAudioPlaybackEvent('warn', `HTML5 seek to ${clamped.toFixed(1)}s stalled on ${track.format || 'stream'}; promoting to 32-bit in-memory decoder.`);
-                s.isPlayPending = false;
-                playWithSoftwareDecoder(track, clamped);
-            }
+            if (stillStalled) logAudioPlaybackEvent('warn', `Seek pending at ${clamped.toFixed(1)}s; waiting for streaming decoder.`);
         }, 1600);
     }
 }
 
 // Play Audio (guarded against concurrent async race conditions and AbortError)
 async function playAudio(userInitiated = false) {
+    if (userInitiated) explicitTransportVersion++;
     const s = store.state;
+    if(nativeReleasing)return;
+    let skipNative=false;
+    if(androidNative?.active){
+        const status=androidNative.read();
+        if(status?.state==='error'||status?.state==='unconfirmed'){if(!await stopNative())return;skipNative=true;}
+        else {s.userExplicitlyPaused=false;androidNative.command('play');return;}
+    }
     if (s.isSoftwareDecoding) {
         s.userExplicitlyPaused = false;
-        syncPlayPauseUI(true);
-        resumeSoftwarePlayback();
+        s.isSoftwarePaused=false;
+        if(s.activeDecodedBuffer){if(!pcmStream){syncPlayPauseUI(true);resumeSoftwarePlayback();}}
         return;
     }
 
     const currentTrack = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
         ? s.standaloneTrackList[s.standaloneTrackIndex]
         : s.allTracks[s.currentTrackIndex];
+    if(!skipNative&&!s.isStandalonePlayback&&nativeEligible(currentTrack)){
+        const offset=s.audio?.readyState>=1?s.audio.currentTime||0:nativeLoadOffset;
+        ++currentPlayRequestId;s.isPlayPending=false;clearNoDataStallTimer();clearSeekStallTimer();
+        if(s.audio)s.audio.pause();if(s.secondaryAudio)s.secondaryAudio.pause();
+        s.userExplicitlyPaused=false;
+        if (androidNative.supportsQueue) s.playQueue = identifyQueueEntries(s.playQueue);
+        const order = androidNative.supportsOrder && s.sleepTimerMode !== 'end'
+            ? token => androidNative.buildOrder(s, token, nativeQueueEdits)
+            : null;
+        if (androidNative.start(currentTrack, offset, nativeGain(), order)) {
+            nativeAttemptGeneration = currentTrackGeneration;
+            rememberNativeQueue(androidNative.token);
+            nativeOrderInputs = nativeOrderKey(androidNative.last);
+            nativeEndedToken = '';
+            nativeLastGain = nativeGain();
+            startNativePoll();
+            updateSignalPathUi(currentTrack);
+            return;
+        }
+        showToast('Native service could not start; using regular playback.');
+    }
     const currentSrc = currentTrack ? (currentTrack.src || '') : '';
     const cleanSrc = currentSrc.startsWith('../') ? currentSrc.substring(3) : currentSrc;
     const isKnownSoftware = shouldPreferSoftwareDecoder(currentTrack, cleanSrc);
+    const directFlac = mediaElementGeneration !== currentTrackGeneration && shouldStreamAndroidFlac(currentTrack);
 
-    if (isKnownSoftware && !s.isSoftwareDecoding) {
+    if ((isKnownSoftware || directFlac) && !s.isSoftwareDecoding) {
         s.userExplicitlyPaused = false;
         syncPlayPauseUI(true);
-        const startOffset = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : 0;
-        playWithSoftwareDecoder(currentTrack, startOffset);
+        const startOffset = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : (s.audio?.currentTime||0);
+        playWithSoftwareDecoder(currentTrack, startOffset, directFlac && !isKnownSoftware);
         return;
     }
 
@@ -917,44 +949,32 @@ async function playAudio(userInitiated = false) {
             if (!targetAudio || targetAudio !== s.audio) return;
             if ((targetAudio.currentTime || 0) > startTimeAtSchedule + 0.04) {
                 clearNoDataStallTimer();
-                targetAudio.removeEventListener('timeupdate', onAdvance);
             }
         };
         targetAudio.addEventListener('timeupdate', onAdvance);
+        removeNoDataListener = () => targetAudio.removeEventListener('timeupdate', onAdvance);
         noDataStallTimer = setTimeout(() => {
-            noDataStallTimer = null;
-            targetAudio.removeEventListener('timeupdate', onAdvance);
+            clearNoDataStallTimer();
             if (reqId !== currentPlayRequestId || s.userExplicitlyPaused || s.isSoftwareDecoding || s.audio !== targetAudio) return;
             const timeStalled = Math.abs((targetAudio.currentTime || 0) - startTimeAtSchedule) < 0.04;
             if ((targetAudio.readyState === 0 || timeStalled) && !targetAudio.ended) {
-                const rawSrc = targetAudio.getAttribute('src') || targetAudio.src || '';
-                if (rawSrc) s.alwaysSoftwareDecodeUrls.add(rawSrc);
-                if (currentTrack.src) s.alwaysSoftwareDecodeUrls.add(currentTrack.src);
-                try {
-                    targetAudio.pause();
-                    targetAudio.removeAttribute('src');
-                    targetAudio.load();
-                } catch (_) {}
-                logAudioPlaybackEvent('info', `HTML5 Audio stalled (readyState ${targetAudio.readyState}) on "${currentTrack.title || currentTrack.filename}". Switching to 32-bit Web Audio Software Engine.`);
-                playWithSoftwareDecoder(currentTrack, startTimeAtSchedule);
+                logAudioPlaybackEvent('warn', 'Waiting for native decoder data; no automatic full-file decode on a slow start.');
             }
-        }, 1450);
+        }, 6000);
     };
 
     try {
         const track = s.allTracks[s.currentTrackIndex];
         const targetRate = (track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100;
-        if (!s.audioContext || s.audioContext.state === 'closed') {
-            await ensureAudioEngineForSampleRate(targetRate);
-        } else if (!s.audioSourceNode) {
-            getOrCreateAudioSourceNode();
-            updateAudioRouting();
-        }
+        // Join any pending replacement rather than playing into a graph that
+        // may be closing. The owner handles reuse without rebuilding.
+        const graph = await ensureAudioEngineForSampleRate(targetRate);
         if (reqId !== currentPlayRequestId) return;
+        if (!graph && s.audioContext) throw new Error('Audio graph could not be initialized. Retry playback.');
         if (s.audioContext && s.audioContext.state !== 'running') {
             try {
                 await Promise.race([
-                    s.audioContext.resume(),
+                    resumeAudioGraph(),
                     new Promise(resolve => setTimeout(resolve, 300))
                 ]);
             } catch (_) {}
@@ -990,8 +1010,8 @@ async function playAudio(userInitiated = false) {
             && (err.name === 'NotSupportedError' || errCode === 3 || errCode === 4);
         if (shouldSoftwareFallback) {
             const rawSrc = (s.audio && (s.audio.getAttribute('src') || s.audio.src)) || '';
-            if (rawSrc) s.alwaysSoftwareDecodeUrls.add(rawSrc);
-            if (currentTrack.src) s.alwaysSoftwareDecodeUrls.add(currentTrack.src);
+            rememberSoftwareDecoder(rawSrc);
+            rememberSoftwareDecoder(currentTrack.src);
             try {
                 if (s.audio) {
                     s.audio.pause();
@@ -1023,8 +1043,10 @@ async function playAudio(userInitiated = false) {
 function pauseAudio() {
     const s = store.state;
     s.userExplicitlyPaused = true;
+    currentPlayRequestId++; s.isPlayPending=false;
     clearNoDataStallTimer();
     clearSeekStallTimer();
+    if(androidNative?.active){androidNative.command('pause');syncPlayPauseUI(false);return;}
     if (s.isSoftwareDecoding) {
         pauseSoftwarePlayback();
         syncPlayPauseUI(false);
@@ -1040,6 +1062,7 @@ function pauseAudio() {
 
 function togglePlayPause() {
     const s = store.state;
+    if(androidNative?.active){const state=androidNative.read()?.state;if(['playing','loading','seeking'].includes(state))pauseAudio();else playAudio(true);return;}
     if (s.isSoftwareDecoding) {
         if (!s.isSoftwarePaused) {
             s.userExplicitlyPaused = true;
@@ -1070,26 +1093,20 @@ function togglePlayPause() {
 }
 
 // =========================================================================
-// True Gapless Playback Engine (Dual-Buffer Pre-caching & 0ms Handoff)
+// Best-effort next-track element preloading (not sample-accurate gapless)
 // =========================================================================
 function peekNextTrackIndex() {
     const s = store.state;
     if (s.playQueue && s.playQueue.length > 0) {
         const queued = s.playQueue[0];
-        const qIdx = s.allTracks.findIndex(t => (queued.id && t.id === queued.id) || (queued.tid && t.tid === queued.tid) || t.filename === queued.filename);
+        const qIdx = findTrackIndex(s.allTracks, queued);
         if (qIdx !== -1) return qIdx;
     }
 
     const pool = s.displayedTracks.length > 0 ? s.displayedTracks : s.allTracks;
     if (pool.length === 0) return -1;
 
-    const currentIdxInPool = pool.findIndex(t => {
-        const cur = s.allTracks[s.currentTrackIndex];
-        if (!cur) return false;
-        if (cur.id && t.id) return t.id === cur.id;
-        if (cur.tid && t.tid) return t.tid === cur.tid;
-        return t.filename === cur.filename;
-    });
+    const currentIdxInPool = findTrackIndex(pool, s.allTracks[s.currentTrackIndex]);
 
     if (currentIdxInPool === -1) return -1;
     if (s.isShuffle && pool.length > 1) return -1;
@@ -1101,22 +1118,24 @@ function peekNextTrackIndex() {
     }
 
     const target = pool[nextIdx];
-    return s.allTracks.findIndex(t => target && ((t.id && t.id === target.id) || (t.tid && t.tid === target.tid) || t.filename === target.filename));
+    return findTrackIndex(s.allTracks, target);
 }
 
-function checkAndPreloadNextTrack(currentTime, duration) {
+async function checkAndPreloadNextTrack(currentTime, duration) {
     const rt = getRuntime();
-    if (rt.isAndroid || rt.isMobile) return;
-    if (!duration || isNaN(duration) || duration < 8) return;
+    if (rt.isAndroidNative || rt.osFamily==='android' || window.innerWidth<=768 || store.state.isStandalonePlayback || store.state.isSoftwareDecoding) return;
+    if (!duration || isNaN(duration) || duration < 8 || store.state.sleepTimerMode === 'end') return;
     const s = store.state;
     if (duration - currentTime <= 5.0) {
         const nextMasterIdx = peekNextTrackIndex();
         if (nextMasterIdx !== -1 && nextMasterIdx !== s.preloadedNextTrackIndex && s.allTracks[nextMasterIdx]) {
             s.preloadedNextTrackIndex = nextMasterIdx;
             const nextTr = s.allTracks[nextMasterIdx];
-            let nextSrc = nextTr.src || '';
+            const generation=currentTrackGeneration;
+            let nextSrc=await resolveTrackSource(nextTr);
+            if(generation!==currentTrackGeneration||s.preloadedNextTrackIndex!==nextMasterIdx)return;
             if (nextSrc.startsWith('../')) nextSrc = nextSrc.substring(3);
-            if (!nextSrc) return;
+            if (!nextSrc){s.preloadedNextTrackIndex=-1;return;}
 
             if (!s.secondaryAudio) {
                 s.secondaryAudio = document.createElement('audio');
@@ -1124,20 +1143,24 @@ function checkAndPreloadNextTrack(currentTime, duration) {
                 s.secondaryAudio.crossOrigin = 'anonymous';
             }
             s.secondaryAudio.src = nextSrc;
+            releaseInactiveSources(s.audio?.getAttribute('src'),nextSrc);
             try { s.secondaryAudio.load(); } catch (_) {}
         }
     }
 }
 
 function executeGaplessHandoff(nextIndex) {
+    if (audioBufferChangePending()) return false;
     const rt = getRuntime();
-    if (rt.isAndroid || rt.isMobile) return false;
+    if (rt.isAndroidNative || rt.osFamily==='android' || window.innerWidth<=768 || store.state.isSoftwareDecoding) return false;
     const s = store.state;
     if (!s.secondaryAudio || s.preloadedNextTrackIndex !== nextIndex || s.secondaryAudio.readyState < 2) {
         return false;
     }
     try {
         const oldAudio = s.audio;
+        ++trackLoadToken; currentTrackGeneration++; currentPlayRequestId++;
+        s.secondaryAudio._trackGeneration=currentTrackGeneration;
         s.secondaryAudio.volume = oldAudio.volume;
         s.secondaryAudio.muted = oldAudio.muted;
         try {
@@ -1155,6 +1178,8 @@ function executeGaplessHandoff(nextIndex) {
 
         oldAudio.pause();
         oldAudio.removeAttribute('src');
+        oldAudio.load();
+        releaseInactiveSources(s.audio.getAttribute('src'));
 
         if (s.audioSourceNode) {
             try { s.audioSourceNode.disconnect(); } catch (_) {}
@@ -1167,10 +1192,13 @@ function executeGaplessHandoff(nextIndex) {
 
         const nextTr = s.allTracks[s.currentTrackIndex];
         s.currentTrack = nextTr;
+        rememberTrack(safeStorage, nextTr);
         store.emit('track:change', { track: nextTr, index: nextIndex });
 
         s.userExplicitlyPaused = false;
+        const handoffGeneration=currentTrackGeneration;
         s.audio.play().then(() => {
+            if(handoffGeneration!==currentTrackGeneration)return;
             syncPlayPauseUI(true);
             store.emit('visualizer:resume');
         }).catch(console.warn);
@@ -1197,8 +1225,33 @@ function executeGaplessHandoff(nextIndex) {
     }
 }
 
-function nextTrack(manual = true) {
+function sendNativeShuffleCommand(status, command) {
     const s = store.state;
+    if (!status || status.state === 'stopped' || status.state === 'unconfirmed'
+        || !androidNative.supportsShuffle || !s.isShuffle || !nativeEligible(s.allTracks[s.currentTrackIndex])) return false;
+    refreshNativeOrder(status);
+    return androidNative.command(command);
+}
+
+async function nextTrack(manual = true, allowNative = true) {
+    const s = store.state;
+    const native = androidNative?.read();
+    if (nativeReleasing || !syncNativeTrack(native)) return;
+    reconcileNativeQueue(native);
+    if (manual && allowNative && sendNativeShuffleCommand(native, 'next')) return;
+    if (native && native.state !== 'stopped' && androidNative.supportsQueue && s.playQueue.length) {
+        const loadToken = trackLoadToken;
+        if (!await stopNative() || loadToken !== trackLoadToken) return;
+        const stopped = androidNative.snapshot();
+        if (stopped?.token === native.token && stopped.revision !== native.revision) {
+            // A service advance during the stop handshake already took the next entry.
+            const index = s.allTracks.findIndex(track => indexedSource(track) === stopped.uri);
+            if (index >= 0) {
+                loadTrack(index, true, Number(stopped.position || 0) / 1000);
+                return;
+            }
+        }
+    }
     clearSeekStallTimer();
     if (manual) {
         s.userExplicitlyPaused = false;
@@ -1226,11 +1279,7 @@ function nextTrack(manual = true) {
     if (s.playQueue && s.playQueue.length > 0) {
         const nextQueuedTrack = s.playQueue.shift();
         store.emit('library:update-queue');
-        const masterIdx = s.allTracks.findIndex(t =>
-            (nextQueuedTrack.id && t.id === nextQueuedTrack.id) ||
-            (nextQueuedTrack.tid && t.tid === nextQueuedTrack.tid) ||
-            t.filename === nextQueuedTrack.filename
-        );
+        const masterIdx = findTrackIndex(s.allTracks, nextQueuedTrack);
         if (masterIdx !== -1) {
             if (!executeGaplessHandoff(masterIdx)) {
                 loadTrack(masterIdx, true);
@@ -1242,13 +1291,7 @@ function nextTrack(manual = true) {
     const pool = s.displayedTracks.length > 0 ? s.displayedTracks : s.allTracks;
     if (pool.length === 0) return;
 
-    const currentIdxInPool = pool.findIndex(t => {
-        const cur = s.allTracks[s.currentTrackIndex];
-        if (!cur) return false;
-        if (cur.id && t.id) return t.id === cur.id;
-        if (cur.tid && t.tid) return t.tid === cur.tid;
-        return t.filename === cur.filename;
-    });
+    const currentIdxInPool = findTrackIndex(pool, s.allTracks[s.currentTrackIndex]);
 
     if (s.isShuffle && pool.length > 1) {
         let nextIdx = Math.floor(Math.random() * pool.length);
@@ -1257,7 +1300,7 @@ function nextTrack(manual = true) {
             nextIdx = Math.floor(Math.random() * pool.length);
             attempts++;
         }
-        const masterIdx = s.allTracks.findIndex(t => pool[nextIdx] && ((t.id && t.id === pool[nextIdx].id) || (t.tid && t.tid === pool[nextIdx].tid) || t.filename === pool[nextIdx].filename));
+        const masterIdx = findTrackIndex(s.allTracks, pool[nextIdx]);
         if (masterIdx !== -1 && !executeGaplessHandoff(masterIdx)) {
             loadTrack(masterIdx, true);
         }
@@ -1273,21 +1316,22 @@ function nextTrack(manual = true) {
             }
             nextIdx = 0;
         }
-        const masterIdx = s.allTracks.findIndex(t => pool[nextIdx] && ((t.id && t.id === pool[nextIdx].id) || (t.tid && t.tid === pool[nextIdx].tid) || t.filename === pool[nextIdx].filename));
+        const masterIdx = findTrackIndex(s.allTracks, pool[nextIdx]);
         if (masterIdx !== -1 && !executeGaplessHandoff(masterIdx)) {
             loadTrack(masterIdx, true);
         }
     }
 }
 
-function prevTrack() {
+function prevTrack(allowNative = true) {
     const s = store.state;
+    const native = androidNative?.read();
+    if (nativeReleasing || !syncNativeTrack(native)) return;
+    if (allowNative && sendNativeShuffleCommand(native, 'prev')) return;
     clearSeekStallTimer();
     s.userExplicitlyPaused = false;
     s.isPlayPending = false;
-    const curPos = s.isSoftwareDecoding
-        ? (s.softwarePlaybackOffset + (!s.isSoftwarePaused && s.audioContext ? (s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0))
-        : (s.audio ? s.audio.currentTime : 0);
+    const curPos = nativePosition() ?? (s.isSoftwareDecoding ? softwarePosition() : (s.audio ? s.audio.currentTime : 0));
 
     if (s.isStandalonePlayback && s.standaloneTrackList && s.standaloneTrackList.length > 0) {
         if (curPos > 3) {
@@ -1312,16 +1356,10 @@ function prevTrack() {
     const pool = s.displayedTracks.length > 0 ? s.displayedTracks : s.allTracks;
     if (pool.length === 0) return;
 
-    const currentIdxInPool = pool.findIndex(t => {
-        const cur = s.allTracks[s.currentTrackIndex];
-        if (!cur) return false;
-        if (cur.id && t.id) return t.id === cur.id;
-        if (cur.tid && t.tid) return t.tid === cur.tid;
-        return t.filename === cur.filename;
-    });
+    const currentIdxInPool = findTrackIndex(pool, s.allTracks[s.currentTrackIndex]);
     let prevIdx = currentIdxInPool - 1;
     if (prevIdx < 0) prevIdx = pool.length - 1;
-    const masterIdx = s.allTracks.findIndex(t => pool[prevIdx] && ((t.id && t.id === pool[prevIdx].id) || (t.tid && t.tid === pool[prevIdx].tid) || t.filename === pool[prevIdx].filename));
+    const masterIdx = findTrackIndex(s.allTracks, pool[prevIdx]);
     if (masterIdx !== -1) loadTrack(masterIdx, true);
 }
 
@@ -1339,8 +1377,15 @@ function updatePlaybackProgress(cur, dur) {
             dur = Number(currentTrack.duration);
         }
     }
-    if (currentTimeEl) currentTimeEl.textContent = formatTime(cur);
-    if (miniCurrentTime) miniCurrentTime.textContent = formatTime(cur);
+    const formattedTime = formatTime(cur);
+    if (currentTimeEl && currentTimeEl.textContent !== formattedTime) currentTimeEl.textContent = formattedTime;
+    if (miniCurrentTime && miniCurrentTime.textContent !== formattedTime) miniCurrentTime.textContent = formattedTime;
+    const valid=Number.isFinite(dur)&&dur>0, max=valid?Math.ceil(dur):0, now=Math.max(0,Math.min(max,Math.floor(Number.isFinite(cur)?cur:0)));
+    for(const control of [document.getElementById('progressCon'),document.getElementById('miniProgressCon')]){
+        if(!control)continue;
+        const values={'aria-valuemax':String(max),'aria-valuenow':String(now),'aria-valuetext':`${formatTime(now)} of ${formatTime(max)}`,'aria-disabled':String(!valid)};
+        for(const [key,value] of Object.entries(values))if(control.getAttribute(key)!==value)control.setAttribute(key,value);
+    }
 
     if (dur && isFinite(dur) && dur > 0) {
         const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
@@ -1360,13 +1405,17 @@ function updatePlaybackProgress(cur, dur) {
 function startSoftwareProgressLoop() {
     const s = store.state;
     cancelSoftwareProgressLoop();
-    function tick() {
+    let lastProgressFrame = -Infinity;
+    function tick(now) {
         if (!s.isSoftwareDecoding || s.isSoftwarePaused || !s.activeDecodedBuffer) return;
-        const cur = s.softwarePlaybackOffset + (s.audioContext ? (s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0);
+        const cur = softwarePosition();
         const dur = s.activeDecodedBuffer.duration;
-        updatePlaybackProgress(cur, dur);
-        mediaSessionController.updatePositionState(false);
-        if (cur >= dur) {
+        if (now - lastProgressFrame >= 33 || cur >= dur) {
+            lastProgressFrame = now;
+            updatePlaybackProgress(cur, dur);
+            mediaSessionController.updatePositionState(false);
+        }
+        if (cur >= dur && !s.activeDecodedBuffer.streaming) {
             onSoftwarePlaybackEnded();
             return;
         }
@@ -1386,6 +1435,7 @@ function cancelSoftwareProgressLoop() {
 function startSoftwareBufferPlayback() {
     const s = store.state;
     if (!s.audioContext || !s.activeDecodedBuffer) return;
+    if (s.activeDecodedBuffer.streaming) {startPcmPlayback();return;}
     if (s.softwareSourceNode) {
         try {
             s.softwareSourceNode.onended = null;
@@ -1398,7 +1448,7 @@ function startSoftwareBufferPlayback() {
     s.softwareSourceNode = s.audioContext.createBufferSource();
     s.softwareSourceNode.buffer = s.activeDecodedBuffer;
 
-    if (!s.softwareSourceGainNode) {
+    if (!s.softwareSourceGainNode || s.softwareSourceGainNode.context !== s.audioContext) {
         s.softwareSourceGainNode = s.audioContext.createGain();
     }
     s.softwareSourceNode.connect(s.softwareSourceGainNode);
@@ -1412,7 +1462,7 @@ function startSoftwareBufferPlayback() {
 
     s.softwareSourceNode.onended = () => {
         if (!s.isSoftwareDecoding || s.isSoftwarePaused) return;
-        const cur = s.softwarePlaybackOffset + (s.audioContext ? (s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0);
+        const cur = softwarePosition();
         if (s.activeDecodedBuffer && cur >= (s.activeDecodedBuffer.duration - 0.5)) {
             onSoftwarePlaybackEnded();
         }
@@ -1423,9 +1473,9 @@ function pauseSoftwarePlayback() {
     const s = store.state;
     if (!s.isSoftwareDecoding || s.isSoftwarePaused) return;
     cancelSoftwareProgressLoop();
-    if (s.audioContext && s.softwarePlaybackStartTime > 0) {
-        s.softwarePlaybackOffset += (s.audioContext.currentTime - s.softwarePlaybackStartTime);
-    }
+    s.softwarePlaybackOffset = softwarePosition();
+    s.softwarePlaybackStartTime=0;
+    stopPcmStream();
     if (s.softwareSourceNode) {
         try {
             s.softwareSourceNode.onended = null;
@@ -1442,7 +1492,7 @@ function resumeSoftwarePlayback() {
     const s = store.state;
     if (!s.isSoftwareDecoding || !s.activeDecodedBuffer) return;
     if (s.audioContext && s.audioContext.state !== 'running') {
-        try { s.audioContext.resume(); } catch (_) {}
+        resumeAudioGraph().catch(() => {});
     }
     startSoftwareBufferPlayback();
 }
@@ -1463,6 +1513,7 @@ function stopSoftwarePlayback() {
     const s = store.state;
     clearSeekStallTimer();
     abortActiveSoftwareFetch();
+    stopPcmStream();pcmFile=null;
     cancelSoftwareProgressLoop();
     if (s.softwareSourceNode) {
         try {
@@ -1477,17 +1528,20 @@ function stopSoftwarePlayback() {
     s.pendingSoftwareSeekSec = null;
     s.softwarePlaybackStartTime = 0;
     s.softwarePlaybackOffset = 0;
+    updateAudioRouting();
 }
 
 function onSoftwarePlaybackEnded() {
     const s = store.state;
-    stopSoftwarePlayback();
-    try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
-    if (s.repeatMode === 'one') {
-        loadTrack(s.currentTrackIndex, true, 0);
-    } else {
-        nextTrack(false);
-    }
+    // Keep the descriptor until a new track takes ownership. Repeat/last-track
+    // controls must still be able to restart a software source after completion.
+    stopPcmStream();cancelSoftwareProgressLoop();
+    if(s.softwareSourceNode){s.softwareSourceNode.onended=null;try{s.softwareSourceNode.stop();s.softwareSourceNode.disconnect();}catch(_){}s.softwareSourceNode=null;}
+    s.isSoftwarePaused=true;s.softwarePlaybackStartTime=0;
+    s.softwarePlaybackOffset=s.activeDecodedBuffer?.duration||0;syncPlayPauseUI(false);
+    if (!s.isStandalonePlayback) { try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {} }
+    if(s.sleepTimerMode==='end'){cancelSleepTimer(false);s.userExplicitlyPaused=true;showToast('Sleep timer: End of track reached. Playback paused.');return;}
+    if(s.repeatMode==='one'){seekSoftwarePlayback(0);playAudio(true);}else nextTrack(false);
 }
 
 function stripId3ToFlacMagic(arrayBuffer) {
@@ -1535,12 +1589,13 @@ async function decodeBufferWithAudioContext(ctx, rawArrayBuf) {
     return await attemptDecode(rawArrayBuf);
 }
 
-async function playWithSoftwareDecoder(track, startTime = 0) {
+async function playWithSoftwareDecoder(track, startTime = 0, retryWebStream = false) {
     const s = store.state;
     if (!track) return;
     clearNoDataStallTimer();
     abortActiveSoftwareFetch();
     const decodeGen = currentTrackGeneration;
+    stopPcmStream();pcmFile=null;
     s.activeDecodedBuffer = null;
     s.isSoftwareDecoding = true;
     s.isSoftwarePaused = false;
@@ -1556,13 +1611,19 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
             } catch (_) {}
         }
 
+        const localFileJob = resolveLocalFile(track);
+        const streamJob = localFileJob.then(file => {
+            if (typeof Worker !== 'function' || !pcmExtension(track, file)) return null;
+            return preparePcmInput(track, file);
+        }).catch(error => ({ error }));
         const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
-        await ensureAudioEngineForSampleRate(targetRate);
+        const graph = await ensureAudioEngineForSampleRate(targetRate);
         if (decodeGen !== currentTrackGeneration) return;
+        if (!graph) throw new Error('Software playback requires a ready audio graph.');
         if (s.audioContext && s.audioContext.state !== 'running') {
             try {
                 await Promise.race([
-                    s.audioContext.resume(),
+                    resumeAudioGraph(),
                     new Promise(resolve => setTimeout(resolve, 250))
                 ]);
             } catch (_) {}
@@ -1571,6 +1632,34 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
         let src = track.src || '';
         if (src.startsWith('../')) src = src.substring(3);
         const ctxRate = s.audioContext ? s.audioContext.sampleRate : targetRate;
+        const localFile = await localFileJob;
+        const prepared = await streamJob;
+        if(decodeGen!==currentTrackGeneration||!s.isSoftwareDecoding)return;
+        if (prepared?.error) {
+            logAudioPlaybackEvent('warn', `Could not open the incremental audio stream: ${prepared.error.message}`);
+        } else if (prepared) {
+            const { file, format } = prepared;
+            pcmFile = file;
+            s.activeDecodedBuffer = format;
+            track.duration = format.duration;
+            if (totalDurationEl) totalDurationEl.textContent = formatTime(format.duration);
+            if (miniTotalDuration) miniTotalDuration.textContent = formatTime(format.duration);
+            const requested = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : startTime;
+            s.pendingSoftwareSeekSec = null;
+            s.softwarePlaybackOffset = Math.max(0, Math.min(format.duration, requested));
+            if (s.userExplicitlyPaused || s.isSoftwarePaused) {
+                s.isSoftwarePaused = true;
+                syncPlayPauseUI(false);
+            } else startSoftwareBufferPlayback();
+            return;
+        }
+        if (retryWebStream) {
+            const offset = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : startTime;
+            loadTrack(s.currentTrackIndex, !s.userExplicitlyPaused, offset, null, true);
+            return;
+        }
+        validateDecodeBudget(track, ctxRate);
+        if (Number(localFile?.size || track.size) > MAX_COMPRESSED_BYTES) throw new DecodeBudgetError('compressed');
         const cacheKey = src ? `${src}@${ctxRate}` : '';
         let decodedBuffer = (cacheKey && softwareBufferCache.has(cacheKey))
             ? softwareBufferCache.get(cacheKey)
@@ -1582,18 +1671,20 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
             activeDecodeAbortController = abortCtrl;
 
             let arrayBuf = null;
-            if (track._fileBlob && typeof track._fileBlob.arrayBuffer === 'function') {
-                arrayBuf = await track._fileBlob.arrayBuffer();
+            const file = localFile;
+            if (file) {
+                arrayBuf = await file.arrayBuffer();
             } else {
                 const res = await fetch(src, abortCtrl ? { signal: abortCtrl.signal } : undefined);
-                if (!res.ok) throw new Error(`HTTP ${res.status} fetch failure`);
-                arrayBuf = await res.arrayBuffer();
+                arrayBuf = await readBoundedAudio(res);
             }
             if (activeDecodeAbortController === abortCtrl) activeDecodeAbortController = null;
             if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
 
             logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
+            softwareBufferCache.clear(); // Avoid retaining a prior decoded track during allocation.
             decodedBuffer = await decodeBufferWithAudioContext(s.audioContext, arrayBuf);
+            if(decodedBuffer.length*decodedBuffer.numberOfChannels*4>MAX_PCM_BYTES)throw new DecodeBudgetError('decoded');
             arrayBuf = null;
             if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
             if (cacheKey) cacheSoftwareAudioBuffer(cacheKey, decodedBuffer);
@@ -1610,18 +1701,35 @@ async function playWithSoftwareDecoder(track, startTime = 0) {
         const requestedStart = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : startTime;
         s.pendingSoftwareSeekSec = null;
         s.softwarePlaybackOffset = Math.max(0, Math.min(decodedBuffer.duration, requestedStart));
-        startSoftwareBufferPlayback();
+        if (s.userExplicitlyPaused || s.isSoftwarePaused) {s.isSoftwarePaused=true;syncPlayPauseUI(false);} else startSoftwareBufferPlayback();
         s.consecutiveSkipCount = 0;
         logAudioPlaybackEvent('info', `Web Audio Software Engine playing "${track.title || track.filename}" at ${decodedBuffer.sampleRate}Hz, ${decodedBuffer.numberOfChannels}ch, ${decodedBuffer.duration.toFixed(1)}s.`);
     } catch (err) {
         if (err && err.name === 'AbortError') return;
         if (decodeGen !== currentTrackGeneration) return;
+        abortActiveSoftwareFetch();
+        if (err instanceof DecodeBudgetError && !s.isStandalonePlayback && !s.userExplicitlyPaused
+            && nativeAttemptGeneration !== decodeGen && canUseAndroidDecoder(track)) {
+            const offset = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : startTime;
+            nativeAttemptGeneration = decodeGen;
+            if (androidNative.start(track, offset, nativeGain(), null)) {
+                s.isSoftwareDecoding = false;
+                s.pendingSoftwareSeekSec = null;
+                nativeRecoveryToken = androidNative.token;
+                rememberNativeQueue(androidNative.token);
+                nativeEndedToken = '';
+                nativeLastGain = nativeGain();
+                startNativePoll();
+                updateSignalPathUi(track);
+                return;
+            }
+        }
         console.error('[AudioEngine] Software decoder fallback failed:', err);
         logAudioPlaybackEvent('error', `Web Audio software decode failure: ${err.message}`);
         s.isSoftwareDecoding = false;
         s.activeDecodedBuffer = null;
-        showCachyToast('Playback Error', 'File corrupted or unreadable. Skipping track...', 'error');
-        setTimeout(() => nextTrack(), 1000);
+        s.userExplicitlyPaused=true;syncPlayPauseUI(false);
+        showCachyToast('Playback unavailable', err.message || 'Unsupported or unreadable audio.', 'error');
     }
 }
 
@@ -1632,8 +1740,8 @@ function attachAudioListeners(targetAudio) {
     let isAudioBuffering = false;
 
     targetAudio.addEventListener('play', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (s.userExplicitlyPaused && document.hidden) {
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (s.userExplicitlyPaused) {
             targetAudio.pause();
             syncPlayPauseUI(false);
             return;
@@ -1642,9 +1750,9 @@ function attachAudioListeners(targetAudio) {
         syncPlayPauseUI(true);
     });
     targetAudio.addEventListener('playing', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         clearSeekStallTimer();
-        if (s.userExplicitlyPaused && document.hidden) {
+        if (s.userExplicitlyPaused) {
             targetAudio.pause();
             syncPlayPauseUI(false);
             return;
@@ -1653,9 +1761,10 @@ function attachAudioListeners(targetAudio) {
         syncPlayPauseUI(true);
     });
     targetAudio.addEventListener('pause', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         if (isAudioBuffering && !s.userExplicitlyPaused) return;
         syncPlayPauseUI(false);
+        if (s.isStandalonePlayback) return;
         try {
             const cur = targetAudio.currentTime;
             const dur = targetAudio.duration;
@@ -1665,23 +1774,23 @@ function attachAudioListeners(targetAudio) {
         } catch (_) {}
     });
     targetAudio.addEventListener('emptied', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         syncPlayPauseUI(false);
     });
     targetAudio.addEventListener('waiting', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         if (!s.userExplicitlyPaused) isAudioBuffering = true;
     });
     targetAudio.addEventListener('seeking', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         if (!s.userExplicitlyPaused) isAudioBuffering = true;
     });
     targetAudio.addEventListener('stalled', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         if (!s.userExplicitlyPaused) isAudioBuffering = true;
     });
     targetAudio.addEventListener('error', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio || s.isSoftwareDecoding) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio || s.isSoftwareDecoding) return;
         if (!targetAudio.src || targetAudio.src === window.location.href || !targetAudio.getAttribute('src')) {
             return;
         }
@@ -1706,19 +1815,10 @@ function attachAudioListeners(targetAudio) {
         const isFatalDecodeError = (errorCode === 3 || errorCode === 4);
 
         const currentAttrSrc = targetAudio.getAttribute('src') || targetAudio.src || '';
-        if (isFatalDecodeError && s.trackPlaybackRetryCount === 0 && currentAttrSrc.includes('php/api/stream.php') && !currentAttrSrc.includes('transcode=1')) {
-            s.trackPlaybackRetryCount++;
-            const transcodeSrc = currentAttrSrc + (currentAttrSrc.includes('?') ? '&' : '?') + 'transcode=1';
-            s.userExplicitlyPaused = false;
-            targetAudio.src = transcodeSrc;
-            try { targetAudio.load(); } catch (_) {}
-            playAudio();
-            return;
-        }
-
         if (isFatalDecodeError && currentTrack && !s.isSoftwareDecoding) {
-            s.alwaysSoftwareDecodeUrls.add(currentAttrSrc);
-            s.alwaysSoftwareDecodeUrls.add(targetAudio.src);
+            rememberSoftwareDecoder(currentAttrSrc);
+            if(s.userExplicitlyPaused)return;
+            rememberSoftwareDecoder(targetAudio.src);
             try {
                 targetAudio.pause();
                 targetAudio.removeAttribute('src');
@@ -1751,18 +1851,15 @@ function attachAudioListeners(targetAudio) {
             showCachyToast('Playback Error', `"${trackTitle}": ${errorDesc}. Skipping track...`, 'warning');
             store.emit('audio:reset-element');
 
+            const errorGeneration=currentTrackGeneration;
+            const recoveryAudio = s.audio;
             setTimeout(() => {
+                if(errorGeneration!==currentTrackGeneration || s.audio!==recoveryAudio)return;
                 const pool = s.displayedTracks.length > 0 ? s.displayedTracks : s.allTracks;
-                const currentIdxInPool = pool.findIndex(t => {
-                    const cur = s.allTracks[s.currentTrackIndex];
-                    if (!cur) return false;
-                    if (cur.id && t.id) return t.id === cur.id;
-                    if (cur.tid && t.tid) return t.tid === cur.tid;
-                    return t.filename === cur.filename;
-                });
+                const currentIdxInPool = findTrackIndex(pool, s.allTracks[s.currentTrackIndex]);
                 if (currentIdxInPool === pool.length - 1 && s.repeatMode === 'off') {
                     pauseAudio();
-                    targetAudio.currentTime = 0;
+                    try { recoveryAudio.currentTime = 0; } catch (_) {}
                     if (progressBar) progressBar.style.width = '0%';
                     if (currentTimeEl) currentTimeEl.textContent = '0:00';
                     try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
@@ -1776,15 +1873,16 @@ function attachAudioListeners(targetAudio) {
         if (errorCode === 2 && targetAudio.src && !s.userExplicitlyPaused && s.trackPlaybackRetryCount === 0) {
             s.trackPlaybackRetryCount++;
             const savedTime = targetAudio.currentTime || 0;
-            const currentSrc = targetAudio.src;
+            const currentSrc = targetAudio.src, retryGeneration=currentTrackGeneration;
             setTimeout(() => {
-                if (!s.userExplicitlyPaused) {
+                if (retryGeneration===currentTrackGeneration && s.audio===targetAudio && !s.userExplicitlyPaused) {
                     targetAudio.src = currentSrc;
                     targetAudio.load();
                     if (savedTime > 0) {
                         try { targetAudio.currentTime = savedTime; } catch (_) {}
                     }
                     targetAudio.play().catch(() => {
+                        if(retryGeneration!==currentTrackGeneration||s.audio!==targetAudio)return;
                         syncPlayPauseUI(false);
                         s.userExplicitlyPaused = true;
                         showCachyToast('Network Error', `Could not recover stream for "${trackTitle}".`, 'error');
@@ -1796,7 +1894,7 @@ function attachAudioListeners(targetAudio) {
 
     let lastPersistedTime = 0;
     targetAudio.addEventListener('timeupdate', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         if (s.isSoftwareDecoding || s.isDraggingScrubber) return;
         const cur = targetAudio.currentTime;
         let dur = targetAudio.duration;
@@ -1811,22 +1909,22 @@ function attachAudioListeners(targetAudio) {
         updatePlaybackProgress(cur, dur);
         mediaSessionController.updatePositionState(false);
 
-        if (cur > 0 && Math.abs(cur - lastPersistedTime) >= 1.0) {
+        if (!s.isStandalonePlayback && cur > 0 && Math.abs(cur - lastPersistedTime) >= 1.0) {
             lastPersistedTime = cur;
             if (!dur || isNaN(dur) || cur < (dur - 1)) {
                 try { safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2)); } catch (_) {}
             }
         }
         checkAndPreloadNextTrack(cur, dur);
-        if (mprisSyncHook) mprisSyncHook(false);
+        mprisSyncHook(false);
     });
 
     targetAudio.addEventListener('ended', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         if (typeof targetAudio._trackGeneration === 'number' && targetAudio._trackGeneration !== currentTrackGeneration) {
             return;
         }
-        try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
+        if (!s.isStandalonePlayback) { try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {} }
 
         const curTime = targetAudio.currentTime || 0;
         const currentTrack = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
@@ -1840,8 +1938,9 @@ function attachAudioListeners(targetAudio) {
             appendDebugTelemetry(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
             if (s.trackPlaybackRetryCount < 2) {
                 s.trackPlaybackRetryCount++;
+                const retryGeneration=currentTrackGeneration;
                 setTimeout(() => {
-                    if (!s.userExplicitlyPaused) {
+                    if (retryGeneration===currentTrackGeneration && s.audio===targetAudio && !s.userExplicitlyPaused) {
                         try { targetAudio.load(); } catch (_) {}
                         playAudio();
                     }
@@ -1870,7 +1969,7 @@ function attachAudioListeners(targetAudio) {
     });
 
     targetAudio.addEventListener('loadedmetadata', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         if (targetAudio.duration && !isNaN(targetAudio.duration)) {
             if (totalDurationEl) totalDurationEl.textContent = formatTime(targetAudio.duration);
             if (miniTotalDuration) miniTotalDuration.textContent = formatTime(targetAudio.duration);
@@ -1887,7 +1986,7 @@ function attachAudioListeners(targetAudio) {
     });
 
     targetAudio.addEventListener('seeked', () => {
-        if (targetAudio._isDisposed || targetAudio !== s.audio) return;
+        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
         clearSeekStallTimer();
         isAudioBuffering = false;
         if (!s.userExplicitlyPaused && targetAudio.paused && !s.isSoftwareDecoding) {
@@ -1895,250 +1994,19 @@ function attachAudioListeners(targetAudio) {
             playAudio(true);
         }
         mediaSessionController.updatePositionState(true);
-        if (mprisSyncHook) mprisSyncHook(true);
+        mprisSyncHook(true);
     });
 }
 
 // --- Core Track Status & Session Methods ---
-function resolveTrackFormat(track) {
-    if (!track) return '';
-    let fmt = (track.format || '').toUpperCase().trim();
-    if (!fmt || fmt === 'AUDIO') {
-        const fname = track.filename || track.fullPath || '';
-        const dotIdx = fname.lastIndexOf('.');
-        if (dotIdx !== -1 && dotIdx < fname.length - 1) {
-            fmt = fname.substring(dotIdx + 1).toUpperCase().trim();
-        }
-    }
-    return fmt || 'PCM';
-}
-
-function updateSignalPathUi(track = store.state.allTracks[store.state.currentTrackIndex]) {
-    const s = store.state;
-
-    const curTheme = getActiveTheme();
-    const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
-    const isLightSurface = (curTheme === 'minimalist-light' || curTheme === 'brutalist-light' || curTheme === 'minimalist-warm' || (curTheme === 'default' && !isMobileViewport));
-    const hasTrack = Boolean(track && (s.allTracks.length > 0 || s.isStandalonePlayback));
-    const format = hasTrack ? resolveTrackFormat(track) : 'NONE';
-    const isLossless = hasTrack && ['FLAC', 'WAV', 'ALAC', 'AIFF', 'APE', 'WV', 'DSD', 'DSF', 'PCM'].includes(format);
-
-    const hasPeq = !s.isPeqBypassed && Array.isArray(s.peqGains) && s.peqGains.some(g => Math.abs(g) > 0.05);
-    const maxBoostDb = (!s.isPeqBypassed && Array.isArray(s.peqGains)) ? Math.max(0, ...s.peqGains) : 0;
-    const activeStages = [];
-    if (s.isSubsonic) activeStages.push('20Hz Subsonic');
-    if (hasPeq) activeStages.push('10-Band PEQ');
-    if (s.isBassBoost) activeStages.push('Bass');
-    if (s.isVocalBoost) activeStages.push('Vocal');
-    if (s.isTrebleBoost) activeStages.push('Treble');
-    if (s.isAmpBoost || s.currentVolumeValue > 1.0) activeStages.push('Pre-Amp');
-    if (s.isCrossfeed) activeStages.push('HRTF Crossfeed');
-    if (s.isSurroundWidener) activeStages.push('Surround M/S');
-    if (s.isAmbiophonics) activeStages.push('Ambiophonics');
-    if (s.isPhaseInvert) activeStages.push('180° Phase');
-    if (s.isMonoMix) activeStages.push('Mono Sum');
-    if (s.isAgpEnabled) activeStages.push('AGP Guard');
-    if (s.isLimiter) activeStages.push('Peak Limiter');
-    if (s.isUltrasonic) activeStages.push(`Ultrasonic (${Math.round(s.ultrasonicCutoff / 1000)}kHz)`);
-    if (s.isReplayGain) activeStages.push('ReplayGain');
-
-    const dspActive = hasActiveDsp();
-    const isNativeBypass = s.mathPrecision === 'native';
-    if (signalPathLabel) {
-        if (!hasTrack) signalPathLabel.textContent = isNativeBypass ? 'NATIVE' : 'READY';
-        else if (isNativeBypass && !dspActive) signalPathLabel.textContent = 'BIT-PERFECT';
-        else signalPathLabel.textContent = dspActive ? 'DSP ON' : 'DIRECT';
-    }
-    const workletPrecisionStr = isNativeBypass
-        ? 'Native Host Bypass'
-        : (s.isPrecision64 ? '64-Bit Double-Float Worklet' : '32-Bit Fast-Float Biquad');
-    const shortEngineLabel = isNativeBypass
-        ? 'NATIVE BYPASS'
-        : (s.isPrecision64 ? '64-BIT WORKLET' : '32-BIT FLOAT');
-
-    if (!hasTrack) {
-        if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'idle';
-        if (auditQualityBadge) {
-            auditQualityBadge.textContent = `IDLE (${shortEngineLabel} READY)`;
-            auditQualityBadge.className = 'signalQualityBadge highPrecision';
-        }
-        if (auditQualityDesc) {
-            auditQualityDesc.textContent = isNativeBypass
-                ? 'No audio track loaded. Native Bypass mode skips worklet DSP math & dithering when EQ/effects are flat, passing decoded Web Audio float frames directly.'
-                : `No audio track loaded. Browser Web Audio decodes streams to 32-bit IEEE 754 float; DSP worklet is configured for ${s.isPrecision64 ? '64-bit double-precision' : '32-bit single-precision'} math.`;
-        }
-        const dotCol = 'var(--text-muted)';
-        if (deckSignalDot) deckSignalDot.style.color = dotCol;
-        if (auditQualityDot) auditQualityDot.style.color = dotCol;
-    } else if (isLossless && !hasPeq && !s.isBassBoost && !s.isVocalBoost && !s.isTrebleBoost && !s.isCrossfeed && !s.isSurroundWidener && !s.isAmbiophonics && !s.isPhaseInvert && !s.isMonoMix) {
-        if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'bit-perfect';
-        if (auditQualityBadge) {
-            auditQualityBadge.textContent = `LOSSLESS ${format} → ${shortEngineLabel}`;
-            auditQualityBadge.className = 'signalQualityBadge bitPerfect';
-        }
-        if (auditQualityDesc) {
-            auditQualityDesc.textContent = isNativeBypass
-                ? `Lossless ${format} decoded by host engine in Native Bypass mode (custom worklet float math & dither bypassed for direct path).`
-                : `Lossless ${format} source decoded by Web Audio into 32-bit IEEE 754 float with flat EQ bypass${s.isUltrasonic || s.ditherMode !== 'off' ? ` and ${workletPrecisionStr.toLowerCase()} output conditioning` : ''}.`;
-        }
-        const dotCol = 'var(--status-success)';
-        if (deckSignalDot) deckSignalDot.style.color = dotCol;
-        if (auditQualityDot) auditQualityDot.style.color = dotCol;
-    } else if (isLossless) {
-        if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'dsp';
-        if (auditQualityBadge) {
-            auditQualityBadge.textContent = `LOSSLESS ${format} → ${isNativeBypass ? 'NATIVE' : (s.isPrecision64 ? '64-BIT' : '32-BIT')} DSP`;
-            auditQualityBadge.className = 'signalQualityBadge dspEnhanced';
-        }
-        if (auditQualityDesc) {
-            auditQualityDesc.textContent = `Lossless ${format} source decoded to 32-bit IEEE 754 float and actively shaped through ${isNativeBypass ? '32-bit host DSP (user EQ/FX active)' : workletPrecisionStr} (${activeStages.join(', ') || 'DSP Active'}).`;
-        }
-        const dotCol = 'var(--status-warning)';
-        if (deckSignalDot) deckSignalDot.style.color = dotCol;
-        if (auditQualityDot) auditQualityDot.style.color = dotCol;
-    } else {
-        if (signalPathBadgeBtn) signalPathBadgeBtn.dataset.signalState = 'lossy';
-        if (auditQualityBadge) {
-            auditQualityBadge.textContent = `${format} LOSSY → ${dspActive ? (isNativeBypass ? 'NATIVE DSP' : (s.isPrecision64 ? '64-BIT DSP' : '32-BIT DSP')) : (isNativeBypass ? 'NATIVE BYPASS' : '32-BIT DECODE')}`;
-            auditQualityBadge.className = 'signalQualityBadge highPrecision';
-        }
-        if (auditQualityDesc) {
-            auditQualityDesc.textContent = `Compressed ${format} stream decoded by browser into 32-bit IEEE 754 floating-point PCM${activeStages.length > 0 ? `, processed via ${workletPrecisionStr} (${activeStages.join(', ')})` : ' with flat EQ response'}.`;
-        }
-        const dotCol = 'var(--text-accent)';
-        if (deckSignalDot) deckSignalDot.style.color = dotCol;
-        if (auditQualityDot) auditQualityDot.style.color = dotCol;
-    }
-
-    const stageSourceEl = document.getElementById('auditStageSource');
-    const stageDecodeEl = document.getElementById('auditStageDecode');
-    const stageDspEl = document.getElementById('auditStageDsp');
-    const stageOutputEl = document.getElementById('auditStageOutput');
-
-    const currentRate = s.audioContext ? s.audioContext.sampleRate : ((track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100);
-    const rateStr = currentRate >= 1000 ? `${(currentRate / 1000).toFixed(1)} kHz` : `${currentRate} Hz`;
-
-    if (stageSourceEl) {
-        if (!hasTrack) {
-            stageSourceEl.textContent = 'Idle (No track loaded)';
-        } else {
-            const bd = track.bitDepth || (isLossless ? ((currentRate >= 88200) ? 24 : 16) : null);
-            const br = track.bitrate ? `${track.bitrate} kbps` : '';
-            const ch = track.channels === 1 ? 'Mono' : 'Stereo';
-            stageSourceEl.textContent = [
-                `${format} (${isLossless ? 'Lossless' : 'Lossy'})`,
-                bd ? `${bd}-Bit` : '',
-                rateStr,
-                br,
-                ch
-            ].filter(Boolean).join(' • ');
-        }
-    }
-
-    if (stageDecodeEl) {
-        stageDecodeEl.textContent = `32-Bit IEEE 754 Float PCM @ ${rateStr}`;
-    }
-
-    if (stageDspEl) {
-        const stagesText = activeStages.length > 0 ? activeStages.join(' + ') : 'Flat Bypass';
-        stageDspEl.textContent = `${workletPrecisionStr} (${stagesText})`;
-    }
-
-    const ditherLabel = s.ditherMode === 'shaped'
-        ? 'Psychoacoustic Shaped (>18 kHz)'
-        : (s.ditherMode === 'tpdf' ? 'TPDF Flat Dither' : 'Unshaped Truncation (Off)');
-    const volPct = Math.round(s.currentVolumeValue * 100);
-    const gainModeStr = s.isHardwareGain ? `Hardware DAC Bridge (${volPct}%)` : `Digital Gain (${volPct}%)`;
-
-    if (stageOutputEl) {
-        stageOutputEl.textContent = `${ditherLabel} • ${gainModeStr}`;
-    }
-
-    let maxTotalBoost = maxBoostDb;
-    if (s.isBassBoost) maxTotalBoost = Math.max(maxTotalBoost, 3.8);
-    if (s.isTrebleBoost) maxTotalBoost = Math.max(maxTotalBoost, 3.0);
-    if (s.isVocalBoost) maxTotalBoost = Math.max(maxTotalBoost, 2.8);
-    const preampAttenDb = maxTotalBoost > 0 ? -(maxTotalBoost * 0.70) : 0;
-    const volDb = s.currentVolumeValue > 0 ? (20 * Math.log10(s.currentVolumeValue)) : -60;
-    const netHeadroomDb = Math.max(0, -(preampAttenDb + Math.min(0, volDb)));
-    if (auditMetricHeadroom) {
-        if (maxTotalBoost > 0) {
-            auditMetricHeadroom.textContent = `${preampAttenDb.toFixed(1)} dB Pre-Amp (${netHeadroomDb.toFixed(1)} dB Guard)`;
-        } else {
-            auditMetricHeadroom.textContent = `+${Math.max(0.6, netHeadroomDb).toFixed(1)} dB (${s.currentVolumeValue > 1.0 ? 'Amplified' : 'Unity Guard'})`;
-        }
-    }
-
-    let latencyMs = s.bufferLatencyTarget === 'interactive' ? 15.0 : 100.0;
-    if (s.audioContext) {
-        const ctxLat = ((s.audioContext.baseLatency || 0) + (s.audioContext.outputLatency || 0)) * 1000;
-        if (ctxLat > 0) latencyMs = ctxLat;
-    }
-    const latencyModeStr = s.bufferLatencyTarget === 'interactive' ? 'Low-Latency' : 'Stable Buffer';
-    if (auditMetricLatency) {
-        auditMetricLatency.textContent = `~${latencyMs.toFixed(1)} ms (${latencyModeStr})`;
-    }
-
-    const auditMetricPrecision = document.getElementById('auditMetricPrecision');
-    const auditMetricPrecisionDesc = document.getElementById('auditMetricPrecisionDesc');
-    if (auditMetricPrecision) {
-        auditMetricPrecision.textContent = s.isPrecision64 ? '32-Bit Decode / 64-Bit DSP' : '32-Bit IEEE 754 Float';
-    }
-    if (auditMetricPrecisionDesc) {
-        auditMetricPrecisionDesc.textContent = s.isPrecision64
-            ? 'Browser decodes audio to 32-bit float; AudioWorklet computes biquad filters and dithering in 64-bit double float.'
-            : 'Browser decodes and processes all audio stages in standard 32-bit single-precision IEEE 754 floating point.';
-    }
-
-    const settingsDspEngineVal = document.getElementById('settingsDspEngineVal');
-    const settingsDspHeadroomVal = document.getElementById('settingsDspHeadroomVal');
-    const settingsDspLatencyVal = document.getElementById('settingsDspLatencyVal');
-    const settingsDspEqVal = document.getElementById('settingsDspEqVal');
-
-    if (settingsDspEngineVal) {
-        settingsDspEngineVal.textContent = s.isPrecision64 ? '64-Bit Worklet / 32-Bit Decode' : '32-Bit IEEE 754 Float';
-    }
-    if (settingsDspHeadroomVal) {
-        settingsDspHeadroomVal.textContent = maxBoostDb > 0 ? `${preampAttenDb.toFixed(1)} dB AGP Active` : '0.0 dBFS True-Peak';
-    }
-    if (settingsDspLatencyVal) {
-        settingsDspLatencyVal.textContent = `~${latencyMs.toFixed(0)} ms (${latencyModeStr})`;
-    }
-    if (settingsDspEqVal) {
-        settingsDspEqVal.textContent = activeStages.length > 0 ? activeStages.slice(0, 2).join(' + ') : 'Linear Bypass';
-    }
+function updateSignalPathUi(track = store.state.isStandalonePlayback
+    ? store.state.standaloneTrackList[store.state.standaloneTrackIndex]
+    : store.state.allTracks[store.state.currentTrackIndex]) {
+    return renderSignalPath(store.state, track, Boolean(androidNative?.active), getConfirmedAudioRoute(), hasActiveDsp());
 }
 
 function findTrackIndexBySavedState(pool) {
-    if (!pool || pool.length === 0) return -1;
-    const savedTid = safeStorage.getItem('cachymusic_last_track_tid');
-    const savedPath = safeStorage.getItem('cachymusic_last_track_path');
-    const savedFilename = safeStorage.getItem('cachymusic_last_track_filename');
-    const savedId = safeStorage.getItem('cachymusic_last_track_id');
-    const savedTitle = safeStorage.getItem('cachymusic_last_track_title');
-
-    if (!savedTid && !savedPath && !savedFilename && !savedId && !savedTitle) return -1;
-
-    let idx = pool.findIndex(t => {
-        if (savedTid && t.tid && t.tid.toString() === savedTid.toString()) return true;
-        if (savedId && t.id && t.id.toString() === savedId.toString()) return true;
-        return false;
-    });
-    if (idx !== -1) return idx;
-
-    if (savedPath) {
-        idx = pool.findIndex(t => t.fullPath && t.fullPath === savedPath);
-        if (idx !== -1) return idx;
-    }
-    if (savedFilename) {
-        idx = pool.findIndex(t => t.filename && t.filename.toLowerCase() === savedFilename.toLowerCase());
-        if (idx !== -1) return idx;
-    }
-    if (savedTitle) {
-        idx = pool.findIndex(t => t.title && t.title.toLowerCase() === savedTitle.toLowerCase());
-        if (idx !== -1) return idx;
-    }
-    return -1;
+    return findSavedTrackIndex(pool || [], safeStorage);
 }
 
 async function restoreSessionState() {
@@ -2174,7 +2042,7 @@ async function restoreSessionState() {
         const foundPoolIdx = findTrackIndexBySavedState(pool);
         if (foundPoolIdx !== -1) {
             const tr = pool[foundPoolIdx];
-            const masterIdx = s.allTracks.findIndex(t => (tr.tid && t.tid == tr.tid) || (tr.fullPath && t.fullPath === tr.fullPath) || (t.id == tr.id));
+            const masterIdx = findTrackIndex(s.allTracks, tr);
             targetIdx = masterIdx !== -1 ? masterIdx : 0;
         } else {
             const foundGlobalIdx = findTrackIndexBySavedState(s.allTracks);
@@ -2182,7 +2050,7 @@ async function restoreSessionState() {
                 targetIdx = foundGlobalIdx;
             } else if (s.currentPlaylistId !== null && s.displayedTracks.length > 0) {
                 const firstPlTrack = s.displayedTracks[0];
-                const masterIdx = s.allTracks.findIndex(t => (firstPlTrack.tid && t.tid == firstPlTrack.tid) || (firstPlTrack.fullPath && t.fullPath === firstPlTrack.fullPath) || (t.id == firstPlTrack.id));
+                const masterIdx = findTrackIndex(s.allTracks, firstPlTrack);
                 targetIdx = masterIdx !== -1 ? masterIdx : 0;
             }
         }
@@ -2191,7 +2059,7 @@ async function restoreSessionState() {
     let savedTime = 0;
     try {
         const rawTime = safeStorage.getItem('cachymusic_last_track_time');
-        if (rawTime !== null && !isNaN(parseFloat(rawTime))) {
+        if (findTrackIndexBySavedState(s.allTracks) === targetIdx && rawTime !== null && Number.isFinite(parseFloat(rawTime))) {
             const parsed = parseFloat(rawTime);
             const targetTrack = s.allTracks[targetIdx];
             const trackDur = (targetTrack && targetTrack.duration) ? Number(targetTrack.duration) : 0;
@@ -2201,6 +2069,27 @@ async function restoreSessionState() {
         }
     } catch (_) {}
 
+    const existing=androidNative?.snapshot();
+    if (androidNative?.supportsQueue && !androidNative.active) {
+        if (existing?.token && !s.playQueue.length) {
+            s.playQueue = restoreNativeQueue(safeStorage.getItem(NATIVE_QUEUE_STORAGE), existing.token, s.allTracks);
+            if (s.playQueue.length) store.emit('library:update-queue', { fromNative: true });
+        }
+        reconcileNativeQueue(existing);
+        if (!existing?.token || existing.state === 'stopped') safeStorage.removeItem(NATIVE_QUEUE_STORAGE);
+    }
+    if(existing?.token&&existing.state!=='stopped'){
+        const idx=s.allTracks.findIndex(t=>indexedSource(t)===existing.uri);
+        if (idx >= 0 && nativeEligible(s.allTracks[idx])) {
+            if (androidNative.supportsShuffle && typeof existing.shuffle === 'boolean') {
+                s.isShuffle = existing.shuffle;
+                updateShuffleButton();
+            }
+            await loadTrack(idx, false, Number(existing.position || 0) / 1000, existing);
+            return;
+        }
+        if(!await stopNative())return;
+    }
     if (s.allTracks[targetIdx]) {
         await loadTrack(targetIdx, false, savedTime);
         if (s.isLyricsView) {
@@ -2211,33 +2100,7 @@ async function restoreSessionState() {
 
 function updateDacStatusUi() {
     const s = store.state;
-    const currentTrack = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
-        ? s.standaloneTrackList[s.standaloneTrackIndex]
-        : s.allTracks[s.currentTrackIndex];
-    updateSignalPathUi(currentTrack);
-    if (!statDacStream) return;
-    const currentRate = s.audioContext ? s.audioContext.sampleRate : ((currentTrack && currentTrack.sampleRate) ? getValidSampleRate(currentTrack.sampleRate) : 44100);
-    const rateStr = currentRate >= 1000 ? `${(currentRate / 1000).toFixed(1)} kHz` : `${currentRate} Hz`;
-    const bd = (currentTrack && currentTrack.bitDepth) || ((currentRate >= 88200) ? 24 : 16);
-    const bitStr = `${bd}-BIT`;
-    const nyquistKhz = (currentRate / 2000).toFixed(1).replace(/\.0$/, '');
-
-    if (!hasActiveDsp()) {
-        statDacStream.textContent = `BIT-PERFECT DIRECT (${bitStr} • ${rateStr} • ${nyquistKhz}kHz BANDWIDTH)`;
-        statDacStream.style.color = 'var(--status-success)';
-        statDacStream.title = `Direct hardware stream matching ${bitStr} • ${rateStr} (${nyquistKhz} kHz Nyquist bandwidth) with zero downsampling and zero DSP coloration.`;
-    } else {
-        const activeDsp = [];
-        if (s.isAmpBoost) activeDsp.push('AMP');
-        if (s.isBassBoost) activeDsp.push('BASS');
-        if (s.isVocalBoost) activeDsp.push('VOCAL');
-        if (s.isTrebleBoost) activeDsp.push('TREBLE');
-        if (s.isLimiter) activeDsp.push('LIMITER');
-        const dspStr = activeDsp.length > 0 ? activeDsp.join('+') : 'ACTIVE';
-        statDacStream.textContent = `STUDIO DSP (${dspStr} • ${bitStr} • ${rateStr} • ${nyquistKhz}kHz)`;
-        statDacStream.style.color = 'var(--status-warning)';
-        statDacStream.title = `Processing through ${s.isPrecision64 ? '64-bit' : '32-bit'} floating-point Web Audio DSP stage at ${rateStr} (${nyquistKhz} kHz bandwidth).`;
-    }
+    updateSignalPathUi(s.isStandalonePlayback ? s.standaloneTrackList[s.standaloneTrackIndex] : s.allTracks[s.currentTrackIndex]);
 }
 
 function updateTrackBadgeUi(track) {
@@ -2245,7 +2108,7 @@ function updateTrackBadgeUi(track) {
     const badgeParts = [];
     const fmt = resolveTrackFormat(track);
     if (fmt) badgeParts.push(fmt);
-    const bd = track.bitDepth || ((track.sampleRate && track.sampleRate >= 88200) ? 24 : 16);
+    const bd = track.bitDepth || null;
     if (bd) badgeParts.push(`${bd}-Bit`);
     if (track.sampleRate) {
         badgeParts.push(track.sampleRate >= 1000 ? `${(track.sampleRate / 1000).toFixed(1)} kHz` : `${track.sampleRate} Hz`);
@@ -2286,6 +2149,7 @@ function setupMediaSessionActionHandlers() {
         seekTo: (sec) => seekAudio(sec),
         getDuration: () => {
             const s = store.state;
+            if(androidNative?.active)return nativeDuration();
             if (s.isSoftwareDecoding && s.activeDecodedBuffer) return s.activeDecodedBuffer.duration;
             if (s.audio && s.audio.duration && isFinite(s.audio.duration)) return s.audio.duration;
             const tr = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
@@ -2295,14 +2159,20 @@ function setupMediaSessionActionHandlers() {
         },
         getPosition: () => {
             const s = store.state;
+            if(androidNative?.active)return nativePosition();
             if (s.isSoftwareDecoding) {
-                return s.softwarePlaybackOffset + (!s.isSoftwarePaused && s.audioContext ? (s.audioContext.currentTime - s.softwarePlaybackStartTime) : 0);
+                return softwarePosition();
             }
             return s.audio ? (s.audio.currentTime || 0) : 0;
         },
-        getPlaybackRate: () => store.state.currentPlaybackSpeed || 1.0
+        getPlaybackRate: () => store.state.isSoftwareDecoding ? 1.0 : (store.state.currentPlaybackSpeed || 1.0)
     });
 }
+
+const nativeModeControl=document.getElementById('androidNativeMode');
+if(nativeModeControl){const row=nativeModeControl.closest('.settingsRowItem');row.hidden=!androidNative;if(!androidNative)row.style.display='none';nativeModeControl.checked=safeStorage.getItem('cachymusic_android_native')==='true';nativeModeControl.addEventListener('change',()=>{safeStorage.setItem('cachymusic_android_native',String(nativeModeControl.checked));});}
+const continuousPcmControl=document.getElementById('continuousPcmMode');
+if(continuousPcmControl){continuousPcmControl.checked=safeStorage.getItem('cachymusic_continuous_pcm')==='true';continuousPcmControl.addEventListener('change',()=>{safeStorage.setItem('cachymusic_continuous_pcm',String(continuousPcmControl.checked));if(!continuousPcmControl.checked)cancelPcmSuccessor();});}
 
 store.subscribe('playback:seek', (e) => {
     const d = e?.detail;
@@ -2311,14 +2181,44 @@ store.subscribe('playback:seek', (e) => {
     if (d.play) playAudio(true);
 });
 store.subscribe('playback:pause', () => pauseAudio());
+store.subscribe('playback:order-change', () => refreshNativeOrder());
+store.subscribe('playback:sleep-mode-change', () => {
+    if (store.state.sleepTimerMode === 'end') cancelPcmSuccessor();
+    refreshNativeOrder();
+});
+store.subscribe('library:update-queue', event => {
+    if (event.detail?.fromNative) return;
+    nativeQueueEdits++;
+    refreshNativeOrder();
+});
 store.subscribe('ui:sync-signal-path', () => updateSignalPathUi());
 store.subscribe('ui:sync-dac-status', () => updateDacStatusUi());
 store.subscribe('ui:sync-track-badge', (e) => updateTrackBadgeUi(e?.detail?.track));
 store.subscribe('ui:sync-volume-icon', (e) => updateVolumeIcon(e?.detail?.volume ?? store.state.currentVolumeValue));
+store.subscribe('audio:graph-lost', () => {
+    const s = store.state;
+    // Native playback is independent of the Web Audio context.
+    if (androidNative?.active || (!s.isPlaying && !s.isPlayPending && !s.isSoftwareDecoding)) return;
+    ++currentPlayRequestId;
+    ++trackLoadToken;
+    ++currentTrackGeneration;
+    if (s.audio) s.audio._trackGeneration = currentTrackGeneration;
+    s.isPlayPending = false;
+    s.userExplicitlyPaused = true;
+    if (playPendingTimeout) { clearTimeout(playPendingTimeout); playPendingTimeout = null; }
+    clearNoDataStallTimer();
+    clearSeekStallTimer();
+    stopSoftwarePlayback();
+    s.activeDecodedBuffer = null;
+    try { s.audio?.pause(); } catch (_) {}
+    syncPlayPauseUI(false, true);
+    showToast('Audio output closed. Press Play to restart playback.');
+});
 store.subscribe('audio:attach-listeners', (e) => attachAudioListeners(e?.detail?.audio || store.state.audio));
 
 export {
     activeLoadedMetadataHandler,
+    nativePosition, nativeDuration,
     attachAudioListeners,
     cancelSoftwareProgressLoop,
     checkAndPreloadNextTrack,
@@ -2348,6 +2248,7 @@ export {
     seekAudio,
     seekSoftwarePlayback,
     setupMediaSessionActionHandlers,
+    softwarePosition,
     startSoftwareBufferPlayback,
     startSoftwareProgressLoop,
     stopSoftwarePlayback,

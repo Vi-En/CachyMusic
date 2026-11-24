@@ -486,7 +486,7 @@ class Storage {
                             'hasCover' => (bool)($t['has_cover'] ?? $t['hasCover']),
                             'cover' => (!empty($t['has_cover']) || !empty($t['hasCover'])) ? ('php/api/cover.php?tid=' . $t['tid']) : null,
                             'lyrics' => $t['lyrics'] ?? null,
-                            'src' => 'php/api/stream.php?path=' . urlencode($fullPath)
+                            'src' => 'php/api/stream.php?tid=' . (int)$t['tid']
                         ];
                         $pos++;
                     }
@@ -890,6 +890,8 @@ class Storage {
     }
 
     public static function saveSoulseekAccount($cfg) {
+        // Credentials are session-only. Do not re-persist legacy encrypted passwords.
+        $cfg['password'] = '';
         if (self::hasMySQL()) {
             $conn = $GLOBALS['connection'];
             $stmt = $conn->prepare("REPLACE INTO SoulseekAccount (id, username, password, is_powered_on, downloads_dir, shared_dir) VALUES (1, ?, ?, ?, ?, ?)");

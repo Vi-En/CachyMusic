@@ -1,6 +1,8 @@
 // CachyMusic - UI Elements & Workspace Shell
 import { formatTime, safeStorage, setScanStatus, showToast } from './utils.js';
 import { store } from './state.js';
+import { THEMES, normalizeThemeId } from './theme-catalog.js';
+import { ultrasonicFilterStatus } from './ultrasonic-status.js';
 
     // DOM Elements - Player & Audio (live reference stored on store.state.audio)
     const audioPlayerEl = store.state.audio || document.getElementById('audioPlayer');
@@ -10,7 +12,6 @@ import { store } from './state.js';
     }
 
     const vinylTurntable = document.getElementById('vinylTurntable');
-    const toneArm = document.getElementById('toneArm');
     const vinylArt = document.getElementById('vinylArt');
     const vinylLabel = document.getElementById('vinylLabel');
     const deckArtworkBackdrop = document.getElementById('deckArtworkBackdrop');
@@ -26,13 +27,16 @@ import { store } from './state.js';
     const trackListPanelEl = document.querySelector('.trackListPanel');
     const settingsPanelEl = document.querySelector('.settingsPanel');
     const infoPanelEl = document.getElementById('infoPanel');
+    const compactLayout = window.matchMedia('(max-width: 768px), (max-height: 500px) and (orientation: landscape)');
     const cachedMobileTabBtns = Array.from(document.querySelectorAll('.mobileTabBtn'));
     const cachedAllPanelsList = [playerDeckEl, trackListPanelEl, settingsPanelEl].filter(Boolean);
 
     function setMobileTabActive(targetId) {
         for (let i = 0; i < cachedMobileTabBtns.length; i++) {
             const b = cachedMobileTabBtns[i];
-            b.classList.toggle('active', b.dataset.target === targetId);
+            const active=b.dataset.target===(targetId==='settingsPanel'?'playerDeck':targetId);
+            b.classList.toggle('active',active);
+            if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
         }
     }
 
@@ -42,20 +46,13 @@ import { store } from './state.js';
         }
     }
 
+    // Native click is dispatched after a completed activation, not at touch-down.
+    // It also supports keyboard and assistive technology without a timing heuristic.
     function bindFastAction(el, action) {
         if (!el) return;
-        let lastActionTime = 0;
-        const handler = (e) => {
-            if (e.type === 'pointerdown' && e.pointerType === 'mouse' && e.button !== 0) return;
-            const now = performance.now();
-            if (now - lastActionTime < 320) return;
-            lastActionTime = now;
-            action(e);
-        };
-        el.addEventListener('pointerdown', handler, { passive: true });
-        el.addEventListener('click', (e) => {
-            e.preventDefault();
-            handler(e);
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            action(event);
         });
     }
 
@@ -331,10 +328,11 @@ import { store } from './state.js';
 
     function setMobileSearchPanelCollapsed(collapsed) {
         if (!slskControlsPanel) return;
+        slskControlsPanel.classList.toggle('is-collapsed', Boolean(collapsed));
+        slskPanelToggleBar?.setAttribute('aria-expanded', String(!collapsed));
         if (collapsed) {
-            slskControlsPanel.classList.add('is-collapsed');
-        } else {
-            slskControlsPanel.classList.remove('is-collapsed');
+            document.getElementById('slskToolbar')?.classList.remove('is-open');
+            document.getElementById('slskConnectionToggleBtn')?.setAttribute('aria-expanded', 'false');
         }
     }
 
@@ -378,33 +376,17 @@ import { store } from './state.js';
         const settingsTabScanStatus = document.getElementById('settingsTabScanStatus');
         if (settingsTabScanStatus) {
             if (s.allTracks && s.allTracks.length > 0) {
-                settingsTabScanStatus.textContent = `● ${s.allTracks.length} tracks currently loaded in library.`;
+                settingsTabScanStatus.textContent = `${s.allTracks.length} tracks currently loaded in library.`;
                 settingsTabScanStatus.style.color = 'var(--text-accent)';
             } else {
-                settingsTabScanStatus.textContent = '● Ready to scan local music library.';
+                settingsTabScanStatus.textContent = 'Ready to scan local music library.';
                 settingsTabScanStatus.style.color = 'var(--text-secondary)';
             }
         }
 
         const settingsTabCurrentThemeBadge = document.getElementById('settingsTabCurrentThemeBadge');
         if (settingsTabCurrentThemeBadge && s.activeTheme) {
-            const labels = {
-                default: 'DEFAULT STUDIO HI-FI',
-                nms: 'THE ATLAS',
-                'solar-eclipse': 'PLANETARY WARP',
-                'euclid-horizon': 'SPACE STATION',
-                'alien-paradise': 'ALIEN PARADISE',
-                'abyssal-void': 'EMERIL DRIVE',
-                dissonance: 'DISSONANCE',
-                sentinel: 'SENTINEL',
-                'minimalist-light': 'MINIMALIST (LIGHT)',
-                'minimalist-dark': 'MINIMALIST (DARK)',
-                'minimalist-warm': 'MINIMALIST (WARM PAPER)',
-                'minimalist-obsidian': 'MINIMALIST (OBSIDIAN OLED)',
-                'brutalist-light': 'MINIMALIST (LIGHT)',
-                'brutalist-dark': 'MINIMALIST (DARK)'
-            };
-            settingsTabCurrentThemeBadge.textContent = labels[s.activeTheme] || s.activeTheme.toUpperCase();
+            settingsTabCurrentThemeBadge.textContent = THEMES[normalizeThemeId(s.activeTheme)].name;
         }
 
         const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
@@ -462,7 +444,7 @@ import { store } from './state.js';
             ultrasonicText.textContent = s.isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
         }
         if (ultrasonicPill) {
-            ultrasonicPill.textContent = s.isUltrasonic ? `ACTIVE (${Math.round(s.ultrasonicCutoff / 1000)} kHz)` : 'BYPASS';
+            ultrasonicPill.textContent = ultrasonicFilterStatus({enabled:s.isUltrasonic, cutoffHz:s.ultrasonicCutoff, contextRateHz:s.audioContext?.sampleRate, workletReady:Boolean(s.dspWorkletNode)}).text;
         }
         if (ultrasonicSelect) {
             ultrasonicSelect.value = s.ultrasonicCutoff.toString();
@@ -528,6 +510,9 @@ import { store } from './state.js';
     }
 
     function switchWorkspace(viewName, targetMobilePanel = null) {
+        // The legacy installation/download hub was removed; its existing navigation
+        // entry points should resolve to Settings rather than a blank workspace.
+        if (viewName === 'download' && !downloadWorkspace) viewName = 'settings';
         const s = store.state;
         s.currentWorkspace = viewName;
         const currentTrack = s.allTracks[s.currentTrackIndex];
@@ -547,7 +532,7 @@ import { store } from './state.js';
             if (soulseekWorkspace) soulseekWorkspace.style.display = 'flex';
             if (downloadWorkspace) downloadWorkspace.style.display = 'none';
             if (settingsWorkspace) settingsWorkspace.style.display = 'none';
-            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'flex';
+            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'grid';
 
             setMobilePanelsInactive();
             setMobileTabActive('soulseekWorkspace');
@@ -570,7 +555,7 @@ import { store } from './state.js';
             if (soulseekWorkspace) soulseekWorkspace.style.display = 'none';
             if (downloadWorkspace) downloadWorkspace.style.display = 'flex';
             if (settingsWorkspace) settingsWorkspace.style.display = 'none';
-            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'flex';
+            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'grid';
 
             setMobilePanelsInactive();
             setMobileTabActive('downloadWorkspace');
@@ -593,7 +578,7 @@ import { store } from './state.js';
             if (soulseekWorkspace) soulseekWorkspace.style.display = 'none';
             if (downloadWorkspace) downloadWorkspace.style.display = 'none';
             if (settingsWorkspace) settingsWorkspace.style.display = 'flex';
-            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'flex';
+            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'grid';
 
             setMobilePanelsInactive();
             setMobileTabActive('settingsWorkspace');
@@ -619,7 +604,7 @@ import { store } from './state.js';
             if (settingsWorkspace) settingsWorkspace.style.display = 'none';
             if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'none';
 
-            if (targetMobilePanel || window.innerWidth <= 768) {
+            if (targetMobilePanel || compactLayout.matches) {
                 const activeTarget = targetMobilePanel || 'playerDeck';
                 setMobileTabActive(activeTarget);
 
@@ -643,14 +628,14 @@ import { store } from './state.js';
                 } else if (activeTarget === 'trackListPanel') {
                     document.body.classList.add('mobile-tab-tracks');
                     if (persistentMiniPlayer) {
-                        persistentMiniPlayer.style.display = 'flex';
+                        persistentMiniPlayer.style.display = 'grid';
                         if (currentTrack) updateMiniPlayerInfo(currentTrack);
                         updateMiniPlayerPlayState(s.isPlaying);
                     }
                 } else if (activeTarget === 'settingsPanel') {
                     document.body.classList.add('mobile-tab-info');
                     if (persistentMiniPlayer) {
-                        persistentMiniPlayer.style.display = 'flex';
+                        persistentMiniPlayer.style.display = 'grid';
                         if (currentTrack) updateMiniPlayerInfo(currentTrack);
                         updateMiniPlayerPlayState(s.isPlaying);
                     }
@@ -742,7 +727,9 @@ import { store } from './state.js';
     function updateEmptyPlayerState(errorMsg = '') {
         const promptEl = document.getElementById('playerEmptyPrompt');
         const errorHintEl = document.getElementById('playerEmptyErrorHint');
-        const hasTracks = Array.isArray(store.state.allTracks) && store.state.allTracks.length > 0;
+        const s = store.state;
+        const hasTracks = Boolean(s.allTracks.length || (s.isStandalonePlayback && s.standaloneTrackList.length));
+        playerDeckEl?.classList.toggle('empty-deck', !hasTracks);
 
         if (promptEl) {
             promptEl.style.display = hasTracks ? 'none' : 'flex';
@@ -769,6 +756,7 @@ import { store } from './state.js';
 
 
     export {
+        compactLayout,
         activeListLabel,
         albumName,
         artistName,
@@ -1002,7 +990,6 @@ import { store } from './state.js';
         themeSelectCards,
         toggleFolderBtn,
         toggleMobileSearchPanel,
-        toneArm,
         topSettingsBtn,
         topThemeLabel,
         totalDurationEl,

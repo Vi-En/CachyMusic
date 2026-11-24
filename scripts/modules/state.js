@@ -1,5 +1,6 @@
 // CachyMusic - Centralized Reactive WorkstationStore & State Architecture
 import { safeStorage } from './utils.js';
+import { ultrasonicFilterPossible } from './ultrasonic-status.js';
 
 export const VALID_SORT_OPTIONS = [
     'default',
@@ -20,12 +21,8 @@ export const PEQ_Q_STEPS = [0.71, 1.0, 1.41, 2.2, 3.5];
 export const NUM_BANDS = 60;
 export const MAX_PARTICLES = 36;
 
-export const VALID_THEME_IDS = [
-    'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
-    'abyssal-void', 'dissonance', 'sentinel',
-    'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian',
-    'brutalist-light', 'brutalist-dark'
-];
+export { VALID_THEME_IDS, normalizeThemeId } from './theme-catalog.js';
+import { normalizeThemeId } from './theme-catalog.js';
 
 function resolveInitialSort() {
     try {
@@ -41,23 +38,18 @@ function resolveInitialSort() {
 function resolveInitialVisMode() {
     try {
         const urlVisParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('vis') : null;
-        let savedMode = urlVisParam || safeStorage.getItem('cachymusic_vis_mode') || 'wave';
+        let savedMode = urlVisParam || safeStorage.getItem('cachymusic_vis_mode') || 'artwork';
         if (savedMode === 'badapple') savedMode = 'thematic';
         return savedMode;
     } catch (_) {}
-    return 'wave';
+    return 'artwork';
 }
 
 function resolveInitialTheme() {
-    let t = safeStorage.getItem('cachymusic_active_theme')
+    const theme = safeStorage.getItem('cachymusic_active_theme')
         || (typeof document !== 'undefined' && document.documentElement ? document.documentElement.getAttribute('data-theme') : null)
         || 'default';
-    if (t === 'brutalist-minimalism-light' || t === 'brutalist-light') t = 'minimalist-light';
-    if (t === 'brutalist-minimalism-dark' || t === 'brutalist-dark') t = 'minimalist-dark';
-    if (!VALID_THEME_IDS.includes(t)) {
-        t = (t === 'atlas' || t === 'spotify' || t === 'apple') ? 'nms' : 'default';
-    }
-    return t;
+    return normalizeThemeId(theme);
 }
 
 function createInitialPeq() {
@@ -141,8 +133,6 @@ export class WorkstationStore extends EventTarget {
             openPeqModal: null,
             closePeqModal: null,
             resumeVisualizerLoop: null,
-            ambientCanvas: null,
-            ambientCtx: null,
             lastRenderedMiniTrack: null,
             dismissedTracksMap: new Map(),
 
@@ -214,9 +204,9 @@ export class WorkstationStore extends EventTarget {
             isVocalBoost: safeStorage.getItem('cachymusic_vocal_boost') === 'true',
             isTrebleBoost: safeStorage.getItem('cachymusic_treble_boost') === 'true',
             isLimiter: safeStorage.getItem('cachymusic_limiter') === 'true',
-            isReplayGain: safeStorage.getItem('cachymusic_replaygain') !== 'false',
+            isReplayGain: safeStorage.getItem('cachymusic_replaygain') === 'true',
             isCrossfeed: safeStorage.getItem('cachymusic_crossfeed') === 'true',
-            isSubsonic: safeStorage.getItem('cachymusic_subsonic') !== 'false',
+            isSubsonic: safeStorage.getItem('cachymusic_subsonic') === 'true',
             currentVolumeValue: initVol,
             mathPrecision: (() => {
                 const raw = safeStorage.getItem('cachymusic_engine_precision');
@@ -231,7 +221,7 @@ export class WorkstationStore extends EventTarget {
             })(),
             detectedDacLabel: '',
             hasExternalDac: false,
-            isAgpEnabled: safeStorage.getItem('cachymusic_agp') !== 'false',
+            isAgpEnabled: safeStorage.getItem('cachymusic_agp') === 'true',
             isSurroundWidener: safeStorage.getItem('cachymusic_surround_ms') === 'true',
             isPhaseInvert: safeStorage.getItem('cachymusic_phase_invert') === 'true',
             isMonoMix: safeStorage.getItem('cachymusic_mono_mix') === 'true',
@@ -239,9 +229,9 @@ export class WorkstationStore extends EventTarget {
             isPitchLockTempo: safeStorage.getItem('cachymusic_pitch_lock') === 'true',
             currentPlaybackSpeed: 1.0,
             isHardwareGain: safeStorage.getItem('cachymusic_hardware_gain') === 'true' || safeStorage.getItem('cachymusic_hw_gain') === 'true',
-            isUltrasonic: safeStorage.getItem('cachymusic_ultrasonic') !== 'false',
+            isUltrasonic: safeStorage.getItem('cachymusic_ultrasonic') === 'true',
             ultrasonicCutoff: parseInt(safeStorage.getItem('cachymusic_ultrasonic_cutoff') || '32000', 10),
-            ditherMode: safeStorage.getItem('cachymusic_dither_mode') || 'shaped',
+            ditherMode: safeStorage.getItem('cachymusic_dither_mode') || 'off',
             isAmbiophonics: safeStorage.getItem('cachymusic_ambiophonics') === 'true',
             bufferLatencyTarget: safeStorage.getItem('cachymusic_buffer_latency') || 'playback',
             isPeqBypassed: safeStorage.getItem('cachymusic_peq_bypassed') === 'true',
@@ -284,6 +274,7 @@ export class WorkstationStore extends EventTarget {
             // Sleep Timer & Telemetry Logs
             sleepTimerInterval: null,
             sleepTimerRemainingSec: 0,
+            sleepTimerTick: null,
             sleepTimerMode: null,
             sleepTimerOriginalVolume: null,
             debugModeActive: safeStorage.getItem('cachymusic_debug_mode') === 'true',
@@ -341,10 +332,11 @@ export const store = new WorkstationStore();
 export function hasActiveDsp() {
     const s = store.state;
     const hasPeq = !s.isPeqBypassed && s.peqGains.some(g => g !== 0);
-    const hasWorkletDsp = s.isUltrasonic || (s.ditherMode !== 'off') || s.isAmbiophonics
+    const hasEffectiveUltrasonic = s.isUltrasonic && (!s.audioContext || ultrasonicFilterPossible(s.ultrasonicCutoff, s.audioContext.sampleRate));
+    const hasWorkletDsp = hasEffectiveUltrasonic || (s.ditherMode !== 'off') || s.isAmbiophonics
         || s.isSurroundWidener || s.isPhaseInvert || s.isMonoMix || (Math.abs(s.stereoBalance) > 0.005);
     return s.isAmpBoost || s.isBassBoost || s.isVocalBoost || s.isTrebleBoost
-        || s.isLimiter || s.isCrossfeed || s.isSubsonic || hasPeq || hasWorkletDsp || (s.currentVolumeValue > 1.0);
+        || s.isLimiter || s.isCrossfeed || s.isSubsonic || s.isReplayGain || s.isAgpEnabled || hasPeq || hasWorkletDsp || (s.currentVolumeValue > 1.0);
 }
 
 export function emitShockwave(x, y, maxRadius, initialAlpha = 0.75) {

@@ -1,0 +1,27 @@
+/* Native range inputs retain keyboard, touch and accessibility behavior. */
+:root[data-theme] .volumeSlider {
+  --volume-fill: 53.3333%; /* 0.8 / 1.5, until saved settings are restored */
+  --volume-ink: var(--accent-color);
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  cursor: pointer;
+}
+:root[data-theme] .volumeSlider.amplified { --volume-ink: var(--status-warning); }
+.volumeSlider::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 4px;
+  background: linear-gradient(to right,var(--volume-ink) 0 var(--volume-fill),var(--quiet-line) var(--volume-fill) 100%);
+}
+.volumeSlider::-webkit-slider-thumb {
+  appearance:none; -webkit-appearance:none; width:14px; height:14px;
+  border:0; border-radius:50%; background:var(--volume-ink); margin-top:-5px;
+}
+.volumeSlider::-moz-range-track { height:4px; border-radius:4px; background:var(--quiet-line); }
+.volumeSlider::-moz-range-progress { height:4px; border-radius:4px; background:var(--volume-ink); }
+.volumeSlider::-moz-range-thumb { width:14px; height:14px; border:0; border-radius:50%; background:var(--volume-ink); }
+@media (forced-colors: active) {
+  :root[data-theme] .volumeSlider { appearance:auto; -webkit-appearance:auto; }
+}

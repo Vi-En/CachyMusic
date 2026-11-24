@@ -1,3 +1,9 @@
+import {dismissalKey, findTrackIndex} from './track-session.js';
+import {bindDisclosure} from './control-ui.js';
+import {createProgressScrubber} from './progress-scrubber.js';
+import { uiIcon } from './icons.js';
+import {loadAllMetadataOverrides} from './local-library.js';
+import { setupMetadataLookup } from './library.js';
 // CachyMusic - Application Orchestrator & Lifecycle Bootstrap
 import {
     formatTime,
@@ -25,6 +31,7 @@ import {
     closeSleepTimerModalBtn,
     closeThemeModalBtn,
     closeSignalPathModalBtn,
+    compactLayout,
     createPlaylistBtn,
     currentTimeEl,
     customSleepInput,
@@ -142,6 +149,7 @@ import {
     prevTrack,
     restoreSessionState,
     seekAudio,
+    softwarePosition,
     setupMediaSessionActionHandlers,
     togglePlayPause,
     updateRepeatUI,
@@ -151,9 +159,7 @@ import * as libraryModule from './library.js';
 import {
     addToQueue,
     addTrackToPlaylist,
-    applyFoundCover,
     applySearchAndSort,
-    autoFindCoverOnline,
     backToPlaylistsView,
     cancelMetadataConfirmation,
     clearQueue,
@@ -187,7 +193,6 @@ import {
     saveLibraryToIndexedDB,
     saveMetadata,
     scanDirectory,
-    updateQueueUi,
     updateRestoreBtnUi,
     updateTrackMetadataDisplay
 } from './library.js';
@@ -265,8 +270,14 @@ const setSleepTimer = (mins) => getSettingsModule().then(m => m && m.setSleepTim
 const cancelSleepTimer = (notify) => getSettingsModule().then(m => m && m.cancelSleepTimer && m.cancelSleepTimer(notify));
 const openSignalPathModal = () => getSettingsModule().then(m => m && m.openSignalPathModal && m.openSignalPathModal());
 const closeSignalPathModal = () => getSettingsModule().then(m => m && m.closeSignalPathModal && m.closeSignalPathModal());
-const setupPwaInstallPrompt = () => getP2pModule().then(m => m && m.setupPwaInstallPrompt && m.setupPwaInstallPrompt());
-const setupDownloadWorkspace = () => getP2pModule().then(m => m && m.setupDownloadWorkspace && m.setupDownloadWorkspace());
+const setupPwaInstallPrompt = () => import('./pwa-install.js').then(m => m.setupPwaInstallPrompt());
+let downloadWorkspaceInitialized = false;
+const setupDownloadWorkspace = () => getP2pModule().then(m => {
+    if (!m || downloadWorkspaceInitialized) return m;
+    downloadWorkspaceInitialized = true;
+    m.setupDownloadWorkspace();
+    return m;
+});
 
 store.subscribe('track:change', ({ detail }) => {
     if (store.state.isLyricsView && detail && detail.track) {
@@ -275,17 +286,22 @@ store.subscribe('track:change', ({ detail }) => {
 });
 
 store.subscribe('workspace:change', ({ detail }) => {
-    const ws = detail && detail.workspace;
+    const ws = detail?.viewName;
     if (ws === 'soulseek') {
-        getP2pModule().then(m => m && m.soulseekController && m.soulseekController.checkStatus());
+        getP2pModule().then(m => {
+            const controller = m?.soulseekController;
+            if (!controller || store.state.currentWorkspace !== 'soulseek') return;
+            controller.checkStatus();
+            if (controller.activeSubView === 'transfers') controller.startTransfersPolling();
+        });
     } else if (ws === 'download') {
-        getP2pModule().then(m => m && m.fetchLanStreamingUrl && m.fetchLanStreamingUrl());
+        setupDownloadWorkspace().then(m => m && m.fetchLanStreamingUrl && m.fetchLanStreamingUrl());
     }
 });
 
     // Toggle Collapsible / Sliding Metadata Inspector Panel
     function toggleMetadataPanel(forcedState) {
-        if (window.innerWidth <= 768) {
+        if (compactLayout.matches) {
             // Mobile View: toggle directly between playerDeck and settingsPanel (Metadata Inspector)
             const isInfoActive = (infoPanelEl && infoPanelEl.classList.contains('mobileActive')) || document.body.classList.contains('mobile-tab-info');
             if (isInfoActive) {
@@ -315,7 +331,7 @@ store.subscribe('workspace:change', ({ detail }) => {
 
     // Toggle Collapsible / Sliding Tracklist Panel (Desktop Zen Stage)
     function toggleTracklistPanel(forcedState) {
-        if (window.innerWidth <= 768) {
+        if (compactLayout.matches) {
             const isTracksActive = (trackListPanelEl && trackListPanelEl.classList.contains('mobileActive')) || document.body.classList.contains('mobile-tab-tracks');
             if (isTracksActive) {
                 switchWorkspace('player', 'playerDeck');
@@ -353,12 +369,30 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         setupEventListeners();
+        document.querySelectorAll('.settingHintBtn[title]').forEach((button, index) => {
+            const row = button.closest('.settingsRowItem');
+            if (!row) return;
+            const help = document.createElement('p');
+            help.id = `settings-help-${index}`;
+            help.className = 'settingsHelpText';
+            help.textContent = button.title;
+            help.hidden = true;
+            row.insertBefore(help, row.firstElementChild.nextSibling);
+            button.removeAttribute('title');
+            button.innerHTML = uiIcon('info');
+            button.setAttribute('aria-controls', help.id);
+            button.setAttribute('aria-expanded', 'false');
+            button.addEventListener('click', () => {
+                help.hidden = !help.hidden;
+                button.setAttribute('aria-expanded', String(!help.hidden));
+            });
+        });
         setupMediaSessionActionHandlers();
         getVisualizerModule();
         if (s.currentWorkspace === 'player') {
             const urlParams = new URLSearchParams(window.location.search);
             const initPanel = urlParams.get('panel') || 'playerDeck';
-            if (window.innerWidth <= 768 || urlParams.get('panel')) {
+            if (compactLayout.matches || urlParams.get('panel')) {
                 switchWorkspace('player', initPanel);
             }
         }
@@ -379,13 +413,14 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         // 1. Check Android Native Bridge saved library first (on APK)
-        if (runtime.isAndroidNative && window.AndroidBridge && typeof window.AndroidBridge.getSavedLibraryJson === 'function') {
+        if (runtime.isAndroidNative && savedMode!=='local' && window.AndroidBridge && typeof window.AndroidBridge.getSavedLibraryJson === 'function') {
             try {
                 const rawJson = window.AndroidBridge.getSavedLibraryJson();
                 if (rawJson) {
                     const parsed = JSON.parse(rawJson);
                     if (parsed && Array.isArray(parsed.tracks) && parsed.tracks.length > 0) {
-                        s.allTracks = parsed.tracks;
+                        const overrides=await loadAllMetadataOverrides();
+                        s.allTracks = parsed.tracks.map(t=>({...t,...(overrides.get(String(t.tid||t.id||t.fullPath||t.filename))||{})}));
                         const dirName = parsed.directory || savedDir || 'Music Folder';
                         if (folderPathInput) folderPathInput.value = dirName;
                         const sInput = document.getElementById('settingsTabFolderPathInput');
@@ -401,7 +436,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         // 2. Only hit scan.php on startup if PHP backend is active and directory mode isn't pure browser IndexedDB
-        if (s.allTracks.length === 0 && runtime.hasPhpBackend && savedMode !== 'browser_idb') {
+        if (s.allTracks.length === 0 && runtime.hasPhpBackend && !['browser_idb','local'].includes(savedMode)) {
             await scanDirectory(savedDir, false, true);
         }
 
@@ -444,7 +479,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Restore saved metadata panel state (persisted across sessions)
         try {
             const savedMetaVisible = safeStorage.getItem('cachymusic_metadata_visible');
-            if (savedMetaVisible === 'false' && window.innerWidth > 768) {
+            if (savedMetaVisible === 'false' && !compactLayout.matches) {
                 toggleMetadataPanel(false);
             }
         } catch (_) {}
@@ -521,6 +556,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         if (shuffleBtn) {
             shuffleBtn.addEventListener('click', () => {
                 store.state.isShuffle = !store.state.isShuffle;
+                store.emit('playback:order-change');
                 shuffleBtn.classList.toggle('active', store.state.isShuffle);
                 shuffleBtn.setAttribute('title', store.state.isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
                 shuffleBtn.blur();
@@ -530,6 +566,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         if (shufflePlayBtn) {
             shufflePlayBtn.addEventListener('click', () => {
                 store.state.isShuffle = true;
+                store.emit('playback:order-change');
                 if (shuffleBtn) {
                     shuffleBtn.classList.add('active');
                     shuffleBtn.setAttribute('title', 'Shuffle Active');
@@ -557,12 +594,11 @@ store.subscribe('workspace:change', ({ detail }) => {
         attachAudioListeners(store.state.audio);
 
         const ensureContextRunning = () => {
-            const ctx = store.state.audioContext;
-            if (!ctx || ctx.state === 'closed') {
-                initAudioContext();
-            } else if (ctx.state === 'suspended') {
-                ctx.resume().catch(() => {});
-            }
+            const s = store.state;
+            const ctx = s.audioContext;
+            // Existing suspended graphs are unlocked by audio-engine.js.
+            // Warm a missing graph only while playback has actually been requested.
+            if ((!ctx || ctx.state === 'closed') && (s.isPlayPending || s.isSoftwareDecoding) && playerCoreModule.nativePosition() === null) initAudioContext();
         };
         ['pointerdown', 'touchstart', 'click', 'keydown'].forEach(evt => {
             window.addEventListener(evt, ensureContextRunning, { passive: true });
@@ -571,10 +607,11 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Remember playback position of currently playing track when window closes / navigates away
         function persistCurrentPlaybackTimeOnExit() {
             const activeAudio = store.state.audio;
-            if (!activeAudio) return;
+            if (!activeAudio || store.state.isStandalonePlayback) return;
             try {
-                const cur = activeAudio.currentTime;
-                const dur = activeAudio.duration;
+                const s = store.state;
+                const cur = playerCoreModule.nativePosition() ?? (s.isSoftwareDecoding ? softwarePosition() : activeAudio.currentTime);
+                const dur = playerCoreModule.nativeDuration() ?? (s.isSoftwareDecoding ? s.activeDecodedBuffer?.duration : activeAudio.duration);
                 if (cur > 0 && (!dur || isNaN(dur) || cur < (dur - 1))) {
                     safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
                 } else {
@@ -588,6 +625,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Keep OS media session synced as paused when tab is hidden while paused
         document.addEventListener('visibilitychange', () => {
             const activeAudio = store.state.audio;
+            if (playerCoreModule.nativePosition()!==null)return;
             if (document.hidden && (store.state.userExplicitlyPaused || !activeAudio || activeAudio.paused)) {
                 mediaSessionController.syncPlaybackState('paused');
             }
@@ -598,160 +636,35 @@ store.subscribe('workspace:change', ({ detail }) => {
 
 
 
-        // Scrubber Dragging & Seeking (Unified Pointer Events for Main & Mini Progress Bars)
-        function getClientX(e) {
-            if (e.touches && e.touches.length > 0) return e.touches[0].clientX;
-            if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientX;
-            return e.clientX;
-        }
-
-        function resolveScrubberDurationSec() {
+        // Both scrubbers share one pointer owner and one track-generation guard.
+        const getDuration = () => {
             const s = store.state;
-            const track = s.allTracks[s.currentTrackIndex];
-            if (s.isSoftwareDecoding && s.activeDecodedBuffer && Number.isFinite(s.activeDecodedBuffer.duration) && s.activeDecodedBuffer.duration > 0) {
-                return s.activeDecodedBuffer.duration;
-            }
-            if (s.audio && Number.isFinite(s.audio.duration) && s.audio.duration > 0) {
-                return s.audio.duration;
-            }
-            return (track && Number.isFinite(track.duration) && track.duration > 0) ? track.duration : 0;
-        }
-
-        function attachProgressScrubber(containerEl) {
-            if (!containerEl) return;
-            let activePointerId = null;
-            let pendingPct = null;
-            let cachedRect = null;
-            let scrubRafPending = false;
-            let latestClientX = null;
-
-            const paintScrub = (clientX) => {
-                const rect = (cachedRect && cachedRect.width > 0) ? cachedRect : containerEl.getBoundingClientRect();
-                if (!rect || rect.width <= 0 || typeof clientX !== 'number' || !Number.isFinite(clientX)) return null;
-                cachedRect = rect;
-                const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-                if (!Number.isFinite(pct)) return null;
-                pendingPct = pct;
-                progressBar.style.width = `${pct * 100}%`;
-                if (miniProgressBar) miniProgressBar.style.width = `${pct * 100}%`;
-                const dur = resolveScrubberDurationSec();
-                if (dur > 0) {
-                    const formatted = formatTime(pct * dur);
-                    currentTimeEl.textContent = formatted;
-                    if (miniCurrentTime) miniCurrentTime.textContent = formatted;
-                    if (progressHoverTooltip && containerEl === progressCon) {
-                        progressHoverTooltip.textContent = formatted;
-                        progressHoverTooltip.style.left = `${pct * 100}%`;
-                    }
+            const track = s.isStandalonePlayback ? s.standaloneTrackList?.[s.standaloneTrackIndex] : s.allTracks[s.currentTrackIndex];
+            const native = playerCoreModule.nativeDuration();
+            const candidates = [native !== null ? native : s.isSoftwareDecoding ? s.activeDecodedBuffer?.duration : s.audio?.duration, track?.duration];
+            return candidates.find(v => Number.isFinite(v) && v > 0) || 0;
+        };
+        const getPosition = () => playerCoreModule.nativePosition() ?? (store.state.isSoftwareDecoding ? softwarePosition() : store.state.audio?.currentTime || 0);
+        const tooltip = document.getElementById('progressHoverTooltip');
+        const scrubber = createProgressScrubber({
+            duration:getDuration, position:getPosition, identity:() => playerCoreModule.currentTrackGeneration,
+            seek:seekAudio, dragging:active => {store.state.isDraggingScrubber = active;},
+            paint:(pct, dur, el) => {
+                for (const bar of [progressBar, miniProgressBar]) if (bar) bar.style.width = `${pct * 100}%`;
+                const time = formatTime(pct * dur);
+                for (const label of [currentTimeEl, miniCurrentTime]) if (label) label.textContent = time;
+                if (tooltip && el === progressCon) {tooltip.textContent = time; tooltip.style.left = `${pct * 100}%`;}
+            },
+            hover:(pct, dur) => {
+                if (progressHover) progressHover.style.width = `${(pct ?? 0) * 100}%`;
+                if (tooltip) {
+                    tooltip.style.opacity = pct === null ? '0' : '1';
+                    if (pct !== null) {tooltip.textContent = formatTime(pct * dur); tooltip.style.left = `${pct * 100}%`;}
                 }
-                return pct;
-            };
-
-            const updateVisual = (e, immediate = false) => {
-                latestClientX = getClientX(e);
-                if (immediate) {
-                    scrubRafPending = false;
-                    return paintScrub(latestClientX);
-                }
-                if (scrubRafPending) return pendingPct;
-                scrubRafPending = true;
-                requestAnimationFrame(() => {
-                    scrubRafPending = false;
-                    if (activePointerId !== null && latestClientX !== null) {
-                        paintScrub(latestClientX);
-                    }
-                });
-                return pendingPct;
-            };
-
-            const finishDrag = (e, shouldCommit) => {
-                if (activePointerId === null || e.pointerId !== activePointerId) return;
-                if (shouldCommit) {
-                    updateVisual(e, true);
-                }
-                scrubRafPending = false;
-                latestClientX = null;
-                try {
-                    if (containerEl.hasPointerCapture && containerEl.hasPointerCapture(activePointerId)) {
-                        containerEl.releasePointerCapture(activePointerId);
-                    }
-                } catch (_) { /* ignore pointer capture release errors */ }
-                activePointerId = null;
-                cachedRect = null;
-                containerEl.classList.remove('dragging');
-                store.state.isDraggingScrubber = false;
-                if (shouldCommit && pendingPct !== null && Number.isFinite(pendingPct)) {
-                    const totalDur = resolveScrubberDurationSec();
-                    if (totalDur > 0) {
-                        const targetSec = Math.max(0, Math.min(totalDur, pendingPct * totalDur));
-                        seekAudio(targetSec);
-                    }
-                }
-                pendingPct = null;
-            };
-
-            containerEl.addEventListener('pointerdown', (e) => {
-                if (e.pointerType === 'mouse' && e.button !== 0) return;
-                if (activePointerId !== null) return;
-                activePointerId = e.pointerId;
-                cachedRect = containerEl.getBoundingClientRect();
-                store.state.isDraggingScrubber = true;
-                containerEl.classList.add('dragging');
-                try {
-                    if (containerEl.setPointerCapture) containerEl.setPointerCapture(e.pointerId);
-                } catch (_) { /* ignore synthetic pointer events without active pointer */ }
-                updateVisual(e, true);
-            });
-
-            containerEl.addEventListener('pointermove', (e) => {
-                if (activePointerId === null || e.pointerId !== activePointerId) return;
-                updateVisual(e, false);
-            });
-
-            containerEl.addEventListener('pointerup', (e) => finishDrag(e, true));
-            containerEl.addEventListener('pointercancel', (e) => finishDrag(e, false));
-        }
-
-        const progressHoverTooltip = document.getElementById('progressHoverTooltip');
-        attachProgressScrubber(progressCon);
-
-        let cachedProgressRect = null;
-        let isHoverPending = false;
-        progressCon.addEventListener('mouseenter', () => {
-            cachedProgressRect = progressCon.getBoundingClientRect();
-        });
-        progressCon.addEventListener('mousemove', (e) => {
-            if (isHoverPending) return;
-            isHoverPending = true;
-            const clientX = getClientX(e);
-            requestAnimationFrame(() => {
-                isHoverPending = false;
-                if (!cachedProgressRect) cachedProgressRect = progressCon.getBoundingClientRect();
-                const pct = Math.max(0, Math.min(1, (clientX - cachedProgressRect.left) / cachedProgressRect.width));
-                progressHover.style.width = `${pct * 100}%`;
-                if (progressHoverTooltip) {
-                    const s = store.state;
-                    const activeAudio = s.audio;
-                    const totalDur = (activeAudio && activeAudio.duration && !isNaN(activeAudio.duration) && activeAudio.duration > 0)
-                        ? activeAudio.duration
-                        : ((s.allTracks[s.currentTrackIndex] && s.allTracks[s.currentTrackIndex].duration) || 0);
-                    if (totalDur > 0) {
-                        progressHoverTooltip.textContent = formatTime(pct * totalDur);
-                        progressHoverTooltip.style.left = `${pct * 100}%`;
-                        progressHoverTooltip.style.opacity = '1';
-                    }
-                }
-            });
-        }, { passive: true });
-
-        progressCon.addEventListener('mouseleave', () => {
-            cachedProgressRect = null;
-            isHoverPending = false;
-            progressHover.style.width = '0%';
-            if (progressHoverTooltip) {
-                progressHoverTooltip.style.opacity = '0';
             }
         });
+        scrubber.attach(progressCon, true);
+        window.addEventListener('pagehide', () => scrubber.cancel());
 
         // Mobile Viewport Navigation Switcher (Instant 0ms Pointerdown Fast-Path)
         const mobileTabBtns = document.querySelectorAll('.mobileTabBtn');
@@ -768,23 +681,9 @@ store.subscribe('workspace:change', ({ detail }) => {
             });
         });
 
-        // Viewport Resize Synchronizer: Smooth transition between Desktop 3-column & Mobile 1-panel mode
-        let lastInnerWidth = window.innerWidth;
-        window.addEventListener('resize', () => {
-            const currentW = window.innerWidth;
-            if ((lastInnerWidth <= 768 && currentW > 768) || (lastInnerWidth > 768 && currentW <= 768)) {
-                if (store.state.currentWorkspace === 'player') {
-                    if (currentW <= 768) {
-                        const activeMobile = document.querySelector('.panel.mobileActive');
-                        const target = activeMobile ? (activeMobile.classList.contains('trackListPanel') ? 'trackListPanel' : activeMobile.classList.contains('settingsPanel') ? 'settingsPanel' : 'playerDeck') : 'playerDeck';
-                        switchWorkspace('player', target);
-                    } else {
-                        switchWorkspace('player');
-                    }
-                }
-            }
-            lastInnerWidth = currentW;
-        }, { passive: true });
+        compactLayout.addEventListener('change', () => {
+            if (store.state.currentWorkspace === 'player') switchWorkspace('player');
+        });
 
         // Volume Deck & Scroll Control
         const volumeDeck = document.querySelector('.volumeDeck');
@@ -818,6 +717,7 @@ store.subscribe('workspace:change', ({ detail }) => {
             const s = store.state;
             if (!s.audio) return;
             s.audio.muted = !s.audio.muted;
+            audioEngineModule.syncSoftwareVolume();
             if (s.audio.muted) {
                 volumeLevel.textContent = '0%';
                 updateVolumeIcon(0);
@@ -891,14 +791,16 @@ store.subscribe('workspace:change', ({ detail }) => {
                 const s = store.state;
                 const count = s.dismissedTracksMap.size;
                 if (count === 0) return;
+                const active = s.allTracks[s.currentTrackIndex];
                 for (const [, item] of s.dismissedTracksMap.entries()) {
-                    const alreadyExists = s.allTracks.some(t => (item.track.tid && t.tid == item.track.tid) || (item.track.fullPath && t.fullPath === item.track.fullPath) || (t.id == item.track.id));
+                    const alreadyExists = findTrackIndex(s.allTracks, item.track) >= 0;
                     if (!alreadyExists) {
                         const insertIdx = Math.min(item.originalIndex ?? s.allTracks.length, s.allTracks.length);
                         s.allTracks.splice(insertIdx, 0, item.track);
                     }
                 }
                 s.dismissedTracksMap.clear();
+                if (active) s.currentTrackIndex = findTrackIndex(s.allTracks, active);
                 applySearchAndSort();
                 updateRestoreBtnUi();
                 showToast(`Restored ${count} track${count === 1 ? '' : 's'} to list.`);
@@ -922,31 +824,8 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Library vs Playlists vs Up Next Queue Tabs
         const quickFormatFilterBarEl = document.getElementById('quickFormatFilterBar');
         const libraryToolsToggleBtnEl = document.getElementById('libraryToolsToggleBtn');
-        const libraryToolsChevronEl = document.getElementById('libraryToolsChevron');
 
-        if (libraryToolsToggleBtnEl && libraryControls) {
-            const syncToolsToggleUi = () => {
-                const isMobile = window.innerWidth <= 768;
-                const isCollapsed = isMobile
-                    ? libraryControls.classList.contains('mobileCollapsed')
-                    : libraryControls.classList.contains('is-collapsed');
-                libraryToolsToggleBtnEl.classList.toggle('active', !isCollapsed);
-                libraryToolsToggleBtnEl.setAttribute('aria-expanded', String(!isCollapsed));
-                if (libraryToolsChevronEl) {
-                    libraryToolsChevronEl.textContent = isCollapsed ? '▾' : '▴';
-                }
-            };
-            syncToolsToggleUi();
-            libraryToolsToggleBtnEl.addEventListener('click', () => {
-                if (window.innerWidth <= 768) {
-                    libraryControls.classList.toggle('mobileCollapsed');
-                } else {
-                    libraryControls.classList.toggle('is-collapsed');
-                }
-                syncToolsToggleUi();
-            });
-            window.addEventListener('resize', syncToolsToggleUi, { passive: true });
-        }
+        bindDisclosure(libraryToolsToggleBtnEl, libraryControls);
 
         tabLibrary.addEventListener('click', () => {
             tabLibrary.classList.add('active');
@@ -1030,14 +909,10 @@ store.subscribe('workspace:change', ({ detail }) => {
                 if (playNowBtn) {
                     const idx = parseInt(playNowBtn.dataset.idx, 10);
                     if (idx >= 0 && idx < s.playQueue.length) {
-                        const track = s.playQueue.splice(idx, 1)[0];
-                        updateQueueUi();
-                        const masterIdx = s.allTracks.findIndex(t =>
-                            (track.id && t.id === track.id) ||
-                            (track.tid && t.tid === track.tid) ||
-                            t.filename === track.filename
-                        );
+                        const masterIdx = findTrackIndex(s.allTracks, s.playQueue[idx]);
                         if (masterIdx !== -1) {
+                            s.playQueue.splice(idx, 1);
+                            store.emit('library:update-queue');
                             loadTrack(masterIdx, true);
                         }
                     }
@@ -1047,13 +922,6 @@ store.subscribe('workspace:change', ({ detail }) => {
                 if (removeBtn) {
                     const idx = parseInt(removeBtn.dataset.idx, 10);
                     removeFromQueue(idx);
-                    return;
-                }
-                const enqueueUpcomingBtn = e.target.closest('.enqueueUpcomingBtn');
-                if (enqueueUpcomingBtn) {
-                    const id = enqueueUpcomingBtn.dataset.id;
-                    const track = s.allTracks.find(t => (t.id && t.id == id) || (t.tid && t.tid == id) || t.filename == id);
-                    if (track) addToQueue(track, false);
                     return;
                 }
             });
@@ -1282,19 +1150,6 @@ store.subscribe('workspace:change', ({ detail }) => {
             settingsSleepTimerBtn.addEventListener('click', openSleepTimerModal);
         }
 
-        // 5. Cross-Platform App & Downloads inside Settings
-        const settingsTabOpenDownloadHubBtn = document.getElementById('settingsTabOpenDownloadHubBtn');
-        if (settingsTabPwaInstallBtn) {
-            settingsTabPwaInstallBtn.addEventListener('click', () => {
-                if (store.state.deferredInstallPrompt) {
-                    store.state.deferredInstallPrompt.prompt();
-                    store.state.deferredInstallPrompt.userChoice.then(() => { store.state.deferredInstallPrompt = null; });
-                } else {
-                    showToast('App is ready: use browser menu "Install App" or "Add to Home Screen".');
-                }
-            });
-        }
-
         // Theme Modal: All 3 categories are displayed side-by-side in multi-column layout
 
         if (deleteCurrentPlaylistBtn) {
@@ -1307,9 +1162,18 @@ store.subscribe('workspace:change', ({ detail }) => {
             });
         }
 
-        // Folder Scan Tray Toggle
+        function openLibrarySettings() {
+            switchWorkspace('settings');
+            document.querySelector('#settingsCategoryNav [data-cat="library"]')?.click();
+        }
+
+        // Compact screens use the Library settings for importing music.
         if (toggleFolderBtn) {
             toggleFolderBtn.addEventListener('click', () => {
+                if (compactLayout.matches) {
+                    openLibrarySettings();
+                    return;
+                }
                 folderTray.style.display = folderTray.style.display === 'flex' ? 'none' : 'flex';
             });
         }
@@ -1349,13 +1213,10 @@ store.subscribe('workspace:change', ({ detail }) => {
         const playerOpenDirSettingsBtn = document.getElementById('playerOpenDirSettingsBtn');
         if (playerOpenDirSettingsBtn) {
             playerOpenDirSettingsBtn.addEventListener('click', () => {
-                switchWorkspace('settings');
-                const libCatBtn = document.querySelector('#settingsCategoryNav .settingsCatBtn[data-cat="library"]');
-                if (libCatBtn) libCatBtn.click();
-                setTimeout(() => {
-                    const sInput = document.getElementById('settingsTabFolderPathInput');
-                    if (sInput) sInput.focus();
-                }, 80);
+                openLibrarySettings();
+                if (getRuntime().hasPhpBackend && !compactLayout.matches) {
+                    document.getElementById('settingsTabFolderPathInput')?.focus();
+                }
             });
         }
 
@@ -1379,7 +1240,7 @@ store.subscribe('workspace:change', ({ detail }) => {
             updateEmptyPlayerState();
         }
 
-        function handleAndroidTracksDiscovered(tracks, folderName) {
+        async function handleAndroidTracksDiscovered(tracks, folderName) {
             hideTrackLoadingOverlay();
             if (store.state.isTrackLoadingCancelled) return;
 
@@ -1395,27 +1256,13 @@ store.subscribe('workspace:change', ({ detail }) => {
             const sInput = document.getElementById('settingsTabFolderPathInput');
             if (sInput) sInput.value = folderName;
 
+            const overrides=await loadAllMetadataOverrides();
+            tracks=tracks.map(t=>({...t,...(overrides.get(String(t.tid||t.id||t.fullPath||t.filename))||{})}));
             store.state.allTracks = tracks;
             try {
-                const cacheData = tracks.map(t => ({
-                    id: t.id,
-                    filename: t.filename,
-                    fullPath: t.fullPath,
-                    title: t.title,
-                    artist: t.artist,
-                    album: t.album,
-                    duration: t.duration,
-                    bitrate: t.bitrate,
-                    sampleRate: t.sampleRate,
-                    channels: t.channels || 2,
-                    format: t.format,
-                    size: t.size,
-                    src: t.src,
-                    cover: t.cover
-                }));
                 safeStorage.setItem('cachymusic_last_directory', folderName);
                 safeStorage.setItem('cachymusic_directory_mode', 'android');
-                safeStorage.setItem('cachymusic_android_tracks', JSON.stringify(cacheData));
+                safeStorage.removeItem('cachymusic_android_tracks');
             } catch (e) {
                 console.warn('Could not cache tracks to localStorage, using IndexedDB:', e);
             }
@@ -1596,7 +1443,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                                         safeStorage.setItem('cachymusic_directory_mode', 'server');
                                     } catch (_) {}
                                     if (store.state.dismissedTracksMap.size > 0) {
-                                        store.state.allTracks = data.tracks.filter(t => !store.state.dismissedTracksMap.has(t.fullPath || t.filename || t.id));
+                                        store.state.allTracks = data.tracks.filter(t => !store.state.dismissedTracksMap.has(dismissalKey(t)));
                                     } else {
                                         store.state.allTracks = data.tracks;
                                     }
@@ -1730,7 +1577,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                     if (!track) return;
                     closeTrackActionMenu();
                     updateTrackMetadataDisplay(track);
-                    if (window.innerWidth <= 768) {
+                    if (compactLayout.matches) {
                         switchWorkspace('player', 'settingsPanel');
                     } else {
                         toggleMetadataPanel(true);
@@ -1766,17 +1613,7 @@ store.subscribe('workspace:change', ({ detail }) => {
             const coverFileInput = document.getElementById('metaEditorCoverFileInput');
             const uploadOverlayBtn = document.getElementById('metaEditorUploadOverlayBtn');
             const browseCoverBtn = document.getElementById('metaEditorBrowseCoverBtn');
-            const findOnlineBtn = document.getElementById('metaEditorFindOnlineBtn');
             const revertCoverBtn = document.getElementById('metaEditorRevertCoverBtn');
-            const onlineCloseBtn = document.getElementById('metaEditorOnlineCloseBtn');
-            const onlineSearchInput = document.getElementById('metaEditorOnlineSearchInput');
-            const onlineSearchSubmitBtn = document.getElementById('metaEditorOnlineSearchSubmitBtn');
-            const applyCoverBtn = document.getElementById('metaEditorApplyCoverBtn');
-
-            const getActiveEditingTrack = () => {
-                const s = store.state;
-                return s.currentEditingTrack || (Array.isArray(s.allTracks) && s.allTracks[s.currentTrackIndex]) || null;
-            };
 
             if (uploadOverlayBtn && coverFileInput) {
                 uploadOverlayBtn.addEventListener('click', () => coverFileInput.click());
@@ -1791,65 +1628,11 @@ store.subscribe('workspace:change', ({ detail }) => {
                     }
                 });
             }
-            if (findOnlineBtn) {
-                findOnlineBtn.addEventListener('click', () => {
-                    const onlineCard = document.getElementById('metaEditorOnlineCard');
-                    if (onlineCard) {
-                        const isHidden = window.getComputedStyle(onlineCard).display === 'none';
-                        if (isHidden) {
-                            onlineCard.style.display = 'flex';
-                            const track = getActiveEditingTrack();
-                            if (track) {
-                                autoFindCoverOnline(track, true);
-                            }
-                        } else {
-                            onlineCard.style.display = 'none';
-                        }
-                    }
-                });
-            }
             if (revertCoverBtn) {
                 revertCoverBtn.addEventListener('click', () => {
                     revertCover();
                 });
             }
-            if (onlineCloseBtn) {
-                onlineCloseBtn.addEventListener('click', () => {
-                    const onlineCard = document.getElementById('metaEditorOnlineCard');
-                    if (onlineCard) onlineCard.style.display = 'none';
-                });
-            }
-            if (onlineSearchSubmitBtn && onlineSearchInput) {
-                onlineSearchSubmitBtn.addEventListener('click', () => {
-                    const q = onlineSearchInput.value.trim();
-                    autoFindCoverOnline(getActiveEditingTrack(), true, q);
-                });
-                onlineSearchInput.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const q = onlineSearchInput.value.trim();
-                        autoFindCoverOnline(getActiveEditingTrack(), true, q);
-                    }
-                });
-            }
-            if (applyCoverBtn) {
-                applyCoverBtn.addEventListener('click', () => {
-                    const preview = document.getElementById('metaEditorOnlinePreview');
-                    const title = document.getElementById('metaEditorOnlineTitle');
-                    const artist = document.getElementById('metaEditorOnlineArtist');
-                    if (preview && preview.src) {
-                        applyFoundCover({
-                            source: 'iTunes Store HD',
-                            artworkUrl: preview.src,
-                            album: title ? title.textContent : '',
-                            artist: artist ? artist.textContent : ''
-                        });
-                        const onlineCard = document.getElementById('metaEditorOnlineCard');
-                        if (onlineCard) onlineCard.style.display = 'none';
-                    }
-                });
-            }
-
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => closeMetadataEditor());
             }
@@ -1900,6 +1683,7 @@ store.subscribe('workspace:change', ({ detail }) => {
             }
         }
         setupMetadataEditorModal();
+        setupMetadataLookup();
 
         async function handleOpenStandaloneAudioFiles(files) {
             const s = store.state;
@@ -1926,7 +1710,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                 if (i % 5 === 0 || i === audioFiles.length - 1) {
                     setScanStatus(`Reading audio metadata (${i + 1}/${audioFiles.length})...`, false);
                 }
-                const url = URL.createObjectURL(file);
+
 
                 let parsed = null;
                 try {
@@ -1949,12 +1733,12 @@ store.subscribe('workspace:change', ({ detail }) => {
                     duration: (parsed && parsed.duration) ? parsed.duration : 0,
                     bitrate: (parsed && parsed.bitrate) ? parsed.bitrate : 0,
                     sampleRate: (parsed && parsed.sampleRate) ? parsed.sampleRate : 44100,
-                    bitDepth: (parsed && parsed.bitDepth) ? parsed.bitDepth : 16,
+                    bitDepth: (parsed && parsed.bitDepth) ? parsed.bitDepth : null,
                     channels: (parsed && parsed.channels) ? parsed.channels : 2,
                     format: (parsed && parsed.format) ? parsed.format : (file.name.split('.').pop() || 'audio'),
                     size: (parsed && parsed.size) ? parsed.size : (file.size ? (file.size / (1024 * 1024)).toFixed(2) + ' MB' : 'N/A'),
                     cover: (parsed && parsed.cover) ? parsed.cover : null,
-                    src: url,
+                    src: null,
                     _fileBlob: file,
                     isStandalone: true
                 });
@@ -2025,6 +1809,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         speedBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const s = store.state;
+                if(s.isSoftwareDecoding){showToast("Playback speed changes require the native decoder; PCM fallback plays at 1×.");return;}
                 speedBtns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 const speed = parseFloat(btn.dataset.speed);
@@ -2109,7 +1894,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         // Mini Player & Soulseek Studio Listeners
-        attachProgressScrubber(miniProgressCon);
+        scrubber.attach(miniProgressCon);
 
         if (miniPlayBtn) miniPlayBtn.addEventListener('click', () => {
             togglePlayPause();
@@ -2134,6 +1919,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                 const s = store.state;
                 if (!s.audio) return;
                 s.audio.muted = !s.audio.muted;
+                audioEngineModule.syncSoftwareVolume();
                 if (s.audio.muted) {
                     volumeLevel.textContent = '0%';
                     updateVolumeIcon(0);
@@ -2280,13 +2066,17 @@ store.subscribe('workspace:change', ({ detail }) => {
                 const searchEl = document.getElementById('trackSearch');
                 if (searchEl) {
                     e.preventDefault();
+                    if (compactLayout.matches) {
+                        switchWorkspace('player', 'trackListPanel');
+                        tabLibrary.click();
+                    }
                     searchEl.focus();
                     searchEl.select();
                     return;
                 }
             }
 
-            // Workspace Hotkeys (Alt+S for Soulseek, Alt+P for Player, Alt+D for Download)
+            // Workspace Hotkeys (Alt+S for Soulseek, Alt+P for Player, Alt+D for Settings (legacy shortcut))
             if (e.altKey && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
                 e.preventDefault();
                 switchWorkspace(store.state.currentWorkspace === 'soulseek' ? 'player' : 'soulseek');
@@ -2294,7 +2084,7 @@ store.subscribe('workspace:change', ({ detail }) => {
             }
             if (e.altKey && (e.code === 'KeyD' || e.key === 'd' || e.key === 'D')) {
                 e.preventDefault();
-                switchWorkspace(store.state.currentWorkspace === 'download' ? 'player' : 'download');
+                switchWorkspace(store.state.currentWorkspace === 'settings' ? 'player' : 'settings');
                 return;
             }
             if (e.altKey && (e.code === 'KeyO' || e.key === 'o' || e.key === 'O')) {
@@ -2352,7 +2142,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                 if (e.shiftKey) nextTrack();
                 else {
                     const s = store.state;
-                    const curTime = s.isSoftwareDecoding ? (s.softwarePlaybackOffset || 0) : (s.audio ? s.audio.currentTime : 0);
+                    const curTime = playerCoreModule.nativePosition() ?? (s.isSoftwareDecoding ? softwarePosition() : (s.audio ? s.audio.currentTime : 0));
                     seekAudio(curTime + 5);
                 }
             } else if (e.code === 'ArrowLeft') {
@@ -2360,7 +2150,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                 if (e.shiftKey) prevTrack();
                 else {
                     const s = store.state;
-                    const curTime = s.isSoftwareDecoding ? (s.softwarePlaybackOffset || 0) : (s.audio ? s.audio.currentTime : 0);
+                    const curTime = playerCoreModule.nativePosition() ?? (s.isSoftwareDecoding ? softwarePosition() : (s.audio ? s.audio.currentTime : 0));
                     seekAudio(Math.max(0, curTime - 5));
                 }
             } else if (e.code === 'ArrowUp') {
@@ -2393,8 +2183,8 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Setup PWA & Desktop Installation Handler
         setupPwaInstallPrompt();
 
-        // Setup Download Hub & Cross-Platform Client Switcher
-        setupDownloadWorkspace();
+        // Downloads and P2P controls initialize on first workspace visit.
+        // Local listening should not parse the entire network client at startup.
     }
 
     // Single Coordinator Namespace (Zero loose window.* property pollution)

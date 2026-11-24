@@ -12,14 +12,6 @@ downloads/
 *.pid
 *.port
 
-# Presentations & Office Documents
-*.pptx
-*.ppt
-*.odp
-*.key
-*.docx
-*.xlsx
-
 # Security, Credentials & Environment
 *.env
 *.env.*
@@ -32,35 +24,39 @@ downloads/
 id_rsa*
 id_ed25519*
 
-# Ephemeral Developer & Audit Tools
-tools/screenshots/
-tools/test_*.js
-tools/retest_*.js
-tools/audit_*
-tools/capture_*
-tools/inspect_*
-tools/verify_*
-tools/find_overflow.js
-tools/generate_minimalist_suites.py
-tools/apply_contrast_overhaul.py
-tools/update_presentation.py
-
 # Server Runtime Caches
 server/soulseek-config.json
 server/soulseek-transfers.json
 
-# Android & Packager Build Artifacts
+# Android, Desktop & Packager Build Artifacts
 tools/packager/android/build/
 tools/packager/android/.gradle/
 tools/packager/android/app/build/
 tools/packager/android/app/src/main/assets/
 tools/packager/android/local.properties
+local.properties
+.gradle/
 dist/
+runtime/
+electron-dist/
+notices/
 bin/*-bin
 *.apk
 *.aab
 *.tar.gz
 *.zip
+
+# Host-Side / Local Development Files
+docs/
+tests/
+ANDROID-APK-BUILD.md
+COMPATIBILITY.md
+DEVELOPMENT.md
+CHANGELOG.md
+INSTRUCTIONS.md
+tools/screenshots/
+tools/nicotine-plugin/*.md
+tools/nicotine-plugin/test_api.sh
 
 # Python Cache
 __pycache__/
@@ -78,15 +74,3 @@ __pycache__/
 .DS_Store
 Thumbs.db
 .~lock.*
-
-
-# AI Agent Directives & Local Project Wiki (Local Agent Memory)
-GEMINI.md
-AGENTS.md
-CLAUDE.md
-INSTRUCTIONS.md
-CHANGELOG.md
-.agents/
-docs/
-tools/nicotine-plugin/*.md
-tools/nicotine-plugin/test_api.sh

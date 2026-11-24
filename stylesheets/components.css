@@ -72,7 +72,7 @@
         transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform 90ms cubic-bezier(0.2, 0, 0, 1);
     }
     :is(.topBtn, .actionBtn, .folderBrowseBtn, .backBtn, .uploadBtn):hover { background: var(--bg-surface-3); border-color: var(--border-medium); }
-    :is(.mediaBtn, .topBtn, .actionBtn, .deckActionBtn, .speedBtn, .speedPresetBtn, .formatFilterPill, .miniBtn, .miniDeckReturnBtn, .mobileTabBtn, .wsTabBtn, .eqDeckBtn, .peqDspBtn, .themeSelectCard, .trackMenuItemBtn, .sampleTagBtn, .settingsCatBtn, .visModeBtn, .trackMenuTriggerBtn, .closeModalBtn, .searchClearBtn):active {
+    :is(.mediaBtn, .topBtn, .actionBtn, .deckActionBtn, .speedBtn, .speedPresetBtn, .formatFilterPill, .miniBtn, .miniDeckReturnBtn, .mobileTabBtn, .wsTabBtn, .eqDeckBtn, .peqDspBtn, .themeSelectCard, .trackMenuItemBtn, .settingsCatBtn, .visModeBtn, .trackMenuTriggerBtn, .closeModalBtn, .searchClearBtn):active {
         transform: scale(0.96);
         transition-duration: 80ms;
     }
@@ -138,11 +138,11 @@
     .turntableCenterCanvas { width: 100%; height: 100%; }
     .vinylSpindle, .spindleHole { position: relative; z-index: 3; width: 14px; height: 14px; border-radius: 50%; background: var(--accent-color); border: 2px solid var(--bg-canvas); box-shadow: 0 0 8px var(--accent-glow); }
     .spindleHole { position: absolute; }
-    .toneArm { position: absolute; top: 6%; right: 4%; width: 4.2rem; height: 62%; transform-origin: 76% 10%; transform: rotate(-28deg) translateZ(0); transition: transform var(--transition-smooth); pointer-events: none; z-index: 4; }
-    .toneArm.active { transform: rotate(2deg) translateZ(0); }
-    .armPivot { position: absolute; top: 0; right: 8px; width: 22px; height: 22px; border-radius: 50%; background: var(--bg-surface-3); border: 2px solid var(--border-bold); }
-    .armShaft { position: absolute; top: 14px; right: 17px; width: 4px; height: 76%; border-radius: 3px; background: linear-gradient(180deg, var(--text-secondary), var(--text-muted)); }
-    .armCartridge { position: absolute; bottom: 6%; right: 10px; width: 14px; height: 22px; border-radius: 3px; background: var(--accent-color); box-shadow: 0 0 10px var(--accent-glow); }
+
+
+
+
+
     .deckTopControls { position: relative; z-index: 5; margin-top: var(--space-xs); justify-content: center; }
     .deckActionBtn { min-height: 32px; padding: 0.28rem 0.65rem; border-radius: var(--radius-full); border: 1px solid var(--border-subtle); background: var(--bg-glass); color: var(--text-secondary); font-size: var(--font-2xs); font-weight: 700; display: inline-flex; align-items: center; gap: 0.35rem; }
     .deckActionBtn.active { border-color: var(--border-bold); color: var(--text-accent); background: var(--accent-surface); }
@@ -219,7 +219,7 @@
     .quickFormatFilterBar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     .quickFormatFilterBar::-webkit-scrollbar { display: none; }
     .libraryControls { height: auto; }
-    .libraryControls.is-collapsed { display: none; }
+
     .libraryControls .actionBtn { min-height: 28px; padding: 0.22rem 0.5rem; font-size: var(--font-3xs); }
     .libraryControls .sortSelect { width: auto; min-width: 7.5rem; max-width: 11.5rem; min-height: 30px; padding: 0.2rem 0.5rem; font-size: var(--font-xs); }
     .libraryControls .searchContainer { flex: 1 1 9rem; min-width: 7.5rem; }
@@ -294,7 +294,7 @@
     .peqModalCard { width: min(100%, 60rem); }
     .themeModalCard { width: min(100%, 56rem); }
     .metaEditorCard { width: min(100%, 44rem); }
-    .trackLoadingCard, .themeLoadingCard { text-align: center; align-items: center; width: min(100%, 24rem); }
+    .trackLoadingCard { text-align: center; align-items: center; width: min(100%, 24rem); }
     .modalHeader, .slskModalHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding-bottom: var(--space-xs); border-bottom: 1px solid var(--border-subtle); }
     .modalHeader h3, .slskModalHeader h3 { font-size: var(--font-md); font-weight: 800; letter-spacing: -0.012em; line-height: 1.2; color: var(--text-primary); }
 
@@ -350,7 +350,7 @@
     .auditStageChain { display: flex; flex-direction: column; gap: 4px; }
     .auditStageRow { display: flex; justify-content: space-between; gap: var(--space-xs); padding: 0.35rem 0.5rem; border-radius: var(--radius-xs); background: var(--bg-surface-2); font-size: var(--font-xs); }
     .auditStageKey { color: var(--text-muted); font-family: var(--font-mono); }
-    .auditStageVal { color: var(--text-primary); font-family: var(--font-mono); }
+    .auditStageVal { color: var(--text-primary); font-family: var(--font-mono); min-width: 0; overflow-wrap: anywhere; text-align: end; }
 
     /* Metadata Editor & Confirm Diff */
     .metaEditorBody, .metaEditorForm, .metaEditorSummaryDetails { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
@@ -475,17 +475,17 @@
     .slskPlaceholder { padding: var(--space-xl) var(--space-md); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: var(--space-sm); }
     .slskPlaceholder h3 { font-size: var(--font-sm); font-weight: 800; letter-spacing: 0.08em; color: var(--text-primary); }
     .slskPlaceholder p { max-width: 30rem; font-size: var(--font-xs); color: var(--text-secondary); }
-    .slskSampleTags { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2xs); margin-top: var(--space-2xs); font-size: var(--font-xs); color: var(--text-muted); }
-    .sampleTagBtn { min-height: 36px; padding: 0.35rem 0.72rem; border-radius: var(--radius-full); border: 1px solid var(--border-medium); background: var(--bg-surface-2); color: var(--text-accent); font-size: var(--font-2xs); font-weight: 700; }
+
+
     .slskSearchBox { flex: 1 1 220px; position: relative; display: flex; align-items: center; }
     .slskDirPill { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .slskResultRow { display: grid; grid-template-columns: minmax(180px, 1.8fr) 68px 86px 76px minmax(110px, 1fr) 74px 92px; gap: var(--space-xs); align-items: center; padding: var(--space-xs); border-bottom: 1px solid var(--border-subtle); font-size: var(--font-xs); }
     .slskSizeVal, .slskBitrateVal, .slskPeerSpeed { font-variant-numeric: tabular-nums; }
     .slskSearchingState { padding: var(--space-lg); display: flex; flex-direction: column; align-items: center; gap: var(--space-sm); text-align: center; }
-    .slskRadarGraphic { position: relative; width: 64px; height: 64px; border-radius: 50%; border: 1px solid var(--border-bold); margin: 0 auto; }
-    .radarSweep { position: absolute; inset: 0; border-radius: 50%; border-top: 2px solid var(--accent-color); animation: vinylSpin 1.4s linear infinite; }
-    .slskSearchingProgressCon { width: min(100%, 16rem); height: 5px; background: var(--bg-surface-3); border-radius: var(--radius-full); overflow: hidden; }
-    .slskSearchingProgressBar { width: 45%; height: 100%; background: var(--accent-color); }
+
+
+
+
     .slskPanelToggleBar { display: none; }
     @media (min-width: 769px) and (max-height: 760px) {
         .playerDeck { padding: var(--space-xs) var(--space-sm); gap: var(--space-2xs); }
@@ -494,11 +494,11 @@
     }
 
     @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
-        .libraryControls.mobileCollapsed { display: none; }
+
         .searchContainer input, .topBtn, .deckActionBtn, .speedBtn, .speedPresetBtn,
-        .settingsCatBtn, .visModeBtn, .miniBtn, .slskMiniTransfersBtn, .sampleTagBtn { min-height: var(--touch-min); }
+        .settingsCatBtn, .visModeBtn, .miniBtn, .slskMiniTransfersBtn { min-height: var(--touch-min); }
         .muteBtn, .miniMuteBtn { min-width: var(--touch-min); min-height: var(--touch-min); }
-        #metadataToggleBtn, #tracklistToggleBtn { display: none; }
+        #tracklistToggleBtn { display: none; }
         .signalPathBadge { min-height: 30px; padding: 0.24rem 0.65rem; }
         .miniPlayerCenter { display: contents; }
         .miniPlayerRight, .miniVolumeCon, .miniDeckReturnBtn { display: none; }
@@ -536,15 +536,6 @@
         }
     }
 
-    @media (max-height: 500px) and (orientation: landscape) {
-        .playerDeck { display: grid; grid-template-columns: minmax(175px, 36%) minmax(0, 1fr); gap: 0.15rem var(--space-md); align-items: center; align-content: space-evenly; padding: 0.25rem var(--space-md); overflow-y: auto; }
-        .turntableStage { grid-column: 1; grid-row: 1 / span 5; height: 100%; }
-        .trackMeta, .timelineCon, .mediaCon, .volumeDeck, .audioProcessingBar { grid-column: 2; min-width: 0; }
-        .trackMeta .albumName, .eqDeckSub { display: none; }
-        .trackMeta h1 { font-size: var(--font-base); }
-        .audioProcessingBar { padding-top: 0; }
-    }
-
     /* Track Action Sheet, Batch Add & Debug HUD */
     .trackMenuHeader, .trackMenuItemBtn, .batchAddRow, .modalPlaylistItem { display: flex; align-items: center; gap: var(--space-xs); width: 100%; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); text-align: left; }
     .trackMenuItemsList, .batchAddTracksList, .modalPlaylistList { display: flex; flex-direction: column; gap: var(--space-2xs); max-height: 46dvh; overflow-y: auto; }
@@ -560,7 +551,7 @@
     .cachyToast.error { border-color: var(--status-danger); }
     .trackLoadingProgressTrack { width: 100%; height: 6px; border-radius: var(--radius-full); background: var(--bg-surface-3); overflow: hidden; }
     .trackLoadingProgressBar { height: 100%; width: 25%; background: var(--accent-color); transition: width 0.18s linear; }
-    .trackLoadingSpinner, .themeLoadingSpinner { width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--border-subtle); border-top-color: var(--accent-color); animation: vinylSpin 0.8s linear infinite; }
+    .trackLoadingSpinner { width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--border-subtle); border-top-color: var(--accent-color); animation: vinylSpin 0.8s linear infinite; }
 }
 
 @layer utilities {

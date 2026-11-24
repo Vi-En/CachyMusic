@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CachyMusic v2.0.3 — Debian (.deb) Package Builder
+# CachyMusic — Debian (.deb) Package Builder
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VERSION="2.0.3"
+VERSION="3.0.0~dev6.18"
 ARCH="all"
 PKG_NAME="cachymusic_${VERSION}_${ARCH}"
 STAGING_DIR="$PROJECT_ROOT/dist/$PKG_NAME"
@@ -21,7 +21,7 @@ cp -r "$PROJECT_ROOT/index.html" "$PROJECT_ROOT/index.php" \
       "$PROJECT_ROOT/manifest.json" "$PROJECT_ROOT/sw.js" \
       "$PROJECT_ROOT/schema.sql" "$PROJECT_ROOT/resources" \
       "$PROJECT_ROOT/scripts" "$PROJECT_ROOT/stylesheets" \
-      "$PROJECT_ROOT/php" "$PROJECT_ROOT/bin" \
+      "$PROJECT_ROOT/php" "$PROJECT_ROOT/bin" "$PROJECT_ROOT/server" "$PROJECT_ROOT/package.json" \
       "$STAGING_DIR/usr/share/cachymusic/"
 
 rm -rf "$STAGING_DIR/usr/share/cachymusic/resources/audio"
@@ -41,8 +41,8 @@ Version: ${VERSION}
 Section: sound
 Priority: optional
 Architecture: ${ARCH}
-Depends: php-cli | php, python3, python3-gi
-Recommends: php-sqlite3, python3-dbus, ffmpeg
+Depends: php-cli | php, python3
+Recommends: php-sqlite3, python3-dbus, python3-gi, ffmpeg
 Maintainer: CachyMusic Team <noreply@cachymusic.org>
 Description: CachyMusic Audio Workstation & Standalone PWA
  High-fidelity 64-bit DSP audio player with vinyl turntable deck,

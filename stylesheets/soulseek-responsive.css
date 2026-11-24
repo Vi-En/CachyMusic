@@ -1,0 +1,386 @@
+/* Soulseek search: mobile-first information hierarchy with desktop layout preserved.
+   A single search form and set of IDs serve every viewport; no duplicate controls. */
+@layer utilities {
+  .soulseekWorkspace .slskControlsPanel,
+  .soulseekWorkspace .slskSearchArea,
+  .soulseekWorkspace .slskSearchRow,
+  .soulseekWorkspace .slskSearchBox,
+  .soulseekWorkspace .slskFilterRow,
+  .soulseekWorkspace .slskToolbar { min-width: 0; }
+
+  .soulseekWorkspace .slskSearchArea {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  /* Flatten the disclosure wrapper on desktop; keep its original toolbar/search order. */
+  .soulseekWorkspace .slskPanelCollapsible { display: contents; }
+  .soulseekWorkspace .slskToolbar { order: 0; }
+  .soulseekWorkspace .slskSearchRow { order: 1; }
+  .soulseekWorkspace .slskPanelToggleBar { order: 2; display: none; }
+  .soulseekWorkspace .slskFilterRow { order: 3; }
+  .soulseekWorkspace .slskSuggestedRow { order: 4; }
+  .soulseekWorkspace .slskConnectionToggleBtn { display: none; }
+  @media (min-width: 769px) {
+    .soulseekWorkspace .slskConnectionToggleBtn { display: none; }
+  }
+
+  .soulseekWorkspace .slskSearchRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(110px, 136px) 116px;
+    gap: 9px;
+    align-items: stretch;
+    padding: 9px;
+    margin: 0;
+  }
+  .soulseekWorkspace .slskSearchBox { display: flex; flex: none; min-width: 0; width: 100%; }
+  .soulseekWorkspace #slskSearchInput {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    padding: 11px 44px 11px 13px;
+    border-radius: 10px;
+    border: 1px solid var(--border-medium);
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
+    font-size: 16px;
+    line-height: 1.35;
+    appearance: none;
+  }
+  .soulseekWorkspace #slskSearchInput::placeholder { color: var(--text-muted); opacity: 1; }
+  .soulseekWorkspace #slskSearchInput:focus-visible,
+  .soulseekWorkspace .slskModeSelect:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+  .soulseekWorkspace #slskSearchClearBtn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+  }
+  .soulseekWorkspace .slskModeSelect {
+    min-width: 0;
+    width: 100%;
+    height: 46px;
+    font-size: 14px;
+    padding-inline: 11px;
+    border-color: var(--border-medium);
+    border-radius: 10px;
+  }
+  .soulseekWorkspace .slskSubmitBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 46px;
+    min-width: 0;
+    width: 100%;
+    border-radius: 10px;
+    letter-spacing: 0;
+    font-size: 14px;
+    font-weight: 750;
+    text-transform: none;
+  }
+
+  .soulseekWorkspace .slskFilterRow {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px;
+  }
+  .soulseekWorkspace .slskFilterGroup {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .soulseekWorkspace .slskChip {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-medium);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: var(--bg-surface-2);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    letter-spacing: 0;
+  }
+  .soulseekWorkspace .slskChip.active {
+    background: var(--accent-surface);
+    border-color: var(--accent-color);
+    color: var(--text-accent);
+  }
+  .soulseekWorkspace .slskFilterToggleBtn,
+  .soulseekWorkspace .slskConnectionToggleBtn {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface-2);
+    color: var(--text-secondary);
+    font-weight: 650;
+    font-size: 13px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    letter-spacing: 0;
+  }
+  .soulseekWorkspace .slskFilterToggleBtn.active { color: var(--text-primary); border-color: var(--border-medium); }
+  .soulseekWorkspace .slskDisclosureChevron { font-size: 18px; line-height: 1; transition: transform 160ms ease; }
+  .soulseekWorkspace :is(.slskFilterToggleBtn, .slskConnectionToggleBtn)[aria-expanded="true"] .slskDisclosureChevron { transform: rotate(180deg); }
+  .soulseekWorkspace .slskTextFiltersCon:not(.open) { display: none; }
+  .soulseekWorkspace .slskTextFiltersCon.open {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    min-width: 0;
+  }
+  .soulseekWorkspace .slskTextFilterItem { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .soulseekWorkspace .slskFilterLabel { font-size: 12px; font-weight: 650; color: var(--text-secondary); }
+  .soulseekWorkspace .slskFilterInputWrap { display: flex; position: relative; min-width: 0; }
+  .soulseekWorkspace .slskFilterInputWrap input {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 9px 42px 9px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--border-medium);
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
+    font-size: 16px;
+  }
+  .soulseekWorkspace .slskInFilterClearBtn {
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: var(--text-secondary);
+  }
+  .soulseekWorkspace .slskToolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+  }
+  .soulseekWorkspace .slskBrand,
+  .soulseekWorkspace .slskQuickStats,
+  .soulseekWorkspace .slskToolbarActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+  .soulseekWorkspace .slskBrand { flex: 0 0 auto; }
+  .soulseekWorkspace .slskQuickStats { flex: 1 1 160px; }
+  .soulseekWorkspace .slskToolbarActions { justify-content: flex-end; }
+  .soulseekWorkspace .slskStatusPill { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; }
+  .soulseekWorkspace .slskDirPill { max-width: 210px; overflow: hidden; text-overflow: ellipsis; }
+  .soulseekWorkspace .slskSuggestedRow { min-width: 0; overflow: hidden; }
+
+  @media (min-width: 769px) {
+    .soulseekWorkspace .slskConnectionToggleBtn { display: none; }
+  }
+
+  @media (max-width: 768px) {
+    .soulseekWorkspace { gap: 10px; }
+    .soulseekWorkspace .slskControlsPanel {
+      flex: 0 0 auto;
+      min-width: 0;
+      width: 100%;
+    }
+    .soulseekWorkspace .slskSearchArea {
+      gap: 10px;
+      padding: 11px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 15px;
+      background: var(--bg-surface-1);
+    }
+    .soulseekWorkspace .slskSearchRow {
+      order: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(105px, 38%);
+      gap: 8px;
+      border: 0;
+      background: transparent;
+      border-radius: 0;
+      padding: 0;
+    }
+    .soulseekWorkspace .slskSearchBox { grid-column: 1 / -1; }
+    .soulseekWorkspace #slskSearchInput { min-height: 50px; padding-block: 13px; }
+    .soulseekWorkspace .slskModeSelect,
+    .soulseekWorkspace .slskSubmitBtn { height: 46px; min-height: 46px; }
+    .soulseekWorkspace .slskPanelToggleBar {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      justify-content: space-between;
+      order: 1;
+      gap: 5px;
+      min-width: 0;
+      padding: 0;
+      background: var(--bg-surface-2);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+    }
+    .soulseekWorkspace .slskPanelToggleControl {
+      min-height: 48px;
+      flex: 1 1 auto;
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      border: 0;
+      border-radius: 10px;
+      padding: 0 10px;
+      background: transparent;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 700;
+      text-align: left;
+    }
+    .soulseekWorkspace .slskToggleBarLeft { display: inline-flex; gap: 6px; align-items: center; min-width: 0; }
+    .soulseekWorkspace .slskToggleTitle { white-space: nowrap; letter-spacing: 0; }
+    .soulseekWorkspace .slskToggleIcon { color: var(--text-muted); font-size: 14px; line-height: 1; }
+    .soulseekWorkspace .slskToggleActiveFilter {
+      max-width: 80px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--text-muted);
+      border-radius: 99px;
+      padding: 3px 6px;
+      background: var(--bg-surface-3);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .soulseekWorkspace .slskToggleChevron {
+      display: inline-block;
+      flex: 0 0 auto;
+      font-size: 19px;
+      line-height: 1;
+      color: var(--text-muted);
+      transform: rotate(0);
+      transition: transform 160ms ease;
+    }
+    .soulseekWorkspace .slskPanelToggleControl[aria-expanded="true"] .slskToggleChevron { transform: rotate(180deg); }
+    .soulseekWorkspace .slskPanelQuickActions { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding-right: 5px; }
+    .soulseekWorkspace .slskMiniStatus { display: inline-flex; width: 10px; align-items: center; justify-content: center; }
+    .soulseekWorkspace .slskMiniTransfersBtn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 9px;
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      background: var(--bg-surface-1);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      letter-spacing: 0;
+    }
+    .soulseekWorkspace .slskPanelCollapsible { display: contents; }
+    .soulseekWorkspace .slskControlsPanel.is-collapsed .slskPanelCollapsible { display: none; }
+    .soulseekWorkspace .slskFilterRow {
+      order: 2;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--border-subtle);
+      border-radius: 0;
+      padding-top: 10px;
+    }
+    .soulseekWorkspace .slskFilterGroup {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      width: 100%;
+      max-width: 100%;
+      scrollbar-width: thin;
+      scroll-snap-type: x proximity;
+      padding: 0 0 5px;
+      overscroll-behavior-x: contain;
+    }
+    .soulseekWorkspace .slskFilterGroup .slskChip { min-height: 42px; scroll-snap-align: start; }
+    .soulseekWorkspace .slskFilterToggleBtn { min-height: 44px; }
+    .soulseekWorkspace .slskTextFiltersCon.open { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .soulseekWorkspace .slskSuggestedRow { order: 3; }
+    .soulseekWorkspace .slskConnectionToggleBtn {
+      display: flex;
+      order: 4;
+      min-height: 44px;
+      border: 0;
+      border-top: 1px solid var(--border-subtle);
+      border-radius: 0;
+      padding: 10px 3px 0;
+      background: transparent;
+    }
+    .soulseekWorkspace .slskToolbar { order: 5; }
+    .soulseekWorkspace .slskToolbar:not(.is-open) { display: none; }
+    .soulseekWorkspace .slskToolbar.is-open {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      border: 0;
+      border-top: 1px solid var(--border-subtle);
+      border-radius: 0;
+      padding: 10px 0 0;
+      background: transparent;
+    }
+    .soulseekWorkspace .slskBrand { display: flex; flex-wrap: wrap; justify-content: flex-start; }
+    .soulseekWorkspace .slskBrand .slskLogo,
+    .soulseekWorkspace .slskBrand .slskBadge { display: none; }
+    .soulseekWorkspace .slskQuickStats { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+    .soulseekWorkspace .slskQuickStats > * { min-width: 0; }
+    .soulseekWorkspace .slskDirPill {
+      width: 100%;
+      max-width: 100%;
+      min-height: 40px;
+      padding: 6px 10px;
+      text-align: left;
+      border: 1px solid var(--border-subtle);
+      border-radius: 7px;
+      background: var(--bg-surface-2);
+    }
+    .soulseekWorkspace .slskToolbarActions { justify-content: flex-start; }
+    .soulseekWorkspace .slskToolbarActions .actionBtn { min-height: 44px; }
+    .soulseekWorkspace .slskResultsCon { min-width: 0; }
+    .soulseekWorkspace .slskResultsFooter { font-size: 11px; }
+  }
+
+  @media (max-width: 360px) {
+    .soulseekWorkspace .slskToggleActiveFilter { max-width: 54px; }
+    .soulseekWorkspace .slskPanelToggleControl { padding-inline: 7px; gap: 3px; }
+    .soulseekWorkspace .slskMiniTransfersBtn { padding-inline: 7px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .soulseekWorkspace .slskDisclosureChevron,
+    .soulseekWorkspace .slskToggleChevron { transition: none; }
+  }
+}

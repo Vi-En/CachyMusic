@@ -1,4 +1,5 @@
-// CachyMusic - Studio-Grade True 64-Bit Floating Point DSP AudioWorklet Processor
+import { PeakLimiter } from './modules/peak-limiter.js';
+// CachyMusic - Floating-Point DSP AudioWorklet Processor
 // Signal Topology (strictly pre-dither):
 //   1. 20 Hz Subsonic High-Pass Filter (Q=0.70710678 Butterworth)
 //   2. Smooth Linear Gain Staging (ReplayGain * Pre-Amp Headroom * Amp Overdrive)
@@ -6,7 +7,7 @@
 //   4. Mutually Exclusive Spatial Engine: Bauer/Meier HRTF Crossfeed OR Ambiophonics R.A.C.E.
 //   5. Mid/Side Width, Mono Sum, Stereo Balance & 180-Degree Phase Polarity
 //   6. Ultrasonic IMD Low-Pass Filter
-//   7. 1.5 ms Lookahead Peak Limiter / AGP & Pre-Dither Soft-Clip Safety Guard
+//   7. Lookahead Peak Limiter / AGP with 4x peak estimation
 //   8. Final xorshift32 TPDF / 2nd-Order Psychoacoustic Noise-Shaped Dither (Zero ops downstream)
 
 const PEQ_FREQS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
@@ -20,12 +21,12 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
 
         // DSP Feature Toggles
         this.precision64 = true;
-        this.agpEnabled = true;
+        this.agpEnabled = false;
         this.limiterEnabled = false;
-        this.subsonicEnabled = true;
-        this.ultrasonicEnabled = true;
+        this.subsonicEnabled = false;
+        this.ultrasonicEnabled = false;
         this.ultrasonicCutoff = 32000;
-        this.ditherMode = 'shaped';      // 'off' | 'tpdf' | 'shaped'
+        this.ditherMode = 'off';      // 'off' | 'tpdf' | 'shaped'
         this.quantizationBits = 24;
         this.crossfeedEnabled = false;
         this.ambiophonicsEnabled = false;
@@ -55,6 +56,8 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
         // Flat coefficient & state buffers for 13 RBJ biquads (zero GC allocation in process())
         this.eqCoeffs = new Float64Array(NUM_EQ_FILTERS * 5); // [b0, b1, b2, a1, a2]
         this.eqActive = new Uint8Array(NUM_EQ_FILTERS);
+        this.activeEqIndices = new Uint8Array(NUM_EQ_FILTERS);
+        this.activeEqCount = 0;
         this.eqStateL = new Float64Array(NUM_EQ_FILTERS * 4);  // [x1, x2, y1, y2]
         this.eqStateR = new Float64Array(NUM_EQ_FILTERS * 4);
 
@@ -84,15 +87,11 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
         this.delayBufR = new Float64Array(64);
         this.delayIdx = 0;
 
-        // 1.5 ms Lookahead Peak Limiter + AGP Ring Buffer
-        this.lookaheadSamples = Math.max(16, Math.min(511, Math.round(0.0015 * this.sr)));
-        this.laBufL = new Float64Array(512);
-        this.laBufR = new Float64Array(512);
-        this.laWriteIdx = 0;
-        this.laAttackCoeff = 1.0 - Math.exp(-1.0 / (0.0005 * this.sr)); // 0.5 ms fast transient arrest
-        this.laReleaseCoeff = 1.0 - Math.exp(-1.0 / (0.090 * this.sr)); // 90 ms transparent release
+        // Stereo-linked lookahead limiter with 4x reconstructed peak estimation.
+        this.agpCeiling = Math.pow(10, -0.6 / 20);
+        this.peakLimiter = new PeakLimiter(this.sr, this.agpCeiling);
+        this.lookaheadSamples = this.peakLimiter.delay;
         this.agpGain = 1.0;
-        this.agpCeiling = 0.96605; // -0.30 dBFS true-peak safe headroom
         this.agpMinGainObserved = 1.0;
         this.telemetryCounter = 0;
 
@@ -117,6 +116,7 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
             if (!data) return;
 
             let needEqUpdate = false;
+            const limiterWasActive = this.agpEnabled || this.limiterEnabled;
 
             if (typeof data.precision64 === 'boolean') this.precision64 = data.precision64;
             if (typeof data.agpEnabled === 'boolean') {
@@ -129,11 +129,11 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
             }
             if (typeof data.subsonicEnabled === 'boolean') this.subsonicEnabled = data.subsonicEnabled;
             if (typeof data.ultrasonicEnabled === 'boolean') this.ultrasonicEnabled = data.ultrasonicEnabled;
-            if (typeof data.ultrasonicCutoff === 'number') {
+            if (Number.isFinite(data.ultrasonicCutoff)) {
                 this.ultrasonicCutoff = Math.max(18000, Math.min(this.sr * 0.49, data.ultrasonicCutoff));
                 this.updateUltrasonicCoeffs();
             }
-            if (typeof data.ditherMode === 'string') this.ditherMode = data.ditherMode;
+            if (['off','tpdf','shaped'].includes(data.ditherMode)) this.ditherMode = data.ditherMode;
             if (data.quantizationBits === 16 || data.quantizationBits === 24) {
                 this.quantizationBits = data.quantizationBits;
                 this.quantizationLevels = data.quantizationBits === 16 ? 32768.0 : 8388608.0;
@@ -174,10 +174,10 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
             }
             if (typeof data.crossfeedEnabled === 'boolean') this.crossfeedEnabled = data.crossfeedEnabled;
             if (typeof data.ambiophonicsEnabled === 'boolean') this.ambiophonicsEnabled = data.ambiophonicsEnabled;
-            if (typeof data.ambiophonicsDelaySamples === 'number') {
+            if (Number.isFinite(data.ambiophonicsDelaySamples)) {
                 this.ambiophonicsDelaySamples = Math.max(1, Math.min(32, Math.round(data.ambiophonicsDelaySamples)));
             }
-            if (typeof data.ambiophonicsAttenuation === 'number') {
+            if (Number.isFinite(data.ambiophonicsAttenuation)) {
                 this.ambiophonicsAttenuation = Math.max(0.1, Math.min(0.95, data.ambiophonicsAttenuation));
             }
             if (typeof data.phaseInvert === 'boolean') this.phaseInvert = data.phaseInvert;
@@ -190,6 +190,9 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
                 this.updateBalanceGains();
             }
 
+            if (limiterWasActive !== (this.agpEnabled || this.limiterEnabled)) {
+                this.peakLimiter.reset(); this.agpGain = 1; this.agpMinGainObserved = 1;
+            }
             if (needEqUpdate) {
                 this.updateAllEqCoeffs();
             }
@@ -302,6 +305,12 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
 
         this.eqActive[12] = this.trebleBoost ? 1 : 0;
         if (this.trebleBoost) this.computeRbjBiquad(this.eqCoeffs, 12 * 5, 'highshelf', 10000.0, 0.707, 3.0);
+
+        // Rebuild only when settings change; the sample loop visits active filters.
+        this.activeEqCount = 0;
+        for (let i = 0; i < NUM_EQ_FILTERS; i++) {
+            if (this.eqActive[i]) this.activeEqIndices[this.activeEqCount++] = i;
+        }
     }
 
     updateSubsonicCoeffs() {
@@ -353,7 +362,7 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
 
         const p64 = this.precision64;
         const useSubsonic = this.subsonicEnabled;
-        const useUltrasonic = this.ultrasonicEnabled;
+        const useUltrasonic = this.ultrasonicEnabled && this.ultrasonicCutoff < this.sr * 0.475;
         // Mutually exclusive: Bauer Crossfeed takes priority over Ambiophonics R.A.C.E. if both enabled
         const useCrossfeed = this.crossfeedEnabled;
         const useAmbi = !useCrossfeed && this.ambiophonicsEnabled;
@@ -377,15 +386,13 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
         const maxD = this.delayBufL.length;
         const xfDelay = this.xfDelaySamples;
         const xfMax = this.xfDelayBufL.length;
-        const laLen = this.laBufL.length;
-        const laDelay = this.lookaheadSamples;
         const inv32Max = 1.0 / 4294967296.0;
 
         for (let i = 0; i < numSamples; i++) {
             let sL = p64 ? inL[i] : Math.fround(inL[i]);
             let sR = p64 ? inR[i] : Math.fround(inR[i]);
 
-            // 1. 20 Hz Subsonic High-Pass Filter (mandatory DC/rumble removal before EQ)
+            // 1. 20 Hz Subsonic High-Pass Filter (optional DC/rumble removal before EQ)
             if (useSubsonic) {
                 let ySubL = sb0 * sL + sb1 * this.subL[0] + sb2 * this.subL[1] - sa1 * this.subL[2] - sa2 * this.subL[3];
                 let ySubR = sb0 * sR + sb1 * this.subR[0] + sb2 * this.subR[1] - sa1 * this.subR[2] - sa2 * this.subR[3];
@@ -402,8 +409,8 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
             sR *= this.currentLinearGain;
 
             // 3. 10-Band RBJ Parametric EQ + Bass / Vocal / Treble Tone Shelves
-            for (let f = 0; f < NUM_EQ_FILTERS; f++) {
-                if (!this.eqActive[f]) continue;
+            for (let active = 0; active < this.activeEqCount; active++) {
+                const f = this.activeEqIndices[active];
                 const cBase = f * 5;
                 const sBase = f * 4;
                 const b0 = this.eqCoeffs[cBase], b1 = this.eqCoeffs[cBase + 1], b2 = this.eqCoeffs[cBase + 2];
@@ -494,48 +501,20 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
                 this.eqStateL.fill(0); this.eqStateR.fill(0);
                 this.xfDirectL.fill(0); this.xfDirectR.fill(0);
                 this.xfCrossL.fill(0); this.xfCrossR.fill(0);
-                this.laBufL.fill(0); this.laBufR.fill(0);
+                this.peakLimiter.reset();
                 this.ditherErr1L = 0.0; this.ditherErr2L = 0.0;
                 this.ditherErr1R = 0.0; this.ditherErr2R = 0.0;
                 this.agpGain = 1.0;
             }
 
-            // 7. 1.5 ms Lookahead Peak Limiter + AGP & Pre-Dither Soft-Clip Safety Guard
+            // 7. Lookahead, stereo-linked peak limiting (no nonlinear soft clipping).
             if (useLimiter) {
-                this.laBufL[this.laWriteIdx] = sL;
-                this.laBufR[this.laWriteIdx] = sR;
-                const readIdx = (this.laWriteIdx - laDelay + laLen) % laLen;
-                const delayedL = this.laBufL[readIdx];
-                const delayedR = this.laBufR[readIdx];
-                this.laWriteIdx = (this.laWriteIdx + 1) % laLen;
-
-                const futAbsL = sL < 0 ? -sL : sL;
-                const futAbsR = sR < 0 ? -sR : sR;
-                const delAbsL = delayedL < 0 ? -delayedL : delayedL;
-                const delAbsR = delayedR < 0 ? -delayedR : delayedR;
-                const peak = Math.max(futAbsL, futAbsR, delAbsL, delAbsR);
-
-                const targetGain = (peak * this.agpGain > this.agpCeiling && peak > 0.0001)
-                    ? (this.agpCeiling / peak)
-                    : 1.0;
-
-                if (targetGain < this.agpGain) {
-                    this.agpGain += (targetGain - this.agpGain) * this.laAttackCoeff;
-                } else {
-                    this.agpGain += (1.0 - this.agpGain) * this.laReleaseCoeff;
-                }
-                if (this.agpGain < this.agpMinGainObserved) {
-                    this.agpMinGainObserved = this.agpGain;
-                }
-                sL = delayedL * this.agpGain;
-                sR = delayedR * this.agpGain;
-
-                // Soft-clip micro-transients ABOVE 0.992 BEFORE dither so dither remains final
-                if (sL > 0.992) sL = 0.992 + Math.tanh((sL - 0.992) * 12.0) * 0.0078;
-                else if (sL < -0.992) sL = -0.992 + Math.tanh((sL + 0.992) * 12.0) * 0.0078;
-
-                if (sR > 0.992) sR = 0.992 + Math.tanh((sR - 0.992) * 12.0) * 0.0078;
-                else if (sR < -0.992) sR = -0.992 + Math.tanh((sR + 0.992) * 12.0) * 0.0078;
+                const margin = dither === 'off' ? 1e-7 : 6 * this.invQuantization + 1e-7;
+                this.peakLimiter.process(sL, sR, margin);
+                sL = this.peakLimiter.left;
+                sR = this.peakLimiter.right;
+                this.agpGain = this.peakLimiter.gain;
+                this.agpMinGainObserved = Math.min(this.agpMinGainObserved, this.agpGain);
             }
 
             // 8. Final Stage: Inline xorshift32 TPDF / 2nd-Order Psychoacoustic Noise-Shaped Dither

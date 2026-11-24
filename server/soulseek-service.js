@@ -4,9 +4,12 @@ const os = require('os');
 const path = require('path');
 const { SlskClient } = require('slsk-client');
 
-const PORT = 12339;
-const CONFIG_PATH = path.join(__dirname, 'soulseek-config.json');
-const DEFAULT_DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
+const PORT = Number(process.env.CACHYMUSIC_SOULSEEK_PORT || 12339);
+const dataDir = process.env.CACHYMUSIC_DATA_DIR || __dirname;
+fs.mkdirSync(dataDir, {recursive:true,mode:0o700});
+const CONFIG_PATH = path.join(dataDir, 'soulseek-config.json');
+const DEFAULT_DOWNLOADS_DIR = path.join(dataDir, 'downloads');
+const LOCAL_TOKEN = process.env.CACHYMUSIC_SOULSEEK_TOKEN || '';
 
 // Persistent configuration
 function loadConfig() {
@@ -17,14 +20,14 @@ function loadConfig() {
   } catch (err) {
     console.error('[Soulseek] Error reading config:', err);
   }
-  return { downloads_dir: DEFAULT_DOWNLOADS_DIR, shared_dir: DEFAULT_DOWNLOADS_DIR };
+  return { downloads_dir: DEFAULT_DOWNLOADS_DIR, shared_dir: '' };
 }
 
 function saveConfig(cfg) {
   try {
     const safeCfg = {
       downloads_dir: cfg.downloads_dir || DEFAULT_DOWNLOADS_DIR,
-      shared_dir: cfg.shared_dir || DEFAULT_DOWNLOADS_DIR
+      shared_dir: cfg.shared_dir || ''
     };
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(safeCfg, null, 2), 'utf8');
   } catch (err) {
@@ -34,7 +37,7 @@ function saveConfig(cfg) {
 
 let appConfig = loadConfig();
 let DOWNLOADS_DIR = appConfig.downloads_dir || DEFAULT_DOWNLOADS_DIR;
-let SHARED_DIR = appConfig.shared_dir || DOWNLOADS_DIR;
+let SHARED_DIR = appConfig.shared_dir || '';
 
 // Session credentials held only in memory during active power-on
 let currentUsername = '';
@@ -58,7 +61,7 @@ let lastError = null;
 let searchResultsCache = new Map(); // token -> items[]
 let currentSearchToken = 0;
 
-const TRANSFERS_CACHE_PATH = path.join(__dirname, 'soulseek-transfers.json');
+const TRANSFERS_CACHE_PATH = path.join(dataDir, 'soulseek-transfers.json');
 
 // Downloads tracker
 let activeDownloads = new Map(); // id -> transfer info
@@ -105,6 +108,8 @@ function loadTransfers() {
           const filename = item.filename || path.basename(norm);
           const localFile = item.local_file || path.join(DOWNLOADS_DIR, filename);
           const partFile = item.part_file || (localFile + '.part');
+          const root = fs.realpathSync(DOWNLOADS_DIR);
+          if(path.dirname(path.resolve(localFile))!==root || path.dirname(path.resolve(partFile))!==root || partFile!==localFile+'.part' || [localFile,partFile].some(f=>fs.existsSync(f)&&fs.lstatSync(f).isSymbolicLink())) continue;
 
           let bytesOnDisk = 0;
           let isCompleteOnDisk = false;
@@ -170,53 +175,48 @@ function loadTransfers() {
   }
 }
 
+let connectionGeneration = 0;
+function invalidateConnection() {
+  ++connectionGeneration;
+  const previous = slskClient;
+  slskClient = null;
+  isConnected = false;
+  isConnecting = false;
+  if (previous) { try { previous.destroy(); } catch (_) {} }
+}
 async function initClient(username, password) {
-  if (isConnecting) return { ok: false, message: 'Connection already in progress' };
+  if (isConnecting) return { ok: false, error: 'Connection already in progress' };
+  invalidateConnection();
+  const generation = connectionGeneration;
   isConnecting = true;
   lastError = null;
-
+  let candidate;
   try {
-    if (slskClient) {
-      try { slskClient.destroy(); } catch (_) {}
-      slskClient = null;
-    }
-
-    slskClient = new SlskClient();
-
-    slskClient.on('server-error', (err) => {
-      console.error('[Soulseek] Server error:', err);
+    candidate = new SlskClient();
+    slskClient = candidate;
+    const current = () => generation === connectionGeneration && slskClient === candidate;
+    candidate.on('server-error', (err) => {
+      if (!current()) return;
       lastError = err?.message || String(err);
       isConnected = false;
     });
-
-    slskClient.on('server-disconnect', ({ reconnecting }) => {
-      console.warn('[Soulseek] Disconnected, reconnecting:', reconnecting);
-      isConnected = false;
-    });
-
-    slskClient.on('server-reconnect', () => {
-      console.log('[Soulseek] Reconnected to server');
+    candidate.on('server-disconnect', () => { if (current()) isConnected = false; });
+    candidate.on('server-reconnect', () => {
+      if (!current()) return;
       isConnected = true;
       lastError = null;
     });
-
-    console.log(`[Soulseek] Logging in as ${username}...`);
-    await slskClient.login(username, password);
-
+    await candidate.login(username, password);
+    if (!current()) { try { candidate.destroy(); } catch (_) {} return {ok:false,error:'Connection cancelled'}; }
     isConnected = true;
     isConnecting = false;
-    lastError = null;
-
     currentUsername = username;
     currentPassword = password;
-
-    console.log(`[Soulseek] Successfully logged in as ${username}`);
     return { ok: true, username };
   } catch (err) {
-    isConnecting = false;
-    isConnected = false;
+    if (generation !== connectionGeneration) return {ok:false,error:'Connection cancelled'};
+    invalidateConnection();
     lastError = err?.message || String(err);
-    console.error('[Soulseek] Login failed:', err);
     return { ok: false, error: lastError };
   }
 }
@@ -227,7 +227,8 @@ console.log('[Soulseek] Service initialized in OFFLINE / POWERED OFF mode (share
 function parseJsonBody(req) {
   return new Promise((resolve) => {
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    let count=0;
+    req.on('data', chunk => { count+=chunk.length;if(count>1024*1024){req.destroy();resolve({});return;}body += chunk; });
     req.on('end', () => {
       try {
         resolve(body ? JSON.parse(body) : {});
@@ -240,17 +241,18 @@ function parseJsonBody(req) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
+  // Only the PHP local adapter may call this service; never grant browser CORS.
+  res.setHeader('Cache-Control','no-store');
+  res.setHeader('X-Content-Type-Options','nosniff');
+  if (!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress) ||
+      req.headers.host !== `127.0.0.1:${PORT}` || req.headers.origin || req.headers['sec-fetch-site'] ||
+      req.headers['x-cachy-local'] !== '1' || (LOCAL_TOKEN && req.headers['x-cachy-token'] !== LOCAL_TOKEN)) {
+    res.writeHead(403);res.end('Forbidden');return;
   }
+  if (!['GET','POST'].includes(req.method)) {res.writeHead(405);res.end();return;}
+  if(req.method==='POST' && String(req.headers['content-type']||'').split(';')[0]!=='application/json'){res.writeHead(415);res.end();return;}
 
+  try {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
 
@@ -270,6 +272,7 @@ const server = http.createServer(async (req, res) => {
       connected: isConnected,
       connecting: isConnecting,
       powered_on: isConnected || isConnecting,
+      has_credentials: Boolean(currentUsername && currentPassword),
       login_username: currentUsername || 'Not logged in',
       login_status: isConnected ? 2 : (isConnecting ? 1 : 0),
       uploads_total: 0,
@@ -305,9 +308,7 @@ const server = http.createServer(async (req, res) => {
   if ((pathname === '/shared_directory' || pathname === '/config/shared_directory') && req.method === 'POST') {
     const body = await parseJsonBody(req);
     const newDir = (body.directory || body.shared_dir || '').trim();
-    if (!newDir) {
-      return sendJson(400, { ok: false, error: 'Shared directory path is required' });
-    }
+    if (!newDir) {SHARED_DIR='';appConfig.shared_dir='';saveConfig(appConfig);return sendJson(200,{ok:true,shared_dir:''});}
     try {
       if (!fs.existsSync(newDir)) {
         fs.mkdirSync(newDir, { recursive: true });
@@ -328,12 +329,7 @@ const server = http.createServer(async (req, res) => {
     const state = (body.state || '').toLowerCase();
 
     if (state === 'off') {
-      if (slskClient) {
-        try { slskClient.destroy(); } catch (_) {}
-        slskClient = null;
-      }
-      isConnected = false;
-      isConnecting = false;
+      invalidateConnection();
       lastError = null;
       console.log('[Soulseek] Powered OFF (disconnected from network, shares unexposed)');
       return sendJson(200, { ok: true, powered_on: false, connected: false });
@@ -341,14 +337,12 @@ const server = http.createServer(async (req, res) => {
 
     if (state === 'on') {
       const username = (body.username || currentUsername).trim();
-      const password = (body.password || currentPassword).trim();
+      const password = (body.password || (username === currentUsername ? currentPassword : '')).trim();
 
       if (!username || !password) {
         return sendJson(400, { ok: false, error: 'Username and password required to connect' });
       }
 
-      currentUsername = username;
-      currentPassword = password;
       const result = await initClient(username, password);
       if (result.ok) {
         return sendJson(200, { ok: true, powered_on: true, connected: true, username: result.username });
@@ -370,8 +364,6 @@ const server = http.createServer(async (req, res) => {
       return sendJson(400, { ok: false, error: 'Username and password are required' });
     }
 
-    currentUsername = username;
-    currentPassword = password;
     const result = await initClient(username, password);
     if (result.ok) {
       return sendJson(200, { ok: true, username: result.username });
@@ -395,12 +387,7 @@ const server = http.createServer(async (req, res) => {
 
   // Disconnect / Logout
   if (pathname === '/logout' && req.method === 'POST') {
-    if (slskClient) {
-      try { slskClient.destroy(); } catch (_) {}
-      slskClient = null;
-    }
-    isConnected = false;
-    isConnecting = false;
+    invalidateConnection();
     currentUsername = '';
     currentPassword = '';
     lastError = null;
@@ -518,8 +505,8 @@ function startTransfer(transferEntry, reqOffset = 0) {
 
   // Ensure downloads directory exists
   try {
-    fs.mkdirSync(path.dirname(partFile), { recursive: true });
-  } catch (_) {}
+    if(path.dirname(path.resolve(partFile))!==fs.realpathSync(DOWNLOADS_DIR)||[partFile,transferEntry.local_file].some(f=>fs.existsSync(f)&&fs.lstatSync(f).isSymbolicLink()))throw Error('Unsafe destination');
+  } catch (_) {transferEntry.status='Error: Unsafe destination';return;}
 
   // Determine actual starting offset from existing .part file on disk
   let actualOffset = reqOffset;
@@ -533,12 +520,13 @@ function startTransfer(transferEntry, reqOffset = 0) {
   }
 
   // If already fully downloaded on disk, finalize immediately
-  if (transferEntry.size > 0 && actualOffset >= transferEntry.size) {
+  if(actualOffset>transferEntry.size){transferEntry.status='Error: oversized partial file';return;}
+  if (transferEntry.size > 0 && actualOffset === transferEntry.size) {
     try {
       if (fs.existsSync(partFile)) {
-        fs.renameSync(partFile, transferEntry.local_file);
+        fs.linkSync(partFile, transferEntry.local_file);fs.unlinkSync(partFile);
       }
-    } catch (_) {}
+    } catch (_) {transferEntry.status='Error: destination collision';return;}
     transferEntry.status = 'Finished';
     transferEntry.progress_pct = 100;
     transferEntry.speed = 0;
@@ -611,6 +599,7 @@ function startTransfer(transferEntry, reqOffset = 0) {
     downloadPromise.on('data', chunk => {
       if (transferEntry.userPaused || transferEntry.userCancelled) return;
       if (chunk && chunk.length > 0 && writeStream && !writeStream.destroyed) {
+        if(chunk.length>transferEntry.size-transferEntry.bytes_downloaded){transferEntry.userCancelled=true;transferEntry.status='Error: oversized peer response';try{downloadPromise.cancel('Oversized response');}catch(_){};writeStream.destroy();return;}
         writeStream.write(chunk);
         transferEntry.bytes_downloaded = (transferEntry.bytes_downloaded || 0) + chunk.length;
       }
@@ -657,11 +646,10 @@ function startTransfer(transferEntry, reqOffset = 0) {
 
           // Atomically rename .part file to final audio file
           try {
-            if (fs.existsSync(partFile)) {
-              fs.renameSync(partFile, transferEntry.local_file);
-            }
+            if (!fs.existsSync(partFile)||fs.statSync(partFile).size!==transferEntry.size)throw Error('Incomplete file');
+            fs.linkSync(partFile, transferEntry.local_file);fs.unlinkSync(partFile);
           } catch (renErr) {
-            console.error('[Soulseek] Failed to rename part file to final file:', renErr);
+            transferEntry.status='Error: incomplete file or destination collision';saveTransfers();return;
           }
 
           transferEntry.progress_pct = 100;
@@ -707,7 +695,7 @@ function startTransfer(transferEntry, reqOffset = 0) {
 }
 
   // Download / Enqueue
-  if (pathname === '/downloads/enqueue' || pathname === '/search/download') {
+  if ((pathname === '/downloads/enqueue' || pathname === '/search/download') && req.method === 'POST') {
     if (!isConnected || !slskClient) {
       return sendJson(503, { ok: false, error: 'Soulseek client is not connected' });
     }
@@ -731,12 +719,18 @@ function startTransfer(transferEntry, reqOffset = 0) {
       return sendJson(400, { ok: false, error: 'Target user and virtual_path are required' });
     }
 
-    const norm = virtualPath.replace(/\\/g, '/');
-    const filename = path.basename(norm);
-    const targetFile = path.join(DOWNLOADS_DIR, filename);
-    const partFile = targetFile + '.part';
-
+    if(typeof username!=='string'||username.length>256||typeof virtualPath!=='string'||virtualPath.length>4096||!Number.isSafeInteger(Number(size))||Number(size)<=0||Number(size)>20*1024**3||activeDownloads.size>=1000)return sendJson(400,{ok:false,error:'Invalid transfer metadata or queue full'});
+    size=Number(size);
+    const filename = path.posix.basename(virtualPath.replace(/\\/g,'/'));
+    const extension=path.extname(filename).toLowerCase();
+    if(!filename||filename.length>180||filename.startsWith('.')||/[\x00-\x1f:*?"<>|]/.test(filename)||!['.mp3','.flac','.wav','.ogg','.opus','.m4a','.aac','.alac','.aiff','.aif','.wma','.ape','.wv','.dsf','.dff'].includes(extension))return sendJson(400,{ok:false,error:'Unsafe or unsupported filename'});
     const downloadId = `${username}:${virtualPath}`;
+    if(activeDownloads.has(downloadId)) return sendJson(200,{ok:true,id:downloadId,message:'Transfer already exists'});
+    const root=fs.realpathSync(DOWNLOADS_DIR);
+    const targetFile = path.join(root,path.basename(filename, path.extname(filename))+'-'+require('crypto').randomBytes(8).toString('hex')+extension);
+    const partFile = targetFile + '.part';
+    if(fs.existsSync(targetFile)||fs.existsSync(partFile))return sendJson(409,{ok:false,error:'Destination exists'});
+
     const transferEntry = {
       id: downloadId,
       username,
@@ -999,6 +993,7 @@ function startTransfer(transferEntry, reqOffset = 0) {
   }
 
   sendJson(404, { ok: false, error: 'Endpoint not found' });
+  } catch (_) { if(!res.headersSent&&!res.destroyed){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:'Invalid request or local operation failed'}));}else if(!res.writableEnded)res.end(); }
 });
 
 function cleanupAndPersist() {

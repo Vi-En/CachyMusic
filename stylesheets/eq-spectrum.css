@@ -1,0 +1,16 @@
+/* Spectrum is a separate input-level layer; the EQ response retains its own dB axis. */
+.peqCanvasContainer { isolation: isolate; }
+.peqSpectrumCanvas, .peqCurveCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.peqSpectrumCanvas { pointer-events: none; z-index: 0; }
+.peqCurveCanvas { z-index: 1; }
+.peqCanvasOverlay { z-index: 2; }
+.peqGraphLegend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; color: var(--text-secondary); font-size: .72rem; line-height: 1.35; }
+.peqModalCard .peqGraphLegend { margin-top: -8px; }
+.desktopSpectrumCanvas { display: none; }
+@media (min-width: 769px) and (min-height: 501px) {
+  :root[data-presentation="artwork"] body.view-player .playerDeck:not(.empty-deck) .desktopSpectrumCanvas {
+    display: block; width: 100%; height: 28px; grid-column: 1 / -1; flex: 0 0 28px;
+  }
+}
+
+#peqStereoBalanceSlider { accent-color: var(--accent-color); }

@@ -32,7 +32,8 @@ if not os.path.exists(ICON_PATH):
     ICON_PATH = "audio-player"
 
 class CachyMusicTray:
-    def __init__(self, port=8000):
+    def __init__(self, port=8000, media_controls=False):
+        self.media_controls = media_controls
         self.port = port
         self.base_url = f"http://127.0.0.1:{self.port}"
         
@@ -83,19 +84,20 @@ class CachyMusicTray:
 
         menu.append(Gtk.SeparatorMenuItem())
 
-        item_play = Gtk.MenuItem(label="Play / Pause")
-        item_play.connect("activate", self.on_play_pause)
-        menu.append(item_play)
+        if self.media_controls:
+            item_play = Gtk.MenuItem(label="Play / Pause")
+            item_play.connect("activate", self.on_play_pause)
+            menu.append(item_play)
 
-        item_next = Gtk.MenuItem(label="Next Track")
-        item_next.connect("activate", self.on_next)
-        menu.append(item_next)
+            item_next = Gtk.MenuItem(label="Next Track")
+            item_next.connect("activate", self.on_next)
+            menu.append(item_next)
 
-        item_prev = Gtk.MenuItem(label="Previous Track")
-        item_prev.connect("activate", self.on_previous)
-        menu.append(item_prev)
+            item_prev = Gtk.MenuItem(label="Previous Track")
+            item_prev.connect("activate", self.on_previous)
+            menu.append(item_prev)
 
-        menu.append(Gtk.SeparatorMenuItem())
+            menu.append(Gtk.SeparatorMenuItem())
 
         item_quit = Gtk.MenuItem(label="Quit CachyMusic")
         item_quit.connect("activate", self.on_quit)
@@ -107,10 +109,11 @@ class CachyMusicTray:
 def main():
     parser = argparse.ArgumentParser(description="CachyMusic System Tray Runner")
     parser.add_argument("--port", type=int, default=8000, help="Local CachyMusic port")
+    parser.add_argument("--media-controls", action="store_true")
     args = parser.parse_args()
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-    _tray = CachyMusicTray(port=args.port)
+    _tray = CachyMusicTray(port=args.port, media_controls=args.media_controls)
     Gtk.main()
 
 if __name__ == "__main__":

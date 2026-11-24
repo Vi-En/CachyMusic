@@ -2,77 +2,131 @@
 
 <div align="center">
 
-**High-Fidelity Music Player**
+**Local-First High-Fidelity Music Player & Audio Workstation**
 
-[![Release](https://img.shields.io/github/v/release/Vi-En/CachyMusic?include_prereleases&label=release&color=00e5ff)](https://github.com/Vi-En/CachyMusic/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20Android%20%7C%20macOS%20%7C%20iOS-informational.svg)]()
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20Android%20%7C%20PWA-informational.svg)]()
 [![PWA Ready](https://img.shields.io/badge/PWA-Installable-success.svg)](manifest.json)
-[![WCAG](https://img.shields.io/badge/WCAG-2.1%20AA%2FAAA-brightgreen.svg)]()
 
 </div>
 
 ---
-## EXPECT BUGS, VISUAL ISSUES, AND SUCH IN THIS BETA.
 
 ## Overview
 
-**CachyMusic** is an open-source music player. The name is inspired from my current OS called CachyOS.
-
-It is a lightweight, self-contained music player and audio workstation that runs directly in your browser or installs as a standalone desktop app.
+**CachyMusic** is an open-source, local-first, cross-platform music player and audio workstation. It runs as an offline-capable Progressive Web App (PWA) with native desktop launchers and an Android WebView/native host wrapper.
 
 ---
 
 ## Features
 
-- **10-Band Parametric Equalizer & 64-Bit DSP**: Built-in ISO parametric EQ (`32 Hz` – `16 kHz`), 20 Hz subsonic HPF, Bauer/Meier HRTF crossfeed, and AudioWorklet precision DSP.
-- **Standalone Cross-Platform PWA**: Imports folders or individual audio files directly in Chromium, Firefox, Safari/iOS, Android, Windows, and macOS with IndexedDB persistence and offline Service Worker caching (`sw.js`).
-- **Real-Time Audio Specs & Tag Editor**: Client-side and PHP metadata/artwork extraction across FLAC, WAV, ALAC, M4A, MP3, OGG/Opus, and AIFF, plus confirmation-gated tag & cover editing.
-- **Optional Zero-Config Desktop Host**: Also runs out of the box via PHP built-in server with SQLite3 / atomic JSON storage (`php/storage.php`), Linux MPRIS2 integration, and native Android APK foreground service playback.
+- **10-Band Parametric Equalizer & DSP**: Built-in AudioWorklet DSP with parametric EQ, subsonic high-pass filter, Bauer/Meier crossfeed, peak limiting, real-time EQ spectrum view, and experimental shared-clock WAV/AIFF/FLAC playback transitions.
+- **Standalone Offline PWA**: Import folders or audio files directly in modern browsers with IndexedDB persistence, bounded artwork caching, and offline Service Worker shell caching (`sw.js`).
+- **Themes & Visualizers**: Multiple visual themes with lazily loaded canvas visualizers.
+- **Metadata & Tag Editing**: Client-side and desktop metadata/artwork parsing across FLAC, WAV, AIFF, MP3, Ogg Vorbis/Opus, and M4A/MP4, optional explicit online lookup (MusicBrainz, Cover Art Archive, LRCLIB), and conservative non-re-encoding tag writing.
+- **Desktop & Android Hosts**:
+  - **Linux / Windows**: Managed loopback PHP desktop host (`bin/cachymusic`, `bin/cachymusic.bat`) with SQLite3/JSON storage, optional Linux MPRIS2/tray integration, and AUR/Debian/AppImage/Electron packaging recipes.
+  - **Android**: Native host (`tools/packager/android/`) with bundled WebView UI, media notification service, experimental native background playback, and an embedded Java Soulseek client.
+- **Optional Soulseek Integration**: User-initiated Soulseek search and download support via the local Node.js adapter (`server/soulseek-service.js`) on desktop or the embedded native client on Android.
 
 ---
 
-## Downloads & Releases (v2.0.3)
+## Quick Start
 
-| Platform | Package | Description |
-|:---|:---|:---|
-| **PWA / Web** | [`index.html`](index.html) / [`manifest.json`](manifest.json) | Install directly as a standalone offline-ready Progressive Web App on Android, Windows, Linux, iOS, and macOS. |
-| **Android** | [`CachyMusic-v2.0.3.apk`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.3/CachyMusic-v2.0.3.apk) | Native self-contained standalone APK with USB-C DAC/IEM hardware bridge, native album art notifications & `MediaPlaybackService`. |
-| **Linux (64-bit)** | [`CachyMusic-v2.0.3-linux.tar.gz`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.3/CachyMusic-v2.0.3-linux.tar.gz) | Standalone package with launcher (`bin/cachymusic`), MPRIS2 daemon, and AUR/Debian/AppImage scripts. |
-| **Windows** | [`CachyMusic-v2.0.3-windows.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.3/CachyMusic-v2.0.3-windows.zip) | Standalone zip package with silent `CachyMusic.vbs` runner, `cachymusic.bat` launcher, and PWA/PHP launch support. |
-| **Android Studio** | [`CachyMusic-v2.0.3-android-project.zip`](https://github.com/Vi-En/CachyMusic/releases/download/v2.0.3/CachyMusic-v2.0.3-android-project.zip) | Complete source project archive ready for Android Studio import. |
+### Linux (Arch / CachyOS & General Linux)
+
+Requires PHP, Python 3, and a Chromium-compatible or default browser (optional: `php-sqlite`, `ffmpeg`, `nodejs`, `zenity`/`kdialog`).
+
+```sh
+bash bin/cachymusic
+```
+
+Or install a user desktop entry:
+
+```sh
+bash install.sh
+```
+
+To build a local Arch package:
+
+```sh
+bash packaging/aur/prepare-source.sh "$HOME/cachymusic-build"
+cd "$HOME/cachymusic-build" && makepkg -si
+```
+
+### Windows
+
+Requires PHP 8.1+, Python 3.10+, and Edge/Chrome/Chromium on `PATH` (or local `php-win/php.exe`).
+
+```bat
+bin\cachymusic.bat
+```
+
+### Direct Local Development Server
+
+```sh
+php -S 127.0.0.1:8000 index.php
+```
+
+Open `http://127.0.0.1:8000/` on the same machine. Keep the local PHP server bound to loopback (`127.0.0.1`).
+
+### Optional Desktop Soulseek Adapter
+
+Requires Node.js 22+ and `slsk-client`:
+
+```sh
+npm install
+```
+
+### Android APK
+
+Requires JDK 17, Gradle 8.2, and Android SDK platform 34 / build-tools 34.0.0 with `ANDROID_HOME` set:
+
+```sh
+bash tools/packager/build-apk-local.sh
+```
+
+On Windows:
+
+```bat
+tools\packager\build-apk-local.bat
+```
 
 
 ---
 
 ## Repository Structure
 
-```
+```text
 .
-├── bin/                    # Cross-platform desktop launchers, tray & MPRIS2 daemon
+├── bin/                    # Cross-platform desktop launchers, tray & MPRIS2 bridge
 ├── index.html              # Main PWA application entrypoint
-├── index.php               # Optional PHP static router & API dispatcher
+├── index.php               # Loopback PHP static router & API dispatcher
 ├── install.sh              # Linux user desktop installer
-├── manifest.json           # W3C Web App Manifest (PWA)
-├── packaging/              # Distribution packaging (AUR, Debian, AppImage, desktop entry)
-├── php/                    # Optional desktop REST API, platform helpers & SQLite3/JSON storage
-│   ├── api/                # Endpoints (scan, stream, cover, metadata, soulseek, playlists, mpris)
-│   ├── auth/               # Local account authentication
-│   ├── platform.php        # Cross-platform OS path, CORS & binary detection helpers
-│   └── storage.php         # Library SQLite3 WAL & atomic JSON abstraction
-├── resources/              # App icons, typography & fallback UI SVG artwork
-├── scripts/                # Modular ES6 client workstation, DSP AudioWorklet & theme bootstrap
-│   ├── dsp-worklet-processor.js
-│   ├── theme-preload.js
-│   └── modules/            # Audio engine, player, tag parser, offline IndexedDB library & UI modules
-├── stylesheets/            # Layered CSS architecture (tokens, themes, layout, components)
-├── sw.js                   # Service Worker for offline PWA caching
-├── tools/                  # Android packager & Nicotine+ plugin tooling
-└── uninstall.sh            # Desktop uninstaller
+├── LICENSE                 # GNU General Public License v3.0 or later
+├── manifest.json           # Web App Manifest (PWA)
+├── package.json            # Node.js package manifest for optional Soulseek adapter
+├── packaging/              # AUR, Debian, AppImage & portable Electron packaging scripts
+├── php/                    # Loopback desktop REST API, metadata readers & storage layer
+├── resources/              # App icons, SVG assets & bundled font (SIL OFL 1.1)
+├── schema.sql              # SQLite database schema
+├── scripts/                # Modular ES6 client, DSP AudioWorklet & theme visualizers
+├── server/                 # Local Soulseek Node.js service & tag rewrite helper
+├── stylesheets/            # Layered CSS stylesheets & theme definitions
+├── sw.js                   # Offline application-shell Service Worker
+├── tools/                  # Android Gradle project, local APK builders & Nicotine+ plugin
+└── uninstall.sh            # Linux user desktop uninstaller
 ```
+
+---
+
+## Privacy
+
+CachyMusic is local-first with no developer telemetry, analytics, or remote crash reporting. Core playback and library features work offline once installed. Online metadata/artwork/lyrics lookups (MusicBrainz, Cover Art Archive, LRCLIB) and Soulseek connections only occur when explicitly initiated by the user.
 
 ---
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0 or later** ([GPL-3.0-or-later](LICENSE)).
+CachyMusic is licensed under the **GNU General Public License v3.0 or later** ([GPL-3.0-or-later](LICENSE)).
+The bundled `NMSFuturaProBook_Kerned.ttf` font is separately licensed under the **SIL Open Font License 1.1** (`resources/fonts/OFL.txt`).

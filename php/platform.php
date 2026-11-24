@@ -18,6 +18,7 @@ if (!function_exists('cachy_is_windows')) {
 
     function cachy_home_dir(): string {
         $candidates = [
+            cachy_is_windows() ? getenv('USERPROFILE') : null,
             getenv('HOME'),
             $_SERVER['HOME'] ?? null,
             getenv('USERPROFILE'),
@@ -97,6 +98,24 @@ if (!function_exists('cachy_is_windows')) {
         return str_replace('\\', '/', trim($path));
     }
 
+    // Only compare canonical paths (realpath) at access-control call sites.
+    function cachy_path_within(string $path, string $root, ?bool $windows = null): bool {
+        $windows = $windows ?? cachy_is_windows();
+        if ($windows) { $path = strtolower(str_replace('\\', '/', $path)); $root = strtolower(str_replace('\\', '/', $root)); }
+        $root = rtrim($root, '/');
+        return $root !== '' && ($path === $root || str_starts_with($path, $root . '/'));
+    }
+
+    // Pass arguments directly, avoiding shell expansion and POSIX redirection on Windows.
+    function cachy_run_args(array $args): ?string {
+        if (!function_exists('proc_open')) return null;
+        $process = @proc_open($args, [0=>['pipe','r'], 1=>['pipe','w'], 2=>['file', cachy_is_windows() ? 'NUL' : '/dev/null','a']], $pipes, null, null, ['bypass_shell'=>true]);
+        if (!is_resource($process)) return null;
+        fclose($pipes[0]);
+        $out = stream_get_contents($pipes[1]); fclose($pipes[1]);
+        return proc_close($process) === 0 && is_string($out) ? $out : null;
+    }
+
     function cachy_is_allowed_scan_path(string $realPath): bool {
         $norm = rtrim(cachy_normalize_path($realPath), '/');
         if ($norm === '' || $norm === '/') return false;
@@ -143,7 +162,7 @@ if (!function_exists('cachy_is_windows')) {
         $isWin = cachy_is_windows();
         $pathEnv = getenv('PATH') ?: ($_SERVER['PATH'] ?? '');
         $dirs = array_filter(explode(PATH_SEPARATOR, $pathEnv));
-        if (!$isWin) {
+        if (!$isWin && getenv('CACHYMUSIC_PACKAGED')!=='1') {
             $dirs = array_merge($dirs, ['/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin']);
         }
         $exts = $isWin ? ['.exe', '.cmd', '.bat', ''] : [''];

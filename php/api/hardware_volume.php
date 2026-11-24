@@ -1,6 +1,7 @@
 <?php
 // CachyMusic - Linux Hardware Analog Gain Bridge (PipeWire / PulseAudio / ALSA)
-// Provides bit-perfect hardware volume control directly communicating with DAC registers
+// Controls the OS default sink/mixer, not verified hardware DAC gain.
+require_once(__DIR__ . "/../platform.php");
 header('Content-Type: application/json; charset=utf-8');
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
@@ -30,11 +31,14 @@ function detect_hardware_backend() {
         return $backend;
     }
 
-    if (!empty(shell_exec('which wpctl 2>/dev/null'))) {
+    $wpctl = cachy_find_binary('wpctl');
+    $pactl = cachy_find_binary('pactl');
+    $amixer = cachy_find_binary('amixer');
+    if ($wpctl && preg_match('/Volume:\s*[0-9.]+/i', cachy_run_args([$wpctl,'get-volume','@DEFAULT_AUDIO_SINK@']) ?? '')) {
         $backend = 'pipewire';
-    } elseif (!empty(shell_exec('which pactl 2>/dev/null'))) {
+    } elseif ($pactl && preg_match('/\d+%/', cachy_run_args([$pactl,'get-sink-volume','@DEFAULT_SINK@']) ?? '')) {
         $backend = 'pulseaudio';
-    } elseif (!empty(shell_exec('which amixer 2>/dev/null'))) {
+    } elseif ($amixer && preg_match('/\[\d+%\]/', cachy_run_args([$amixer,'sget',detect_alsa_control()]) ?? '')) {
         $backend = 'alsa';
     } else {
         $backend = 'none';
@@ -173,51 +177,19 @@ function set_hardware_volume($vol) {
     $backend = detect_hardware_backend();
     $vol = max(0.0, min(1.5, (float)$vol)); // Allow up to +3.5dB headroom (1.5), safely clamped
 
-    if ($backend === 'pipewire') {
-        $safeVol = sprintf("%.2f", $vol);
-        @shell_exec("wpctl set-volume @DEFAULT_AUDIO_SINK@ {$safeVol} 2>/dev/null");
-        return true;
-    } elseif ($backend === 'pulseaudio') {
-        $pct = (int)round($vol * 100);
-        @shell_exec("pactl set-sink-volume @DEFAULT_SINK@ {$pct}% 2>/dev/null");
-        return true;
-    } elseif ($backend === 'alsa') {
-        $pct = (int)round($vol * 100);
-        $ctl = escapeshellarg(detect_alsa_control());
-        @shell_exec("amixer sset {$ctl} {$pct}% 2>/dev/null");
-        return true;
-    }
+    $pct = (int)round($vol * 100);
+    if ($backend === 'pipewire') return cachy_run_args([cachy_find_binary('wpctl'), 'set-volume', '@DEFAULT_AUDIO_SINK@', number_format($vol, 2, '.', '')]) !== null;
+    if ($backend === 'pulseaudio') return cachy_run_args([cachy_find_binary('pactl'), 'set-sink-volume', '@DEFAULT_SINK@', $pct.'%']) !== null;
+    if ($backend === 'alsa') return cachy_run_args([cachy_find_binary('amixer'), 'sset', detect_alsa_control(), min(100,$pct).'%']) !== null;
     return false;
 }
 
 function toggle_hardware_mute($muteState = null) {
     $backend = detect_hardware_backend();
-    if ($backend === 'pipewire') {
-        if ($muteState === null) {
-            @shell_exec('wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle 2>/dev/null');
-        } else {
-            $val = $muteState ? 1 : 0;
-            @shell_exec("wpctl set-mute @DEFAULT_AUDIO_SINK@ {$val} 2>/dev/null");
-        }
-        return true;
-    } elseif ($backend === 'pulseaudio') {
-        if ($muteState === null) {
-            @shell_exec('pactl set-sink-mute @DEFAULT_SINK@ toggle 2>/dev/null');
-        } else {
-            $val = $muteState ? '1' : '0';
-            @shell_exec("pactl set-sink-mute @DEFAULT_SINK@ {$val} 2>/dev/null");
-        }
-        return true;
-    } elseif ($backend === 'alsa') {
-        $ctl = escapeshellarg(detect_alsa_control());
-        if ($muteState === null) {
-            @shell_exec("amixer sset {$ctl} toggle 2>/dev/null");
-        } else {
-            $val = $muteState ? 'mute' : 'unmute';
-            @shell_exec("amixer sset {$ctl} {$val} 2>/dev/null");
-        }
-        return true;
-    }
+    $value = $muteState === null ? 'toggle' : ($muteState ? '1' : '0');
+    if ($backend === 'pipewire') return cachy_run_args([cachy_find_binary('wpctl'),'set-mute','@DEFAULT_AUDIO_SINK@',$value]) !== null;
+    if ($backend === 'pulseaudio') return cachy_run_args([cachy_find_binary('pactl'),'set-mute','@DEFAULT_SINK@',$value]) !== null;
+    if ($backend === 'alsa') return cachy_run_args([cachy_find_binary('amixer'),'sset',detect_alsa_control(),$muteState === null ? 'toggle' : ($muteState ? 'mute' : 'unmute')]) !== null;
     return false;
 }
 
