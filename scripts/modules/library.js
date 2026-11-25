@@ -6,6 +6,7 @@ import { createLibraryQueryController } from './library-query-controller.js';
 import { queryLibrary } from './library-query.js';
 import { uiIcon } from './icons.js';
 import { createIndexer } from './indexing-client.js';
+import { createArtworkPrefetcher, resolveTrackThumbUrl } from './artwork-loader.js';
 // CachyMusic - Music Library, Virtual Scroller, Playlists, Queue & Metadata Editor
 import {
     escapeHtml,
@@ -431,15 +432,44 @@ function getTrackSearchString(t) {
 }
 
 let libraryWorkerRequestId = 0;
+let displayedIndexMap = new WeakMap();
+let cachedQuerySource = null;
+let cachedQueryLength = -1;
+let cachedQueryPlaylistId = null;
+let cachedQueryRecords = null;
+
+function rebuildDisplayedIndexMap(tracks) {
+    const map = new WeakMap();
+    if (Array.isArray(tracks)) {
+        for (let i = 0; i < tracks.length; i++) {
+            const t = tracks[i];
+            if (t && typeof t === 'object' && !map.has(t)) map.set(t, i);
+        }
+    }
+    displayedIndexMap = map;
+}
+
+function getDisplayedTrackIndex(track) {
+    if (!track || typeof track !== 'object') return -1;
+    const s = store.state;
+    const mapped = displayedIndexMap.get(track);
+    if (mapped !== undefined && s.displayedTracks[mapped] === track) return mapped;
+    return findTrackIndex(s.displayedTracks, track);
+}
 
 function publishTrackQuery(tracks) {
     store.state.displayedTracks = tracks;
+    rebuildDisplayedIndexMap(tracks);
     store.emit('playback:order-change');
     renderTrackList();
 }
 
 function queryTracks(tracks) {
-    return tracks.map((track, index) => ({
+    const plId = store.state.currentPlaylistId;
+    if (tracks === cachedQuerySource && tracks.length === cachedQueryLength && plId === cachedQueryPlaylistId && cachedQueryRecords) {
+        return cachedQueryRecords;
+    }
+    const records = tracks.map((track, index) => ({
         index,
         title: track.title || track.filename || '',
         artist: track.artist || 'Unknown',
@@ -454,6 +484,11 @@ function queryTracks(tracks) {
         inCurrentPlaylist: Boolean(track.inCurrentPlaylist),
         search: getTrackSearchString(track)
     }));
+    cachedQuerySource = tracks;
+    cachedQueryLength = tracks.length;
+    cachedQueryPlaylistId = plId;
+    cachedQueryRecords = records;
+    return records;
 }
 
 const libraryQueries = createLibraryQueryController({
@@ -594,7 +629,30 @@ function initTrackListDelegation() {
                 if (masterIdx !== -1) {
                     const proposed={};
                     if(s.currentPlaylistId!==null){const pl=s.playlists.find(p=>String(p.plid)===String(s.currentPlaylistId));if(!pl||!startPlaylistSession(proposed,pl.plid,resolvePlaylistMembers(pl.tracks,s.allTracks,serverPlaylist(pl.plid)),s.isShuffle,track))return;}
-                    void loadTrack(masterIdx,true,0,null,false,false,proposed.playlistPlayback??null).then(()=>store.emit('playback:order-change'));
+                    // Instant 0ms visual feedback on tap/click before async audio start.
+                    const container = document.getElementById('trackItemsContainer');
+                    if (container) {
+                        for (const prev of container.querySelectorAll('.trackItem.active')) {
+                            prev.classList.remove('active');
+                            prev.querySelector('.trackDetails')?.removeAttribute('aria-current');
+                        }
+                    }
+                    item.classList.add('active', 'is-selecting');
+                    item.querySelector('.trackDetails')?.setAttribute('aria-current', 'true');
+                    setTimeout(() => item.classList.remove('is-selecting'), 180);
+                    if (miniTitle) miniTitle.textContent = track.title || track.filename || 'Unknown Track';
+                    if (miniArtist) miniArtist.textContent = track.artist || 'Unknown Artist';
+                    if (trackName) {
+                        const span = trackName.querySelector('.marqueeContent');
+                        if (span) span.textContent = track.title || track.filename || 'Unknown';
+                        else trackName.textContent = track.title || track.filename || 'Unknown';
+                    }
+                    if (artistName) {
+                        const span = artistName.querySelector('.marqueeContent');
+                        if (span) span.textContent = track.artist || 'Unknown';
+                        else artistName.textContent = track.artist || 'Unknown';
+                    }
+                    void loadTrack(masterIdx,true,0,null,false,false,proposed.playlistPlayback??null,null,{fromClick:true}).then(()=>store.emit('playback:order-change'));
                 }
             }
         }
@@ -605,12 +663,49 @@ function initTrackListDelegation() {
 // Windowed track list: render a bounded viewport plus overscan.
 // =========================================================================
 const MIN_TRACK_ROW_HEIGHT = 64;
-function getTrackRowHeight() {
-    const rootSize=parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return Math.max(MIN_TRACK_ROW_HEIGHT, Number.isFinite(rootSize)?Math.ceil(rootSize*4):MIN_TRACK_ROW_HEIGHT);
-}
-const VIRTUAL_BUFFER_ROWS = 8;
+const VIRTUAL_BUFFER_ROWS = 4;
 const renderedTrack = new WeakMap();
+const artworkPrefetcher = createArtworkPrefetcher();
+const rowPool = [];
+const MAX_ROW_POOL = 48;
+let cachedRootRowHeight = 0;
+let trackListNeedsRender = false;
+let playlistsDirty = false;
+let lastTrackScrollPreserve = false;
+let lastScrollTop = 0;
+let lastScrollTime = 0;
+let lastScrollDir = 1;
+let lastScrollVelocity = 0;
+
+function computeTrackRowHeight() {
+    const rootSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    cachedRootRowHeight = Math.max(MIN_TRACK_ROW_HEIGHT, Number.isFinite(rootSize) ? Math.ceil(rootSize * 4) : MIN_TRACK_ROW_HEIGHT);
+    return cachedRootRowHeight;
+}
+function getTrackRowHeight() {
+    return cachedRootRowHeight || computeTrackRowHeight();
+}
+
+function isTrackListViewportVisible() {
+    if (!trackList || trackList.style.display === 'none') return false;
+    return trackList.getClientRects().length > 0 && trackList.clientHeight > 0;
+}
+
+function syncActiveTrackHighlight() {
+    const s = store.state;
+    const container = document.getElementById('trackItemsContainer');
+    if (!container) return;
+    const cur = s.allTracks[s.currentTrackIndex];
+    const currentDisplayedIndex = getDisplayedTrackIndex(cur);
+    for (const child of Array.from(container.children)) {
+        const rowIdx = parseInt(child.dataset.index, 10);
+        const isCurrent = !isNaN(rowIdx) && rowIdx === currentDisplayedIndex;
+        child.classList.toggle('active', isCurrent);
+        const button = child.querySelector('.trackDetails');
+        if (isCurrent) button?.setAttribute('aria-current', 'true');
+        else button?.removeAttribute('aria-current');
+    }
+}
 function captureTrackFocus(container) {
     const focused = document.activeElement;
     const row = focused?.closest('.trackItem');
@@ -625,6 +720,78 @@ function restoreTrackFocus(container, snapshot) {
     const target = row?.querySelector(snapshot.menu ? '.trackMenuTriggerBtn' : '.trackDetails') || trackList;
     target.focus({preventScroll:true});
 }
+function releaseTrackRow(row) {
+    row.remove();
+    if (rowPool.length < MAX_ROW_POOL) rowPool.push(row);
+}
+function acquireTrackRow() {
+    if (rowPool.length > 0) return rowPool.pop();
+    const item = document.createElement('div');
+    item.className = 'trackItem';
+    item.innerHTML = `
+        <img src="resources/images/default.svg" alt="" class="trackThumb" width="40" height="40" decoding="async">
+        <button type="button" class="trackDetails">
+            <span class="trackTitle" dir="auto"></span>
+            <span class="trackArtist" dir="auto"></span>
+        </button>
+        <span class="trackDuration" dir="ltr"></span>
+        <button type="button" class="trackMenuTriggerBtn" title="Track options">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <circle cx="12" cy="5" r="2.2"></circle>
+                <circle cx="12" cy="12" r="2.2"></circle>
+                <circle cx="12" cy="19" r="2.2"></circle>
+            </svg>
+        </button>
+    `;
+    const thumb = item.firstElementChild;
+    thumb.addEventListener('error', (e) => {
+        if (e.target.dataset.fallbackApplied) return;
+        e.target.dataset.fallbackApplied = '1';
+        e.target.dataset.boundSrc = 'resources/images/default.svg';
+        e.target.src = 'resources/images/default.svg';
+    });
+    return item;
+}
+function bindTrackRow(item, track, idx, isCurrent, highPriority) {
+    item.className = isCurrent ? 'trackItem active' : 'trackItem';
+    item.dataset.id = track.id || track.tid || track.filename || '';
+    item.dataset.index = idx;
+    renderedTrack.set(item, track);
+
+    const thumbEl = item.children[0];
+    const detailsBtn = item.children[1];
+    const titleEl = detailsBtn.children[0];
+    const artistEl = detailsBtn.children[1];
+    const durationEl = item.children[2];
+    const menuBtn = item.children[3];
+
+    const rawTitle = track.title || track.filename || 'Unknown';
+    const rawArtist = track.artist || 'Unknown';
+    const albumSuffix = track.album ? ` • ${track.album}` : '';
+    const coverSrc = resolveTrackThumbUrl(track);
+
+    if (thumbEl.dataset.boundSrc !== coverSrc) {
+        if (thumbEl.dataset.boundSrc && !artworkPrefetcher.has(coverSrc)) {
+            thumbEl.removeAttribute('src');
+        }
+        thumbEl.dataset.fallbackApplied = '';
+        thumbEl.dataset.boundSrc = coverSrc;
+        if ('fetchPriority' in thumbEl) thumbEl.fetchPriority = highPriority ? 'high' : 'low';
+        thumbEl.src = coverSrc;
+    }
+    titleEl.textContent = rawTitle;
+    artistEl.textContent = `${rawArtist}${albumSuffix}`;
+    durationEl.textContent = formatTime(track.duration);
+
+    detailsBtn.setAttribute('aria-label', `Play ${rawTitle}`);
+    if (isCurrent) detailsBtn.setAttribute('aria-current', 'true');
+    else detailsBtn.removeAttribute('aria-current');
+
+    menuBtn.dataset.index = idx;
+    menuBtn.setAttribute('aria-label', `Track options for ${rawTitle}`);
+    return item;
+}
+
 let isVirtualScrollBound = false;
 let isVirtualScrollPending = false;
 const virtualTrackState = {
@@ -640,16 +807,16 @@ function renderVirtualTrackWindow(force = false) {
     if (total === 0) return;
 
     const viewportHeight = trackList.clientHeight || 600;
-    const rowHeight=getTrackRowHeight();
-    const resized=rowHeight!==virtualTrackState.rowHeight;
-    const scrollTop=(trackList.scrollTop||0)*rowHeight/virtualTrackState.rowHeight;
-    if(resized){
-        virtualTrackState.rowHeight=rowHeight;
-        trackList.style.setProperty('--track-row-height',`${rowHeight}px`);
-        force=true;
+    const rowHeight = getTrackRowHeight();
+    const resized = rowHeight !== virtualTrackState.rowHeight;
+    const scrollTop = (trackList.scrollTop || 0) * rowHeight / virtualTrackState.rowHeight;
+    if (resized) {
+        virtualTrackState.rowHeight = rowHeight;
+        trackList.style.setProperty('--track-row-height', `${rowHeight}px`);
+        force = true;
     }
     const visibleCount = Math.ceil(viewportHeight / rowHeight);
-    const rawStart = Math.min(total-1,Math.floor(scrollTop / rowHeight));
+    const rawStart = Math.min(total - 1, Math.floor(scrollTop / rowHeight));
     const startIndex = Math.max(0, rawStart - VIRTUAL_BUFFER_ROWS);
     const endIndex = Math.min(total, rawStart + visibleCount + VIRTUAL_BUFFER_ROWS);
 
@@ -668,56 +835,24 @@ function renderVirtualTrackWindow(force = false) {
 
     if (!container) return;
     const cur = s.allTracks[s.currentTrackIndex];
-    const currentDisplayedIndex = findTrackIndex(s.displayedTracks, cur);
+    const currentDisplayedIndex = getDisplayedTrackIndex(cur);
     const focusSnapshot = captureTrackFocus(container);
 
-    function buildTrackItemElement(track, idx, isCurrent) {
-        const item = document.createElement('div');
-        item.className = `trackItem ${isCurrent ? 'active' : ''}`;
-        item.dataset.id = track.id || track.tid || track.filename || '';
-        item.dataset.index = idx;
-        renderedTrack.set(item, track);
-
-        const coverSrc = track.coverThumb || (track.cover
-            ? (track.cover.startsWith('data:') || track.cover.startsWith('blob:')
-                ? track.cover
-                : (track.cover + (track.cover.includes('?') ? '&thumb=1' : '?thumb=1')))
-            : 'resources/images/default.svg');
-        const displayTitle = track.title ? escapeHtml(track.title) : escapeHtml(track.filename || 'Unknown');
-        const displayArtist = track.artist ? escapeHtml(track.artist) : 'Unknown';
-        const displayAlbum = track.album ? ` • ${escapeHtml(track.album)}` : '';
-
-        item.innerHTML = `
-            <img src="${escapeHtml(coverSrc)}" alt="" class="trackThumb" width="40" height="40" loading="lazy" decoding="async">
-            <button type="button" class="trackDetails" aria-label="Play ${displayTitle}">
-                <span class="trackTitle" dir="auto">${displayTitle}</span>
-                <span class="trackArtist" dir="auto">${displayArtist}${displayAlbum}</span>
-            </button>
-            <span class="trackDuration" dir="ltr">${formatTime(track.duration)}</span>
-            <button type="button" class="trackMenuTriggerBtn" title="Track options" aria-label="Track options for ${displayTitle}" data-index="${idx}">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                    <circle cx="12" cy="5" r="2.2"></circle>
-                    <circle cx="12" cy="12" r="2.2"></circle>
-                    <circle cx="12" cy="19" r="2.2"></circle>
-                </svg>
-            </button>
-        `;
-        if (isCurrent) item.querySelector('.trackDetails')?.setAttribute('aria-current', 'true');
-        item.querySelector('.trackThumb')?.addEventListener('error', e => { e.target.src = 'resources/images/default.svg'; }, {once:true});
-        return item;
-    }
+    artworkPrefetcher.prefetchWindow(s.displayedTracks, startIndex, endIndex, lastScrollDir, lastScrollVelocity);
 
     if (force) {
-        container.innerHTML = '';
+        while (container.lastElementChild) {
+            releaseTrackRow(container.lastElementChild);
+        }
         const frag = document.createDocumentFragment();
         for (let idx = startIndex; idx < endIndex; idx++) {
             const track = s.displayedTracks[idx];
             if (!track) continue;
-            const isCurrent = idx === currentDisplayedIndex;
-            frag.appendChild(buildTrackItemElement(track, idx, isCurrent));
+            const highPriority = idx >= rawStart && idx < rawStart + visibleCount;
+            frag.appendChild(bindTrackRow(acquireTrackRow(), track, idx, idx === currentDisplayedIndex, highPriority));
         }
         container.appendChild(frag);
-        if(resized)trackList.scrollTop=scrollTop;
+        if (resized) trackList.scrollTop = scrollTop;
         restoreTrackFocus(container, focusSnapshot);
         return;
     }
@@ -725,18 +860,16 @@ function renderVirtualTrackWindow(force = false) {
     const existingRows = new Map();
     for (const child of Array.from(container.children)) {
         const rowIdx = parseInt(child.dataset.index, 10);
-        if (!isNaN(rowIdx) && rowIdx >= startIndex && rowIdx < endIndex) {
+        const expected = (!isNaN(rowIdx) && rowIdx >= startIndex && rowIdx < endIndex) ? s.displayedTracks[rowIdx] : null;
+        if (expected && renderedTrack.get(child) === expected) {
             existingRows.set(rowIdx, child);
-            const curTrack = s.displayedTracks[rowIdx];
-            if (curTrack) {
-                const isCurrent = rowIdx === currentDisplayedIndex;
-                child.classList.toggle('active', !!isCurrent);
-                const button = child.querySelector('.trackDetails');
-                if (isCurrent) button?.setAttribute('aria-current', 'true');
-                else button?.removeAttribute('aria-current');
-            }
+            const isCurrent = rowIdx === currentDisplayedIndex;
+            child.classList.toggle('active', !!isCurrent);
+            const button = child.children[1];
+            if (isCurrent) button?.setAttribute('aria-current', 'true');
+            else button?.removeAttribute('aria-current');
         } else {
-            child.remove();
+            releaseTrackRow(child);
         }
     }
 
@@ -744,8 +877,8 @@ function renderVirtualTrackWindow(force = false) {
         if (existingRows.has(idx)) continue;
         const track = s.displayedTracks[idx];
         if (!track) continue;
-        const isCurrent = idx === currentDisplayedIndex;
-        const newItem = buildTrackItemElement(track, idx, isCurrent);
+        const highPriority = idx >= rawStart && idx < rawStart + visibleCount;
+        const newItem = bindTrackRow(acquireTrackRow(), track, idx, idx === currentDisplayedIndex, highPriority);
 
         let inserted = false;
         for (let nextIdx = idx + 1; nextIdx < endIndex; nextIdx++) {
@@ -768,6 +901,7 @@ function initVirtualScrollListener() {
     if (isVirtualScrollBound || !trackList) return;
     isVirtualScrollBound = true;
     trackList.style.overflowAnchor = 'none';
+    computeTrackRowHeight();
     trackList.addEventListener('keydown', event => {
         if (!['ArrowDown','ArrowUp','Home','End'].includes(event.key) || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
         const row = event.target.closest('.trackItem');
@@ -783,6 +917,14 @@ function initVirtualScrollListener() {
     });
     trackList.style.setProperty('--track-row-height', `${virtualTrackState.rowHeight}px`);
     trackList.addEventListener('scroll', () => {
+        const now = performance.now();
+        const top = trackList.scrollTop || 0;
+        const dt = Math.max(1, now - (lastScrollTime || now));
+        const delta = top - lastScrollTop;
+        if (delta !== 0) lastScrollDir = delta > 0 ? 1 : -1;
+        lastScrollVelocity = Math.min(8, Math.abs(delta) / dt);
+        lastScrollTop = top;
+        lastScrollTime = now;
         if (isVirtualScrollPending) return;
         isVirtualScrollPending = true;
         requestAnimationFrame(() => {
@@ -791,7 +933,14 @@ function initVirtualScrollListener() {
         });
     }, { passive: true });
     if (typeof ResizeObserver === 'function') {
-        new ResizeObserver(() => renderVirtualTrackWindow()).observe(trackList);
+        new ResizeObserver(() => {
+            computeTrackRowHeight();
+            if (isTrackListViewportVisible()) {
+                const force = trackListNeedsRender;
+                trackListNeedsRender = false;
+                renderVirtualTrackWindow(force);
+            }
+        }).observe(trackList);
     }
 }
 
@@ -859,6 +1008,13 @@ function renderTrackList(preserveScroll = false) {
         return;
     }
 
+    if (!isTrackListViewportVisible()) {
+        trackListNeedsRender = true;
+        lastTrackScrollPreserve = preserveScroll;
+        return;
+    }
+    trackListNeedsRender = false;
+
     if (!preserveScroll) {
         trackList.scrollTop = 0;
     }
@@ -893,6 +1049,11 @@ function playlistViewIndex(library, playlists, extraKeys = []) {
 }
 function renderPlaylistsView(sharedIndex = null) {
     const s=store.state;if(!playlistList)return;
+    if (playlistsView && playlistsView.style.display === 'none') {
+        playlistsDirty = true;
+        return;
+    }
+    playlistsDirty = false;
     const search=document.getElementById('playlistSearchInput');
     if(search)search.oninput=renderPlaylistsView;
     const clearSearch=document.getElementById('playlistSearchClear');if(clearSearch){clearSearch.hidden=!search?.value;clearSearch.onclick=()=>{search.value='';renderPlaylistsView();search.focus();};}
@@ -1405,7 +1566,7 @@ function updateQueueUi() {
 
 function renderQueueView() {
     const s = store.state;
-    if (!queueList) return;
+    if (!queueList || (queueView && queueView.style.display === 'none')) return;
     if (s.playQueue.length === 0) {
         queueList.innerHTML = '<div class="queueEmpty">Your queue is empty. Open a track’s menu to add it to the queue.</div>';
     } else {
@@ -1656,7 +1817,26 @@ async function removeTrackFromCurrentPlaylist(track){const plid=store.state.curr
     showToast(`Removed from "${p.name}". Audio file kept.`);return true;
 });}
 
-store.subscribe('library:render-window', (e) => renderVirtualTrackWindow(Boolean(e?.detail?.preserveScroll ?? true)));
+store.subscribe('library:render-window', (e) => {
+    if (e?.detail?.activeOnly) {
+        if (isTrackListViewportVisible()) syncActiveTrackHighlight();
+        else trackListNeedsRender = true;
+        return;
+    }
+    if (isTrackListViewportVisible()) {
+        renderVirtualTrackWindow(Boolean(e?.detail?.preserveScroll ?? true));
+    } else {
+        trackListNeedsRender = true;
+    }
+});
+store.subscribe('workspace:change', () => {
+    if (trackListNeedsRender && isTrackListViewportVisible()) {
+        renderTrackList(lastTrackScrollPreserve);
+    }
+    if (playlistsDirty && playlistsView && playlistsView.style.display !== 'none') {
+        renderPlaylistsView();
+    }
+});
 store.subscribe('library:scroll-to-index', (e) => {
     if (e?.detail) scrollToTrackIndex(e.detail.index, Boolean(e.detail.active));
 });

@@ -5,6 +5,8 @@ let lastPosSyncMs = 0;
 let lastNotifiedTrackKey = null;
 const rasterCoverCache = new Map();
 const rasterCoverRequests = new Map();
+let pendingAndroidSync = null;
+let androidSyncQueued = false;
 
 function resolveRasterCover(coverUrl) {
     try {
@@ -174,18 +176,25 @@ export class MediaSessionController {
             && (rawCover.startsWith('blob:') || rawCover.startsWith('data:') || rawCover.startsWith('https://appassets.androidplatform.net/'));
         if (needsRasterize && !track._resolvedNotificationCover) {
             const trackKey = `${track.tid || track.id || track.filename}:${rawCover}`;
-            rasterizeCoverToDataUrl(rawCover).then((dataUrl) => {
-                if (!dataUrl) return;
-                track._resolvedNotificationCover = dataUrl;
-                const activeTrack = store.state.isStandalonePlayback
-                    ? store.state.standaloneTrackList?.[store.state.standaloneTrackIndex]
-                    : (store.state.allTracks?.[store.state.currentTrackIndex] || store.state.currentTrack);
-                const activeKey = activeTrack ? `${activeTrack.tid || activeTrack.id || activeTrack.filename}:${activeTrack.cover}` : '';
-                if (activeKey === trackKey) {
-                    this.applyMediaSessionMetadata(title, artist, album, dataUrl);
-                    this.syncAndroidNotification(track, store.state.isPlaying);
-                }
-            });
+            const scheduleRaster = () => {
+                rasterizeCoverToDataUrl(rawCover).then((dataUrl) => {
+                    if (!dataUrl) return;
+                    track._resolvedNotificationCover = dataUrl;
+                    const activeTrack = store.state.isStandalonePlayback
+                        ? store.state.standaloneTrackList?.[store.state.standaloneTrackIndex]
+                        : (store.state.allTracks?.[store.state.currentTrackIndex] || store.state.currentTrack);
+                    const activeKey = activeTrack ? `${activeTrack.tid || activeTrack.id || activeTrack.filename}:${activeTrack.cover}` : '';
+                    if (activeKey === trackKey) {
+                        this.applyMediaSessionMetadata(title, artist, album, dataUrl);
+                        this.syncAndroidNotification(track, store.state.isPlaying);
+                    }
+                });
+            };
+            if (typeof requestIdleCallback === 'function') {
+                requestIdleCallback(scheduleRaster, { timeout: 350 });
+            } else {
+                setTimeout(scheduleRaster, 120);
+            }
         }
     }
 
@@ -226,23 +235,33 @@ export class MediaSessionController {
 
     syncAndroidNotification(track, playing) {
         if (typeof window === 'undefined' || !window.AndroidBridge) return;
-        if (typeof window.AndroidBridge.updateMediaNotification === 'function') {
+        if (typeof window.AndroidBridge.updateMediaNotification !== 'function') return;
+        pendingAndroidSync = { track, playing: Boolean(playing) };
+        if (androidSyncQueued) return;
+        androidSyncQueued = true;
+        const flush = () => {
+            androidSyncQueued = false;
+            const latest = pendingAndroidSync;
+            pendingAndroidSync = null;
+            if (!latest || store.state.isNativePlaybackActive?.()) return;
             try {
-                const durMs = Math.round((this.handlers?.getDuration?.() || track?.duration || 0) * 1000);
+                const durMs = Math.round((this.handlers?.getDuration?.() || latest.track?.duration || 0) * 1000);
                 const posMs = Math.round((this.handlers?.getPosition?.() || 0) * 1000);
-                const resolved = track?._resolvedNotificationCover || resolveRasterCover(track?.cover) || '';
-                const coverArg = resolved.length<=256*1024 ? resolved : '';
+                const resolved = latest.track?._resolvedNotificationCover || resolveRasterCover(latest.track?.cover) || '';
+                const coverArg = resolved.length <= 256 * 1024 ? resolved : '';
                 window.AndroidBridge.updateMediaNotification(
-                    track?.title || track?.filename || 'CachyMusic',
-                    track?.artist || 'Unknown Artist',
-                    track?.album || 'CachyMusic Workstation',
+                    latest.track?.title || latest.track?.filename || 'CachyMusic',
+                    latest.track?.artist || 'Unknown Artist',
+                    latest.track?.album || 'CachyMusic Workstation',
                     coverArg,
-                    Boolean(playing),
+                    latest.playing,
                     durMs,
                     posMs
                 );
             } catch (_) {}
-        }
+        };
+        if (typeof queueMicrotask === 'function') queueMicrotask(flush);
+        else Promise.resolve().then(flush);
     }
 
     stopAndroidNotification() {

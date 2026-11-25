@@ -15,6 +15,7 @@ import {
     removeConsumedQueueEntries, restoreNativeQueue, saveNativeQueue
 } from './android-native-playback.js';
 import { inspectFlac } from './flac-reader.js';
+import { openAndroidDirectPcm, closeAndroidDirectPcm } from './android-pcm-reader.js';
 import { PcmRangeSource } from './pcm-range.js';
 import { inspectPcm } from './pcm-reader.js';
 import { PcmStream } from './pcm-stream.js';
@@ -247,18 +248,78 @@ let trackLoadToken = 0;
 let pcmStream = null;
 let pcmFile = null;
 let pendingPcm = null;
+let sharedPcmWorker = null;
+function acquirePcmWorker() {
+    if (!sharedPcmWorker && typeof Worker === 'function') {
+        sharedPcmWorker = new Worker(new URL('./pcm-worker.js', import.meta.url), { type: 'module' });
+    }
+    return sharedPcmWorker;
+}
+function resetPcmWorker() {
+    const w = sharedPcmWorker;
+    sharedPcmWorker = null;
+    try { w?.terminate(); } catch (_) {}
+}
 function continuousPcmEnabled(){return store.state.sleepTimerMode!=='end' && safeStorage.getItem('cachymusic_continuous_pcm')==='true' && (store.state.currentPlaybackSpeed||1)===1;}
 function pcmExtension(track,file){return /\.(wav|wave|aif|aiff|flac)$/i.test(track?.filename||file?.name||'');}
-function shouldStreamAndroidFlac(track) {
-    const s = store.state;
-    return androidNative && indexedSource(track) && /\.flac$/i.test(track.filename || '')
-        && hasActiveDsp() && (s.currentPlaybackSpeed || 1) === 1 && typeof Worker === 'function';
+function canAndroidDirectDecode(track) {
+    return Boolean(
+        androidNative
+        && indexedSource(track)
+        && typeof window !== 'undefined'
+        && typeof window.AndroidBridge?.supportsDirectPcm === 'function'
+        && window.AndroidBridge.supportsDirectPcm()
+    );
 }
-function cancelPcmSuccessor(){const old=pendingPcm;pendingPcm=null;old?.stream?.stop();}
-function stopPcmStream(){cancelPcmSuccessor();const old=pcmStream;pcmStream=null;old?.stop();}
+function canStreamPcmTrack(track, file) {
+    return pcmExtension(track, file) || canAndroidDirectDecode(track);
+}
+function shouldUseDirectEngine(track) {
+    const s = store.state;
+    if (!androidNative || !indexedSource(track) || nativeEligible(track)) return false;
+    if ((s.currentPlaybackSpeed || 1) !== 1 || typeof Worker !== 'function') return false;
+    return canAndroidDirectDecode(track) || (/\.(flac|wav|wave|aif|aiff)$/i.test(track.filename || '') && hasActiveDsp());
+}
+function presentSecondaryTrackMeta(track, isStandalone = false) {
+    if (!track) return;
+    applyTrackMetadataToDom(track, isStandalone);
+    updateSignalPathUi(track);
+    mediaSessionController.updateMetadata(track);
+    mprisSyncHook(true);
+}
+function presentTrackOnDeck(track, { isStandalone = false, artistFallback = 'Unknown', albumText = null, syncLyrics = true, targetTime = 0, deferSecondary = false } = {}) {
+    if (!track) return;
+    if (trackName) updateMarqueeText(trackName, track.title || track.filename || (isStandalone ? 'Standalone Audio' : 'Unknown'));
+    if (artistName) updateMarqueeText(artistName, track.artist || artistFallback);
+    if (albumName) updateMarqueeText(albumName, albumText ?? (track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Album: Unknown'));
+    updateTrackBadgeUi(track);
+    const coverSrc = track.cover || 'resources/images/default.svg';
+    applyArtworkToDeck(coverSrc, Boolean(track.cover && !track.cover.includes('default.svg')));
+    updateMiniPlayerInfo(track);
+    if (syncLyrics) {
+        updateLyricsDisplay(track);
+        if (targetTime > 0) updateActiveLyric(targetTime);
+    }
+    if (!deferSecondary) presentSecondaryTrackMeta(track, isStandalone);
+}
+function cancelPcmSuccessor(){const old=pendingPcm;pendingPcm=null;if(old?.format?.codec==='android-direct')old.format.sessionClosed=true;old?.stream?.stop();}
+function stopPcmStream(){cancelPcmSuccessor();const old=pcmStream;pcmStream=null;if(old?.format?.codec==='android-direct')old.format.sessionClosed=true;old?.stop();}
 function softwarePosition(){const s=store.state;return pcmStream?.started?pcmStream.position():Math.max(0, s.softwarePlaybackOffset+(!s.isSoftwarePaused&&s.audioContext&&s.softwarePlaybackStartTime>0&&!s.activeDecodedBuffer?.streaming?Math.max(0,s.audioContext.currentTime-s.softwarePlaybackStartTime):0));}
 async function preparePcmInput(track,localFile){
     const file=localFile===undefined?await resolveLocalFile(track):localFile;
+    if (!file && canAndroidDirectDecode(track) && !/\.(wav|wave|aif|aiff)$/i.test(track?.filename || '')) {
+        try {
+            const directFormat = await openAndroidDirectPcm(track.src, track.duration);
+            // Keep hi-res >16-bit FLAC on exact JS reader unless MediaCodec delivers float PCM.
+            if (/\.flac$/i.test(track?.filename || '') && Number(track?.bitDepth) > 16 && !directFormat.isFloat) {
+                void closeAndroidDirectPcm(directFormat.sessionId);
+            } else {
+                return { file: null, format: directFormat };
+            }
+        } catch (err) {
+            if (!pcmExtension(track, file)) return null;
+        }
+    }
     if(!pcmExtension(track,file))return null;
     let input=file;
     if(!input){let src=track.src||'';if(src.startsWith('../'))src=src.substring(3);
@@ -267,13 +328,15 @@ async function preparePcmInput(track,localFile){
     const format=await (/\.flac$/i.test(track.filename||file?.name||'')?inspectFlac:inspectPcm)(input);
     return {file:input instanceof PcmRangeSource?input.descriptor():input,format};
 }
-function makePcmStream(file,format){
+function makePcmStream(file,format,{isSuccessor=false}={}){
     const s=store.state;
     const stream=new PcmStream(s.audioContext,s.softwareSourceGainNode,file,format,{
+        worker: isSuccessor ? null : acquirePcmWorker(),
+        keepWorkerAlive: !isSuccessor,
         onStart:(anchor,offset)=>{if(pcmStream!==stream)return;s.softwarePlaybackStartTime=anchor;s.softwarePlaybackOffset=offset;s.isSoftwarePaused=false;syncPlayPauseUI(true);startSoftwareProgressLoop();},
         onProgress:()=>{if(pcmStream===stream)checkPcmSuccessor(stream);},
-        onEnd:()=>{if(pcmStream!==stream){if(pendingPcm?.stream===stream)cancelPcmSuccessor();return;}if(adoptPcmSuccessor())return;pcmStream=null;onSoftwarePlaybackEnded();},
-        onError:(error,position)=>{if(pcmStream!==stream){if(pendingPcm?.stream===stream)cancelPcmSuccessor();return;}cancelPcmSuccessor();pcmStream=null;s.softwarePlaybackOffset=Math.max(s.softwarePlaybackOffset,position);s.softwarePlaybackStartTime=0;s.isSoftwarePaused=true;s.userExplicitlyPaused=true;cancelSoftwareProgressLoop();syncPlayPauseUI(false);showCachyToast('PCM playback interrupted',error.message,'error');}
+        onEnd:()=>{if(stream.format?.codec==='android-direct')stream.format.sessionClosed=true;if(pcmStream!==stream){if(pendingPcm?.stream===stream)cancelPcmSuccessor();return;}if(adoptPcmSuccessor())return;pcmStream=null;onSoftwarePlaybackEnded();},
+        onError:(error,position)=>{if(stream.format?.codec==='android-direct')stream.format.sessionClosed=true;if(pcmStream!==stream){if(pendingPcm?.stream===stream)cancelPcmSuccessor();return;}resetPcmWorker();cancelPcmSuccessor();pcmStream=null;s.softwarePlaybackOffset=Math.max(s.softwarePlaybackOffset,position);s.softwarePlaybackStartTime=0;s.isSoftwarePaused=true;s.userExplicitlyPaused=true;cancelSoftwareProgressLoop();syncPlayPauseUI(false);showCachyToast('PCM playback interrupted',error.message,'error');}
     });
     return stream;
 }
@@ -281,14 +344,14 @@ function checkPcmSuccessor(current){
     if(!pendingPcm&&current.endTime-current.ctx.currentTime>5)return;
     const s=store.state,candidate=continuousPcmEnabled()&&!audioBufferChangePending()?nextPcmCandidate(s):null;
     if(pendingPcm&&!sameCandidate(pendingPcm.candidate,candidate))cancelPcmSuccessor();
-    if(!candidate||!pcmExtension(candidate.track)||current.endTime-current.ctx.currentTime>5)return;
+    if(!candidate||!canStreamPcmTrack(candidate.track)||current.endTime-current.ctx.currentTime>5)return;
     if(!pendingPcm&&!sameCandidate(current.lastAttempt,candidate)){
         current.lastAttempt=candidate;
         const job={candidate,current,stream:null};pendingPcm=job;
         (async()=>{
             const result=await preparePcmInput(candidate.track);
             if(!result||pendingPcm!==job||pcmStream!==current)return;
-            job.file=result.file;job.format=result.format;job.stream=makePcmStream(job.file,job.format);
+            job.file=result.file;job.format=result.format;job.stream=makePcmStream(job.file,job.format,{isSuccessor:true});
             await job.stream.prepare(0);
             if(pendingPcm!==job||pcmStream!==current){job.stream.stop();return;}
             checkPcmSuccessor(current);
@@ -309,20 +372,47 @@ function adoptPcmSuccessor(){
     s.softwarePlaybackStartTime=pcmStream.anchor;s.softwarePlaybackOffset=0;s.isSoftwarePaused=false;s.trackPlaybackRetryCount=0;
     rememberTrack(safeStorage, track);
     store.emit('track:change',{track,index});
-    updateMarqueeText(trackName,track.title||track.filename||'Unknown');updateMarqueeText(artistName,track.artist||'Unknown');updateMarqueeText(albumName,track.album?`Album: ${track.album}`:'Album: Unknown');
-    updateTrackBadgeUi(track);applyArtworkToDeck(track.cover||'resources/images/default.svg',Boolean(track.cover&&!track.cover.includes('default.svg')));
-    applyTrackMetadataToDom(track,false);updateSignalPathUi(track);updateMiniPlayerInfo(track);updateLyricsDisplay(track);
+    presentTrackOnDeck(track);
     if(totalDurationEl)totalDurationEl.textContent=formatTime(track.duration);if(miniTotalDuration)miniTotalDuration.textContent=formatTime(track.duration);
-    updatePlaybackProgress(pcmStream.position(),track.duration);mediaSessionController.updateMetadata(track);mediaSessionController.updatePositionState(true);
-    store.emit('library:render-window',{preserveScroll:true});mprisSyncHook(true);
+    updatePlaybackProgress(pcmStream.position(),track.duration);mediaSessionController.updatePositionState(true);
+    store.emit('library:render-window',{preserveScroll:true});
     startSoftwareProgressLoop();return true;
 }
 function startPcmPlayback(){
     const s=store.state, format=s.activeDecodedBuffer;
     stopPcmStream();
-    if(!pcmFile||!format?.streaming||!s.audioContext)return;
+    if((!pcmFile && format?.codec !== 'android-direct') || !format?.streaming || !s.audioContext)return;
     if(!s.softwareSourceGainNode||s.softwareSourceGainNode.context!==s.audioContext)s.softwareSourceGainNode=s.audioContext.createGain();
     updateAudioRouting();
+    if (format.codec === 'android-direct' && format.sessionClosed) {
+        if (!format.trackSrc) {
+            s.isSoftwarePaused = true;
+            syncPlayPauseUI(false);
+            showCachyToast('PCM playback interrupted', 'Missing audio source for resume', 'error');
+            return;
+        }
+        const resumeGen = currentTrackGeneration;
+        void openAndroidDirectPcm(format.trackSrc, format.duration).then(fresh => {
+            if (resumeGen !== currentTrackGeneration || s.activeDecodedBuffer !== format || s.isSoftwarePaused || s.userExplicitlyPaused) {
+                void closeAndroidDirectPcm(fresh.sessionId);
+                return;
+            }
+            format.sessionId = fresh.sessionId;
+            format.sessionClosed = false;
+            const stream = makePcmStream(pcmFile, format);
+            pcmStream = stream;
+            s.softwarePlaybackStartTime = 0;
+            s.isSoftwarePaused = false;
+            stream.start(s.softwarePlaybackOffset, true).catch(err => stream.fail(err));
+        }).catch(err => {
+            if (resumeGen !== currentTrackGeneration) return;
+            s.isSoftwarePaused = true;
+            s.userExplicitlyPaused = true;
+            syncPlayPauseUI(false);
+            showCachyToast('PCM playback interrupted', err?.message || 'Unable to reopen direct stream', 'error');
+        });
+        return;
+    }
     const stream=makePcmStream(pcmFile,format);
     pcmStream=stream;s.softwarePlaybackStartTime=0;s.isSoftwarePaused=false;
     const quickStart = Boolean(androidNative && indexedSource(s.currentTrack));
@@ -386,7 +476,7 @@ function applyTrackMetadataToDom(track, isStandalone = false) {
 }
 
 // Load Track by Index in allTracks
-async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = null, useMediaElement = false, fromQueue = false, playlistContext = undefined, historyTarget = null) {
+async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = null, useMediaElement = false, fromQueue = false, playlistContext = undefined, historyTarget = null, options = {}) {
     store.state.audioEditPaused=false;
     const s = store.state;
     if (!s.allTracks[index]) return;
@@ -396,8 +486,16 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
     if (!autoPlay && !adoptNative) s.userExplicitlyPaused = true;
     currentTrackGeneration++;
     if(activeLoadedMetadataHandler&&s.audio)s.audio.removeEventListener('loadedmetadata',activeLoadedMetadataHandler);
-    if(s.audio){s.audio.pause();s.audio.removeAttribute("src");s.audio.load();}
-    if(s.secondaryAudio){s.secondaryAudio.pause();s.secondaryAudio.removeAttribute("src");s.secondaryAudio.load();}
+    const nextCandidate = s.allTracks[index];
+    const nextWillUseSpecialTransport = Boolean(adoptNative || nativeEligible(nextCandidate) || shouldPreferSoftwareDecoder(nextCandidate) || (!useMediaElement && shouldUseDirectEngine(nextCandidate)));
+    if (s.audio) {
+        s.audio.pause();
+        if (nextWillUseSpecialTransport && s.audio.getAttribute('src')) {
+            s.audio.removeAttribute("src");
+            s.audio.load();
+        }
+    }
+    if(s.secondaryAudio && s.secondaryAudio.getAttribute('src')){s.secondaryAudio.pause();s.secondaryAudio.removeAttribute("src");s.secondaryAudio.load();}
     s.preloadedNextTrackIndex=-1;
     s.currentTrackIndex = index;
     s.trackPlaybackRetryCount = 0;
@@ -431,8 +529,8 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
     if (trackSrc.startsWith('../')) trackSrc = trackSrc.substring(3);
 
     const prefersSoftware = shouldPreferSoftwareDecoder(track, trackSrc);
-    const streamFlac = !useMediaElement && shouldStreamAndroidFlac(track);
-    const isKnownSoftware = prefersSoftware || streamFlac;
+    const streamDirect = !useMediaElement && shouldUseDirectEngine(track);
+    const isKnownSoftware = prefersSoftware || streamDirect;
     const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;
     const refreshBuffer = !nativeEligible(track) && audioBufferChangePending();
     if (!adoptNative && (refreshBuffer || !(autoPlay && (isKnownSoftware || nativeEligible(track))))) {
@@ -524,15 +622,7 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
     }
 
     updateEmptyPlayerState();
-    updateMarqueeText(trackName, track.title ? track.title : (track.filename || 'Unknown'));
-    updateMarqueeText(artistName, track.artist ? track.artist : 'Unknown');
-    updateMarqueeText(albumName, track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Album: Unknown');
-    updateTrackBadgeUi(track);
-
-    const coverSrc = track.cover || 'resources/images/default.svg';
-    const hasCustomCover = Boolean(track.cover && !track.cover.includes('default.svg'));
-    applyArtworkToDeck(coverSrc, hasCustomCover);
-    appendDebugTelemetry(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
+    presentTrackOnDeck(track, { syncLyrics: false, deferSecondary: true });
 
     if (coverBadge) {
         if (track.cover) {
@@ -544,16 +634,16 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
         }
     }
 
-    applyTrackMetadataToDom(track, false);
-
-    store.emit('library:render-window', { preserveScroll: true });
+    store.emit('library:render-window', { preserveScroll: true, activeOnly: true });
     const displayedIdx = findTrackIndex(s.displayedTracks, track);
     if (displayedIdx !== -1 && trackList) {
         const activeEl = trackList.querySelector(`.trackItem[data-index="${displayedIdx}"]`);
         if (activeEl) {
             activeEl.classList.add('active');
-            activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        } else {
+            if (!options?.fromClick) {
+                activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        } else if (!options?.fromClick) {
             store.emit('library:scroll-to-index', { index: displayedIdx, active: true });
         }
     }
@@ -576,32 +666,32 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
     if (totalDurationEl) totalDurationEl.textContent = formatTime(track.duration);
     if (miniTotalDuration) miniTotalDuration.textContent = formatTime(track.duration);
     updatePlaybackProgress(targetTime,track.duration);
-    updateMiniPlayerInfo(track);
-    updateLyricsDisplay(track);
-    if (targetTime > 0 && s.isLyricsView) {
-        updateActiveLyric(targetTime);
-    }
 
-    mediaSessionController.updateMetadata(track);
-    mprisSyncHook(true);
-
-    if(adoptNative){syncPlayPauseUI(adoptNative.state==='playing',true);startNativePoll();updateSignalPathUi(track);return;}
-    if (isKnownSoftware) {
-        if (autoPlay && loadPlayId===currentPlayRequestId) {
-            playWithSoftwareDecoder(track, initialTime, streamFlac && !prefersSoftware);
+    let playbackPromise = null;
+    if (adoptNative) {
+        syncPlayPauseUI(adoptNative.state === 'playing', true);
+        startNativePoll();
+    } else if (isKnownSoftware) {
+        if (autoPlay && loadPlayId === currentPlayRequestId) {
+            playbackPromise = playWithSoftwareDecoder(track, initialTime, streamDirect && !prefersSoftware);
         } else {
             s.pendingSoftwareSeekSec = initialTime > 0 ? initialTime : null;
             s.isSoftwarePaused = true;
             syncPlayPauseUI(false);
         }
-        return;
-    }
-
-    if (autoPlay && loadPlayId===currentPlayRequestId) {
-        playAudio();
+    } else if (autoPlay && loadPlayId === currentPlayRequestId) {
+        playbackPromise = playAudio();
     } else {
         pauseAudio();
     }
+
+    presentSecondaryTrackMeta(track, false);
+    if (s.isLyricsView) {
+        updateLyricsDisplay(track);
+        if (targetTime > 0) updateActiveLyric(targetTime);
+    }
+    appendDebugTelemetry(`[LOAD] Track #${index + 1}: "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
+    return playbackPromise;
 }
 
 // =========================================================================
@@ -704,30 +794,17 @@ async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
     if (miniProgressBar) miniProgressBar.style.width = '0%';
 
     updateEmptyPlayerState();
-    if (trackName) updateMarqueeText(trackName, track.title ? track.title : (track.filename || 'Standalone Audio'));
-    if (artistName) updateMarqueeText(artistName, track.artist ? track.artist : 'External File');
-    if (albumName) updateMarqueeText(albumName, track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Standalone File');
-
-    updateTrackBadgeUi(track);
     const audioSrcBadge = document.getElementById('audioSourceBadge');
     if (audioSrcBadge) audioSrcBadge.textContent = 'STANDALONE';
-
-    const coverSrc = track.cover || 'resources/images/default.svg';
-    const hasCustomCover = Boolean(track.cover && !track.cover.includes('default.svg'));
-    applyArtworkToDeck(coverSrc, hasCustomCover);
     appendDebugTelemetry(`[STANDALONE LOAD] "${track.title || track.filename}" (${track.format || 'AUDIO'}, ${track.sampleRate || 44100}Hz)`);
-
-    applyTrackMetadataToDom(track, true);
     document.querySelectorAll('.trackItem.active').forEach(el => el.classList.remove('active'));
-
     if (totalDurationEl) totalDurationEl.textContent = formatTime(track.duration);
     if (miniTotalDuration) miniTotalDuration.textContent = formatTime(track.duration);
-    updateMiniPlayerInfo(track);
-    updateSignalPathUi(track);
-    updateLyricsDisplay(track);
-
-    mediaSessionController.updateMetadata(track);
-    mprisSyncHook(true);
+    presentTrackOnDeck(track, {
+        isStandalone: true,
+        artistFallback: 'External File',
+        albumText: track.album ? `Album: ${track.album}${track.year ? ' (' + track.year + ')' : ''}` : 'Standalone File'
+    });
 
     if (isKnownSoftware) {
         if (autoPlay && loadPlayId===currentPlayRequestId) {
@@ -930,13 +1007,13 @@ async function playAudio(userInitiated = false, {preserveOutput = false} = {}) {
     const currentSrc = currentTrack ? (currentTrack.src || '') : '';
     const cleanSrc = currentSrc.startsWith('../') ? currentSrc.substring(3) : currentSrc;
     const isKnownSoftware = shouldPreferSoftwareDecoder(currentTrack, cleanSrc);
-    const directFlac = mediaElementGeneration !== currentTrackGeneration && shouldStreamAndroidFlac(currentTrack);
+    const directStream = mediaElementGeneration !== currentTrackGeneration && shouldUseDirectEngine(currentTrack);
 
-    if ((isKnownSoftware || directFlac) && !s.isSoftwareDecoding) {
+    if ((isKnownSoftware || directStream) && !s.isSoftwareDecoding) {
         s.userExplicitlyPaused = false;
         syncPlayPauseUI(true);
         const startOffset = Number.isFinite(s.pendingSoftwareSeekSec) ? s.pendingSoftwareSeekSec : (s.audio?.currentTime||0);
-        playWithSoftwareDecoder(currentTrack, startOffset, directFlac && !isKnownSoftware);
+        playWithSoftwareDecoder(currentTrack, startOffset, directStream && !isKnownSoftware);
         return;
     }
 
@@ -987,11 +1064,12 @@ async function playAudio(userInitiated = false, {preserveOutput = false} = {}) {
     try {
         const track = s.allTracks[s.currentTrackIndex];
         const targetRate = (track && track.sampleRate) ? getValidSampleRate(track.sampleRate) : 44100;
-        // Join any pending replacement rather than playing into a graph that
-        // may be closing. The owner handles reuse without rebuilding.
-        const graph = await ensureAudioEngineForSampleRate(targetRate);
-        if (reqId !== currentPlayRequestId) return;
-        if (!graph && s.audioContext) throw new Error('Audio graph could not be initialized. Retry playback.');
+        // Skip redundant graph await if route is already confirmed and unchanged.
+        if (!getConfirmedAudioRoute() || audioBufferChangePending()) {
+            const graph = await ensureAudioEngineForSampleRate(targetRate);
+            if (reqId !== currentPlayRequestId) return;
+            if (!graph && s.audioContext) throw new Error('Audio graph could not be initialized. Retry playback.');
+        }
         if (s.audioContext && s.audioContext.state !== 'running') {
             try {
                 await Promise.race([
@@ -1224,18 +1302,7 @@ function executeGaplessHandoff(nextIndex, fromQueue=false) {
         }).catch(console.warn);
 
         if (nextTr) {
-            if (trackName) updateMarqueeText(trackName, nextTr.title ? nextTr.title : (nextTr.filename || 'Unknown'));
-            if (artistName) updateMarqueeText(artistName, nextTr.artist ? nextTr.artist : 'Unknown');
-            if (albumName) updateMarqueeText(albumName, nextTr.album ? `Album: ${nextTr.album}${nextTr.year ? ' (' + nextTr.year + ')' : ''}` : 'Album: Unknown');
-            updateTrackBadgeUi(nextTr);
-            const coverSrc = nextTr.cover || 'resources/images/default.svg';
-            const hasCustomCover = Boolean(nextTr.cover && !nextTr.cover.includes('default.svg'));
-            applyArtworkToDeck(coverSrc, hasCustomCover);
-            applyTrackMetadataToDom(nextTr, false);
-            updateSignalPathUi(nextTr);
-            updateLyricsDisplay(nextTr);
-            updateMiniPlayerInfo(nextTr);
-            mediaSessionController.updateMetadata(nextTr);
+            presentTrackOnDeck(nextTr);
             store.emit('library:render-window', { preserveScroll: true });
         }
         return true;
@@ -1401,7 +1468,7 @@ function startSoftwareProgressLoop() {
         if (!s.isSoftwareDecoding || s.isSoftwarePaused || !s.activeDecodedBuffer) return;
         const cur = softwarePosition();
         const dur = s.activeDecodedBuffer.duration;
-        if (now - lastProgressFrame >= 33 || cur >= dur) {
+        if (now - lastProgressFrame >= 66 || cur >= dur) {
             lastProgressFrame = now;
             updatePlaybackProgress(cur, dur);
             mediaSessionController.updatePositionState(false);
@@ -1492,11 +1559,16 @@ function seekSoftwarePlayback(targetSec) {
     const s = store.state;
     if (!s.isSoftwareDecoding || !s.activeDecodedBuffer) return;
     const dur = s.activeDecodedBuffer.duration;
-    s.softwarePlaybackOffset = Math.max(0, Math.min(dur, targetSec));
+    const clamped = Math.max(0, Math.min(dur, targetSec));
+    s.softwarePlaybackOffset = clamped;
     if (!s.isSoftwarePaused) {
-        startSoftwareBufferPlayback();
+        if (pcmStream && !pcmStream.closed && s.activeDecodedBuffer.streaming && typeof pcmStream.seek === 'function') {
+            void pcmStream.seek(clamped).catch(err => pcmStream?.fail(err));
+        } else {
+            startSoftwareBufferPlayback();
+        }
     } else {
-        updatePlaybackProgress(s.softwarePlaybackOffset, dur);
+        updatePlaybackProgress(clamped, dur);
     }
 }
 
@@ -1559,7 +1631,7 @@ async function playWithSoftwareDecoder(track, startTime = 0, retryWebStream = fa
 
         const localFileJob = resolveLocalFile(track);
         const streamJob = localFileJob.then(file => {
-            if (typeof Worker !== 'function' || !pcmExtension(track, file)) return null;
+            if (typeof Worker !== 'function' || !canStreamPcmTrack(track, file)) return null;
             return preparePcmInput(track, file);
         }).catch(error => ({ error }));
         const targetRate = track.sampleRate ? getValidSampleRate(track.sampleRate) : 44100;

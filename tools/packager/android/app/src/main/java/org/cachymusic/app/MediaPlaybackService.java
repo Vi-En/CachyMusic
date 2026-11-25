@@ -54,6 +54,7 @@ public class MediaPlaybackService extends Service {
 
     public static final String ACTION_UPDATE = "org.cachymusic.app.MEDIA_UPDATE";
     public static final String ACTION_STOP_SERVICE = "org.cachymusic.app.MEDIA_STOP_SERVICE";
+    public static final String ACTION_THEME_UPDATE = "org.cachymusic.app.MEDIA_THEME_UPDATE";
 
     public static final String BROADCAST_MEDIA_COMMAND = "org.cachymusic.app.MEDIA_COMMAND";
     public static final String EXTRA_CMD = "cmd";
@@ -70,8 +71,10 @@ public class MediaPlaybackService extends Service {
     static final String ACTION_NATIVE_ORDER = "org.cachymusic.app.NATIVE_ORDER";
     private static volatile String nativeSnapshot = "{}";
     private static volatile boolean nativeOwned;
+    private static volatile boolean serviceRunning;
     static String nativeStatus() { return nativeSnapshot; }
     static boolean ownsNative() { return nativeOwned; }
+    static boolean isRunning() { return serviceRunning; }
 
     // The Activity and service share a process. Only the catalog ID crosses Binder.
     private static final class PlaybackCatalog {
@@ -302,6 +305,10 @@ public class MediaPlaybackService extends Service {
     private final ThreadPoolExecutor coverExecutor=new ThreadPoolExecutor(1,1,0,TimeUnit.SECONDS,
             new ArrayBlockingQueue<>(1),new ThreadPoolExecutor.DiscardOldestPolicy());
     private Bitmap cachedCoverBitmap = null;
+    private Bitmap cachedFallbackBitmap = null;
+    private String cachedFallbackTheme = "";
+    private boolean usingFallbackCover = false;
+    private String currentTheme = "default";
     private boolean currentIsPlaying = false;
     private long currentDurationMs = 0L;
     private long currentPositionMs = 0L;
@@ -309,6 +316,10 @@ public class MediaPlaybackService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        serviceRunning = true;
+        currentTheme = NotificationThemeArt.specFor(
+                getSharedPreferences("cachymusic_prefs", MODE_PRIVATE).getString("appearance_theme", "default")
+        ).id;
         createNotificationChannel();
 
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -367,6 +378,9 @@ public class MediaPlaybackService extends Service {
         if(ACTION_NATIVE_LOAD.equals(action)){
             String id=intent.getStringExtra("token"), raw=intent.getStringExtra("uri");
             if(id==null||!id.matches("[A-Za-z0-9-]{1,64}")||raw==null||raw.length()>8192||!"content".equals(Uri.parse(raw).getScheme())){stopSelf();return START_NOT_STICKY;}
+            if (intent.hasExtra("theme")) {
+                currentTheme = NotificationThemeArt.specFor(intent.getStringExtra("theme")).id;
+            }
             currentTitle=nonEmpty(intent.getStringExtra("title"),"CachyMusic");currentArtist=nonEmpty(intent.getStringExtra("artist"),"Unknown Artist");currentAlbum=nonEmpty(intent.getStringExtra("album"),"");
             currentIsPlaying=false;currentPositionMs=0;currentDurationMs=0;
             nativeRevision = 0;
@@ -421,8 +435,21 @@ public class MediaPlaybackService extends Service {
             return START_NOT_STICKY;
         }
 
+        if (ACTION_THEME_UPDATE.equals(action)) {
+            currentTheme = NotificationThemeArt.specFor(intent.getStringExtra("theme")).id;
+            if (usingFallbackCover || cachedCoverBitmap == null) {
+                cachedCoverBitmap = getFallbackCoverBitmap();
+                usingFallbackCover = true;
+            }
+            publishNotification();
+            return START_NOT_STICKY;
+        }
+
         if (ACTION_UPDATE.equals(action)) {
             if(nativeOwned)return START_NOT_STICKY;
+            if (intent.hasExtra("theme")) {
+                currentTheme = NotificationThemeArt.specFor(intent.getStringExtra("theme")).id;
+            }
             currentTitle = nonEmpty(intent.getStringExtra("title"), "CachyMusic");
             currentArtist = nonEmpty(intent.getStringExtra("artist"), "Unknown Artist");
             currentAlbum = intent.getStringExtra("album") != null ? intent.getStringExtra("album") : "";
@@ -460,13 +487,19 @@ public class MediaPlaybackService extends Service {
         if(!key.equals(currentCoverKey)){
             currentCoverKey=key;final long generation=++coverGeneration;
             cachedCoverBitmap=getFallbackCoverBitmap();
+            usingFallbackCover=true;
             if(!key.isEmpty())coverExecutor.execute(()->{
                 Bitmap decoded=decodeCoverBitmap(key);
                 mainHandler.post(()->{
                     if(mediaSession==null||generation!=coverGeneration){if(decoded!=null)decoded.recycle();return;}
-                    cachedCoverBitmap=decoded!=null?decoded:getFallbackCoverBitmap();publishNotification();
+                    usingFallbackCover=(decoded==null);
+                    cachedCoverBitmap=decoded!=null?decoded:getFallbackCoverBitmap();
+                    publishNotification();
                 });
             });
+        } else if (usingFallbackCover || cachedCoverBitmap == null) {
+            cachedCoverBitmap = getFallbackCoverBitmap();
+            usingFallbackCover = true;
         }
     }
 
@@ -516,7 +549,9 @@ public class MediaPlaybackService extends Service {
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
 
-        builder.setSmallIcon(R.mipmap.ic_launcher)
+        NotificationThemeArt.ThemeSpec themeSpec = NotificationThemeArt.specFor(currentTheme);
+        builder.setSmallIcon(R.drawable.ic_stat_cachymusic)
+                .setColor(themeSpec.surfaceColor)
                 .setContentTitle(currentTitle)
                 .setContentText(currentArtist)
                 .setSubText(currentAlbum)
@@ -525,16 +560,19 @@ public class MediaPlaybackService extends Service {
                 .setOngoing(currentIsPlaying)
                 .setOnlyAlertOnce(true)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
-                .addAction(android.R.drawable.ic_media_previous, "Previous", prevPi)
+                .addAction(R.drawable.ic_notif_prev, "Previous", prevPi)
                 .addAction(
-                        currentIsPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+                        currentIsPlaying ? R.drawable.ic_notif_pause : R.drawable.ic_notif_play,
                         currentIsPlaying ? "Pause" : "Play",
                         togglePi
                 )
-                .addAction(android.R.drawable.ic_media_next, "Next", nextPi)
+                .addAction(R.drawable.ic_notif_next, "Next", nextPi)
                 .setStyle(new Notification.MediaStyle()
                         .setMediaSession(mediaSession.getSessionToken())
                         .setShowActionsInCompactView(0, 1, 2));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setColorized(true);
+        }
 
         if (cachedCoverBitmap != null) {
             builder.setLargeIcon(cachedCoverBitmap);
@@ -578,10 +616,25 @@ public class MediaPlaybackService extends Service {
     }
 
     private Bitmap getFallbackCoverBitmap() {
+        if (cachedFallbackBitmap != null && !cachedFallbackBitmap.isRecycled() && currentTheme.equals(cachedFallbackTheme)) {
+            return cachedFallbackBitmap;
+        }
+        try {
+            Bitmap rendered = NotificationThemeArt.renderFallbackCover(currentTheme, 256);
+            if (rendered != null) {
+                cachedFallbackBitmap = rendered;
+                cachedFallbackTheme = currentTheme;
+                return rendered;
+            }
+        } catch (Exception ignored) {}
         try {
             Bitmap fallback = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
-            return scaleBitmap(fallback, 256);
-        } catch (Exception ignored) {
+            Bitmap scaled = scaleBitmap(fallback, 256);
+            if (scaled != fallback && fallback != null) fallback.recycle();
+            cachedFallbackBitmap = scaled;
+            cachedFallbackTheme = currentTheme;
+            return scaled;
+        } catch (Exception innerIgnored) {
             return null;
         }
     }
@@ -600,7 +653,7 @@ public class MediaPlaybackService extends Service {
                     String uriParam=parsed.getQueryParameter("uri");
                     if(uriParam!=null&&"content".equals(Uri.parse(uriParam).getScheme()))raw=MainActivity.resolveTrackArtworkBytes(this,Uri.parse(uriParam));
                 }else if("/resources/images/icon-192.png".equals(path)||"/resources/images/icon-512.png".equals(path)){
-                    return getFallbackCoverBitmap();
+                    return null;
                 }
             }
             if(raw==null||raw.length==0||raw.length>10*1024*1024)return null;
@@ -645,6 +698,7 @@ public class MediaPlaybackService extends Service {
 
     @Override
     public void onDestroy() {
+        serviceRunning = false;
         destroying=true;++coverGeneration;coverExecutor.shutdownNow();mainHandler.removeCallbacks(nativeTick);
         if(noisyReceiver!=null)unregisterReceiver(noisyReceiver);
         if(nativePlayer!=null){nativePlayer.stop();nativePlayer=null;} nativeOwned=false;

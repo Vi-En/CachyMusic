@@ -215,13 +215,18 @@ export class WorkstationStore extends EventTarget {
             mathPrecision: (() => {
                 const raw = safeStorage.getItem('cachymusic_engine_precision');
                 if (raw === 'native' || raw === '32' || raw === '64') return raw;
-                return safeStorage.getItem('cachymusic_precision_64') === 'false' ? '32' : '64';
+                const legacy = safeStorage.getItem('cachymusic_precision_64');
+                if (legacy === 'false') return '32';
+                if (legacy === 'true') return '64';
+                return 'native';
             })(),
             isPrecision64: (() => {
                 const raw = safeStorage.getItem('cachymusic_engine_precision');
                 if (raw === 'native' || raw === '32') return false;
                 if (raw === '64') return true;
-                return safeStorage.getItem('cachymusic_precision_64') !== 'false';
+                const legacy = safeStorage.getItem('cachymusic_precision_64');
+                if (legacy === 'false' || legacy === null) return false;
+                return legacy === 'true';
             })(),
             detectedDacLabel: '',
             hasExternalDac: false,

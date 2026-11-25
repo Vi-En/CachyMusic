@@ -1,6 +1,11 @@
 // Pure DSP control policies; no DOM, audio nodes, or global state.
 
+const softClipCurveCache = new Map();
+const linearCurveCache = new Map();
+
 export function createSoftClipCurve(samples = 2048) {
+    const cached = softClipCurveCache.get(samples);
+    if (cached) return cached;
     const curve = new Float32Array(samples);
     // Smooth sample-domain compression above 0.891; not a DAC or true-peak guarantee.
     const ceiling = 0.891;
@@ -15,14 +20,18 @@ export function createSoftClipCurve(samples = 2048) {
             curve[i] = x;
         }
     }
+    if (softClipCurveCache.size < 4) softClipCurveCache.set(samples, curve);
     return curve;
 }
 
 export function createLinearCurve(samples = 2048) {
+    const cached = linearCurveCache.get(samples);
+    if (cached) return cached;
     const curve = new Float32Array(samples);
     for (let i = 0; i < samples; i++) {
         curve[i] = (i * 2) / (samples - 1) - 1;
     }
+    if (linearCurveCache.size < 4) linearCurveCache.set(samples, curve);
     return curve;
 }
 

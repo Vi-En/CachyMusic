@@ -1,5 +1,5 @@
 pkgname=cachymusic
-pkgver=3.0.0.dev6.42
+pkgver=3.0.0.dev6.43
 pkgrel=1
 pkgdesc='Local-first music player with optional DSP and Soulseek'
 arch=('any')

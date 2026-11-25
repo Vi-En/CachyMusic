@@ -8,8 +8,9 @@
   border-block-end: 1px solid var(--border-subtle);
   border-radius: 0;
   background: transparent;
+  touch-action: pan-y manipulation;
 }
-.trackListItemsContainer .trackItem:is(:hover, .active) { background: var(--accent-surface); }
+.trackListItemsContainer .trackItem:is(:hover, .active, .is-selecting) { background: var(--accent-surface); }
 
 /* Single row structure: no invisible quick-action columns. */
 :root[data-theme] .trackItem { display:grid; grid-template-columns:40px minmax(0,1fr) max-content 48px; column-gap:8px; align-items:center; padding:6px 0 6px 6px; min-width:0; box-sizing:border-box; text-align:start; transition:background-color var(--motion-short) var(--motion-feedback); }

@@ -149,16 +149,26 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
             if (Array.isArray(data.peqGains) && data.peqGains.length === 10) {
                 for (let b = 0; b < 10; b++) {
                     const g = Number(data.peqGains[b]);
-                    if (Number.isFinite(g)) this.peqGains[b] = Math.max(-15, Math.min(15, g));
+                    if (Number.isFinite(g)) {
+                        const clamped = Math.max(-15, Math.min(15, g));
+                        if (clamped !== this.peqGains[b]) {
+                            this.peqGains[b] = clamped;
+                            needEqUpdate = true;
+                        }
+                    }
                 }
-                needEqUpdate = true;
             }
             if (Array.isArray(data.peqQs) && data.peqQs.length === 10) {
                 for (let b = 0; b < 10; b++) {
                     const q = Number(data.peqQs[b]);
-                    if (Number.isFinite(q)) this.peqQs[b] = Math.max(0.4, Math.min(8.0, q));
+                    if (Number.isFinite(q)) {
+                        const clamped = Math.max(0.4, Math.min(8.0, q));
+                        if (clamped !== this.peqQs[b]) {
+                            this.peqQs[b] = clamped;
+                            needEqUpdate = true;
+                        }
+                    }
                 }
-                needEqUpdate = true;
             }
             if (typeof data.bassBoost === 'boolean' && data.bassBoost !== this.bassBoost) {
                 this.bassBoost = data.bassBoost;
@@ -385,9 +395,67 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
         const delay = this.ambiophonicsDelaySamples;
         const atten = this.ambiophonicsAttenuation;
         const maxD = this.delayBufL.length;
+        const delayMask = maxD - 1;
         const xfDelay = this.xfDelaySamples;
         const xfMax = this.xfDelayBufL.length;
+        const xfMask = xfMax - 1;
         const inv32Max = 1.0 / 4294967296.0;
+        const needWidth = !isMono && Math.abs(width - 1.0) > 0.005;
+        const needBalance = balL !== 1.0 || balR !== 1.0;
+
+        const targetGain = this.targetLinearGain;
+        let curGain = this.currentLinearGain;
+        const gainSmooth = this.gainSmoothCoeff;
+        const unityGain = curGain === targetGain && curGain === 1.0;
+
+        const subL = this.subL, subR = this.subR;
+        const eqCoeffs = this.eqCoeffs, eqStateL = this.eqStateL, eqStateR = this.eqStateR;
+        const uL = this.uL, uR = this.uR;
+        const xfDirectL = this.xfDirectL, xfDirectR = this.xfDirectR;
+        const xfCrossL = this.xfCrossL, xfCrossR = this.xfCrossR;
+        const xfDelayBufL = this.xfDelayBufL, xfDelayBufR = this.xfDelayBufR;
+        const delayBufL = this.delayBufL, delayBufR = this.delayBufR;
+        const limiter = this.peakLimiter;
+        const qLevels = this.quantizationLevels;
+        const invQ = this.invQuantization;
+
+        if (!useSubsonic && this.activeEqCount === 0 && !useCrossfeed && !useAmbi && !isMono
+            && !needWidth && !needBalance && !invPhase && !useUltrasonic && !useLimiter
+            && dither === 'off' && unityGain) {
+            for (let i = 0; i < numSamples; i++) {
+                let sL = p64 ? inL[i] : Math.fround(inL[i]);
+                let sR = p64 ? inR[i] : Math.fround(inR[i]);
+                if (!Number.isFinite(sL) || !Number.isFinite(sR)) {
+                    sL = 0.0;
+                    sR = 0.0;
+                    subL.fill(0); subR.fill(0);
+                    uL.fill(0); uR.fill(0);
+                    eqStateL.fill(0); eqStateR.fill(0);
+                    xfDirectL.fill(0); xfDirectR.fill(0);
+                    xfCrossL.fill(0); xfCrossR.fill(0);
+                    limiter.reset();
+                    this.ditherErr1L = 0.0; this.ditherErr2L = 0.0;
+                    this.ditherErr1R = 0.0; this.ditherErr2R = 0.0;
+                    this.agpGain = 1.0;
+                }
+                outL[i] = sL;
+                outR[i] = sR;
+            }
+            if (++this.telemetryCounter >= 75) {
+                this.telemetryCounter = 0;
+                const grDb = this.agpMinGainObserved < 0.999 ? (20.0 * Math.log10(this.agpMinGainObserved)) : 0.0;
+                this.agpMinGainObserved = this.agpGain;
+                if (grDb < -0.05) {
+                    this.port.postMessage({ type: 'agp_telemetry', gainReductionDb: grDb });
+                }
+            }
+            return true;
+        }
+
+        const limiterMargin = dither === 'off' ? 1e-7 : 6 * invQ + 1e-7;
+        const shapedMaxErr = invQ * 2.0;
+        let xfIdx = this.xfDelayIdx;
+        let ambiIdx = this.delayIdx;
 
         for (let i = 0; i < numSamples; i++) {
             let sL = p64 ? inL[i] : Math.fround(inL[i]);
@@ -395,69 +463,69 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
 
             // 1. 20 Hz Subsonic High-Pass Filter (optional DC/rumble removal before EQ)
             if (useSubsonic) {
-                let ySubL = sb0 * sL + sb1 * this.subL[0] + sb2 * this.subL[1] - sa1 * this.subL[2] - sa2 * this.subL[3];
-                let ySubR = sb0 * sR + sb1 * this.subR[0] + sb2 * this.subR[1] - sa1 * this.subR[2] - sa2 * this.subR[3];
+                let ySubL = sb0 * sL + sb1 * subL[0] + sb2 * subL[1] - sa1 * subL[2] - sa2 * subL[3];
+                let ySubR = sb0 * sR + sb1 * subR[0] + sb2 * subR[1] - sa1 * subR[2] - sa2 * subR[3];
                 if (!p64) { ySubL = Math.fround(ySubL); ySubR = Math.fround(ySubR); }
-                this.subL[1] = this.subL[0]; this.subL[0] = sL; this.subL[3] = this.subL[2]; this.subL[2] = ySubL;
-                this.subR[1] = this.subR[0]; this.subR[0] = sR; this.subR[3] = this.subR[2]; this.subR[2] = ySubR;
+                subL[1] = subL[0]; subL[0] = sL; subL[3] = subL[2]; subL[2] = ySubL;
+                subR[1] = subR[0]; subR[0] = sR; subR[3] = subR[2]; subR[2] = ySubR;
                 sL = ySubL;
                 sR = ySubR;
             }
 
             // 2. Smooth Linear Gain Staging (ReplayGain * Pre-Amp * Master Amp)
-            this.currentLinearGain += (this.targetLinearGain - this.currentLinearGain) * this.gainSmoothCoeff;
-            sL *= this.currentLinearGain;
-            sR *= this.currentLinearGain;
+            curGain += (targetGain - curGain) * gainSmooth;
+            sL *= curGain;
+            sR *= curGain;
 
             // 3. 10-Band RBJ Parametric EQ + Bass / Vocal / Treble Tone Shelves
             for (let active = 0; active < this.activeEqCount; active++) {
                 const f = this.activeEqIndices[active];
                 const cBase = f * 5;
                 const sBase = f * 4;
-                const b0 = this.eqCoeffs[cBase], b1 = this.eqCoeffs[cBase + 1], b2 = this.eqCoeffs[cBase + 2];
-                const a1 = this.eqCoeffs[cBase + 3], a2 = this.eqCoeffs[cBase + 4];
+                const b0 = eqCoeffs[cBase], b1 = eqCoeffs[cBase + 1], b2 = eqCoeffs[cBase + 2];
+                const a1 = eqCoeffs[cBase + 3], a2 = eqCoeffs[cBase + 4];
 
-                let yL = b0 * sL + b1 * this.eqStateL[sBase] + b2 * this.eqStateL[sBase + 1] - a1 * this.eqStateL[sBase + 2] - a2 * this.eqStateL[sBase + 3];
-                let yR = b0 * sR + b1 * this.eqStateR[sBase] + b2 * this.eqStateR[sBase + 1] - a1 * this.eqStateR[sBase + 2] - a2 * this.eqStateR[sBase + 3];
+                let yL = b0 * sL + b1 * eqStateL[sBase] + b2 * eqStateL[sBase + 1] - a1 * eqStateL[sBase + 2] - a2 * eqStateL[sBase + 3];
+                let yR = b0 * sR + b1 * eqStateR[sBase] + b2 * eqStateR[sBase + 1] - a1 * eqStateR[sBase + 2] - a2 * eqStateR[sBase + 3];
                 if (!p64) { yL = Math.fround(yL); yR = Math.fround(yR); }
-                this.eqStateL[sBase + 1] = this.eqStateL[sBase]; this.eqStateL[sBase] = sL;
-                this.eqStateL[sBase + 3] = this.eqStateL[sBase + 2]; this.eqStateL[sBase + 2] = yL;
-                this.eqStateR[sBase + 1] = this.eqStateR[sBase]; this.eqStateR[sBase] = sR;
-                this.eqStateR[sBase + 3] = this.eqStateR[sBase + 2]; this.eqStateR[sBase + 2] = yR;
+                eqStateL[sBase + 1] = eqStateL[sBase]; eqStateL[sBase] = sL;
+                eqStateL[sBase + 3] = eqStateL[sBase + 2]; eqStateL[sBase + 2] = yL;
+                eqStateR[sBase + 1] = eqStateR[sBase]; eqStateR[sBase] = sR;
+                eqStateR[sBase + 3] = eqStateR[sBase + 2]; eqStateR[sBase + 2] = yR;
                 sL = yL;
                 sR = yR;
             }
 
             // 4. Spatial Processing (Bauer/Meier Headphone Crossfeed OR Speaker R.A.C.E.)
             if (useCrossfeed) {
-                const dL = xfd0 * sL + xfd1 * this.xfDirectL[0] + xfd2 * this.xfDirectL[1] - xfda1 * this.xfDirectL[2] - xfda2 * this.xfDirectL[3];
-                const dR = xfd0 * sR + xfd1 * this.xfDirectR[0] + xfd2 * this.xfDirectR[1] - xfda1 * this.xfDirectR[2] - xfda2 * this.xfDirectR[3];
-                this.xfDirectL[1] = this.xfDirectL[0]; this.xfDirectL[0] = sL; this.xfDirectL[3] = this.xfDirectL[2]; this.xfDirectL[2] = dL;
-                this.xfDirectR[1] = this.xfDirectR[0]; this.xfDirectR[0] = sR; this.xfDirectR[3] = this.xfDirectR[2]; this.xfDirectR[2] = dR;
+                const dL = xfd0 * sL + xfd1 * xfDirectL[0] + xfd2 * xfDirectL[1] - xfda1 * xfDirectL[2] - xfda2 * xfDirectL[3];
+                const dR = xfd0 * sR + xfd1 * xfDirectR[0] + xfd2 * xfDirectR[1] - xfda1 * xfDirectR[2] - xfda2 * xfDirectR[3];
+                xfDirectL[1] = xfDirectL[0]; xfDirectL[0] = sL; xfDirectL[3] = xfDirectL[2]; xfDirectL[2] = dL;
+                xfDirectR[1] = xfDirectR[0]; xfDirectR[0] = sR; xfDirectR[3] = xfDirectR[2]; xfDirectR[2] = dR;
 
-                const cL = xfc0 * sL + xfc1 * this.xfCrossL[0] + xfc2 * this.xfCrossL[1] - xfca1 * this.xfCrossL[2] - xfca2 * this.xfCrossL[3];
-                const cR = xfc0 * sR + xfc1 * this.xfCrossR[0] + xfc2 * this.xfCrossR[1] - xfca1 * this.xfCrossR[2] - xfca2 * this.xfCrossR[3];
-                this.xfCrossL[1] = this.xfCrossL[0]; this.xfCrossL[0] = sL; this.xfCrossL[3] = this.xfCrossL[2]; this.xfCrossL[2] = cL;
-                this.xfCrossR[1] = this.xfCrossR[0]; this.xfCrossR[0] = sR; this.xfCrossR[3] = this.xfCrossR[2]; this.xfCrossR[2] = cR;
+                const cL = xfc0 * sL + xfc1 * xfCrossL[0] + xfc2 * xfCrossL[1] - xfca1 * xfCrossL[2] - xfca2 * xfCrossL[3];
+                const cR = xfc0 * sR + xfc1 * xfCrossR[0] + xfc2 * xfCrossR[1] - xfca1 * xfCrossR[2] - xfca2 * xfCrossR[3];
+                xfCrossL[1] = xfCrossL[0]; xfCrossL[0] = sL; xfCrossL[3] = xfCrossL[2]; xfCrossL[2] = cL;
+                xfCrossR[1] = xfCrossR[0]; xfCrossR[0] = sR; xfCrossR[3] = xfCrossR[2]; xfCrossR[2] = cR;
 
-                this.xfDelayBufL[this.xfDelayIdx] = cL;
-                this.xfDelayBufR[this.xfDelayIdx] = cR;
-                const readIdx = (this.xfDelayIdx - xfDelay + xfMax) % xfMax;
-                const delayedCrossR = this.xfDelayBufR[readIdx];
-                const delayedCrossL = this.xfDelayBufL[readIdx];
-                this.xfDelayIdx = (this.xfDelayIdx + 1) % xfMax;
+                xfDelayBufL[xfIdx] = cL;
+                xfDelayBufR[xfIdx] = cR;
+                const readIdx = (xfIdx - xfDelay + xfMax) & xfMask;
+                const delayedCrossR = xfDelayBufR[readIdx];
+                const delayedCrossL = xfDelayBufL[readIdx];
+                xfIdx = (xfIdx + 1) & xfMask;
 
                 sL = (dL * 0.72) + (delayedCrossR * 0.28);
                 sR = (dR * 0.72) + (delayedCrossL * 0.28);
             } else if (useAmbi) {
-                const readIdx = (this.delayIdx - delay + maxD) % maxD;
-                const delayedL = this.delayBufL[readIdx];
-                const delayedR = this.delayBufR[readIdx];
+                const readIdx = (ambiIdx - delay + maxD) & delayMask;
+                const delayedL = delayBufL[readIdx];
+                const delayedR = delayBufR[readIdx];
                 const canceledL = sL - (atten * delayedR);
                 const canceledR = sR - (atten * delayedL);
-                this.delayBufL[this.delayIdx] = canceledL;
-                this.delayBufR[this.delayIdx] = canceledR;
-                this.delayIdx = (this.delayIdx + 1) % maxD;
+                delayBufL[ambiIdx] = canceledL;
+                delayBufR[ambiIdx] = canceledR;
+                ambiIdx = (ambiIdx + 1) & delayMask;
                 sL = canceledL;
                 sR = canceledR;
             }
@@ -467,13 +535,13 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
                 const mono = (sL + sR) * 0.5;
                 sL = mono;
                 sR = mono;
-            } else if (Math.abs(width - 1.0) > 0.005) {
+            } else if (needWidth) {
                 const mid = (sL + sR) * 0.5;
                 const side = (sL - sR) * 0.5 * width;
                 sL = mid + side;
                 sR = mid - side;
             }
-            if (balL !== 1.0 || balR !== 1.0) {
+            if (needBalance) {
                 sL *= balL;
                 sR *= balR;
             }
@@ -484,11 +552,11 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
 
             // 6. Ultrasonic IMD Low-Pass Filter
             if (useUltrasonic) {
-                let yUL = ub0 * sL + ub1 * this.uL[0] + ub2 * this.uL[1] - ua1 * this.uL[2] - ua2 * this.uL[3];
-                let yUR = ub0 * sR + ub1 * this.uR[0] + ub2 * this.uR[1] - ua1 * this.uR[2] - ua2 * this.uR[3];
+                let yUL = ub0 * sL + ub1 * uL[0] + ub2 * uL[1] - ua1 * uL[2] - ua2 * uL[3];
+                let yUR = ub0 * sR + ub1 * uR[0] + ub2 * uR[1] - ua1 * uR[2] - ua2 * uR[3];
                 if (!p64) { yUL = Math.fround(yUL); yUR = Math.fround(yUR); }
-                this.uL[1] = this.uL[0]; this.uL[0] = sL; this.uL[3] = this.uL[2]; this.uL[2] = yUL;
-                this.uR[1] = this.uR[0]; this.uR[0] = sR; this.uR[3] = this.uR[2]; this.uR[2] = yUR;
+                uL[1] = uL[0]; uL[0] = sL; uL[3] = uL[2]; uL[2] = yUL;
+                uR[1] = uR[0]; uR[0] = sR; uR[3] = uR[2]; uR[2] = yUR;
                 sL = yUL;
                 sR = yUR;
             }
@@ -497,12 +565,12 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
             if (!Number.isFinite(sL) || !Number.isFinite(sR)) {
                 sL = 0.0;
                 sR = 0.0;
-                this.subL.fill(0); this.subR.fill(0);
-                this.uL.fill(0); this.uR.fill(0);
-                this.eqStateL.fill(0); this.eqStateR.fill(0);
-                this.xfDirectL.fill(0); this.xfDirectR.fill(0);
-                this.xfCrossL.fill(0); this.xfCrossR.fill(0);
-                this.peakLimiter.reset();
+                subL.fill(0); subR.fill(0);
+                uL.fill(0); uR.fill(0);
+                eqStateL.fill(0); eqStateR.fill(0);
+                xfDirectL.fill(0); xfDirectR.fill(0);
+                xfCrossL.fill(0); xfCrossR.fill(0);
+                limiter.reset();
                 this.ditherErr1L = 0.0; this.ditherErr2L = 0.0;
                 this.ditherErr1R = 0.0; this.ditherErr2R = 0.0;
                 this.agpGain = 1.0;
@@ -510,12 +578,11 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
 
             // 7. Lookahead, stereo-linked peak limiting (no nonlinear soft clipping).
             if (useLimiter) {
-                const margin = dither === 'off' ? 1e-7 : 6 * this.invQuantization + 1e-7;
-                this.peakLimiter.process(sL, sR, margin);
-                sL = this.peakLimiter.left;
-                sR = this.peakLimiter.right;
-                this.agpGain = this.peakLimiter.gain;
-                this.agpMinGainObserved = Math.min(this.agpMinGainObserved, this.agpGain);
+                limiter.process(sL, sR, limiterMargin);
+                sL = limiter.left;
+                sR = limiter.right;
+                this.agpGain = limiter.gain;
+                if (this.agpGain < this.agpMinGainObserved) this.agpMinGainObserved = this.agpGain;
             }
 
             // 8. Final Stage: Inline xorshift32 TPDF / 2nd-Order Psychoacoustic Noise-Shaped Dither
@@ -527,7 +594,7 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
                 xL ^= xL << 13; xL ^= xL >>> 17; xL ^= xL << 5;
                 const r2L = (xL >>> 0) * inv32Max - 0.5;
                 this.rngStateL = xL >>> 0;
-                const tpdfL = (r1L - r2L) * this.invQuantization;
+                const tpdfL = (r1L - r2L) * invQ;
 
                 let xR = this.rngStateR;
                 xR ^= xR << 13; xR ^= xR >>> 17; xR ^= xR << 5;
@@ -535,39 +602,40 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
                 xR ^= xR << 13; xR ^= xR >>> 17; xR ^= xR << 5;
                 const r2R = (xR >>> 0) * inv32Max - 0.5;
                 this.rngStateR = xR >>> 0;
-                const tpdfR = (r1R - r2R) * this.invQuantization;
+                const tpdfR = (r1R - r2R) * invQ;
 
                 if (dither === 'shaped') {
-                    const maxErr = this.invQuantization * 2.0;
-
                     const shapedL = sL + tpdfL - (1.5 * this.ditherErr1L) + (0.65 * this.ditherErr2L);
-                    const quantL = Math.round(shapedL * this.quantizationLevels) * this.invQuantization;
+                    const quantL = Math.round(shapedL * qLevels) * invQ;
                     let errL = quantL - shapedL;
                     if (!Number.isFinite(errL)) errL = 0.0;
-                    else if (errL > maxErr) errL = maxErr;
-                    else if (errL < -maxErr) errL = -maxErr;
+                    else if (errL > shapedMaxErr) errL = shapedMaxErr;
+                    else if (errL < -shapedMaxErr) errL = -shapedMaxErr;
                     this.ditherErr2L = this.ditherErr1L;
                     this.ditherErr1L = errL;
                     sL = quantL;
 
                     const shapedR = sR + tpdfR - (1.5 * this.ditherErr1R) + (0.65 * this.ditherErr2R);
-                    const quantR = Math.round(shapedR * this.quantizationLevels) * this.invQuantization;
+                    const quantR = Math.round(shapedR * qLevels) * invQ;
                     let errR = quantR - shapedR;
                     if (!Number.isFinite(errR)) errR = 0.0;
-                    else if (errR > maxErr) errR = maxErr;
-                    else if (errR < -maxErr) errR = -maxErr;
+                    else if (errR > shapedMaxErr) errR = shapedMaxErr;
+                    else if (errR < -shapedMaxErr) errR = -shapedMaxErr;
                     this.ditherErr2R = this.ditherErr1R;
                     this.ditherErr1R = errR;
                     sR = quantR;
                 } else {
-                    sL = Math.round((sL + tpdfL) * this.quantizationLevels) * this.invQuantization;
-                    sR = Math.round((sR + tpdfR) * this.quantizationLevels) * this.invQuantization;
+                    sL = Math.round((sL + tpdfL) * qLevels) * invQ;
+                    sR = Math.round((sR + tpdfR) * qLevels) * invQ;
                 }
             }
 
             outL[i] = sL;
             outR[i] = sR;
         }
+        this.currentLinearGain = curGain;
+        this.xfDelayIdx = xfIdx;
+        this.delayIdx = ambiIdx;
 
         // Periodic AGP telemetry (~5Hz at 48kHz / 128-sample quantum)
         this.telemetryCounter++;

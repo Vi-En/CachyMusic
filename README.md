@@ -1,132 +1,53 @@
 # CachyMusic
 
-<div align="center">
+**Source revision: 3.0.0-dev.6.43 — initial user-test release.** Runnable source/build kit, not a device-certified public release.
 
-**Local-First High-Fidelity Music Player & Audio Workstation**
+A private, local-first, cross-platform audiophile music player with integrated audio processing, local library management, online metadata lookup and optional Soulseek. Shared PWA interface; Android and desktop packaging provide native functionality beyond browser capabilities.
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20Android%20%7C%20PWA-informational.svg)]()
-[![PWA Ready](https://img.shields.io/badge/PWA-Installable-success.svg)](manifest.json)
+## Start here
 
-</div>
+- **[Initial testing and safe upgrade](INITIAL-TEST.md)** — first launch, backups, rollback, initial acceptance checklist and optional service boundaries.
 
----
+- **[Platform compatibility and installation](COMPATIBILITY.md)** — Arch Linux, Windows and Android, requirements, startup commands and limitations.
 
-## Overview
+- **[Development and build guide](DEVELOPMENT.md)** — Android debug/release APK, signing, Linux portable packaging and clean-install tests.
+- **[Privacy, security and licensing](docs/PRIVACY-AND-LICENSING.md)** — local-only policy, network exceptions and release gates.
 
-**CachyMusic** is an open-source, local-first, cross-platform music player and audio workstation. It runs as an offline-capable Progressive Web App (PWA) with native desktop launchers and an Android WebView/native host wrapper.
+The primary mobile reference is the Infinix Note 30 5G; responsive layout is based on logical CSS viewport dimensions, not physical pixels. Experimental shared-clock PCM/FLAC transitions are available; universal gapless playback, bit-perfect hardware output and complete security certification are not claimed.
 
----
+## What's new in dev.6
 
-## Features
+- Experimental Android native playback for indexed local audio, off by default. The service can continue the Play Queue, ordered playback and shuffle while the interface is closed. Background ordered playback and shuffle can each use up to 4,096 indexed tracks. The Play Queue can hold up to 512 indexed entries for background playback. Catalog size limits apply. During shuffle, Previous follows playback history. Android 14 emulator checks covered all three expanded playback modes after the activity closed. Playback on the physical reference phone remains pending.
+- Android Soulseek validates public numeric IPv4 peer endpoints, rejects private and special-use ranges, and bounds direct file sockets; unavailable Android sharing is labeled explicitly. Local host tests cover the address policy and connection lifecycle.
+- Developer build guide and release gates updated. No end-user component downloads added.
 
-- **10-Band Parametric Equalizer & DSP**: Built-in AudioWorklet DSP with parametric EQ, subsonic high-pass filter, Bauer/Meier crossfeed, peak limiting, transactional DSP control persistence, real-time EQ spectrum view, and experimental shared-clock WAV/AIFF/FLAC playback transitions.
-- **Standalone Offline PWA**: Import folders or audio files directly in modern browsers with IndexedDB + OPFS persistence, an atomic offline write journal, bounded artwork caching, and scope-isolated Service Worker shell caching (`sw.js`).
-- **Playlists & Optional SQL Backend**: Playlist workspace with revision-checked mutations, JSON storage by default, and an optional MySQL schema/migration (`schema.sql`, `php/migrations/playlist-revision.sql`, opt-in via `CACHYMUSIC_PLAYLIST_SQL=1`).
-- **Themes & Visualizers**: Twelve visual themes with lazily loaded canvas visualizers.
-- **Metadata & Tag Editing**: Client-side and desktop metadata/artwork parsing across FLAC, WAV, AIFF, MP3, Ogg Vorbis/Opus, and M4A/MP4, optional explicit online lookup (MusicBrainz, Cover Art Archive, LRCLIB), and conservative non-re-encoding tag writing.
-- **Desktop & Android Hosts**:
-  - **Linux / Windows**: Managed loopback PHP desktop host (`bin/cachymusic`, `bin/cachymusic.bat`) with SQLite3/JSON storage, optional Linux MPRIS2/tray integration, and AUR/Debian/AppImage/Electron packaging recipes.
-  - **Android**: Native host (`tools/packager/android/`) with bundled WebView UI, media notification service, experimental native background playback, and an embedded Java Soulseek client.
-- **Optional Soulseek Integration**: User-initiated Soulseek search and download support via the local Node.js adapter (`server/soulseek-service.js`) on desktop or the embedded native client on Android.
+## Previous dev.5 changes
 
----
+- Optional continuous WAV/AIFF/FLAC playback with one prebuffered successor on the same audio clock and DSP path; ordered/queue/repeat modes, guarded cancellation and fallback. Native streaming remains the default. Simulated scheduling verified, real device playback pending.
+- Android Soulseek login cancellation, generation-isolated sockets, bounded executors and asynchronous native API bridge. Host-JVM local server and JS mock tests; APK and live transfers pending.
+- Notification art is size-bounded and restricted to approved local/indexed resources. Accessible keyboard scrubbing, sleep-timer completion and stale playback retry fixes.
 
-## Quick Start
+## Previous dev.4 changes
 
-### Linux (Arch / CachyOS & General Linux)
+- Extended bundled incremental FLAC decoding through 32-bit mono/stereo; verified float32 output against FFmpeg for a real 32-bit libFLAC fixture. Native streaming remains preferred.
+- Added conservative metadata writing for Ogg Vorbis/Opus and M4A/AAC/ALAC, on top of FLAC, MP3, WAV and AIFF. No audio re-encoding. Tagged copies and explicit desktop replacement; Android native writes remain unimplemented.
+- Correctly assemble large Ogg headers and locate MP4 movie metadata beyond the initial file prefix.
+- Hardened Android transfer token binding and exclusive download socket ownership; Android compilation and live peer tests pending. Upload serving is still absent.
+- Earlier DSP, library, artwork, navigation, privacy and standalone packaging improvements retained.
 
-Requires PHP 8.1+, Python 3.10+, and a Chromium-compatible or default browser (optional: `php-sqlite`, `ffmpeg`, `nodejs`, `zenity`/`kdialog`).
-
-```sh
-bash bin/cachymusic
-```
-
-Or install a user desktop entry:
+## Develop
 
 ```sh
-bash install.sh
-```
-
-To build a local Arch package:
-
-```sh
-bash packaging/aur/prepare-source.sh "$HOME/cachymusic-build"
-cd "$HOME/cachymusic-build" && makepkg -si
-```
-
-### Windows
-
-Requires PHP 8.1+, Python 3.10+, and Edge/Chrome/Chromium on `PATH` (or local `php-win/php.exe`).
-
-```bat
-bin\cachymusic.bat
-```
-
-### Direct Local Development Server
-
-```sh
+bash tests/run-all.sh
 php -S 127.0.0.1:8000 index.php
 ```
 
-Open `http://127.0.0.1:8000/` on the same machine. Keep the local PHP server bound to loopback (`127.0.0.1`).
-
-### Optional Desktop Soulseek Adapter
-
-Requires Node.js 22+ and `slsk-client`:
-
-```sh
-npm install
-```
-
-### Android APK
-
-Requires JDK 17, Gradle 8.2+, and Android SDK platform 34 / build-tools 34.0.0 with `ANDROID_HOME` set:
-
-```sh
-bash tools/packager/build-apk-local.sh
-```
-
-On Windows:
-
-```bat
-tools\packager\build-apk-local.bat
-```
-
----
-
-## Repository Structure
-
-```text
-.
-├── bin/                    # Cross-platform desktop launchers, tray & MPRIS2 bridge
-├── index.html              # Main PWA application entrypoint
-├── index.php               # Loopback PHP static router & API dispatcher
-├── install.sh              # Linux user desktop installer
-├── LICENSE                 # GNU General Public License v3.0 or later
-├── manifest.json           # Web App Manifest (PWA)
-├── package.json            # Node.js package manifest for optional Soulseek adapter
-├── packaging/              # AUR, Debian, AppImage & portable Electron packaging scripts
-├── php/                    # Loopback desktop REST API, metadata readers, SQL & storage layer
-├── resources/              # App icons, SVG assets & bundled font (SIL OFL 1.1)
-├── schema.sql              # Database schema
-├── scripts/                # Modular ES6 client, DSP AudioWorklet & theme visualizers
-├── server/                 # Local Soulseek Node.js service & tag rewrite helper
-├── stylesheets/            # Layered CSS stylesheets & theme definitions
-├── sw.js                   # Offline application-shell Service Worker
-├── tools/                  # Android Gradle project, local APK builders & Nicotine+ plugin
-└── uninstall.sh            # Linux user desktop uninstaller
-```
-
----
+Open `http://127.0.0.1:8000/` on the same machine. See the build guide for required development dependencies. The legacy local PHP server is not a public web service. Use the packaged application for native Soulseek capabilities and full offline distribution. Neither the Android APK nor portable Linux binaries are included in this source snapshot.
 
 ## Privacy
 
-CachyMusic is local-first with no developer telemetry, analytics, or remote crash reporting. Core playback and library features work offline once installed. Online metadata/artwork/lyrics lookups (MusicBrainz, Cover Art Archive, LRCLIB) and Soulseek connections only occur when explicitly initiated by the user.
-
----
+No developer telemetry, analytics or remote crash reporting is intended. Core local music functions require no Internet connection once installed. Explicit online metadata/cover/lyrics lookup and user-initiated Soulseek connectivity are intentional exceptions; providers and peers receive connection information and relevant user-selected query data. A hosted PWA also contacts its host to install/update. Never share files without authorization. Full network validation remains a release gate.
 
 ## License
 
-CachyMusic is licensed under the **GNU General Public License v3.0 or later** ([GPL-3.0-or-later](LICENSE)).
-The bundled `NMSFuturaProBook_Kerned.ttf` font is separately licensed under the **SIL Open Font License 1.1** (`resources/fonts/OFL.txt`).
+CachyMusic: GPL-3.0-or-later (see `LICENSE`). NMS Futura Pro Book font: separate SIL OFL 1.1 license, `resources/fonts/OFL.txt`. Third-party dependencies and codecs retain their respective licenses. Distribution requires applicable notices, provenance review and corresponding source. No music or provider artwork is bundled.

@@ -268,6 +268,8 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
     const miniNextBtn = document.getElementById('miniNextBtn');
     const miniCurrentTime = document.getElementById('miniCurrentTime');
     const miniTotalDuration = document.getElementById('miniTotalDuration');
+    const miniVisStrip = document.getElementById('miniVisStrip');
+    const miniVisCanvas = document.getElementById('miniVisCanvas');
     const miniProgressCon = document.getElementById('miniProgressCon');
     const miniProgressBar = document.getElementById('miniProgressBar');
     const miniVolumeSlider = document.getElementById('miniVolumeSlider');
@@ -352,6 +354,17 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         setMobileSearchPanelCollapsed(!isCollapsed);
     }
 
+    let pendingMiniCover = null;
+    function hydrateMiniPlayerArtwork() {
+        if (!pendingMiniCover || !miniArtPreview || !persistentMiniPlayer || persistentMiniPlayer.style.display === 'none') return;
+        const src = pendingMiniCover;
+        pendingMiniCover = null;
+        if (miniArtPreview.getAttribute('src') === src) return;
+        miniArtPreview.decoding = 'async';
+        miniArtPreview.onerror = () => { miniArtPreview.onerror = null; miniArtPreview.src = 'resources/images/default.svg'; };
+        miniArtPreview.src = src;
+    }
+
     function updateMiniPlayerInfo(track) {
         if (!track) return;
         if (store.state.lastRenderedMiniTrack === track) return;
@@ -359,8 +372,17 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         if (miniTitle) miniTitle.textContent = track.title || track.filename || 'Unknown Track';
         if (miniArtist) miniArtist.textContent = track.artist || 'Unknown Artist';
         if (miniArtPreview) {
-            miniArtPreview.onerror = () => { miniArtPreview.onerror = null; miniArtPreview.src = 'resources/images/default.svg'; };
-            miniArtPreview.src = track.cover || 'resources/images/default.svg';
+            const cover = track.cover || 'resources/images/default.svg';
+            if (persistentMiniPlayer && persistentMiniPlayer.style.display === 'none') {
+                pendingMiniCover = cover;
+            } else {
+                pendingMiniCover = null;
+                if (miniArtPreview.getAttribute('src') !== cover) {
+                    miniArtPreview.decoding = 'async';
+                    miniArtPreview.onerror = () => { miniArtPreview.onerror = null; miniArtPreview.src = 'resources/images/default.svg'; };
+                    miniArtPreview.src = cover;
+                }
+            }
         }
         if (miniTotalDuration) miniTotalDuration.textContent = formatTime(track.duration || 0);
     }
@@ -415,90 +437,7 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
             }
         }
 
-        // 1. Math Precision Architecture
-        const precisionBtns = document.querySelectorAll('.enginePrecisionBtn');
-        const precisionPill = document.getElementById('settingsEnginePrecisionPill');
-        if (precisionBtns.length > 0) {
-            precisionBtns.forEach(b => {
-                const is64 = b.getAttribute('data-precision') === '64';
-                b.classList.toggle('active', is64 === s.isPrecision64);
-            });
-        }
-        if (precisionPill) {
-            precisionPill.textContent = s.isPrecision64 ? '64-BIT DOUBLE FLOAT' : '32-BIT FAST FLOAT';
-        }
-
-        // 2. Hardware Analog Gain (PipeWire / ALSA Bridge)
-        const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
-        const hwGainDot = document.getElementById('settingsHwGainDot');
-        const hwGainText = document.getElementById('settingsHwGainText');
-        const hwGainPill = document.getElementById('settingsHardwareGainPill');
-        if (hwGainBtn) hwGainBtn.classList.toggle('active', s.isHardwareGain);
-        if (hwGainDot) hwGainDot.classList.toggle('active', s.isHardwareGain);
-        if (hwGainText) {
-            hwGainText.textContent = s.isHardwareGain ? `HARDWARE GAIN: ON (${s.hwVolumeBackend.toUpperCase()})` : 'HARDWARE GAIN: OFF';
-        }
-        if (hwGainPill && s.hwVolumeBackend !== 'none') {
-            hwGainPill.textContent = `READY (${s.hwVolumeBackend.toUpperCase()})`;
-        }
-
-        // 3. Ultrasonic IMD Filter
-        const ultrasonicBtn = document.getElementById('settingsUltrasonicToggleBtn');
-        const ultrasonicDot = document.getElementById('settingsUltrasonicDot');
-        const ultrasonicText = document.getElementById('settingsUltrasonicText');
-        const ultrasonicSelect = document.getElementById('settingsUltrasonicCutoffSelect');
-        const ultrasonicPill = document.getElementById('settingsUltrasonicPill');
-        if (ultrasonicBtn) ultrasonicBtn.classList.toggle('active', s.isUltrasonic);
-        if (ultrasonicDot) ultrasonicDot.classList.toggle('active', s.isUltrasonic);
-        if (ultrasonicText) {
-            ultrasonicText.textContent = s.isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
-        }
-        if (ultrasonicPill) {
-            ultrasonicPill.textContent = ultrasonicFilterStatus({enabled:s.isUltrasonic, cutoffHz:s.ultrasonicCutoff, contextRateHz:s.audioContext?.sampleRate, workletReady:Boolean(s.dspWorkletNode)}).text;
-        }
-        if (ultrasonicSelect) {
-            ultrasonicSelect.value = s.ultrasonicCutoff.toString();
-        }
-
-        // 4. Dithering & Noise Shaping
-        const ditherBtns = document.querySelectorAll('.ditherModeBtn');
-        const ditherPill = document.getElementById('settingsDitherPill');
-        if (ditherBtns.length > 0) {
-            ditherBtns.forEach(b => {
-                const mode = b.getAttribute('data-dither');
-                b.classList.toggle('active', mode === s.ditherMode);
-            });
-        }
-        if (ditherPill) {
-            ditherPill.textContent = s.ditherMode === 'shaped' ? 'SHAPED (>18 kHz)' : (s.ditherMode === 'tpdf' ? 'TPDF FLAT' : 'OFF (TRUNCATE)');
-        }
-
-        // 5. Speaker Ambiophonics R.A.C.E.
-        const ambiBtn = document.getElementById('settingsAmbiToggleBtn');
-        const ambiDot = document.getElementById('settingsAmbiDot');
-        const ambiText = document.getElementById('settingsAmbiText');
-        const ambiPill = document.getElementById('settingsAmbiPill');
-        if (ambiBtn) ambiBtn.classList.toggle('active', s.isAmbiophonics);
-        if (ambiDot) ambiDot.classList.toggle('active', s.isAmbiophonics);
-        if (ambiText) {
-            ambiText.textContent = s.isAmbiophonics ? 'AMBIOPHONICS: ON (R.A.C.E.)' : 'AMBIOPHONICS: OFF (SPEAKERS ONLY)';
-        }
-        if (ambiPill) {
-            ambiPill.textContent = s.isAmbiophonics ? 'ACTIVE (R.A.C.E.)' : 'BYPASS';
-        }
-
-        // 6. Audio Buffer & Latency Tuning
-        const bufferBtns = document.querySelectorAll('.bufferLatencyBtn');
-        const bufferPill = document.getElementById('settingsBufferPill');
-        if (bufferBtns.length > 0) {
-            bufferBtns.forEach(b => {
-                const latency = b.getAttribute('data-latency');
-                b.classList.toggle('active', latency === s.bufferLatencyTarget);
-            });
-        }
-        if (bufferPill) {
-            bufferPill.textContent = s.bufferLatencyTarget === 'interactive' ? 'STUDIO LOW-LATENCY (~15ms)' : 'PLAYBACK (~100ms)';
-        }
+        store.emit('audio:preferences-changed');
 
         // 7. Background Web Notification toggle (Opt-In)
         const bgNotifToggle = document.getElementById('settingsBgNotificationsToggle');
@@ -527,86 +466,41 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         s.currentWorkspace = viewName;
         const currentTrack = s.allTracks[s.currentTrackIndex];
 
-        if (viewName === 'soulseek') {
-            document.body.classList.remove('view-player', 'view-download', 'view-settings');
-            document.body.classList.add('view-soulseek');
+        const secondaryViews = {
+            soulseek: { bodyClass: 'view-soulseek', navBtn: wsSoulseekBtn, panel: soulseekWorkspace, mobileTab: 'soulseekWorkspace' },
+            download: { bodyClass: 'view-download', navBtn: wsDownloadBtn, panel: downloadWorkspace, mobileTab: 'downloadWorkspace', extraBtn: installAppBtn },
+            settings: { bodyClass: 'view-settings', navBtn: wsSettingsBtn, panel: settingsWorkspace, mobileTab: 'settingsWorkspace', extraBtn: topSettingsBtn, onEnter: syncSettingsTabValues }
+        };
+        const secondary = secondaryViews[viewName];
 
-            if (wsPlayerBtn) wsPlayerBtn.classList.remove('active');
-            if (wsSoulseekBtn) wsSoulseekBtn.classList.add('active');
-            if (wsDownloadBtn) wsDownloadBtn.classList.remove('active');
-            if (wsSettingsBtn) wsSettingsBtn.classList.remove('active');
-            if (topSettingsBtn) topSettingsBtn.classList.remove('active');
-            if (installAppBtn) installAppBtn.classList.remove('active');
+        document.body.classList.remove('view-player', 'view-soulseek', 'view-download', 'view-settings');
+        [wsPlayerBtn, wsSoulseekBtn, wsDownloadBtn, wsSettingsBtn, topSettingsBtn, installAppBtn].forEach(b => b?.classList.remove('active'));
+
+        if (secondary) {
+            document.body.classList.add(secondary.bodyClass);
+            secondary.navBtn?.classList.add('active');
+            secondary.extraBtn?.classList.add('active');
 
             if (gridContainer) gridContainer.style.display = 'none';
-            if (soulseekWorkspace) soulseekWorkspace.style.display = 'flex';
-            if (downloadWorkspace) downloadWorkspace.style.display = 'none';
-            if (settingsWorkspace) settingsWorkspace.style.display = 'none';
-            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'grid';
+            if (soulseekWorkspace) soulseekWorkspace.style.display = viewName === 'soulseek' ? 'flex' : 'none';
+            if (downloadWorkspace) downloadWorkspace.style.display = viewName === 'download' ? 'flex' : 'none';
+            if (settingsWorkspace) settingsWorkspace.style.display = viewName === 'settings' ? 'flex' : 'none';
+            if (persistentMiniPlayer) {
+                persistentMiniPlayer.style.display = 'grid';
+                hydrateMiniPlayerArtwork();
+                store.emit('visualizer:resume');
+            }
 
             setMobilePanelsInactive();
-            setMobileTabActive('soulseekWorkspace');
+            setMobileTabActive(secondary.mobileTab);
             document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
 
             if (currentTrack) updateMiniPlayerInfo(currentTrack);
             updateMiniPlayerPlayState(s.isPlaying);
-        } else if (viewName === 'download') {
-            document.body.classList.remove('view-player', 'view-soulseek', 'view-settings');
-            document.body.classList.add('view-download');
-
-            if (wsPlayerBtn) wsPlayerBtn.classList.remove('active');
-            if (wsSoulseekBtn) wsSoulseekBtn.classList.remove('active');
-            if (wsDownloadBtn) wsDownloadBtn.classList.add('active');
-            if (wsSettingsBtn) wsSettingsBtn.classList.remove('active');
-            if (topSettingsBtn) topSettingsBtn.classList.remove('active');
-            if (installAppBtn) installAppBtn.classList.add('active');
-
-            if (gridContainer) gridContainer.style.display = 'none';
-            if (soulseekWorkspace) soulseekWorkspace.style.display = 'none';
-            if (downloadWorkspace) downloadWorkspace.style.display = 'flex';
-            if (settingsWorkspace) settingsWorkspace.style.display = 'none';
-            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'grid';
-
-            setMobilePanelsInactive();
-            setMobileTabActive('downloadWorkspace');
-            document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
-
-            if (currentTrack) updateMiniPlayerInfo(currentTrack);
-            updateMiniPlayerPlayState(s.isPlaying);
-        } else if (viewName === 'settings') {
-            document.body.classList.remove('view-player', 'view-soulseek', 'view-download');
-            document.body.classList.add('view-settings');
-
-            if (wsPlayerBtn) wsPlayerBtn.classList.remove('active');
-            if (wsSoulseekBtn) wsSoulseekBtn.classList.remove('active');
-            if (wsDownloadBtn) wsDownloadBtn.classList.remove('active');
-            if (wsSettingsBtn) wsSettingsBtn.classList.add('active');
-            if (topSettingsBtn) topSettingsBtn.classList.add('active');
-            if (installAppBtn) installAppBtn.classList.remove('active');
-
-            if (gridContainer) gridContainer.style.display = 'none';
-            if (soulseekWorkspace) soulseekWorkspace.style.display = 'none';
-            if (downloadWorkspace) downloadWorkspace.style.display = 'none';
-            if (settingsWorkspace) settingsWorkspace.style.display = 'flex';
-            if (persistentMiniPlayer) persistentMiniPlayer.style.display = 'grid';
-
-            setMobilePanelsInactive();
-            setMobileTabActive('settingsWorkspace');
-            document.body.classList.remove('mobile-tab-player', 'mobile-tab-tracks', 'mobile-tab-info');
-
-            if (currentTrack) updateMiniPlayerInfo(currentTrack);
-            updateMiniPlayerPlayState(s.isPlaying);
-            syncSettingsTabValues();
+            secondary.onEnter?.();
         } else {
-            document.body.classList.remove('view-soulseek', 'view-download', 'view-settings');
             document.body.classList.add('view-player');
-
-            if (wsPlayerBtn) wsPlayerBtn.classList.add('active');
-            if (wsSoulseekBtn) wsSoulseekBtn.classList.remove('active');
-            if (wsDownloadBtn) wsDownloadBtn.classList.remove('active');
-            if (wsSettingsBtn) wsSettingsBtn.classList.remove('active');
-            if (topSettingsBtn) topSettingsBtn.classList.remove('active');
-            if (installAppBtn) installAppBtn.classList.remove('active');
+            wsPlayerBtn?.classList.add('active');
 
             if (gridContainer) gridContainer.style.display = '';
             if (soulseekWorkspace) soulseekWorkspace.style.display = 'none';
@@ -639,15 +533,19 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
                     document.body.classList.add('mobile-tab-tracks');
                     if (persistentMiniPlayer) {
                         persistentMiniPlayer.style.display = 'grid';
+                        hydrateMiniPlayerArtwork();
                         if (currentTrack) updateMiniPlayerInfo(currentTrack);
                         updateMiniPlayerPlayState(s.isPlaying);
+                        store.emit('visualizer:resume');
                     }
                 } else if (activeTarget === 'settingsPanel') {
                     document.body.classList.add('mobile-tab-info');
                     if (persistentMiniPlayer) {
                         persistentMiniPlayer.style.display = 'grid';
+                        hydrateMiniPlayerArtwork();
                         if (currentTrack) updateMiniPlayerInfo(currentTrack);
                         updateMiniPlayerPlayState(s.isPlaying);
+                        store.emit('visualizer:resume');
                     }
                 }
                 if (metadataToggleBtn) {
@@ -857,6 +755,8 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         miniTotalDuration,
         miniTurntableThumb,
         miniVolumeSlider,
+        miniVisCanvas,
+        miniVisStrip,
         modalCreateAndAddBtn,
         modalNewPlaylistName,
         modalPlaylistList,

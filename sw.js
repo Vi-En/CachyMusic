@@ -2,7 +2,7 @@
 // Cache Storage is shared by every installation on an origin. Scope the
 // cache name so a subdirectory installation cannot evict another one.
 const CACHE_PREFIX = 'cachymusic-shell:' + encodeURIComponent(self.registration.scope) + ':';
-const CACHE_NAME = CACHE_PREFIX + '3.0.0-dev.6.42';
+const CACHE_NAME = CACHE_PREFIX + '3.0.0-dev.6.43';
 
 const PRECACHE_ASSETS = [
   './',
@@ -121,12 +121,15 @@ const PRECACHE_ASSETS = [
   './scripts/modules/visualizers/station.js',
   './scripts/modules/visualizers/studio.js',
   './scripts/modules/visualizers/themed-wave.js',
+  './scripts/modules/visualizers/mini-strip.js',
   './scripts/modules/visualizer-budget.js',
   './scripts/modules/visualizer.js',
   './scripts/modules/settings.js',
   './scripts/modules/p2p.js',
   './scripts/modules/android-soulseek-bridge.js',
     './scripts/modules/android-native-playback.js',
+  './scripts/modules/android-pcm-reader.js',
+  './scripts/modules/artwork-loader.js',
   './scripts/modules/app.js',
   './scripts/dsp-worklet-processor.js',
   './scripts/modules/peak-limiter.js',

@@ -7,7 +7,7 @@
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: https://musicbrainz.org https://coverartarchive.org https://archive.org https://*.archive.org https://lrclib.net; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
     <meta name="theme-color" content="#090e14">
-    <script src="scripts/theme-preload.js?v=3.0.0-dev.6.42-integrity-ux"></script>
+    <script src="scripts/theme-preload.js?v=3.0.0-dev.6.43-integrity-ux"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,7 +26,7 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.6.42-integrity-ux">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.6.43-integrity-ux">
     <script src="scripts/pwa-init.js" defer></script>
 </head>
 <body class="view-player mobile-tab-player">
@@ -38,16 +38,6 @@
 
     <!-- Top Navigation Bar -->
     <header class="topBar">
-        <div class="brand">
-            <span class="brandLogo">CachyMusic</span>
-            <div class="brandLiveMeter" id="brandLiveMeter" aria-hidden="true" title="Audio Engine Signal">
-                <span class="meterBar b1"></span>
-                <span class="meterBar b2"></span>
-                <span class="meterBar b3"></span>
-                <span class="meterBar b4"></span>
-            </div>
-        </div>
-
         <div class="workspaceSwitcher" id="workspaceSwitcher">
             <button type="button" class="wsTabBtn active" id="wsPlayerBtn" aria-current="page" data-view="player" title="Music Player (Alt+P)">
                 <span class="wsLabel">Player</span>
@@ -66,11 +56,6 @@
         </div>
 
         <div class="topActions">
-            <button type="button" id="toggleFolderBtn" class="topBtn" title="Load Audio From Folder Path" aria-label="Folder Scan">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                <span class="desktopOnly">Add music</span>
-                <span class="mobileOnly">Add music</span>
-            </button>
             <button type="button" id="topSettingsBtn" class="topBtn settingsQuickBtn" title="Player Settings, Themes &amp; Audio Sources" aria-label="Player Settings">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 <span>Settings</span>
@@ -122,7 +107,7 @@
             <div class="settingsSubPane active" id="metaPane">
                 <!-- Embedded Cover Art Card -->
                 <div class="coverCardCon">
-                    <img src="resources/images/default.svg" alt="Album Art" id="coverArtPreview" class="coverArtPreview">
+                    <img src="resources/images/default.svg" alt="Album Art" id="coverArtPreview" class="coverArtPreview" decoding="async">
                 </div>
 
                 <!-- Turntable Platter RPM & Speed (Transferred back to Metadata Inspector) -->
@@ -212,27 +197,21 @@
             <div class="turntableStage" id="turntableStage">
                 <!-- Embedded Artwork Layer (Positioned Behind Turntable) -->
                 <div class="deckArtworkWrapper" id="deckArtworkWrapper">
-                    <img src="resources/images/default.svg" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true">
+                    <img src="resources/images/default.svg" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true" decoding="async">
                     <div class="deckArtworkCard" id="deckArtworkCard">
-                        <img src="resources/images/default.svg" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop">
+                        <img src="resources/images/default.svg" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop" decoding="async">
                     </div>
                     <div class="deckArtworkScrim"></div>
                 </div>
 
                 <!-- Lyrics View (overlays turntable) -->
-                <div class="lyricsCon lyricsActiveHidden" id="lyricsCon" style="display:none;">
+                <div class="lyricsCon lyricsActiveHidden is-empty" id="lyricsCon" style="display:none;">
                     <div class="lyricsHeader">
                         <span class="lyricsTrackName" id="lyricsTrackName">—</span>
                         <span class="lyricsArtistName" id="lyricsArtistName">—</span>
                     </div>
                     <div class="lyricsScrollArea" id="lyricsScrollArea">
-                        <div class="lyricsContent" id="lyricsContent">
-                            <div class="lyricsPlaceholder" id="lyricsPlaceholder">
-                                <div class="lyricsPlaceholderIcon"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13M9 18a3 2 0 1 1-6 0 3 2 0 0 1 6 0Zm12-2a3 2 0 1 1-6 0 3 2 0 0 1 6 0Z"/></svg></div>
-                                <p>No lyrics available for this track.</p>
-                                <span>Lyrics can be embedded via the<br>USLT/LYRICS tag in your audio files.</span>
-                            </div>
-                        </div>
+                        <div class="lyricsContent" id="lyricsContent"><div class="lyricsPlaceholder" id="lyricsPlaceholder"><div class="lyricsPlaceholderIcon"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13M9 18a3 2 0 1 1-6 0 3 2 0 0 1 6 0Zm12-2a3 2 0 1 1-6 0 3 2 0 0 1 6 0Z"/></svg></div><p>No lyrics available for this track.</p></div></div>
                     </div>
                 </div>
 
@@ -241,7 +220,7 @@
                     <div class="vinylTurntable" id="vinylTurntable">
                         <div class="vinylGrooves"></div>
                         <div class="vinylLabel" id="vinylLabel">
-                            <img src="resources/images/default.svg" alt="Cover Art" id="vinylArt">
+                            <img src="resources/images/default.svg" alt="Cover Art" id="vinylArt" decoding="async">
                             <div class="spindleHole"></div>
                         </div>
                     </div>
@@ -882,11 +861,11 @@
                                 <div class="settingsRowTitleGroup">
                                     <h4 class="settingsRowTitle">DSP precision<button type="button" class="settingHintBtn" title="Controls DSP calculation precision. Native Bypass routes audio directly at the Web Audio host rate without extra worklet float math when EQ/FX are flat; 32-bit rounds selected stages to Float32; 64-bit uses double-precision internal calculations." aria-label="Feature explanation">!</button></h4>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsEnginePrecisionPill">64-bit internal</span>
+                                <span class="settingsEnginePill" id="settingsEnginePrecisionPill">Bypass when flat</span>
                             </div>
                             <div class="settingsOptionToggles">
-                                <button type="button" class="actionBtn enginePrecisionBtn" data-precision="native">Bypass when flat</button>
-                                <button type="button" class="actionBtn enginePrecisionBtn active" data-precision="64">64-bit internal</button>
+                                <button type="button" class="actionBtn enginePrecisionBtn active" data-precision="native">Bypass when flat</button>
+                                <button type="button" class="actionBtn enginePrecisionBtn" data-precision="64">64-bit internal</button>
                                 <button type="button" class="actionBtn enginePrecisionBtn" data-precision="32">32-bit rounding</button>
                             </div>
                         </div>
@@ -1171,7 +1150,7 @@
     <aside class="persistentMiniPlayer" id="persistentMiniPlayer" style="display: none;" aria-label="Quick Audio Controls">
         <div class="miniPlayerLeft">
             <div class="miniTurntableThumb" id="miniTurntableThumb">
-                <img src="resources/images/default.svg" alt="Mini Art" id="miniArtPreview">
+                <img src="resources/images/default.svg" alt="Mini Art" id="miniArtPreview" decoding="async">
                 <div class="miniSpindle"></div>
             </div>
             <div class="miniTrackInfo">
@@ -1223,6 +1202,9 @@
                 OPEN PLAYER
             </button>
         </div>
+        <div class="miniVisStrip" id="miniVisStrip" aria-hidden="true">
+            <canvas id="miniVisCanvas" class="miniVisCanvas"></canvas>
+        </div>
     </aside>
 
     <!-- Compact workspace navigation -->
@@ -1249,7 +1231,7 @@
     <div class="modalBackdrop trackMenuBackdrop" id="trackActionMenuModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="trackMenuTitle">
         <div class="modalCard trackMenuCard" id="trackMenuCard">
             <div class="trackMenuHeader">
-                <img src="resources/images/default.svg" alt="Cover" class="trackMenuThumb" id="trackMenuThumb">
+                <img src="resources/images/default.svg" alt="Cover" class="trackMenuThumb" id="trackMenuThumb" decoding="async">
                 <div class="trackMenuMeta">
                     <h3 class="trackMenuTitle" id="trackMenuTitle" dir="auto">Track Title</h3>
                     <p class="trackMenuArtist" id="trackMenuArtist">Artist • Album</p>
@@ -1330,7 +1312,7 @@
                 <!-- Track Summary Header with Cover & Audio Badges -->
                 <div class="metaEditorSummary">
                     <div class="metaEditorThumbCon">
-                        <img src="resources/images/default.svg" alt="Cover" class="metaEditorThumb" id="metaEditorThumb">
+                        <img src="resources/images/default.svg" alt="Cover" class="metaEditorThumb" id="metaEditorThumb" decoding="async">
                         <button type="button" class="metaEditorThumbOverlayBtn" id="metaEditorUploadOverlayBtn" title="Change Cover Art">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                             <span>Change</span>

@@ -19,5 +19,5 @@ for f in ['index.html','index.php','sw.js','manifest.json','schema.sql','LICENSE
 for name in ['php','scripts','stylesheets','resources','server']:
  shutil.copytree(root/name,player/name,ignore=shutil.ignore_patterns('soulseek-config.json','soulseek-transfers.json','audio','*.log','node_modules'))
 shutil.copytree(a.node_modules,player/'node_modules',symlinks=True);shutil.copytree(a.runtime,resources/'cachymusic-runtime',symlinks=True);shutil.copytree(a.notices,resources/'third-party-notices');
-for f in [root/'README.md',root/'LICENSE'] : shutil.copy2(f,a.output/f.name)
+for f in [root/'README.md',root/'DEVELOPMENT.md',root/'LICENSE'] : shutil.copy2(f,a.output/f.name)
 print('Staged portable '+a.platform+' application at '+str(a.output));print('Run '+str(a.output/('electron'+suffix))+'; packaging is not a verified release until the clean-install tests pass.')

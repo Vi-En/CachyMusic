@@ -1,9 +1,22 @@
 /* Shared interaction feedback. Never animate continuous control values. */
 :root { --motion-feedback: cubic-bezier(.2,0,0,1); --motion-short: 140ms; --motion-standard: 200ms; }
 :root :is(button,summary,[role="button"],input[type="checkbox"],select) {
- transition: background-color var(--motion-short) var(--motion-feedback), border-color var(--motion-short) var(--motion-feedback), color var(--motion-short) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback);
+ transition: background-color var(--motion-short) var(--motion-feedback), border-color var(--motion-short) var(--motion-feedback), color var(--motion-short) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback), transform 180ms cubic-bezier(.34,1.56,.64,1);
 }
-:root :is(button,summary,[role="button"]):not(:disabled):not([aria-disabled="true"]):active { opacity:.76; transform:none; }
+:root :is(button,summary,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.trackDetails):not(.playlistOpenBtn):active {
+ opacity: .88;
+ transform: scale(.945);
+ transition-duration: 70ms;
+ transition-timing-function: cubic-bezier(.2,0,0,1);
+}
+@keyframes cachyBtnPop {
+ 0%   { transform: scale(.945); }
+ 55%  { transform: scale(1.038); }
+ 100% { transform: scale(1); }
+}
+:root :is(button,summary,[role="button"]).is-popping:not(:disabled):not([aria-disabled="true"]) {
+ animation: cachyBtnPop 210ms cubic-bezier(.22,1,.36,1);
+}
 :root :is(input[type="checkbox"],.toolsChevron,.settingsAdvancedChevron) { transition: background-color var(--motion-standard) var(--motion-feedback), border-color var(--motion-standard) var(--motion-feedback), transform var(--motion-standard) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback); }
 :root input[type="checkbox"]::before { transition: transform var(--motion-standard) var(--motion-feedback), background-color var(--motion-short) var(--motion-feedback); }
 :root input[type="range"]::-webkit-slider-thumb { transition: background-color var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback); }
@@ -14,11 +27,277 @@
 :root[data-theme] .settingsRowHeader > * { min-width:0; max-width:100%; }
 :root[data-theme] .settingsOptionToggles > button { white-space:normal; overflow-wrap:anywhere; min-height:44px; }
 :root[data-theme] .settingsApplyStatus { overflow-wrap:anywhere; }
-@media (prefers-reduced-motion:reduce) {
- :root :is(button,summary,[role="button"],input,select,.trackItem,.toolsChevron,.settingsAdvancedChevron), :root input[type="checkbox"]::before { transition:none!important; }
-}
 
 :root[data-theme] .trackMeta :is(#trackName,#artistName,.albumName) { text-align:var(--player-text-align); align-self:stretch; }
+:root[data-theme] .trackMeta :is(#trackName,#artistName,.albumName).isMarquee {
+ text-overflow: clip;
+ text-align: left;
+ mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
+ -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
+}
+:root[data-theme] .trackMeta .isMarquee .marqueeContent { padding-inline: 2px; }
+
+/* Pause offscreen marquee and spin animations when culled from view. */
+body:not(.view-player) :is(.isMarquee .marqueeContent, .vinylTurntable, .ambientAuraGlow),
+body:not(.mobile-tab-player) .isMarquee .marqueeContent {
+ animation-play-state: paused;
+}
+@media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
+ body:not(.mobile-tab-player) .vinylTurntable { animation-play-state: paused; }
+}
+.turntableCon.lyricsActiveHidden .vinylTurntable { animation-play-state: paused; }
+
+/* Lyrics empty state: immediately non-scrollable and compact. */
+:root[data-theme] .lyricsCon.is-empty .lyricsScrollArea {
+ overflow: hidden;
+ display: flex;
+ align-items: flex-start;
+ justify-content: center;
+ padding: var(--space-md) var(--space-xs);
+}
+:root[data-theme] .lyricsCon.is-empty .lyricsContent {
+ white-space: normal;
+ width: 100%;
+}
+:root[data-theme] .lyricsPlaceholder {
+ display: flex;
+ flex-direction: column;
+ align-items: center;
+ gap: var(--space-xs);
+ color: var(--text-secondary);
+ margin: 0;
+ padding: var(--space-xs) 0;
+}
+:root[data-theme] .lyricsPlaceholder p {
+ margin: 0;
+ font-size: var(--font-sm);
+ color: var(--text-secondary);
+}
+
+/* Library Sort & Tools highlight and subtle responsive dropdown interpolation. */
+:root[data-theme] .formatFilterPill.active {
+ background: var(--accent-surface);
+ color: var(--text-accent);
+ border-color: color-mix(in oklch, var(--accent-color) 52%, transparent);
+ box-shadow: inset 0 -2px var(--accent-color);
+}
+:root[data-theme] .libraryToolsToggleBtn {
+ border: 1px solid var(--quiet-line);
+ background: transparent;
+ color: var(--text-secondary);
+}
+:root[data-theme] .libraryToolsToggleBtn:hover {
+ color: var(--text-primary);
+ background: var(--quiet-fill);
+ border-color: var(--border-medium);
+}
+:root[data-theme] .libraryToolsToggleBtn:is(.active, [aria-expanded="true"]) {
+ background: var(--accent-surface);
+ color: var(--text-accent);
+ border-color: color-mix(in oklch, var(--accent-color) 55%, transparent);
+ box-shadow: inset 0 -2px var(--accent-color);
+}
+:root[data-theme] .libraryToolsToggleBtn.has-active-sort:not(.active):not([aria-expanded="true"]) {
+ border-color: color-mix(in oklch, var(--accent-color) 42%, transparent);
+ color: var(--text-primary);
+}
+:root[data-theme] .libraryControls {
+ background: color-mix(in oklch, var(--quiet-fill) 85%, transparent);
+ border-bottom: 1px solid var(--quiet-line);
+ padding-block: 8px;
+ gap: 8px;
+}
+:root[data-theme] .libraryControls .sortContainer label {
+ font-size: var(--font-xs);
+ font-weight: 600;
+ color: var(--text-secondary);
+}
+:root[data-theme] .libraryControls .sortSelect[data-sort-active="true"] {
+ border-color: color-mix(in oklch, var(--accent-color) 55%, transparent);
+ background: var(--accent-surface);
+ color: var(--text-accent);
+}
+@keyframes cachyDropdownIn {
+ from { opacity: 0; transform: translateY(-5px) scaleY(.975); }
+ to   { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+:root[data-theme] #libraryControls:not([hidden]),
+:root[data-theme] .settingsHelpText:not([hidden]),
+:root[data-theme] .slskTextFiltersCon.open,
+:root[data-theme] .slskToolbar.is-open,
+:root[data-theme] .slskControlsPanel:not(.is-collapsed) .slskPanelCollapsible,
+:root[data-theme] details[open] > :not(summary) {
+ transform-origin: top center;
+ animation: cachyDropdownIn 180ms cubic-bezier(.2,.85,.3,1);
+}
+@supports (interpolate-size: allow-keywords) {
+ :root { interpolate-size: allow-keywords; }
+ :root[data-theme] details::details-content {
+  block-size: 0;
+  opacity: 0;
+  overflow: clip;
+  transition: block-size 200ms cubic-bezier(.2,.85,.3,1), opacity 160ms ease, content-visibility 200ms allow-discrete;
+ }
+ :root[data-theme] details[open]::details-content {
+  block-size: auto;
+  opacity: 1;
+ }
+}
+:root[data-theme] select {
+ transition: border-color var(--motion-short) var(--motion-feedback), background-color var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback);
+}
+:root[data-theme] select:is(:hover,:focus-visible) {
+ border-color: color-mix(in oklch, var(--accent-color) 55%, transparent);
+}
+:root[data-theme] .slskToggleChevron,
+:root[data-theme] .slskDisclosureChevron {
+ display: inline-flex;
+ align-items: center;
+ transition: transform var(--motion-standard) var(--motion-feedback);
+}
+:root[data-theme] .slskControlsPanel:not(.is-collapsed) .slskToggleChevron {
+ transform: rotate(180deg);
+}
+
+/* Settings scrollbar hidden and consistent layout across all settings panels. */
+:root[data-theme] .settingsWorkspace {
+ scrollbar-width: none;
+ -ms-overflow-style: none;
+}
+:root[data-theme] .settingsWorkspace::-webkit-scrollbar {
+ display: none;
+ width: 0;
+ height: 0;
+}
+:root[data-theme] .settingsWorkspace > * {
+ width: min(100%, 1040px);
+ margin-inline: auto;
+}
+:root[data-theme] .settingsLayoutGrid:is([data-active-cat="library"],[data-active-cat="system"],[data-active-cat="privacy"]) {
+ grid-template-columns: minmax(0, min(100%, 720px));
+ justify-content: center;
+}
+:root[data-theme] .settingsSectionHeader {
+ display: flex;
+ flex-direction: column;
+ gap: 3px;
+ padding-inline: 2px;
+}
+:root[data-theme] .settingsSectionTitleRow {
+ display: flex;
+ align-items: center;
+ gap: 8px;
+ flex-wrap: wrap;
+}
+:root[data-theme] .settingsPanelContent { padding-block: 4px; }
+:root[data-theme] :is(#settingsCardFolders,.privacyNotice) {
+ padding: 14px max(12px, var(--group-inset));
+ gap: 10px;
+}
+:root[data-theme] .settingsWorkspace .settingsRowHeader {
+ align-items: flex-start;
+ gap: 8px 12px;
+}
+:root[data-theme] :is(.settingsEnginePill,.settingsSleepBadge) {
+ padding: 3px 8px;
+ border-radius: var(--radius-xs);
+ background: var(--accent-surface);
+ color: var(--text-accent);
+ font-size: .72rem;
+ font-weight: 650;
+ white-space: nowrap;
+}
+:root[data-theme] .settingsSleepBadge.active {
+ background: var(--accent-color);
+ color: var(--text-on-accent);
+}
+:root[data-theme] .settingHintBtn {
+ width: 28px;
+ height: 28px;
+ min-width: 28px;
+ min-height: 28px;
+ padding: 0;
+ border-radius: 50%;
+ border: 1px solid var(--quiet-line);
+ color: var(--text-secondary);
+}
+:root[data-theme] .settingsInlineControls {
+ display: grid;
+ grid-template-columns: minmax(0, 1fr) auto;
+ gap: 8px;
+ align-items: stretch;
+}
+:root[data-theme] .visSelectorGrid {
+ display: grid;
+ grid-template-columns: repeat(2, minmax(0, 1fr));
+ gap: 8px;
+}
+:root[data-theme] .visModeBtn { min-height: 44px; }
+:root[data-theme] .settingsSleepQuickRow {
+ display: grid;
+ grid-template-columns: repeat(auto-fit, minmax(min(100%, 92px), 1fr));
+ gap: 6px;
+}
+:root[data-theme] #settingsTabOpenSleepModalBtn { margin-top: 4px; width: 100%; }
+:root[data-theme] .settingsFolderInputRow {
+ display: grid;
+ grid-template-columns: minmax(0, 1fr) auto auto;
+ gap: 8px;
+}
+@media (max-width: 768px) {
+ :root[data-theme] .settingsFolderInputRow { grid-template-columns: minmax(0, 1fr); }
+}
+:root[data-theme] .settingsMobileFolderActions {
+ display: grid;
+ grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+ gap: 8px;
+}
+:root[data-theme] .settingsScanStatusBox {
+ padding: 8px 10px;
+ border-radius: var(--radius-xs);
+ background: color-mix(in oklch, var(--bg-canvas) 45%, transparent);
+}
+:root[data-theme] .settingsAdvancedSummary { padding: 12px 4px; min-height: 54px; }
+:root[data-theme] .settingsDspMetricsGrid { gap: 8px; margin-block: 4px 8px; }
+:root[data-theme] .settingsDspMetricItem { padding: 8px 10px; border-radius: var(--radius-xs); }
+:root[data-theme] .settingsThemePickerBtn { padding: 12px 14px; border: 1px solid var(--quiet-line); }
+
+/* Offscreen viewport culling hints. */
+.settingsSectionPanel {
+ content-visibility: auto;
+ contain-intrinsic-size: auto 180px;
+}
+:is(.playlistBrowseRow,.queueItem,.slskResultRow,.slskTransferRow) {
+ content-visibility: auto;
+ contain-intrinsic-size: auto 72px;
+}
+
+@media (prefers-reduced-motion:reduce) {
+ :root :is(button,summary,[role="button"],input,select,.trackItem,.toolsChevron,.settingsAdvancedChevron,.slskToggleChevron,.slskDisclosureChevron),
+ :root input[type="checkbox"]::before,
+ :root[data-theme] details::details-content {
+  transition: none!important;
+ }
+ :root :is(button,summary,[role="button"]).is-popping,
+ :root[data-theme] #libraryControls:not([hidden]),
+ :root[data-theme] .settingsHelpText:not([hidden]),
+ :root[data-theme] .slskTextFiltersCon.open,
+ :root[data-theme] .slskToolbar.is-open,
+ :root[data-theme] .slskControlsPanel:not(.is-collapsed) .slskPanelCollapsible,
+ :root[data-theme] details[open] > :not(summary) {
+  animation: none!important;
+ }
+ :root :is(button,summary,[role="button"]):active { transform: none!important; }
+ :root[data-theme] .trackMeta :is(#trackName,#artistName,.albumName).isMarquee {
+  text-overflow: ellipsis;
+  mask-image: none;
+  -webkit-mask-image: none;
+ }
+ :root[data-theme] .isMarquee .marqueeContent {
+  animation: none!important;
+  transform: none!important;
+ }
+}
 
 /* Native modal: focus and Escape are owned by the browser. Shared geometry,
    theme-specific material and color; no ornamental warning graphics. */

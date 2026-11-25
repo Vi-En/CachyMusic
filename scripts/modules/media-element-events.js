@@ -182,7 +182,7 @@ return function attachAudioListeners(targetAudio) {
         updatePlaybackProgress(cur, dur);
         mediaSessionController.updatePositionState(false);
 
-        if (!s.isStandalonePlayback && cur > 0 && Math.abs(cur - lastPersistedTime) >= 1.0) {
+        if (!s.isStandalonePlayback && cur > 0 && Math.abs(cur - lastPersistedTime) >= 5.0) {
             lastPersistedTime = cur;
             if (!dur || isNaN(dur) || cur < (dur - 1)) {
                 try { safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2)); } catch (_) {}

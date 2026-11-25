@@ -43,21 +43,45 @@ export async function inspectFlac(file) {
     return {...format,offset:p,points};
 }
 // Non-reflected CRCs, polynomials 0x07 and 0x8005. Table avoids per-bit loops on frame payloads.
-function crcTable(bits,poly){const t=new Uint16Array(256),mask=2**bits-1;for(let i=0;i<256;i++){let x=i<<(bits-8);for(let j=0;j<8;j++)x=((x<<1)^((x&(1<<(bits-1)))?poly:0))&mask;t[i]=x;}return t;}
+const POW2 = Float64Array.from({length: 53}, (_, i) => 2 ** i);
+function crcTable(bits,poly){const t=new Uint16Array(256),mask=POW2[bits]-1;for(let i=0;i<256;i++){let x=i<<(bits-8);for(let j=0;j<8;j++)x=((x<<1)^((x&(1<<(bits-1)))?poly:0))&mask;t[i]=x;}return t;}
 const crc8=crcTable(8,7),crc16=crcTable(16,0x8005);
-function checksum(b,n,t,bits){let c=0;for(let i=0;i<n;i++)c=((c<<8)&(2**bits-1))^t[((c>>>(bits-8))^b[i])&255];return c;}
+function checksum(b,n,t,bits){
+    let c=0;
+    if(bits===16){for(let i=0;i<n;i++)c=((c<<8)&0xffff)^t[((c>>>8)^b[i])&255];return c;}
+    for(let i=0;i<n;i++)c=t[(c^b[i])&255];return c;
+}
 class Bits {
-    constructor(data){this.data=data;this.pos=0;}
-    read(n){if(n<0||n>33||this.pos+n>this.data.length*8)fail('truncated frame');let val=0;while(n){const off=this.pos&7,k=Math.min(n,8-off);val=val*2**k+((this.data[this.pos>>3]>>(8-off-k))&((1<<k)-1));this.pos+=k;n-=k;}return val;}
-    signed(n){if(!n)return 0;const x=this.read(n);return x>=2**(n-1)?x-2**n:x;}
-    unary(){let q=0;while(this.pos+8<=this.data.length*8 && !(this.pos&7) && this.data[this.pos>>3]===0){this.pos+=8;q+=8;if(q>1048576)fail('Rice quotient budget');}while(this.read(1)===0){if(++q>1048576)fail('Rice quotient budget');}return q;}
-    number(){const first=this.read(8);if(first<128)return first;let count=0;for(let mask=128;first&mask;mask>>=1)count++;if(count<2||count>7)fail('invalid frame number');let n=first&((1<<(7-count))-1);for(let i=1;i<count;i++){const v=this.read(8);if((v&192)!==128)fail('invalid frame number continuation');n=n*64+(v&63);}if(n < 2**([0,0,7,11,16,21,26,31][count]))fail('overlong frame number');return n;}
+    constructor(data){this.data=data;this.pos=0;this.bitLength=data.length*8;}
+    read(n){
+        if(n<0||n>33||this.pos+n>this.bitLength)fail('truncated frame');
+        let val=0;const data=this.data;let pos=this.pos;
+        while(n){const off=pos&7,k=n<(8-off)?n:(8-off);val=val*POW2[k]+((data[pos>>3]>>(8-off-k))&((1<<k)-1));pos+=k;n-=k;}
+        this.pos=pos;return val;
+    }
+    signed(n){if(!n)return 0;const x=this.read(n);return x>=POW2[n-1]?x-POW2[n]:x;}
+    unary(){
+        const data=this.data,bitLen=this.bitLength;let pos=this.pos,q=0;
+        while(pos<bitLen){
+            const byte=data[pos>>3],off=pos&7;
+            const rem=(byte<<(off))&0xff;
+            if(rem===0){const step=Math.min(8-off,bitLen-pos);q+=step;pos+=step;if(q>1048576)fail('Rice quotient budget');continue;}
+            const lz=Math.clz32(rem)-24;
+            const avail=bitLen-pos;
+            if(lz>=avail){fail('truncated frame');}
+            q+=lz;if(q>1048576)fail('Rice quotient budget');
+            this.pos=pos+lz+1;return q;
+        }
+        fail('truncated frame');
+    }
+    number(){const first=this.read(8);if(first<128)return first;let count=0;for(let mask=128;first&mask;mask>>=1)count++;if(count<2||count>7)fail('invalid frame number');let n=first&((1<<(7-count))-1);for(let i=1;i<count;i++){const v=this.read(8);if((v&192)!==128)fail('invalid frame number continuation');n=n*64+(v&63);}if(n < POW2[[0,0,7,11,16,21,26,31][count]])fail('overlong frame number');return n;}
 }
 const fixed=[[ ],[1],[2,-1],[3,-3,1],[4,-6,4,-1]];
 function subframe(r,n,width){
     if(r.read(1)!==0)fail('invalid subframe padding');const type=r.read(6),wasted=r.read(1)?r.unary()+1:0; width-=wasted;
     if(width<1||width>33)fail('unsupported subframe bit depth');
     const a=new Float64Array(n);let order,coeff,shift=0;
+    const minSample=-POW2[width-1],maxSample=POW2[width-1];
     if(type===0)a.fill(r.signed(width));
     else if(type===1){for(let i=0;i<n;i++)a[i]=r.signed(width);}
     else {
@@ -66,19 +90,21 @@ function subframe(r,n,width){
         else fail('reserved subframe type');
         if(order>n)fail('invalid predictor order');for(let i=0;i<order;i++)a[i]=r.signed(width);
         if(!coeff){const precision=r.read(4)+1;if(precision===16)fail('invalid LPC precision');shift=r.signed(5);if(shift<0)fail('unsupported negative LPC shift');coeff=Array.from({length:order},()=>r.signed(precision));}
-        const method=r.read(2);if(method>1)fail('invalid residual coding');const riceBits=4+method,partitionOrder=r.read(4),partitions=2**partitionOrder;
+        const shiftDiv=POW2[shift];
+        const method=r.read(2);if(method>1)fail('invalid residual coding');const riceBits=4+method,riceEscape=POW2[riceBits]-1,partitionOrder=r.read(4),partitions=POW2[partitionOrder];
         if(n%partitions||n/partitions<order)fail('invalid residual partitions');const size=n/partitions;
         for(let p=0;p<partitions;p++){
-            const k=r.read(riceBits),escape=k===2**riceBits-1,raw=escape?r.read(5):0;
-            for(let i=p?size*p:order;i<size*(p+1);i++){
-                let residual;if(escape)residual=r.signed(raw);else {const u=r.unary()*2**k+r.read(k);if(u>0xffffffff)fail('residual overflow');residual=u%2?-(u+1)/2:u/2;}
+            const k=r.read(riceBits),escape=k===riceEscape,raw=escape?r.read(5):0,riceMul=escape?0:POW2[k];
+            const endIdx=size*(p+1);
+            for(let i=p?size*p:order;i<endIdx;i++){
+                let residual;if(escape)residual=r.signed(raw);else {const u=r.unary()*riceMul+r.read(k);if(u>0xffffffff)fail('residual overflow');residual=u%2?-(u+1)/2:u/2;}
                 let predicted=0;for(let j=0;j<order;j++)predicted+=coeff[j]*a[i-j-1];
-                if(!Number.isSafeInteger(predicted))fail('predictor overflow');a[i]=Math.floor(predicted/2**shift)+residual;
-                if(a[i]<-(2**(width-1))||a[i]>=2**(width-1))fail('sample overflow');
+                if(!Number.isSafeInteger(predicted))fail('predictor overflow');a[i]=Math.floor(predicted/shiftDiv)+residual;
+                if(a[i]<minSample||a[i]>=maxSample)fail('sample overflow');
             }
         }
     }
-    if(wasted)for(let i=0;i<n;i++)a[i]*=2**wasted;return a;
+    if(wasted){const mul=POW2[wasted];for(let i=0;i<n;i++)a[i]*=mul;}return a;
 }
 export function decodeFlacFrame(data,f){
     const r=new Bits(data);if(r.read(15)!==0x7ffc)fail('invalid frame sync');const variable=r.read(1),blockCode=r.read(4),rateCode=r.read(4),assignment=r.read(4),depthCode=r.read(3);

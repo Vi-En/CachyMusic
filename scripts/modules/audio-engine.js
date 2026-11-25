@@ -29,6 +29,9 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         const s=store.state;
         if(s.isNativePlaybackActive?.())return;
         if(s.audioContext&&s.audioContext.state!=='closed'&&!getConfirmedAudioRoute())throw Error('Audio route not ready');
+        if (s.audioContext && s.audioContext.state !== 'closed' && (s.mathPrecision !== 'native' || hasUserShapingDsp()) && !s.dspWorkletNode && typeof s.audioContext.audioWorklet?.addModule === 'function') {
+            await loadDspWorklet();
+        }
         if(getConfirmedAudioRoute()==='worklet'){
             const ctx=s.audioContext,node=s.dspWorkletNode;
             await workletAcks.wait(node);
@@ -262,12 +265,16 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         }
     }
 
+    let cachedDspBtns = null;
     function updateDspButtonsUi(emit = true) {
         const s = store.state;
         const route = s.isNativePlaybackActive?.() ? "native" : getConfirmedAudioRoute();
         const status = key => effectState(s,key,route,{ackPending:workletAcks.pending(s.dspWorkletNode)});
         const statusLabel = (key, on, off) => ({unsupported:"Unavailable",pending:"Pending",applied:on,off})[status(key)];
-        const dspBtns = document.querySelectorAll('[data-target="limiter"], [data-target="amp"], [data-target="bass"], [data-target="vocal"], [data-target="treble"], [data-target="xfeed"], [data-target="subsonic"], [data-target="agp"], [data-target="surround"], [data-target="phase"], [data-target="mono"], [data-target="peq"]');
+        if (!cachedDspBtns || !cachedDspBtns.length) {
+            cachedDspBtns = Array.from(document.querySelectorAll('[data-target="limiter"], [data-target="amp"], [data-target="bass"], [data-target="vocal"], [data-target="treble"], [data-target="xfeed"], [data-target="subsonic"], [data-target="agp"], [data-target="surround"], [data-target="phase"], [data-target="mono"], [data-target="peq"]'));
+        }
+        const dspBtns = cachedDspBtns;
         dspBtns.forEach(btn => {
             const target = btn.dataset.target;
             const isActive = (target === 'limiter' && s.isLimiter) ||
@@ -860,18 +867,29 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
     // =========================================================================
 
 
-    function initDspNodes() {
+    function initCoreNodes() {
         const s = store.state;
         if (!s.audioContext) return;
         const ctx = s.audioContext;
-        s.outputGate = ctx.createGain();
-        outputHold.initialize(s.outputGate);
-        s.outputGate.connect(ctx.destination);
-        s.analyser = ctx.createAnalyser();
-        s.analyser.fftSize = 2048; // FFT bin spacing is context sample rate / fftSize.
-        s.analyser.smoothingTimeConstant = 0.38; // Smooth display at the cost of temporal resolution.
-        s.analyser.minDecibels = -90; // Wide dynamic range captures delicate high-frequency air, harmonics & cymbals above 16kHz
-        s.analyser.maxDecibels = -25;
+        if (!s.outputGate || s.outputGate.context !== ctx) {
+            s.outputGate = ctx.createGain();
+            outputHold.initialize(s.outputGate);
+            s.outputGate.connect(ctx.destination);
+        }
+        if (!s.analyser || s.analyser.context !== ctx) {
+            s.analyser = ctx.createAnalyser();
+            s.analyser.fftSize = 2048; // FFT bin spacing is context sample rate / fftSize.
+            s.analyser.smoothingTimeConstant = 0.38; // Smooth display at the cost of temporal resolution.
+            s.analyser.minDecibels = -90; // Wide dynamic range captures delicate high-frequency air, harmonics & cymbals above 16kHz
+            s.analyser.maxDecibels = -25;
+        }
+    }
+
+    function ensureFallbackDspNodes() {
+        const s = store.state;
+        if (!s.audioContext) return;
+        const ctx = s.audioContext;
+        if (s.ampGainNode && s.ampGainNode.context === ctx) return;
 
         // -1. Subsonic High-Pass Filter: Infrasonic rumble eliminator at 20 Hz (Butterworth Q=0.707)
         s.subsonicFilter = ctx.createBiquadFilter();
@@ -952,6 +970,11 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         // Reduce fallback waveshaper cost at higher graph rates. This is a policy,
         // not proof of alias-free processing.
         s.ampSoftClipper.oversample = (ctx.sampleRate >= 88200) ? 'none' : '2x';
+    }
+
+    function initDspNodes() {
+        initCoreNodes();
+        ensureFallbackDspNodes();
     }
 
     function resetMediaElementForNewAudioContext() {
@@ -1114,6 +1137,8 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
             }
 
             // Fallback Web Audio Biquad Graph (only when AudioWorklet is unavailable)
+            if (route !== 'direct') loadDspWorklet();
+            ensureFallbackDspNodes();
             updatePreAmpGain(s.audioContext.currentTime);
             let rootNode = activeSource;
             if (s.isSubsonic && s.subsonicFilter && s.mathPrecision !== 'native') {
@@ -1222,11 +1247,13 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         s.audioContext = ctx;
         appliedBufferLatency = latencyHint;
         try {
-            initDspNodes();
+            initCoreNodes();
             getOrCreateAudioSourceNode();
             updateAudioRouting();
             if (!getConfirmedAudioRoute()) throw new Error('Audio route not connected');
-            loadDspWorklet();
+            if (s.mathPrecision !== 'native' || hasUserShapingDsp()) {
+                loadDspWorklet();
+            }
         } catch (error) {
             // Retain ownership of a partially initialized context until it
             // actually closes; the next ensure can safely recover it.
@@ -1279,10 +1306,16 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         return resumeGraph(graphLifecycle.init());
     }
 
-    // Unlock AudioContext on any user interaction if suspended
+    // Unlock or warm AudioContext on user gesture when playback is active/requested
     ['click', 'keydown', 'touchstart', 'pointerdown'].forEach(ev => {
         window.addEventListener(ev, () => {
-            resumeGraph(store.state.audioContext);
+            const s = store.state;
+            const ctx = s.audioContext;
+            if ((!ctx || ctx.state === 'closed') && (s.isPlayPending || s.isSoftwareDecoding) && !s.isNativePlaybackActive?.()) {
+                initAudioContext();
+                return;
+            }
+            resumeGraph(ctx);
         }, { passive: true });
     });
 
@@ -1310,8 +1343,13 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
     store.subscribe('theme:change', () => requestAnimationFrame(drawPeqCurve));
     store.subscribe('dsp:change', () => updateWorkletParams());
     store.subscribe('track:change', () => {
+        const s = store.state;
+        const targetGain = computeReplayGainMultiplier();
+        if (s.replayGainNode && s.audioContext) {
+            s.replayGainNode.gain.setTargetAtTime(targetGain, s.audioContext.currentTime, 0.04);
+        }
         updateWorkletParams();
-        toggleReplayGain(store.state.isReplayGain);
+        store.emit('ui:sync-dac-status');
     });
 
     export {

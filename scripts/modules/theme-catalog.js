@@ -27,3 +27,33 @@ export function normalizeThemeId(value) {
     const id = THEME_ALIASES.get(value) || value;
     return VALID_THEME_IDS.includes(id) ? id : "default";
 }
+
+export const THEME_VISUAL_PROFILES = Object.freeze({
+    "default": Object.freeze({ style: "segmented", accent: "#38bdf8", secondary: "#94a3b8", light: false }),
+    "nms": Object.freeze({ style: "liquid", accent: "#ff2a55", secondary: "#00e5ff", light: false }),
+    "solar-eclipse": Object.freeze({ style: "liquid", accent: "#38d9ff", secondary: "#a855f7", light: false }),
+    "euclid-horizon": Object.freeze({ style: "segmented", accent: "#f59e0b", secondary: "#fbbf24", light: false }),
+    "alien-paradise": Object.freeze({ style: "liquid", accent: "#ff4da6", secondary: "#2dd4bf", light: false }),
+    "abyssal-void": Object.freeze({ style: "liquid", accent: "#10f5a8", secondary: "#0ea5e9", light: false }),
+    "dissonance": Object.freeze({ style: "liquid", accent: "#c084fc", secondary: "#f472b6", light: false }),
+    "sentinel": Object.freeze({ style: "segmented", accent: "#00e5ff", secondary: "#f97316", light: false }),
+    "minimalist-light": Object.freeze({ style: "segmented", accent: "#111827", secondary: "#6b7280", light: true }),
+    "minimalist-dark": Object.freeze({ style: "segmented", accent: "#f3f4f6", secondary: "#9ca3af", light: false }),
+    "minimalist-warm": Object.freeze({ style: "liquid", accent: "#9a3412", secondary: "#d97706", light: true }),
+    "minimalist-obsidian": Object.freeze({ style: "segmented", accent: "#22d3ee", secondary: "#38bdf8", light: false }),
+});
+
+export function getThemeNotificationProfile(themeId) {
+    const id = normalizeThemeId(themeId);
+    const base = THEMES[id];
+    const visual = THEME_VISUAL_PROFILES[id];
+    return {
+        id,
+        name: base.name,
+        chrome: base.chrome,
+        style: visual.style,
+        accent: visual.accent,
+        secondary: visual.secondary,
+        light: visual.light,
+    };
+}

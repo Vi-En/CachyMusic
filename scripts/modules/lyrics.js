@@ -63,15 +63,12 @@ import {
         store.state.parsedLyrics = parsedLyrics;
 
         if (!parsedLyrics || parsedLyrics.lines.length === 0) {
-            lyricsContent.innerHTML = `
-                <div class="lyricsPlaceholder">
-                    <div class="lyricsPlaceholderIcon">${uiIcon('music')}</div>
-                    <p>No lyrics available for this track.</p>
-                    <span>Lyrics can be embedded via the<br>USLT/LYRICS tag in your audio files or in a .lrc file.</span>
-                </div>
-            `;
+            lyricsCon?.classList.add('is-empty');
+            if (lyricsScrollArea) lyricsScrollArea.scrollTop = 0;
+            lyricsContent.innerHTML = `<div class="lyricsPlaceholder"><div class="lyricsPlaceholderIcon">${uiIcon('music')}</div><p>No lyrics available for this track.</p></div>`;
             return;
         }
+        lyricsCon?.classList.remove('is-empty');
 
         let html = '';
         parsedLyrics.lines.forEach((item, idx) => {

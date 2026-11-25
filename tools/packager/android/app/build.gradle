@@ -10,8 +10,8 @@ android {
         applicationId "org.cachymusic.app"
         minSdk 24
         targetSdk 34
-        versionCode 68
-        versionName "3.0.0-dev.6.42"
+        versionCode 69
+        versionName "3.0.0-dev.6.43"
     }
     buildTypes {
         release {
