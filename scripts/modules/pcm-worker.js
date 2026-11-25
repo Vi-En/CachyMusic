@@ -5,14 +5,17 @@ import { FlacReader } from './flac-reader.js';
 import { AndroidDirectPcmReader } from './android-pcm-reader.js';
 
 let reader = null;
+let readerEpoch = 0;
 
 function releaseReader() {
+    readerEpoch++;
     if (!reader) return;
     try { reader.close?.(); } catch (_) {}
     reader = null;
 }
 
 self.onmessage = async ({ data }) => {
+    const activeEpoch = readerEpoch;
     try {
         if (data.type === 'close') {
             releaseReader();
@@ -33,9 +36,12 @@ self.onmessage = async ({ data }) => {
             return;
         }
         if (data.type !== 'read' || !reader) throw Error('PCM worker not initialized');
+        const myEpoch = readerEpoch;
         const channels = await reader.readFrames(data.first, data.count);
+        if (myEpoch !== readerEpoch) return;
         self.postMessage({ id: data.id, channels }, channels.map(a => a.buffer));
     } catch (e) {
+        if (data?.type === 'read' && activeEpoch !== readerEpoch) return;
         self.postMessage({ id: data.id, error: e.message });
     }
 };

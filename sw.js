@@ -2,7 +2,7 @@
 // Cache Storage is shared by every installation on an origin. Scope the
 // cache name so a subdirectory installation cannot evict another one.
 const CACHE_PREFIX = 'cachymusic-shell:' + encodeURIComponent(self.registration.scope) + ':';
-const CACHE_NAME = CACHE_PREFIX + '3.0.0-dev.6.43';
+const CACHE_NAME = CACHE_PREFIX + '3.0.0-dev.6.44';
 
 const PRECACHE_ASSETS = [
   './',

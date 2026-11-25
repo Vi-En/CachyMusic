@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VERSION="3.0.0~dev6.43"
+VERSION="3.0.0~dev6.44"
 ARCH="all"
 PKG_NAME="cachymusic_${VERSION}_${ARCH}"
 STAGING_DIR="$PROJECT_ROOT/dist/$PKG_NAME"

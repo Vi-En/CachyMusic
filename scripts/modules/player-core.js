@@ -1562,7 +1562,7 @@ function seekSoftwarePlayback(targetSec) {
     const clamped = Math.max(0, Math.min(dur, targetSec));
     s.softwarePlaybackOffset = clamped;
     if (!s.isSoftwarePaused) {
-        if (pcmStream && !pcmStream.closed && s.activeDecodedBuffer.streaming && typeof pcmStream.seek === 'function') {
+        if (pcmStream && !pcmStream.closed && pcmStream.prepared && s.activeDecodedBuffer.streaming && typeof pcmStream.seek === 'function') {
             void pcmStream.seek(clamped).catch(err => pcmStream?.fail(err));
         } else {
             startSoftwareBufferPlayback();

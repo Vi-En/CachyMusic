@@ -816,6 +816,7 @@ public class MainActivity extends Activity {
                         return new WebResourceResponse("application/json", "UTF-8", 200, "OK", headers,
                                 new ByteArrayInputStream(payload.toString().getBytes(StandardCharsets.UTF_8)));
                     } catch (Exception e) {
+                        Log.w(TAG, "Direct PCM open error: " + e.getMessage());
                         return forbiddenMedia();
                     }
                 }
@@ -837,6 +838,7 @@ public class MainActivity extends Activity {
                         return new WebResourceResponse("application/octet-stream", null, 200, "OK", headers,
                                 new ByteArrayInputStream(packet));
                     } catch (Exception e) {
+                        Log.w(TAG, "Direct PCM read error: " + e.getMessage());
                         return forbiddenMedia();
                     }
                 }

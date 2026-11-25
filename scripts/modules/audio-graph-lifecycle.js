@@ -48,7 +48,7 @@ export function createWorkletLoader({ current, isCurrent, install, failed }) {
         if (attempts.has(ctx)) return attempts.get(ctx);
         const task = Promise.resolve().then(async () => {
             if (!isCurrent(ctx)) return;
-            await ctx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=3.0.0-dev.6.43');
+            await ctx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=3.0.0-dev.6.44');
             if (isCurrent(ctx)) install(ctx);
         }).catch(error => { if (isCurrent(ctx)) failed(error); });
         attempts.set(ctx, task);

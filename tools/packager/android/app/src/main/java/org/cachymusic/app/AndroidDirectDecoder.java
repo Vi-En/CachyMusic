@@ -237,9 +237,11 @@ final class AndroidDirectDecoder {
                 if (System.currentTimeMillis() > deadline) {
                     throw new IOException("PCM decode timeout");
                 }
+                boolean queuedInput = false;
                 if (!session.inputEos) {
-                    int inIdx = session.codec.dequeueInputBuffer(CODEC_TIMEOUT_US);
+                    int inIdx = session.codec.dequeueInputBuffer(0L);
                     if (inIdx >= 0) {
+                        queuedInput = true;
                         ByteBuffer inBuf = session.codec.getInputBuffer(inIdx);
                         if (inBuf != null) {
                             inBuf.clear();
@@ -256,7 +258,7 @@ final class AndroidDirectDecoder {
                     }
                 }
 
-                int outIdx = session.codec.dequeueOutputBuffer(info, CODEC_TIMEOUT_US);
+                int outIdx = session.codec.dequeueOutputBuffer(info, queuedInput ? 0L : 2000L);
                 if (outIdx >= 0) {
                     ByteBuffer outBuf = session.codec.getOutputBuffer(outIdx);
                     if (outBuf != null && info.size > 0) {
@@ -324,11 +326,15 @@ final class AndroidDirectDecoder {
         if (session.skipUntilUs > 0L && ptsUs >= 0L) {
             if (ptsUs < session.skipUntilUs) {
                 long deltaUs = session.skipUntilUs - ptsUs;
-                long estSkip = (deltaUs * session.sampleRate) / 1_000_000L;
-                if (estSkip >= totalFrames) {
-                    return new byte[0];
+                if (deltaUs > 15_000_000L) {
+                    session.skipUntilUs = -1L;
+                } else {
+                    long estSkip = (deltaUs * session.sampleRate) / 1_000_000L;
+                    if (estSkip >= totalFrames) {
+                        return new byte[0];
+                    }
+                    skipFrames = (int) Math.max(0L, estSkip);
                 }
-                skipFrames = (int) Math.max(0L, estSkip);
             }
             session.skipUntilUs = -1L;
         }

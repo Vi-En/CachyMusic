@@ -135,14 +135,15 @@ export function parseCpcmPacket(arrayBuffer) {
  * Implements `outputFrames`, `readFrames(first, count)`, and `close()`.
  */
 export class AndroidDirectPcmReader {
-    constructor(format, outputRate, fetchFn = globalThis.fetch) {
+    constructor(format, outputRate, fetchFn = null) {
         if (!format?.sessionId) throw Error('Android direct PCM session missing');
         if (!Number.isInteger(outputRate) || outputRate < 8000 || outputRate > 384000) {
             throw Error('Unsupported output rate');
         }
         this.format = format;
         this.outputRate = outputRate;
-        this.fetchFn = fetchFn;
+        this.fetchFn = typeof fetchFn === 'function' ? fetchFn : null;
+        this.activeAbort = null;
         this.ratio = format.sampleRate / outputRate;
         this.outputFrames = Math.max(1, Math.ceil(format.frames / this.ratio));
         this.kernel = this.ratio === 1 ? null : getResampleKernel(this.ratio);
@@ -159,18 +160,23 @@ export class AndroidDirectPcmReader {
         url.searchParams.set('frames', String(maxFrames));
 
         const ctrl = new AbortController();
+        this.activeAbort = ctrl;
         const timer = setTimeout(() => ctrl.abort(), 5000);
         try {
-            const res = await this.fetchFn(url.href, {
+            const init = {
                 redirect: 'error',
                 credentials: 'same-origin',
                 cache: 'no-store',
                 signal: ctrl.signal
-            });
+            };
+            const fn = this.fetchFn;
+            // Call without binding `this` to the reader instance (WorkerGlobalScope WebIDL check).
+            const res = await (fn ? fn.call(globalThis, url.href, init) : fetch(url.href, init));
             if (!res.ok) throw Error(`Direct PCM read failed (${res.status})`);
             return parseCpcmPacket(await res.arrayBuffer());
         } finally {
             clearTimeout(timer);
+            if (this.activeAbort === ctrl) this.activeAbort = null;
         }
     }
 
@@ -272,6 +278,8 @@ export class AndroidDirectPcmReader {
     close() {
         if (this.closed) return;
         this.closed = true;
+        try { this.activeAbort?.abort(); } catch (_) {}
+        this.activeAbort = null;
         this.ring = [new Float32Array(0), new Float32Array(0)];
         void closeAndroidDirectPcm(this.format.sessionId);
     }

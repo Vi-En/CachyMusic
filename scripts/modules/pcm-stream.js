@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Bounded source scheduler. PCM conversion/resampling happens in a dedicated worker.
+let globalRequestSeq = 0;
+
 export class PcmStream {
     constructor(context, destination, file, format, { onStart, onEnd, onError, onProgress, worker = null, keepWorkerAlive = false } = {}) {
         this.ctx = context;
@@ -126,7 +128,7 @@ export class PcmStream {
     request(data) {
         if (this.closed) return Promise.reject(Error('Stream stopped'));
         return new Promise((resolve, reject) => {
-            const id = ++this.sequence;
+            const id = ++globalRequestSeq;
             const timeout = setTimeout(() => {
                 this.requests.delete(id);
                 reject(Error('PCM worker request timed out'));
