@@ -19,27 +19,17 @@ if (!in_array('ob_gzhandler', ob_list_handlers(), true) && extension_loaded('zli
 $method = $_SERVER['REQUEST_METHOD'];
 $rawInput = file_get_contents('php://input');
 $data = json_decode($rawInput, true) ?: $_POST;
+function positive_playlist_id($value) { return (is_int($value)||is_string($value)) && preg_match('/^[1-9][0-9]*$/D',(string)$value) && filter_var($value,FILTER_VALIDATE_INT)!==false; }
+try {
 
 if ($method === 'GET') {
-    $libFile = __DIR__ . '/../../data/library.json';
-    if (file_exists($libFile)) {
-        $mtime = filemtime($libFile);
-        $etag = '"pl-' . dechex($mtime) . '-' . dechex(filesize($libFile)) . '"';
-        header("ETag: $etag");
-        header("Last-Modified: " . gmdate('D, d M Y H:i:s', $mtime) . " GMT");
-        header("Cache-Control: public, max-age=60, stale-while-revalidate=300");
-
-        $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
-        if (!empty($ifNoneMatch) && trim($ifNoneMatch, '" ') === trim($etag, '" ')) {
-            http_response_code(304);
-            exit;
-        }
-    }
+    header('Cache-Control: private, no-store');
+    if (isset($_GET['plid'])&&!positive_playlist_id($_GET['plid'])) { http_response_code(400);echo json_encode(['success'=>false,'message'=>'Invalid playlist ID.']);exit; }
     $plid = isset($_GET['plid']) ? (int)$_GET['plid'] : null;
 
     if ($plid) {
         $playlist = Storage::getPlaylist($plid);
-        if (!$playlist) {
+        if (!$playlist || !in_array($playlist['username']??'',[$currentUser,'default'],true)) {
             echo json_encode(['success' => false, 'message' => 'Playlist not found.']);
             exit;
         }
@@ -57,20 +47,24 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
+    if ((Storage::hasMySQL()&&!PlaylistSql::enabled()) || (PlaylistSql::enabled()&&!Storage::hasMySQL())) { http_response_code(503); echo json_encode(['success'=>false,'message'=>'MySQL playlist changes require the explicit transactional migration and a working database.']); exit; }
     $action = $data['action'] ?? $_GET['action'] ?? '';
+    if(in_array($action,['edit','edit_members','delete','add_track','remove_track','add_tracks'],true)&&!positive_playlist_id($data['plid']??null) || in_array($action,['add_track','remove_track'],true)&&!positive_playlist_id($data['tid']??null)){http_response_code(400);echo json_encode(['success'=>false,'message'=>'Invalid playlist or track ID.']);exit;}
 
     if ($action === 'create') {
         $name = trim($data['name'] ?? '');
-        if (empty($name)) {
+        if ($name==='' || strlen($name)>200) {
             echo json_encode(['success' => false, 'message' => 'Playlist name is required.']);
             exit;
         }
 
-        $newPlid = Storage::createPlaylist($name, $currentUser);
+        foreach(Storage::getPlaylists($currentUser) as $existing)if(strcasecmp($existing['name'],$name)===0){echo json_encode(['success'=>false,'message'=>'A playlist with that name already exists.']);exit;}
+        $newPlid = Storage::createPlaylist($name, $currentUser,$data['tracks']??[]);
         if ($newPlid) {
             echo json_encode([
                 'success' => true,
                 'plid'    => $newPlid,
+                'playlist' => array_values(array_filter(Storage::getPlaylists($currentUser),fn($p)=>(int)$p['plid']===$newPlid))[0]??null,
                 'name'    => $name,
                 'message' => 'Playlist created.'
             ]);
@@ -80,6 +74,10 @@ if ($method === 'POST') {
         exit;
     }
 
+    if (in_array($action,['edit','edit_members'],true)) {
+        $ok=Storage::editPlaylist((int)($data['plid']??0),(string)($data['name']??''),$data['tracks']??null,$currentUser,$data['revision']??null,$action==='edit_members');
+        echo json_encode(['success'=>$ok,'message'=>$ok?'Playlist updated.':'Could not save playlist; membership or name may have changed.', 'playlist'=>$ok?array_values(array_filter(Storage::getPlaylists($currentUser),fn($p)=>(int)$p['plid']===(int)$data['plid']))[0]??null:null]);exit;
+    }
     if ($action === 'delete') {
         $plid = (int)($data['plid'] ?? 0);
         if (!$plid) {
@@ -87,7 +85,7 @@ if ($method === 'POST') {
             exit;
         }
 
-        if (Storage::deletePlaylist($plid, $currentUser)) {
+        if (Storage::deletePlaylist($plid, $currentUser,$data['revision']??null)) {
             echo json_encode(['success' => true, 'message' => 'Playlist deleted.']);
         } else {
             echo json_encode(['success' => false, 'message' => 'Could not delete playlist (permission denied or not found).']);
@@ -95,6 +93,10 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'add_tracks') {
+        $plid=(int)$data['plid'];$ok=Storage::addTracksToPlaylist($plid,$data['tracks']??null,$currentUser,$data['revision']??null);
+        echo json_encode(['success'=>$ok,'message'=>$ok?'Songs added.':'Playlist changed or a selected track is unavailable. No songs added.', 'playlist'=>$ok?array_values(array_filter(Storage::getPlaylists($currentUser),fn($p)=>(int)$p['plid']===$plid))[0]??null:null]);exit;
+    }
     if ($action === 'add_track') {
         $plid = (int)($data['plid'] ?? 0);
         $tid = (int)($data['tid'] ?? 0);
@@ -104,11 +106,11 @@ if ($method === 'POST') {
             exit;
         }
 
-        $res = Storage::addTrackToPlaylist($plid, $tid);
+        $res = Storage::addTrackToPlaylist($plid, $tid,$currentUser);
         if ($res === 'already_in_playlist') {
             echo json_encode(['success' => false, 'message' => 'Track already in playlist.']);
         } elseif ($res) {
-            echo json_encode(['success' => true, 'message' => 'Track added to playlist.']);
+            echo json_encode(['success' => true, 'message' => 'Track added to playlist.', 'playlist'=>array_values(array_filter(Storage::getPlaylists($currentUser),fn($p)=>(int)$p['plid']===$plid))[0]??null]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Could not add track to playlist.']);
         }
@@ -124,8 +126,8 @@ if ($method === 'POST') {
             exit;
         }
 
-        if (Storage::removeTrackFromPlaylist($plid, $tid)) {
-            echo json_encode(['success' => true, 'message' => 'Track removed from playlist.']);
+        if (Storage::removeTrackFromPlaylist($plid, $tid,$currentUser)) {
+            echo json_encode(['success' => true, 'message' => 'Track removed from playlist.', 'playlist'=>array_values(array_filter(Storage::getPlaylists($currentUser),fn($p)=>(int)$p['plid']===$plid))[0]??null]);
         } else {
             echo json_encode(['success' => false, 'message' => 'Could not remove track.']);
         }
@@ -134,5 +136,6 @@ if ($method === 'POST') {
 }
 
 echo json_encode(['success' => false, 'message' => 'Invalid request.']);
+} catch(Throwable $e) { http_response_code(503); echo json_encode(['success'=>false,'message'=>'Playlist storage is unavailable. Reload before retrying.']); }
 exit;
 

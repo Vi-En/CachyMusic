@@ -1,0 +1,55 @@
+/* Metadata editor: shared structure and lookup layout. */
+@layer components {
+    /* Metadata Editor & Confirm Diff */
+    .metaEditorBody, .metaEditorForm, .metaEditorSummaryDetails { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
+    .metaEditorSummary { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; padding: var(--space-xs); background: var(--bg-surface-2); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); }
+    .metaEditorThumbCon { position: relative; width: 88px; height: 88px; border-radius: var(--radius-sm); overflow: hidden; flex: 0 0 88px; }
+    .metaEditorThumb { width: 100%; height: 100%; object-fit: cover; }
+    .metaEditorThumbOverlayBtn { position: absolute; inset: auto 0 0 0; background: oklch(0 0 0 / 0.72); color: #ffffff; font-size: var(--font-3xs); padding: 0.2rem; display: flex; align-items: center; justify-content: center; gap: 4px; }
+    .metaEditorCoverActions, .metaEditorPills, .metaEditorActions, .metaEditorConfirmActions, .metaEditorOnlineSearchCon { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
+    .metaEditorCoverActionBtn, .metaEditorPill, .metaEditorApplyCoverBtn, .metaEditorOnlineSearchBtn { padding: 0.3rem 0.65rem; border-radius: var(--radius-xs); border: 1px solid var(--border-subtle); background: var(--bg-surface-3); font-size: var(--font-2xs); font-weight: 700; }
+    .metaEditorOnlineCard, .metaEditorConfirmCard { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-sm); border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-bold); }
+    .metaEditorOnlineHeader, .metaEditorConfirmHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
+    .metaEditorOnlineContent, .metaEditChangeRow, .metaEditCoverChangeRow { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; font-size: var(--font-xs); }
+    .metaEditorOnlinePreview, .metaEditMiniThumb { width: 64px; height: 64px; border-radius: var(--radius-xs); object-fit: cover; }
+    .metaEditChangeField { font-weight: 800; color: var(--text-accent); }
+    .metaEditChangeFrom { color: var(--text-muted); text-decoration: line-through; }
+    .metaEditChangeTo { color: var(--status-success); font-weight: 700; }
+    .metaEditorStatus { padding: var(--space-xs); border-radius: var(--radius-xs); font-size: var(--font-xs); }
+    .metaEditorStatus.error { color: var(--status-danger); background: color-mix(in oklch, var(--status-danger) 14%, transparent); }
+    .metaEditorStatus.success { color: var(--status-success); background: color-mix(in oklch, var(--status-success) 14%, transparent); }
+    .metaEditorFormGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs); }
+    .metaEditorField { display: flex; flex-direction: column; gap: 3px; }
+    .metaFieldFull { grid-column: 1 / -1; }
+    .metaEditorLabel { font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.05em; color: var(--text-muted); }
+
+}
+.metadataLookup { padding: 14px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface-2); margin: 12px 0; min-width: 0; }
+.metadataLookup h4 { font-size: 1rem; color: var(--text-primary); }
+.metadataLookup p, .metadataWriteHint { color: var(--text-secondary); font-size: .83rem; line-height: 1.5; overflow-wrap: anywhere; margin: 6px 0; }
+.metadataLookupActions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.metadataLookupActions .actionBtn, .metadataLookupResults button { min-height: 48px; }
+.metadataLookupResults { display: grid; gap: 8px; max-height: 300px; overflow: auto; }
+.metadataMatch { border: 1px solid var(--border-subtle); padding: 12px; border-radius: 10px; min-width: 0; }
+.metadataMatch p { overflow-wrap: anywhere; }
+.metadataMatch button { margin: 4px 6px 0 0; }
+.metadataLyricsField textarea { width: 100%; min-height: 120px; resize: vertical; white-space: pre-wrap; }
+.metadataLyricsField input[type=file] { max-width: 100%; min-height: 48px; }
+@media (max-width: 480px) { .metadataLookupActions .actionBtn { flex: 1 1 130px; } .metadataLookup { padding: 10px; } .metadataLyricsField textarea { font-size: 16px; } }
+
+
+#metaEditorCard { container-type: inline-size; }
+#metaEditorCard :is(.metaEditorFileTitle,.metaEditorFilePath,.metaEditChangeFrom,.metaEditChangeTo,.metaEditorConfirmDesc) { overflow-wrap: anywhere; min-width: 0; }
+#metaEditorCard .metaEditorSummaryDetails { flex: 1 1 14rem; }
+#metaEditorCard .metaEditorField { min-width: 0; }
+#metaEditorCard .metaEditorInput { width: 100%; min-width: 0; }
+#metaEditorCard :is(.metaEditorCoverActionBtn,.metaEditorThumbOverlayBtn) { min-height: 44px; }
+#metaEditorCard .metaEditorConfirmActions > button { flex: 1 1 9rem; white-space: normal; }
+@container (max-width: 28rem) { .metaEditorFormGrid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Match each theme’s existing title and material treatment, not a separate generic dialog. */
+#metaEditorTitle { font-family: var(--player-title-font, inherit); font-weight: var(--player-title-weight, 600); letter-spacing: normal; }
+#metaEditorCard .metadataLookup { border-radius: var(--group-radius, 8px); background: var(--group-fill, var(--bg-surface-2)); }
+#metaEditorCard .metadataMatch { border-radius: var(--chrome-radius, 6px); }
+#metaEditorCard .metaEditorLabel { letter-spacing: normal; font-size: var(--font-xs); color: var(--text-secondary); }
+#metaEditorCard .metaEditorSummary { background: transparent; border: 0; padding-inline: 0; }

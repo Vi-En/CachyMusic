@@ -8,7 +8,7 @@ import { PeakLimiter } from './modules/peak-limiter.js';
 //   5. Mid/Side Width, Mono Sum, Stereo Balance & 180-Degree Phase Polarity
 //   6. Ultrasonic IMD Low-Pass Filter
 //   7. Lookahead Peak Limiter / AGP with 4x peak estimation
-//   8. Final xorshift32 TPDF / 2nd-Order Psychoacoustic Noise-Shaped Dither (Zero ops downstream)
+//   8. Final xorshift32 TPDF / 2nd-Order Psychoacoustic Noise-Shaped Dither (Final stage inside the processor; external output gate may ramp)
 
 const PEQ_FREQS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 const NUM_EQ_FILTERS = 13; // 10 PEQ + Bass (10) + Vocal (11) + Treble (12)
@@ -199,6 +199,7 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
 
             this.port.postMessage({
                 type: 'status',
+                revision: data.revision,
                 precision64: this.precision64,
                 agpEnabled: this.agpEnabled,
                 limiterEnabled: this.limiterEnabled,
@@ -518,7 +519,7 @@ class CachyMusicDspProcessor extends AudioWorkletProcessor {
             }
 
             // 8. Final Stage: Inline xorshift32 TPDF / 2nd-Order Psychoacoustic Noise-Shaped Dither
-            // Strictly NOTHING modifies sL/sR downstream of this step!
+            // Final processing stage here; the external output gate can attenuate during transitions.
             if (dither !== 'off') {
                 let xL = this.rngStateL;
                 xL ^= xL << 13; xL ^= xL >>> 17; xL ^= xL << 5;

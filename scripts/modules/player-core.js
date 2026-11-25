@@ -1,3 +1,9 @@
+import {saveNativePlaylist,restoreNativePlaylist} from './android-native-playback.js';
+import {playbackPool, playlistNeighbor, recordPlaylistVisit, historyNeighbor, seekPlaylistHistory, syncPlaylistShuffle} from './playlist-playback.js';
+import {createMediaElementListener} from './media-element-events.js';
+import {updatePlaybackProgress} from './player-progress.js';
+import {decodeBufferWithAudioContext} from './software-audio-decoder.js';
+import {createAudioEditGuard, confirmAudioChange} from './audio-change-policy.js';
 import {findTrackIndex, findSavedTrackIndex, rememberTrack} from './track-session.js';
 import {resolveTrackFormat} from './signal-path-model.js';
 import {renderSignalPath} from './signal-path-ui.js';
@@ -52,7 +58,7 @@ import {
 } from './ui-elements.js';
 import { updateActiveLyric, updateLyricsDisplay } from './lyrics.js';
 import { appendDebugTelemetry, cancelSleepTimer, logAudioPlaybackEvent } from './settings.js';
-import { getConfirmedAudioRoute, audioBufferChangePending, ensureAudioEngineForSampleRate, getOrCreateAudioSourceNode, resumeAudioGraph, setVolume, updateAudioRouting } from './audio-engine.js';
+import { outputHold, acknowledgeAudioEdit, getConfirmedAudioRoute, audioBufferChangePending, ensureAudioEngineForSampleRate, getOrCreateAudioSourceNode, resumeAudioGraph, setVolume, updateAudioRouting } from './audio-engine.js';
 import { getRuntime } from './runtime-capabilities.js';
 import { mediaSessionController } from './media-session.js';
 
@@ -64,6 +70,7 @@ let nativeQueueEdits = 0;
 let nativeRecoveryToken = '';
 let nativeAttemptGeneration = -1;
 const NATIVE_QUEUE_STORAGE = 'cachymusic_android_session_queue';
+const NATIVE_PLAYLIST_STORAGE = 'cachymusic_android_playlist_session';
 function canUseAndroidDecoder(track) {
     const s = store.state;
     return androidNative && Boolean(indexedSource(track)) && !hasActiveDsp()
@@ -74,7 +81,7 @@ function nativeEligible(track) {
     return canUseAndroidDecoder(track) && (safeStorage.getItem('cachymusic_android_native') === 'true'
         || (nativeRecoveryToken && nativeRecoveryToken === androidNative.token));
 }
-function nativeGain(){const s=store.state;return s.audio?.muted?0:s.isHardwareGain?1:Math.max(0,Math.min(1,s.currentVolumeValue));}
+function nativeGain(){const s=store.state;return s.audio?.muted?0:s.isHardwareGain?s.hardwareAppGain:Math.max(0,Math.min(1,s.currentVolumeValue));}
 function nativePosition(){return androidNative?.active?Number(androidNative.read()?.position||0)/1000:null;}
 function nativeDuration(){return androidNative?.active?Number(androidNative.read()?.duration||0)/1000:null;}
 function reconcileNativeQueue(status) {
@@ -86,16 +93,18 @@ function reconcileNativeQueue(status) {
     store.emit('library:update-queue', { fromNative: true });
 }
 function rememberNativeQueue(token) {
+    safeStorage.setItem(NATIVE_PLAYLIST_STORAGE,saveNativePlaylist(token,store.state.playlistPlayback));
     if (androidNative.supportsQueue) safeStorage.setItem(NATIVE_QUEUE_STORAGE, saveNativeQueue(token, store.state.playQueue));
 }
 function nativeOrderKey(status) {
     const s = store.state;
     return [status.token, status.revision, s.allTracks[s.currentTrackIndex], s.allTracks, s.allTracks.length,
-        s.displayedTracks, s.displayedTracks.length, s.playQueue, s.playQueue.length, nativeQueueEdits, s.isShuffle, s.repeatMode, s.sleepTimerMode === 'end'];
+        playbackPool(s), playbackPool(s).length,s.playlistPlayback?.cursor,s.playlistPlayback?.historyIndex, s.playQueue, s.playQueue.length, nativeQueueEdits, s.isShuffle, s.repeatMode, s.sleepTimerMode === 'end'];
 }
 function refreshNativeOrder(status = androidNative?.read()) {
     if (!androidNative?.supportsOrder || nativeReleasing || !status || status.state === 'stopped') return;
     if (status.token === nativeRecoveryToken) return;
+    if(!syncNativeTrack(status))return;
     reconcileNativeQueue(status);
     const s = store.state;
     if (nativeOrderKey(status).every((value, i) => value === nativeOrderInputs[i])) return;
@@ -103,6 +112,7 @@ function refreshNativeOrder(status = androidNative?.read()) {
         s.playQueue = identifyQueueEntries(s.playQueue);
         rememberNativeQueue(status.token);
     }
+    if(!androidNative.supportsQueue)rememberNativeQueue(status.token);
     if (['unconfirmed', 'error'].includes(status.state)) return;
     const index = indexedSource(s.allTracks[s.currentTrackIndex]) === status.uri
         ? s.currentTrackIndex : s.allTracks.findIndex(track => indexedSource(track) === status.uri);
@@ -116,6 +126,7 @@ function updateShuffleButton() {
     if (!shuffleBtn) return;
     const { isShuffle } = store.state;
     shuffleBtn.classList.toggle('active', isShuffle);
+    shuffleBtn.setAttribute('aria-pressed', String(isShuffle));
     shuffleBtn.setAttribute('title', isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
 }
 
@@ -123,7 +134,7 @@ function syncNativeTrack(status) {
     const s = store.state;
     if (!status?.uri || status.uri === indexedSource(s.allTracks[s.currentTrackIndex])) return true;
     const index = s.allTracks.findIndex(track => indexedSource(track) === status.uri);
-    if (index >= 0) loadTrack(index, false, status.position / 1000, status);
+    if (index >= 0) {const consumed=new Set(status.consumedQueueIds||[]);const queued=s.playQueue.some(t=>consumed.has(t.nativeQueueId)&&indexedSource(t)===status.uri);loadTrack(index, false, status.position / 1000, status,false,queued);}
     else stopNative().then(stopped => { if (stopped) syncPlayPauseUI(false, true); });
     return index >= 0;
 }
@@ -137,6 +148,7 @@ function stopNative(){
             if (token && stopped?.token === token && stopped.state === 'stopped') {
                 reconcileNativeQueue(stopped);
                 if (androidNative.supportsQueue) safeStorage.removeItem(NATIVE_QUEUE_STORAGE);
+                safeStorage.removeItem(NATIVE_PLAYLIST_STORAGE);
             }
             clearInterval(nativePoll);
             nativePoll = null;
@@ -156,11 +168,12 @@ function startNativePoll(){
         if(v.state==='stopped'){
             reconcileNativeQueue(v);
             if (androidNative.supportsQueue) safeStorage.removeItem(NATIVE_QUEUE_STORAGE);
+                safeStorage.removeItem(NATIVE_PLAYLIST_STORAGE);
             androidNative.token='';androidNative.last=null;clearInterval(nativePoll);nativePoll=null;nativeOrderInputs=[];
             syncPlayPauseUI(false,true);updateSignalPathUi(s.allTracks[s.currentTrackIndex]);return;
         }
-        reconcileNativeQueue(v);
         if (!syncNativeTrack(v)) return;
+        reconcileNativeQueue(v);
         const track=s.allTracks[s.currentTrackIndex];
         const position=Number(v.position||0)/1000,duration=Number(v.duration||0)/1000||track?.duration||0;
         if(v.state==='error'&&!nativeEligible(track)){loadTrack(s.currentTrackIndex,false,position);return;}
@@ -292,7 +305,7 @@ function adoptPcmSuccessor(){
     const {track,index,queue}=job.candidate;
     ++trackLoadToken;++currentTrackGeneration;++currentPlayRequestId;
     if(queue){s.playQueue.shift();store.emit('library:update-queue');}
-    s.currentTrackIndex=index;s.currentTrack=track;s.activeDecodedBuffer=job.format;track.duration=job.format.duration;
+    s.currentTrackIndex=index;s.currentTrack=track;if(!queue){const forward=historyNeighbor(s,1);if(forward?.index===index)seekPlaylistHistory(s,forward);}recordPlaylistVisit(s,track,Boolean(queue));s.activeDecodedBuffer=job.format;track.duration=job.format.duration;
     s.softwarePlaybackStartTime=pcmStream.anchor;s.softwarePlaybackOffset=0;s.isSoftwarePaused=false;s.trackPlaybackRetryCount=0;
     rememberTrack(safeStorage, track);
     store.emit('track:change',{track,index});
@@ -373,11 +386,13 @@ function applyTrackMetadataToDom(track, isStandalone = false) {
 }
 
 // Load Track by Index in allTracks
-async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = null, useMediaElement = false) {
+async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = null, useMediaElement = false, fromQueue = false, playlistContext = undefined, historyTarget = null) {
+    store.state.audioEditPaused=false;
     const s = store.state;
     if (!s.allTracks[index]) return;
     const loadToken=++trackLoadToken, loadPlayId=++currentPlayRequestId;
     if(adoptNative){androidNative?.adopt(adoptNative);}else if(!await stopNative()||loadToken!==trackLoadToken)return;
+    if(playlistContext!==undefined){s.playlistPlayback=playlistContext;if(playlistContext)s.isShuffle=playlistContext.shuffle;updateShuffleButton();}
     if (!autoPlay && !adoptNative) s.userExplicitlyPaused = true;
     currentTrackGeneration++;
     if(activeLoadedMetadataHandler&&s.audio)s.audio.removeEventListener('loadedmetadata',activeLoadedMetadataHandler);
@@ -404,6 +419,8 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
     }
     const track = s.allTracks[s.currentTrackIndex];
     s.currentTrack = track;
+    if(historyTarget)seekPlaylistHistory(s,historyTarget);
+    recordPlaylistVisit(s,track,fromQueue);
 
     if (track) rememberTrack(safeStorage, track);
 
@@ -637,6 +654,7 @@ async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
     if(s.audio){s.audio.pause();s.audio.removeAttribute('src');s.audio.load();}
     if(s.secondaryAudio){s.secondaryAudio.pause();s.secondaryAudio.removeAttribute('src');s.secondaryAudio.load();}
     s.preloadedNextTrackIndex=-1;
+    s.playlistPlayback=null;
     s.isStandalonePlayback = true;
     s.currentTrack = track;
     updateStandaloneBannerUi(true, track);
@@ -773,6 +791,7 @@ function updateRepeatUI() {
     refreshNativeOrder();
     if (!repeatBtn) return;
     safeStorage.setItem('cachymusic_repeat_mode', s.repeatMode);
+    repeatBtn.setAttribute('aria-label', `Repeat: ${s.repeatMode === 'one' ? 'one track' : s.repeatMode === 'all' ? 'all tracks' : 'off'}`);
 
     if (s.repeatMode === 'one') {
         repeatBtn.classList.add('active', 'repeat-one');
@@ -810,6 +829,8 @@ function updateRepeatUI() {
 function seekAudio(targetSec) {
     const s = store.state;
     if (typeof targetSec !== 'number' || !Number.isFinite(targetSec)) return;
+    s.audioEditPaused=false;
+    explicitTransportVersion++;
     nativeLoadOffset=Math.max(0,targetSec);
     if(androidNative?.active){androidNative.command('seek',targetSec);updatePlaybackProgress(targetSec,nativeDuration());return;}
     const track = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
@@ -865,8 +886,8 @@ function seekAudio(targetSec) {
 }
 
 // Play Audio (guarded against concurrent async race conditions and AbortError)
-async function playAudio(userInitiated = false) {
-    if (userInitiated) explicitTransportVersion++;
+async function playAudio(userInitiated = false, {preserveOutput = false} = {}) {
+    if (userInitiated) { explicitTransportVersion++; store.state.audioEditPaused = false; }
     const s = store.state;
     if(nativeReleasing)return;
     let skipNative=false;
@@ -981,9 +1002,9 @@ async function playAudio(userInitiated = false) {
         }
         if (reqId !== currentPlayRequestId) return;
         const activeAudio = s.audio;
-        if (activeAudio.muted) activeAudio.muted = false;
-        if (activeAudio.volume === 0 && s.currentVolumeValue > 0) {
-            activeAudio.volume = s.isHardwareGain ? 1.0 : Math.min(1.0, s.currentVolumeValue);
+        // Playback is not a volume or mute command. Preserve the user’s mute choice.
+        if (!preserveOutput && activeAudio.volume === 0 && s.currentVolumeValue > 0) {
+            activeAudio.volume = s.isHardwareGain ? s.hardwareAppGain : Math.min(1.0, s.currentVolumeValue);
         }
 
         if (activeAudio.error && !activeAudio._isFreshTrackLoad) {
@@ -1040,9 +1061,10 @@ async function playAudio(userInitiated = false) {
     }
 }
 
-function pauseAudio() {
+function pauseAudio({internalEdit=false}={}) {
     const s = store.state;
-    s.userExplicitlyPaused = true;
+    if (internalEdit) s.audioEditPaused = true;
+    else { explicitTransportVersion++; s.audioEditPaused = false; s.userExplicitlyPaused = true; }
     currentPlayRequestId++; s.isPlayPending=false;
     clearNoDataStallTimer();
     clearSeekStallTimer();
@@ -1062,6 +1084,7 @@ function pauseAudio() {
 
 function togglePlayPause() {
     const s = store.state;
+    if (s.audioEditPaused) { pauseAudio(); return; }
     if(androidNative?.active){const state=androidNative.read()?.state;if(['playing','loading','seeking'].includes(state))pauseAudio();else playAudio(true);return;}
     if (s.isSoftwareDecoding) {
         if (!s.isSoftwarePaused) {
@@ -1097,13 +1120,10 @@ function togglePlayPause() {
 // =========================================================================
 function peekNextTrackIndex() {
     const s = store.state;
-    if (s.playQueue && s.playQueue.length > 0) {
-        const queued = s.playQueue[0];
-        const qIdx = findTrackIndex(s.allTracks, queued);
-        if (qIdx !== -1) return qIdx;
-    }
+    for(const queued of s.playQueue||[]){const qIdx=findTrackIndex(s.allTracks,queued);if(qIdx!==-1)return qIdx;}
 
-    const pool = s.displayedTracks.length > 0 ? s.displayedTracks : s.allTracks;
+    if(s.playlistPlayback)return playlistNeighbor(s);
+    const pool = playbackPool(s);
     if (pool.length === 0) return -1;
 
     const currentIdxInPool = findTrackIndex(pool, s.allTracks[s.currentTrackIndex]);
@@ -1149,7 +1169,7 @@ async function checkAndPreloadNextTrack(currentTime, duration) {
     }
 }
 
-function executeGaplessHandoff(nextIndex) {
+function executeGaplessHandoff(nextIndex, fromQueue=false) {
     if (audioBufferChangePending()) return false;
     const rt = getRuntime();
     if (rt.isAndroidNative || rt.osFamily==='android' || window.innerWidth<=768 || store.state.isSoftwareDecoding) return false;
@@ -1191,7 +1211,7 @@ function executeGaplessHandoff(nextIndex) {
         updateAudioRouting();
 
         const nextTr = s.allTracks[s.currentTrackIndex];
-        s.currentTrack = nextTr;
+        s.currentTrack = nextTr;if(!fromQueue){const forward=historyNeighbor(s,1);if(forward?.index===nextIndex)seekPlaylistHistory(s,forward);}recordPlaylistVisit(s,nextTr,fromQueue);
         rememberTrack(safeStorage, nextTr);
         store.emit('track:change', { track: nextTr, index: nextIndex });
 
@@ -1228,7 +1248,7 @@ function executeGaplessHandoff(nextIndex) {
 function sendNativeShuffleCommand(status, command) {
     const s = store.state;
     if (!status || status.state === 'stopped' || status.state === 'unconfirmed'
-        || !androidNative.supportsShuffle || !s.isShuffle || !nativeEligible(s.allTracks[s.currentTrackIndex])) return false;
+        || !androidNative.supportsShuffle || s.playlistPlayback || !s.isShuffle || !nativeEligible(s.allTracks[s.currentTrackIndex])) return false;
     refreshNativeOrder(status);
     return androidNative.command(command);
 }
@@ -1276,19 +1296,25 @@ async function nextTrack(manual = true, allowNative = true) {
         return;
     }
 
-    if (s.playQueue && s.playQueue.length > 0) {
+    while (s.playQueue && s.playQueue.length > 0) {
         const nextQueuedTrack = s.playQueue.shift();
         store.emit('library:update-queue');
         const masterIdx = findTrackIndex(s.allTracks, nextQueuedTrack);
         if (masterIdx !== -1) {
-            if (!executeGaplessHandoff(masterIdx)) {
-                loadTrack(masterIdx, true);
+            if (!executeGaplessHandoff(masterIdx,true)) {
+                loadTrack(masterIdx, true, 0, null, false, true);
             }
             return;
         }
     }
 
-    const pool = s.displayedTracks.length > 0 ? s.displayedTracks : s.allTracks;
+    if(s.playlistPlayback){
+        const index=playlistNeighbor(s);
+        const forward=historyNeighbor(s,1);
+        if(index<0){pauseAudio();seekAudio(0);return;}
+        if(!executeGaplessHandoff(index))loadTrack(index,true,0,null,false,false,undefined,forward?.index===index?forward:null);return;
+    }
+    const pool = playbackPool(s);
     if (pool.length === 0) return;
 
     const currentIdxInPool = findTrackIndex(pool, s.allTracks[s.currentTrackIndex]);
@@ -1353,7 +1379,8 @@ function prevTrack(allowNative = true) {
         return;
     }
 
-    const pool = s.displayedTracks.length > 0 ? s.displayedTracks : s.allTracks;
+    if(s.playlistPlayback){const previous=historyNeighbor(s,-1);if(previous){loadTrack(previous.index,true,0,null,false,true,undefined,previous);}else {seekAudio(0);playAudio(true);}return;}
+    const pool = playbackPool(s);
     if (pool.length === 0) return;
 
     const currentIdxInPool = findTrackIndex(pool, s.allTracks[s.currentTrackIndex]);
@@ -1366,42 +1393,6 @@ function prevTrack(allowNative = true) {
 // =========================================================================
 // Universal Web Audio Software Decoder Engine (Zero-Skip Hybrid Pipeline)
 // =========================================================================
-function updatePlaybackProgress(cur, dur) {
-    const s = store.state;
-    if (s.isDraggingScrubber) return;
-    const currentTrack = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
-        ? s.standaloneTrackList[s.standaloneTrackIndex]
-        : s.allTracks[s.currentTrackIndex];
-    if (!isFinite(dur) || isNaN(dur) || dur <= 0) {
-        if (currentTrack && currentTrack.duration && isFinite(currentTrack.duration)) {
-            dur = Number(currentTrack.duration);
-        }
-    }
-    const formattedTime = formatTime(cur);
-    if (currentTimeEl && currentTimeEl.textContent !== formattedTime) currentTimeEl.textContent = formattedTime;
-    if (miniCurrentTime && miniCurrentTime.textContent !== formattedTime) miniCurrentTime.textContent = formattedTime;
-    const valid=Number.isFinite(dur)&&dur>0, max=valid?Math.ceil(dur):0, now=Math.max(0,Math.min(max,Math.floor(Number.isFinite(cur)?cur:0)));
-    for(const control of [document.getElementById('progressCon'),document.getElementById('miniProgressCon')]){
-        if(!control)continue;
-        const values={'aria-valuemax':String(max),'aria-valuenow':String(now),'aria-valuetext':`${formatTime(now)} of ${formatTime(max)}`,'aria-disabled':String(!valid)};
-        for(const [key,value] of Object.entries(values))if(control.getAttribute(key)!==value)control.setAttribute(key,value);
-    }
-
-    if (dur && isFinite(dur) && dur > 0) {
-        const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
-        if (progressBar) progressBar.style.width = `${pct}%`;
-        if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
-    }
-
-    if (cur > 1.0 && s.consecutiveSkipCount > 0) {
-        s.consecutiveSkipCount = 0;
-    }
-
-    if (s.isLyricsView) {
-        updateActiveLyric(cur);
-    }
-}
-
 function startSoftwareProgressLoop() {
     const s = store.state;
     cancelSoftwareProgressLoop();
@@ -1544,51 +1535,6 @@ function onSoftwarePlaybackEnded() {
     if(s.repeatMode==='one'){seekSoftwarePlayback(0);playAudio(true);}else nextTrack(false);
 }
 
-function stripId3ToFlacMagic(arrayBuffer) {
-    if (!arrayBuffer || arrayBuffer.byteLength < 16) return null;
-    const bytes = new Uint8Array(arrayBuffer);
-    // Only scan when file begins with ID3v2 header ('I','D','3')
-    if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
-    // Syncsafe ID3v2 tag size + 10-byte header
-    let startOffset = 10 + ((bytes[6] & 0x7f) << 21) + ((bytes[7] & 0x7f) << 14) + ((bytes[8] & 0x7f) << 7) + (bytes[9] & 0x7f);
-    if (startOffset + 4 <= bytes.length
-        && bytes[startOffset] === 0x66 && bytes[startOffset + 1] === 0x4c
-        && bytes[startOffset + 2] === 0x61 && bytes[startOffset + 3] === 0x43) {
-        return arrayBuffer.slice(startOffset);
-    }
-    const scanLimit = Math.min(bytes.length - 4, 262144);
-    for (let i = 10; i < scanLimit; i++) {
-        if (bytes[i] === 0x66 && bytes[i + 1] === 0x4c && bytes[i + 2] === 0x61 && bytes[i + 3] === 0x43) {
-            return arrayBuffer.slice(i);
-        }
-    }
-    return null;
-}
-
-async function decodeBufferWithAudioContext(ctx, rawArrayBuf) {
-    const attemptDecode = (buf) => new Promise((resolve, reject) => {
-        const p = ctx.decodeAudioData(
-            buf,
-            decoded => resolve(decoded),
-            err => reject(err || new Error('decodeAudioData callback returned error'))
-        );
-        if (p && typeof p.then === 'function') {
-            p.then(resolve, reject);
-        }
-    });
-    const head = rawArrayBuf && rawArrayBuf.byteLength >= 16 ? new Uint8Array(rawArrayBuf, 0, 3) : null;
-    const hasId3Header = Boolean(head && head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33);
-    if (hasId3Header) {
-        const stripped = stripId3ToFlacMagic(rawArrayBuf);
-        if (stripped) {
-            logAudioPlaybackEvent('info', 'Stripped prepended ID3v2 tag wrapper before fLaC sync frame for software decoder.');
-            return await attemptDecode(stripped);
-        }
-    }
-    // Zero-copy decode avoids duplicating large 50-90MB FLAC ArrayBuffers on 4GB devices
-    return await attemptDecode(rawArrayBuf);
-}
-
 async function playWithSoftwareDecoder(track, startTime = 0, retryWebStream = false) {
     const s = store.state;
     if (!track) return;
@@ -1683,7 +1629,7 @@ async function playWithSoftwareDecoder(track, startTime = 0, retryWebStream = fa
 
             logAudioPlaybackEvent('info', `Decompressing bitstream into 32-bit floating point audio buffer (${(arrayBuf.byteLength / (1024 * 1024)).toFixed(2)} MB)...`);
             softwareBufferCache.clear(); // Avoid retaining a prior decoded track during allocation.
-            decodedBuffer = await decodeBufferWithAudioContext(s.audioContext, arrayBuf);
+            decodedBuffer = await decodeBufferWithAudioContext(s.audioContext, arrayBuf, () => logAudioPlaybackEvent('info', 'Stripped prepended ID3v2 tag wrapper before FLAC decoding.'));
             if(decodedBuffer.length*decodedBuffer.numberOfChannels*4>MAX_PCM_BYTES)throw new DecodeBudgetError('decoded');
             arrayBuf = null;
             if (decodeGen !== currentTrackGeneration || !s.isSoftwareDecoding) return;
@@ -1733,270 +1679,7 @@ async function playWithSoftwareDecoder(track, startTime = 0, retryWebStream = fa
     }
 }
 
-function attachAudioListeners(targetAudio) {
-    const s = store.state;
-    if (!targetAudio || targetAudio._hasCachyListeners) return;
-    targetAudio._hasCachyListeners = true;
-    let isAudioBuffering = false;
-
-    targetAudio.addEventListener('play', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (s.userExplicitlyPaused) {
-            targetAudio.pause();
-            syncPlayPauseUI(false);
-            return;
-        }
-        isAudioBuffering = false;
-        syncPlayPauseUI(true);
-    });
-    targetAudio.addEventListener('playing', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        clearSeekStallTimer();
-        if (s.userExplicitlyPaused) {
-            targetAudio.pause();
-            syncPlayPauseUI(false);
-            return;
-        }
-        isAudioBuffering = false;
-        syncPlayPauseUI(true);
-    });
-    targetAudio.addEventListener('pause', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (isAudioBuffering && !s.userExplicitlyPaused) return;
-        syncPlayPauseUI(false);
-        if (s.isStandalonePlayback) return;
-        try {
-            const cur = targetAudio.currentTime;
-            const dur = targetAudio.duration;
-            if (cur > 0 && (!dur || isNaN(dur) || cur < (dur - 1))) {
-                safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2));
-            }
-        } catch (_) {}
-    });
-    targetAudio.addEventListener('emptied', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        syncPlayPauseUI(false);
-    });
-    targetAudio.addEventListener('waiting', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (!s.userExplicitlyPaused) isAudioBuffering = true;
-    });
-    targetAudio.addEventListener('seeking', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (!s.userExplicitlyPaused) isAudioBuffering = true;
-    });
-    targetAudio.addEventListener('stalled', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (!s.userExplicitlyPaused) isAudioBuffering = true;
-    });
-    targetAudio.addEventListener('error', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio || s.isSoftwareDecoding) return;
-        if (!targetAudio.src || targetAudio.src === window.location.href || !targetAudio.getAttribute('src')) {
-            return;
-        }
-        const err = targetAudio.error;
-        if (!err) return;
-        console.error('Audio element error:', err);
-        clearNoDataStallTimer();
-        isAudioBuffering = false;
-        syncPlayPauseUI(false);
-        s.isPlayPending = false;
-
-        if (playPendingTimeout) {
-            clearTimeout(playPendingTimeout);
-            playPendingTimeout = null;
-        }
-
-        const currentTrack = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
-            ? s.standaloneTrackList[s.standaloneTrackIndex]
-            : s.allTracks[s.currentTrackIndex];
-        const trackTitle = currentTrack ? (currentTrack.title || currentTrack.filename || 'Current track') : 'Audio track';
-        const errorCode = err ? err.code : 0;
-        const isFatalDecodeError = (errorCode === 3 || errorCode === 4);
-
-        const currentAttrSrc = targetAudio.getAttribute('src') || targetAudio.src || '';
-        if (isFatalDecodeError && currentTrack && !s.isSoftwareDecoding) {
-            rememberSoftwareDecoder(currentAttrSrc);
-            if(s.userExplicitlyPaused)return;
-            rememberSoftwareDecoder(targetAudio.src);
-            try {
-                targetAudio.pause();
-                targetAudio.removeAttribute('src');
-                targetAudio.load();
-            } catch (_) {}
-            logAudioPlaybackEvent('info', `Native decoder unsuited for "${trackTitle}" (code ${errorCode}). Playing via 32-bit Web Audio Software Engine.`);
-            playWithSoftwareDecoder(currentTrack, targetAudio.currentTime || 0);
-            return;
-        }
-
-        if (isFatalDecodeError || s.trackPlaybackRetryCount >= 1) {
-            s.userExplicitlyPaused = true;
-            s.consecutiveSkipCount++;
-            const errorDesc = errorCode === 3
-                ? 'Corrupted audio stream or decoder failure'
-                : (errorCode === 4 ? 'Format or file source not supported' : 'Playback stream timed out');
-
-            logAudioPlaybackEvent('error', `Track "${trackTitle}" decode failure (code ${errorCode}): ${errorDesc}`, {
-                src: targetAudio.src,
-                track: currentTrack
-            });
-
-            if (s.consecutiveSkipCount >= 3) {
-                pauseAudio();
-                logAudioPlaybackEvent('warn', 'Consecutive skip limit reached (3 tracks failed). Halting auto-skip.');
-                showCachyToast('Playback Halted', 'Multiple tracks failed to decode. Check Audio Diagnostics in Settings.', 'error');
-                return;
-            }
-
-            showCachyToast('Playback Error', `"${trackTitle}": ${errorDesc}. Skipping track...`, 'warning');
-            store.emit('audio:reset-element');
-
-            const errorGeneration=currentTrackGeneration;
-            const recoveryAudio = s.audio;
-            setTimeout(() => {
-                if(errorGeneration!==currentTrackGeneration || s.audio!==recoveryAudio)return;
-                const pool = s.displayedTracks.length > 0 ? s.displayedTracks : s.allTracks;
-                const currentIdxInPool = findTrackIndex(pool, s.allTracks[s.currentTrackIndex]);
-                if (currentIdxInPool === pool.length - 1 && s.repeatMode === 'off') {
-                    pauseAudio();
-                    try { recoveryAudio.currentTime = 0; } catch (_) {}
-                    if (progressBar) progressBar.style.width = '0%';
-                    if (currentTimeEl) currentTimeEl.textContent = '0:00';
-                    try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
-                } else {
-                    nextTrack();
-                }
-            }, 1200);
-            return;
-        }
-
-        if (errorCode === 2 && targetAudio.src && !s.userExplicitlyPaused && s.trackPlaybackRetryCount === 0) {
-            s.trackPlaybackRetryCount++;
-            const savedTime = targetAudio.currentTime || 0;
-            const currentSrc = targetAudio.src, retryGeneration=currentTrackGeneration;
-            setTimeout(() => {
-                if (retryGeneration===currentTrackGeneration && s.audio===targetAudio && !s.userExplicitlyPaused) {
-                    targetAudio.src = currentSrc;
-                    targetAudio.load();
-                    if (savedTime > 0) {
-                        try { targetAudio.currentTime = savedTime; } catch (_) {}
-                    }
-                    targetAudio.play().catch(() => {
-                        if(retryGeneration!==currentTrackGeneration||s.audio!==targetAudio)return;
-                        syncPlayPauseUI(false);
-                        s.userExplicitlyPaused = true;
-                        showCachyToast('Network Error', `Could not recover stream for "${trackTitle}".`, 'error');
-                    });
-                }
-            }, 1500);
-        }
-    });
-
-    let lastPersistedTime = 0;
-    targetAudio.addEventListener('timeupdate', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (s.isSoftwareDecoding || s.isDraggingScrubber) return;
-        const cur = targetAudio.currentTime;
-        let dur = targetAudio.duration;
-        const currentTrack = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
-            ? s.standaloneTrackList[s.standaloneTrackIndex]
-            : s.allTracks[s.currentTrackIndex];
-        if (!isFinite(dur) || isNaN(dur) || dur <= 0) {
-            if (currentTrack && currentTrack.duration && isFinite(currentTrack.duration)) {
-                dur = Number(currentTrack.duration);
-            }
-        }
-        updatePlaybackProgress(cur, dur);
-        mediaSessionController.updatePositionState(false);
-
-        if (!s.isStandalonePlayback && cur > 0 && Math.abs(cur - lastPersistedTime) >= 1.0) {
-            lastPersistedTime = cur;
-            if (!dur || isNaN(dur) || cur < (dur - 1)) {
-                try { safeStorage.setItem('cachymusic_last_track_time', cur.toFixed(2)); } catch (_) {}
-            }
-        }
-        checkAndPreloadNextTrack(cur, dur);
-        mprisSyncHook(false);
-    });
-
-    targetAudio.addEventListener('ended', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (typeof targetAudio._trackGeneration === 'number' && targetAudio._trackGeneration !== currentTrackGeneration) {
-            return;
-        }
-        if (!s.isStandalonePlayback) { try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {} }
-
-        const curTime = targetAudio.currentTime || 0;
-        const currentTrack = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
-            ? s.standaloneTrackList[s.standaloneTrackIndex]
-            : s.allTracks[s.currentTrackIndex];
-        const trackDur = targetAudio.duration || (currentTrack ? (currentTrack.duration || 0) : 0);
-        const trackTitle = currentTrack ? (currentTrack.title || currentTrack.filename || 'Current track') : 'Audio track';
-
-        if ((trackDur > 5 && curTime < 3.0) || curTime === 0) {
-            logAudioPlaybackEvent('warn', `Premature stream termination at ${curTime.toFixed(2)}s on "${trackTitle}"`);
-            appendDebugTelemetry(`[WARN] Premature stream end at ${curTime.toFixed(2)}s / ${trackDur.toFixed(2)}s for "${trackTitle}". Attempting reload...`, 'warn');
-            if (s.trackPlaybackRetryCount < 2) {
-                s.trackPlaybackRetryCount++;
-                const retryGeneration=currentTrackGeneration;
-                setTimeout(() => {
-                    if (retryGeneration===currentTrackGeneration && s.audio===targetAudio && !s.userExplicitlyPaused) {
-                        try { targetAudio.load(); } catch (_) {}
-                        playAudio();
-                    }
-                }, 400);
-                return;
-            }
-            pauseAudio();
-            showToast(`Playback paused on "${trackTitle}". Stream buffer interrupted.`);
-            return;
-        }
-        appendDebugTelemetry(`[EVENT] Track finished naturally at ${curTime.toFixed(1)}s`);
-
-        if (s.sleepTimerMode === 'end') {
-            pauseAudio();
-            cancelSleepTimer(false);
-            showToast('Sleep timer: End of track reached. Playback paused.');
-            return;
-        }
-
-        if (s.repeatMode === 'one') {
-            targetAudio.currentTime = 0;
-            playAudio();
-        } else {
-            nextTrack(false);
-        }
-    });
-
-    targetAudio.addEventListener('loadedmetadata', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        if (targetAudio.duration && !isNaN(targetAudio.duration)) {
-            if (totalDurationEl) totalDurationEl.textContent = formatTime(targetAudio.duration);
-            if (miniTotalDuration) miniTotalDuration.textContent = formatTime(targetAudio.duration);
-            mediaSessionController.updatePositionState(true);
-        }
-        try {
-            if (s.currentPlaybackSpeed !== 1.0) {
-                targetAudio.playbackRate = s.currentPlaybackSpeed;
-            }
-            targetAudio.preservesPitch = s.isPitchLockTempo;
-            targetAudio.mozPreservesPitch = s.isPitchLockTempo;
-            targetAudio.webkitPreservesPitch = s.isPitchLockTempo;
-        } catch (_) {}
-    });
-
-    targetAudio.addEventListener('seeked', () => {
-        if (androidNative?.active || targetAudio._isDisposed || targetAudio !== s.audio) return;
-        clearSeekStallTimer();
-        isAudioBuffering = false;
-        if (!s.userExplicitlyPaused && targetAudio.paused && !s.isSoftwareDecoding) {
-            s.isPlayPending = false;
-            playAudio(true);
-        }
-        mediaSessionController.updatePositionState(true);
-        mprisSyncHook(true);
-    });
-}
+const attachAudioListeners = createMediaElementListener({nativeActive:()=>Boolean(androidNative?.active), trackGeneration:()=>currentTrackGeneration, playbackIntent:playbackIntentVersion, clearPendingPlay:()=>{if(playPendingTimeout){clearTimeout(playPendingTimeout);playPendingTimeout=null;}}, syncPlayPauseUI, clearSeekStallTimer, clearNoDataStallTimer, rememberSoftwareDecoder, playWithSoftwareDecoder, pauseAudio, nextTrack, playAudio, checkAndPreloadNextTrack, mprisSyncHook});
 
 // --- Core Track Status & Session Methods ---
 function updateSignalPathUi(track = store.state.isStandalonePlayback
@@ -2070,22 +1753,30 @@ async function restoreSessionState() {
     } catch (_) {}
 
     const existing=androidNative?.snapshot();
+    let restoredQueueCurrent=false;
     if (androidNative?.supportsQueue && !androidNative.active) {
         if (existing?.token && !s.playQueue.length) {
             s.playQueue = restoreNativeQueue(safeStorage.getItem(NATIVE_QUEUE_STORAGE), existing.token, s.allTracks);
             if (s.playQueue.length) store.emit('library:update-queue', { fromNative: true });
         }
+        const consumed=new Set(existing?.consumedQueueIds||[]);
+        restoredQueueCurrent=s.playQueue.some(t=>consumed.has(t.nativeQueueId)&&indexedSource(t)===existing?.uri);
         reconcileNativeQueue(existing);
         if (!existing?.token || existing.state === 'stopped') safeStorage.removeItem(NATIVE_QUEUE_STORAGE);
     }
     if(existing?.token&&existing.state!=='stopped'){
+        const restored=restoreNativePlaylist(safeStorage.getItem(NATIVE_PLAYLIST_STORAGE),existing.token,s.allTracks);
+        if(restored.invalid){if(!await stopNative())return;showToast('The previous playlist session could not be restored. Select a playlist to resume.');return;}
+        s.playlistPlayback=restored.session;
+        if(restored.session)s.isShuffle=restored.session.shuffle;
         const idx=s.allTracks.findIndex(t=>indexedSource(t)===existing.uri);
         if (idx >= 0 && nativeEligible(s.allTracks[idx])) {
-            if (androidNative.supportsShuffle && typeof existing.shuffle === 'boolean') {
+            if (!s.playlistPlayback && androidNative.supportsShuffle && typeof existing.shuffle === 'boolean') {
                 s.isShuffle = existing.shuffle;
                 updateShuffleButton();
             }
-            await loadTrack(idx, false, Number(existing.position || 0) / 1000, existing);
+            await loadTrack(idx, false, Number(existing.position || 0) / 1000, existing,false,Boolean(restoredQueueCurrent||s.playlistPlayback&&!s.playlistPlayback.ordered.some(t=>indexedSource(t)===existing.uri)));
+            rememberNativeQueue(existing.token);
             return;
         }
         if(!await stopNative())return;
@@ -2131,6 +1822,7 @@ function updateVolumeIcon(vol) {
         pathHtml = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
     }
 
+    for (const id of ['muteBtn', 'miniMuteBtn']) document.getElementById(id)?.setAttribute('aria-pressed', String(Boolean(audio?.muted)));
     if (volumeIcon) volumeIcon.innerHTML = pathHtml;
     const miniVolIcon = document.getElementById('miniVolumeIcon');
     if (miniVolIcon) miniVolIcon.innerHTML = pathHtml;
@@ -2169,10 +1861,85 @@ function setupMediaSessionActionHandlers() {
     });
 }
 
-const nativeModeControl=document.getElementById('androidNativeMode');
-if(nativeModeControl){const row=nativeModeControl.closest('.settingsRowItem');row.hidden=!androidNative;if(!androidNative)row.style.display='none';nativeModeControl.checked=safeStorage.getItem('cachymusic_android_native')==='true';nativeModeControl.addEventListener('change',()=>{safeStorage.setItem('cachymusic_android_native',String(nativeModeControl.checked));});}
-const continuousPcmControl=document.getElementById('continuousPcmMode');
-if(continuousPcmControl){continuousPcmControl.checked=safeStorage.getItem('cachymusic_continuous_pcm')==='true';continuousPcmControl.addEventListener('change',()=>{safeStorage.setItem('cachymusic_continuous_pcm',String(continuousPcmControl.checked));if(!continuousPcmControl.checked)cancelPcmSuccessor();});}
+// Reconfigure a loaded library track through the existing transport owner.
+// No direct destruction of an active graph from the Settings controller.
+async function reloadForAudioPreference() {
+    const s = store.state;
+    if (s.isStandalonePlayback || !s.allTracks[s.currentTrackIndex] || s.isPlayPending || nativeReleasing) return false;
+    if (!androidNative?.active && !s.isSoftwareDecoding && !s.audio?.getAttribute('src')) return false;
+    const position = androidNative?.active ? nativePosition() : s.isSoftwareDecoding ? softwarePosition() : s.audio?.currentTime || 0;
+    const duration = androidNative?.active ? nativeDuration() : s.isSoftwareDecoding ? s.activeDecodedBuffer?.duration : s.audio?.duration;
+    // loadTrack's end-of-track restoration rule would otherwise restart the song.
+    if (Number.isFinite(duration) && duration > 0 && position >= duration - 1) return false;
+    const playing = s.isPlaying && !s.userExplicitlyPaused;
+    await loadTrack(s.currentTrackIndex, playing, position);
+    return true;
+}
+store.state.isNativePlaybackActive = () => Boolean(androidNative?.active);
+// Native playback does not use the Web Audio DSP route. Do not interrupt it for
+// an inaudible Web Audio setting; backend switches use their own reload path.
+store.state.audioEditIntent = () => `${currentTrackGeneration}:${explicitTransportVersion}`;
+store.state.withAudioEdit = createAudioEditGuard({
+    isPlaying: () => store.state.isPlaying && !androidNative?.active,
+    pause: () => pauseAudio({internalEdit:true}),
+    resume: () => { store.state.audioEditPaused=false; return playAudio(false, {preserveOutput:true}); },
+    onUnsafe: () => { pauseAudio(); showToast('Audio recovery failed. Playback stopped; check settings before retrying.'); },
+    finishPause: (failed, sameOwner) => { if (store.state.audioEditPaused) { store.state.audioEditPaused=false; if (failed && sameOwner) store.state.userExplicitlyPaused=true; } },
+    identity: store.state.audioEditIntent,
+    acquire: () => outputHold.acquire(),
+    release: () => outputHold.release(),
+    acknowledge: acknowledgeAudioEdit
+});
+
+store.state.applyBufferProfileNow = async () => {
+    if (!audioBufferChangePending() || androidNative?.active) return false;
+    return reloadForAudioPreference();
+};
+const nativeModeControl = document.getElementById('androidNativeMode');
+if (nativeModeControl) {
+    const row = nativeModeControl.closest('.settingsRowItem');
+    row.hidden = !androidNative;
+    if (!androidNative) row.style.display = 'none';
+    nativeModeControl.checked = safeStorage.getItem('cachymusic_android_native') === 'true';
+    nativeModeControl.addEventListener('change', async () => {
+        const next = nativeModeControl.checked;
+        nativeModeControl.checked = safeStorage.getItem('cachymusic_android_native') === 'true';
+        nativeModeControl.disabled = true;
+        try { if (!await confirmAudioChange('androidNative', next)) return; }
+        finally { nativeModeControl.disabled = false; }
+        nativeModeControl.checked = next;
+        safeStorage.setItem('cachymusic_android_native', String(next));
+        const s = store.state;
+        if (!androidNative || s.isStandalonePlayback) return;
+        if (Boolean(androidNative.active) !== Boolean(nativeEligible(s.currentTrack))) {
+            nativeModeControl.disabled = true;
+            try { if (!await reloadForAudioPreference()) showToast('Playback mode saved for the next eligible track.'); }
+            catch (error) { console.warn('Playback mode change failed', error); showToast('Playback mode saved; current track could not be reloaded.'); }
+            finally { nativeModeControl.disabled = false; }
+        }
+    });
+}
+const continuousPcmControl = document.getElementById('continuousPcmMode');
+if (continuousPcmControl) {
+    continuousPcmControl.checked = safeStorage.getItem('cachymusic_continuous_pcm') === 'true';
+    continuousPcmControl.addEventListener('change', async () => {
+        const next = continuousPcmControl.checked;
+        continuousPcmControl.checked = safeStorage.getItem('cachymusic_continuous_pcm') === 'true';
+        continuousPcmControl.disabled = true;
+        try { if (!await confirmAudioChange('continuousPcm', next)) return; }
+        finally { continuousPcmControl.disabled = false; }
+        continuousPcmControl.checked = next;
+        safeStorage.setItem('cachymusic_continuous_pcm', String(next));
+        if (!continuousPcmControl.checked) cancelPcmSuccessor();
+        else if (pcmStream) { pcmStream.lastAttempt = null; checkPcmSuccessor(pcmStream); }
+        else if (continuousPcmEnabled() && pcmExtension(store.state.currentTrack) && typeof Worker === 'function') {
+            continuousPcmControl.disabled = true;
+            try { if (!await reloadForAudioPreference()) showToast('Continuous playback saved for the next compatible track.'); }
+            catch (error) { console.warn('Continuous playback change failed', error); showToast('Continuous playback saved; current track could not be reloaded.'); }
+            finally { continuousPcmControl.disabled = false; }
+        }
+    });
+}
 
 store.subscribe('playback:seek', (e) => {
     const d = e?.detail;
@@ -2181,7 +1948,7 @@ store.subscribe('playback:seek', (e) => {
     if (d.play) playAudio(true);
 });
 store.subscribe('playback:pause', () => pauseAudio());
-store.subscribe('playback:order-change', () => refreshNativeOrder());
+store.subscribe('playback:order-change', () => {syncPlaylistShuffle(store.state);updateShuffleButton();refreshNativeOrder();});
 store.subscribe('playback:sleep-mode-change', () => {
     if (store.state.sleepTimerMode === 'end') cancelPcmSuccessor();
     refreshNativeOrder();

@@ -5,6 +5,7 @@ if (session_status() === PHP_SESSION_ACTIVE) {
 }
 require_once(__DIR__ . '/../platform.php');
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: private, no-store');
 cachy_send_local_cors('GET, POST, OPTIONS');
 
 if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -192,7 +193,7 @@ if ($isDirectScanRequest) {
             'src'         => $tid ? ('php/api/stream.php?tid=' . $tid) : ('php/api/stream.php?path=' . urlencode($fullPath))
         ];
     }
-    Storage::commitBatch();
+    if (!Storage::commitBatch()) { echo json_encode(['success'=>false,'message'=>'Library changed during scan or storage commit failed. Scan again.']); exit; }
 
     echo json_encode([
         'success'   => true,

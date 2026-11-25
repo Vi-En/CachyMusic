@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 import { store, NUM_BANDS } from '../state.js';
 import { getActiveTheme } from '../ui-elements.js';
 
@@ -395,7 +396,7 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 // Default Studio Phosphor Rounded Bar
                 drawRoundedRect(ctx, x, y, barWidth, segmentHeight, 1);
             }
-            ctx.shadowBlur = 0;
+            setCanvasShadowBlur(ctx, 0);
         }
 
         // 3. THEME-SPECIFIC FLOATING PEAK CAPS!
@@ -412,7 +413,7 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 ctx.rotate(Math.PI / 4);
                 ctx.fillStyle = diamondColor;
                 ctx.shadowColor = diamondColor;
-                ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                setCanvasShadowBlur(ctx, Math.min(4, 2 + beatPulse * 2));
                 const dSize = Math.max(2.2, Math.min(segmentHeight, barWidth * 0.45, 5.0));
                 ctx.fillRect(-dSize / 2, -dSize / 2, dSize, dSize);
                 ctx.restore();
@@ -430,7 +431,7 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 ctx.save();
                 ctx.fillStyle = '#ff007f';
                 ctx.shadowColor = '#00f0ff';
-                ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                setCanvasShadowBlur(ctx, Math.min(4, 2 + beatPulse * 2));
                 const orbR = Math.max(1.8, Math.min(barWidth * 0.38, segmentHeight * 0.85, 4.0));
                 ctx.beginPath();
                 ctx.arc(pcx, pcy, orbR, 0, Math.PI * 2);
@@ -444,7 +445,7 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 ctx.save();
                 ctx.fillStyle = '#fbbf24';
                 ctx.shadowColor = '#fbbf24';
-                ctx.shadowBlur = 3;
+                setCanvasShadowBlur(ctx, 3);
                 ctx.fillRect(x - 1, peakY, barWidth + 2, Math.min(2.2, segmentHeight));
                 ctx.fillStyle = '#14b8a6';
                 ctx.fillRect(pcx - 1, peakY - 3, 2, 2);
@@ -455,7 +456,7 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 const bobY = pcy + Math.sin(performance.now() * 0.005 + i) * 1.0;
                 ctx.fillStyle = '#ff2a70';
                 ctx.shadowColor = '#00ced1';
-                ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                setCanvasShadowBlur(ctx, Math.min(4, 2 + beatPulse * 2));
                 const sporeR = Math.max(1.6, Math.min(barWidth * 0.36, segmentHeight * 0.8, 3.8));
                 ctx.beginPath();
                 ctx.arc(pcx, bobY, sporeR, 0, Math.PI * 2);
@@ -466,7 +467,7 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 ctx.save();
                 ctx.fillStyle = '#00ffaa';
                 ctx.shadowColor = '#00ffaa';
-                ctx.shadowBlur = 3;
+                setCanvasShadowBlur(ctx, 3);
                 ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
                 // Radar ping ripple
                 ctx.strokeStyle = 'rgba(0, 255, 170, ' + (0.4 + beatPulse * 0.4) + ')';
@@ -480,7 +481,7 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 ctx.save();
                 ctx.fillStyle = '#fae8ff';
                 ctx.shadowColor = '#d946ef';
-                ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                setCanvasShadowBlur(ctx, Math.min(4, 2 + beatPulse * 2));
                 const capH = Math.max(1.8, Math.min(segmentHeight, 3.5));
                 const capW = Math.max(3.0, Math.min(barWidth * 0.7, 8.0));
                 ctx.beginPath();
@@ -501,7 +502,7 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 ctx.save();
                 ctx.fillStyle = '#ff3d00';
                 ctx.shadowColor = '#ff3d00';
-                ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                setCanvasShadowBlur(ctx, Math.min(4, 2 + beatPulse * 2));
                 ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
                 // Optical targeting pip
                 ctx.fillStyle = '#00e5ff';
@@ -517,16 +518,16 @@ export function drawVerticalDash(ctx, width, height, bands, playing, dt, beatPul
                 else if (currentTheme === 'minimalist-warm') capCol = '#d97706';
                 else if (currentTheme === 'minimalist-obsidian') capCol = '#38bdf8';
                 ctx.fillStyle = capCol;
-                ctx.shadowBlur = 0;
+                setCanvasShadowBlur(ctx, 0);
                 ctx.fillRect(x, peakY, barWidth, Math.min(2.0, segmentHeight));
                 ctx.restore();
             } else {
                 // Default Studio Phosphor LED Peak Bar
                 ctx.fillStyle = '#ffffff';
                 ctx.shadowColor = 'rgba(255, 255, 255, 0.95)';
-                ctx.shadowBlur = Math.min(4, 2 + beatPulse * 2);
+                setCanvasShadowBlur(ctx, Math.min(4, 2 + beatPulse * 2));
                 drawRoundedRect(ctx, x, peakY, barWidth, segmentHeight, 1);
-                ctx.shadowBlur = 0;
+                setCanvasShadowBlur(ctx, 0);
             }
         }
     }

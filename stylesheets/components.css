@@ -113,9 +113,9 @@
     .playerDeck { padding: var(--space-sm) var(--space-md); justify-content: space-between; gap: var(--space-xs); overflow-y: auto; }
     .turntableStage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; border-radius: var(--radius-md); background: radial-gradient(circle at center, var(--accent-surface), transparent 72%); container-type: size; }
     .deckArtworkWrapper { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
-    .deckArtworkAmbient { position: absolute; inset: -12%; width: 124%; height: 124%; object-fit: cover; opacity: 0.16; filter: blur(26px) saturate(1.25); pointer-events: none; }
-    .deckArtworkBackdrop { width: 100%; height: 100%; object-fit: cover; opacity: 0.04; pointer-events: none; }
-    .deckArtworkScrim { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 15%, var(--bg-surface-1) 88%); pointer-events: none; }
+    .deckArtworkAmbient { display: none; }
+    .deckArtworkBackdrop { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
+    .deckArtworkScrim { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 70%, var(--workspace-canvas) 100%); pointer-events: none; }
     .deckArtworkCard { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
     .turntableCon { position: relative; z-index: 2; flex: 0 0 auto; aspect-ratio: 1; width: max(72px, min(var(--turntable-size), calc(100cqh - 2.9rem), calc(100cqw - 1rem))); height: auto; display: flex; align-items: center; justify-content: center; contain: layout paint; transform: translateZ(0); }
     .turntableCon.lyricsActiveHidden { display: none; }
@@ -352,29 +352,6 @@
     .auditStageKey { color: var(--text-muted); font-family: var(--font-mono); }
     .auditStageVal { color: var(--text-primary); font-family: var(--font-mono); min-width: 0; overflow-wrap: anywhere; text-align: end; }
 
-    /* Metadata Editor & Confirm Diff */
-    .metaEditorBody, .metaEditorForm, .metaEditorSummaryDetails { display: flex; flex-direction: column; gap: var(--space-xs); min-width: 0; }
-    .metaEditorSummary { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; padding: var(--space-xs); background: var(--bg-surface-2); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); }
-    .metaEditorThumbCon { position: relative; width: 88px; height: 88px; border-radius: var(--radius-sm); overflow: hidden; flex: 0 0 88px; }
-    .metaEditorThumb { width: 100%; height: 100%; object-fit: cover; }
-    .metaEditorThumbOverlayBtn { position: absolute; inset: auto 0 0 0; background: oklch(0 0 0 / 0.72); color: #ffffff; font-size: var(--font-3xs); padding: 0.2rem; display: flex; align-items: center; justify-content: center; gap: 4px; }
-    .metaEditorCoverActions, .metaEditorPills, .metaEditorActions, .metaEditorConfirmActions, .metaEditorOnlineSearchCon { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
-    .metaEditorCoverActionBtn, .metaEditorPill, .metaEditorApplyCoverBtn, .metaEditorOnlineSearchBtn { padding: 0.3rem 0.65rem; border-radius: var(--radius-xs); border: 1px solid var(--border-subtle); background: var(--bg-surface-3); font-size: var(--font-2xs); font-weight: 700; }
-    .metaEditorOnlineCard, .metaEditorConfirmCard { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-sm); border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-bold); }
-    .metaEditorOnlineHeader, .metaEditorConfirmHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
-    .metaEditorOnlineContent, .metaEditChangeRow, .metaEditCoverChangeRow { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; font-size: var(--font-xs); }
-    .metaEditorOnlinePreview, .metaEditMiniThumb { width: 64px; height: 64px; border-radius: var(--radius-xs); object-fit: cover; }
-    .metaEditChangeField { font-weight: 800; color: var(--text-accent); }
-    .metaEditChangeFrom { color: var(--text-muted); text-decoration: line-through; }
-    .metaEditChangeTo { color: var(--status-success); font-weight: 700; }
-    .metaEditorStatus { padding: var(--space-xs); border-radius: var(--radius-xs); font-size: var(--font-xs); }
-    .metaEditorStatus.error { color: var(--status-danger); background: color-mix(in oklch, var(--status-danger) 14%, transparent); }
-    .metaEditorStatus.success { color: var(--status-success); background: color-mix(in oklch, var(--status-success) 14%, transparent); }
-    .metaEditorFormGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs); }
-    .metaEditorField { display: flex; flex-direction: column; gap: 3px; }
-    .metaFieldFull { grid-column: 1 / -1; }
-    .metaEditorLabel { font-size: var(--font-3xs); font-weight: 700; letter-spacing: 0.05em; color: var(--text-muted); }
-
     /* Theme Modal */
     .themeModalScrollArea { overflow-y: auto; max-height: 68dvh; }
     .themeColumnsContainer { display: flex; flex-direction: column; gap: var(--space-md); }
@@ -507,9 +484,6 @@
         .miniBtn { padding: 0.25rem 0.65rem; }
         .settingsHubHeader { padding: var(--space-xs) var(--space-sm); }
         .settingsSubtitle { display: none; }
-        .settingsCategoryNav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-        .settingsCategoryNav::-webkit-scrollbar { display: none; }
-        .settingsCatBtn { flex: 0 0 auto; white-space: nowrap; }
         .modalBackdrop { padding: 0.35rem; align-items: flex-end; }
         .modalCard { width: 100%; max-width: 100%; max-height: 94dvh; border-radius: var(--radius-md); animation: modalSheetIn var(--transition-base); }
         .modalCard .peqCanvasContainer { height: 120px; }

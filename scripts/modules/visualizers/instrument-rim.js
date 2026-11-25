@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 // A shallow, bounded bezel around the artwork. No extra canvas, assets or filters.
 const TAU = 2 * Math.PI;
 const RIMS = Object.freeze({
@@ -16,7 +17,7 @@ export function drawInstrumentRim(ctx, width, height, name, beat = 0) {
     ctx.save();
     ctx.translate(width / 2, height / 2);
     ctx.scale(r, r);
-    ctx.shadowBlur = 0;
+    setCanvasShadowBlur(ctx, 0);
     // All marks remain within the .99-radius canvas mask.
     ctx.beginPath(); ctx.arc(0, 0, .952, 0, TAU);
     ctx.lineWidth = .068; ctx.strokeStyle = p.base; ctx.stroke();

@@ -1,0 +1,11 @@
+/* Settings workspace owns category geometry. Theme files own materials. */
+:root[data-theme] .settingsWorkspace .settingsCategoryNav { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:4px; padding-block:2px 8px; }
+:root[data-theme] .settingsWorkspace .settingsCatBtn { min-width:0; max-width:100%; min-height:44px; padding:6px 8px; white-space:normal; overflow-wrap:anywhere; line-height:1.25; }
+:root[data-theme] .settingsWorkspace .settingsCol { min-width:0; }
+@media (max-width:768px) {
+  :root[data-theme] .settingsWorkspace .settingsCategoryNav { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  :root[data-theme] .settingsWorkspace .settingsCatBtn { font-size:.875rem; padding-inline:3px; }
+}
+@media (max-width:360px) {
+  :root[data-theme] .settingsWorkspace .settingsCatBtn { font-size:.8125rem; }
+}

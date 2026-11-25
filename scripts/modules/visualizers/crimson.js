@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 // Crimson — detailed scene and companion dock illustration.
 import { emitTurntableShockwave, store } from '../state.js';
 import { drawInstrumentRim } from './instrument-rim.js';
@@ -67,7 +68,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.save();
         ctx.strokeStyle = sw.color === '#00e5ff' ? `rgba(0, 229, 255, ${currentAlpha})` : `rgba(255, 23, 68, ${currentAlpha})`;
         ctx.shadowColor = sw.color || '#ff1744';
-        ctx.shadowBlur = (8 + atlasLuminance * 12 * (0.35 + 0.65 * fidelity)) * s;
+        setCanvasShadowBlur(ctx, (8 + atlasLuminance * 12 * (0.35 + 0.65 * fidelity)) * s);
         ctx.lineWidth = Math.max(1.0, (2.0 + atlasLuminance * 1.4) * (1.0 - prog * 0.5));
         ctx.beginPath();
         ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
@@ -96,7 +97,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(255, 23, 68, ${0.40 + atlasLuminance * 0.50})`;
         ctx.lineWidth = Math.max(1.5, 2.0 * s);
         ctx.shadowColor = '#ff1744';
-        ctx.shadowBlur = (8 + atlasLuminance * 16) * s;
+        setCanvasShadowBlur(ctx, (8 + atlasLuminance * 16) * s);
         ctx.stroke();
 
         // Outer Hexagonal Grid & Radar Crosshairs
@@ -115,7 +116,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(0, 229, 255, ${0.20 + atlasLuminance * 0.35})`;
         ctx.lineWidth = Math.max(1.0, 1.4 * s);
         ctx.shadowColor = '#00e5ff';
-        ctx.shadowBlur = (6 + atlasLuminance * 10) * s;
+        setCanvasShadowBlur(ctx, (6 + atlasLuminance * 10) * s);
         ctx.stroke();
 
         // 12 Telemetry Spokes & Sector Pointers
@@ -130,23 +131,6 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         }
         ctx.restore();
 
-        // Telemetry Text Stamps around the perimeter
-        ctx.save();
-        ctx.rotate(-atlasRotationAngle * 0.15);
-        ctx.fillStyle = `rgba(0, 229, 255, ${0.45 + atlasLuminance * 0.45})`;
-        ctx.font = `${Math.max(9, Math.round(8 * s))}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const glyphs = ['I', 'II', 'III', 'IV'];
-        for (let g = 0; g < 4; g++) {
-            const gAng = (g * Math.PI) / 2;
-            ctx.save();
-            ctx.rotate(gAng);
-            ctx.translate(0, -maxRadius * 0.88);
-            ctx.fillText(glyphs[g], 0, 0);
-            ctx.restore();
-        }
-        ctx.restore();
         ctx.restore();
     }
 
@@ -160,7 +144,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = atlasLuminance > 0.65 ? `rgba(255, 255, 255, ${platterAlpha})` : `rgba(255, 23, 68, ${platterAlpha})`;
     ctx.lineWidth = Math.max(1.0, (1.2 + atlasLuminance * 1.6) * s);
     ctx.shadowColor = atlasLuminance > 0.65 ? '#ffffff' : '#ff1744';
-    ctx.shadowBlur = (atlasLuminance * 22 * (0.35 + 0.65 * fidelity)) * s;
+    setCanvasShadowBlur(ctx, (atlasLuminance * 22 * (0.35 + 0.65 * fidelity)) * s);
     ctx.stroke();
     ctx.restore();
 
@@ -189,7 +173,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.arc(0, 0, r1, 0, Math.PI * 2);
     ctx.strokeStyle = `rgba(0, 229, 255, ${0.15 + atlasLuminance * 0.75})`;
     ctx.shadowColor = '#00e5ff';
-    ctx.shadowBlur = (atlasLuminance * 16) * s;
+    setCanvasShadowBlur(ctx, (atlasLuminance * 16) * s);
     ctx.lineWidth = Math.max(0.7, (0.9 + atlasLuminance * 1.5) * s);
     ctx.setLineDash([Math.round(5 * s), Math.round(7 * s)]);
     ctx.stroke();
@@ -204,7 +188,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.arc(0, 0, r2, 0, Math.PI * 2);
     ctx.strokeStyle = `rgba(255, 23, 68, ${0.18 + atlasLuminance * 0.75})`;
     ctx.shadowColor = '#ff1744';
-    ctx.shadowBlur = (atlasLuminance * 18) * s;
+    setCanvasShadowBlur(ctx, (atlasLuminance * 18) * s);
     ctx.lineWidth = Math.max(0.7, (0.9 + atlasLuminance * 1.6) * s);
     ctx.setLineDash([Math.round(6 * s), Math.round(5 * s)]);
     ctx.stroke();
@@ -328,18 +312,18 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         if (atlasLuminance > 0.58 && isFront) {
             ctx.strokeStyle = `rgba(255, 255, 255, ${0.65 + atlasLuminance * 0.35})`;
             ctx.shadowColor = '#ffffff';
-            ctx.shadowBlur = (atlasLuminance * 20) * s;
+            setCanvasShadowBlur(ctx, (atlasLuminance * 20) * s);
         } else {
             const edgeAlpha = 0.20 + atlasLuminance * 0.80;
             ctx.strokeStyle = isFront
                 ? `rgba(255, 40, 80, ${edgeAlpha})`
                 : `rgba(200, 15, 45, ${edgeAlpha * 0.7})`;
             ctx.shadowColor = '#ff1744';
-            ctx.shadowBlur = (atlasLuminance * 16) * s;
+            setCanvasShadowBlur(ctx, (atlasLuminance * 16) * s);
         }
         ctx.lineWidth = Math.max(0.7, (0.8 + atlasLuminance * 1.5) * s);
         ctx.stroke();
-        ctx.shadowBlur = 0;
+        setCanvasShadowBlur(ctx, 0);
     }
 
     // 6. Atlas Core Singularity Spark (Dormant garnet ember -> blazing stellar pulsar)
@@ -438,7 +422,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = '#ff1744';
     ctx.lineWidth = Math.max(1.0, 1.4 * s);
     ctx.shadowColor = '#ff1744';
-    ctx.shadowBlur = (8 + beatPulse * 10) * s;
+    setCanvasShadowBlur(ctx, (8 + beatPulse * 10) * s);
     ctx.stroke();
 
     ctx.beginPath();
@@ -471,7 +455,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.ellipse(0, baseY, wellR, wellR * 0.55, 0, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = '#ff1744';
-    ctx.shadowBlur = (14 + beatPulse * 20) * s;
+    setCanvasShadowBlur(ctx, (14 + beatPulse * 20) * s);
     ctx.fill();
 
     if (playing && beatPulse > 0.28) {
@@ -501,7 +485,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
         ctx.arc(px, py - pilH, 1.2 * s, 0, Math.PI * 2);
         ctx.fillStyle = '#ffffff';
         ctx.shadowColor = '#ff1744';
-        ctx.shadowBlur = 6 * s;
+        setCanvasShadowBlur(ctx, 6 * s);
         ctx.fill();
     });
     ctx.restore();
@@ -539,7 +523,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 0.8 * s;
         ctx.shadowColor = '#ff1744';
-        ctx.shadowBlur = 6 * s;
+        setCanvasShadowBlur(ctx, 6 * s);
         ctx.stroke();
         ctx.restore();
     }
@@ -587,7 +571,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     coreGrad.addColorStop(1, '#1a0105');
     ctx.fillStyle = coreGrad;
     ctx.shadowColor = '#ff1744';
-    ctx.shadowBlur = (16 + beatPulse * 24) * s;
+    setCanvasShadowBlur(ctx, (16 + beatPulse * 24) * s);
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = Math.max(1.0, 1.4 * s);
@@ -606,7 +590,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.font = `700 ${Math.max(6, Math.round(7.2 * s))}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'center';
     ctx.shadowColor = '#ff1744';
-    ctx.shadowBlur = 6 * s;
+    setCanvasShadowBlur(ctx, 6 * s);
 
     ctx.restore();
 }

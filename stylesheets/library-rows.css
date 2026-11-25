@@ -1,0 +1,25 @@
+/* Library window geometry and track control ownership. */
+.trackList { gap: 0; overflow-x: clip; }
+.trackList > :is(.trackListSpacerTop, .trackListSpacerBottom, .trackListItemsContainer) { flex: none; min-width: 0; }
+.trackListItemsContainer .trackItem {
+  height: var(--track-row-height, 64px);
+  min-width: 0;
+  border: 0;
+  border-block-end: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+.trackListItemsContainer .trackItem:is(:hover, .active) { background: var(--accent-surface); }
+
+/* Single row structure: no invisible quick-action columns. */
+:root[data-theme] .trackItem { display:grid; grid-template-columns:40px minmax(0,1fr) max-content 48px; column-gap:8px; align-items:center; padding:6px 0 6px 6px; min-width:0; box-sizing:border-box; text-align:start; transition:background-color var(--motion-short) var(--motion-feedback); }
+:root[data-theme] .trackItem :is(.trackDetails,.trackInfo) { min-width:0; overflow:hidden; text-align:start; }
+:root[data-theme] .trackItem .trackThumb { width:40px; height:40px; aspect-ratio:1; object-fit:cover; }
+:root[data-theme] .trackItem .trackDuration { justify-self:end; white-space:nowrap; margin:0; }
+:root[data-theme] .trackItem .trackMenuTriggerBtn { width:48px; height:48px; min-width:48px; min-height:48px; padding:0; justify-self:end; }
+:root[data-theme] .trackItem .trackTitle { font-weight:600; }
+:root[data-theme] button.trackDetails { display:flex; flex-direction:column; align-items:stretch; justify-content:center; min-height:44px; padding:0; border:0; background:transparent; border-radius:4px; gap:3px; width:100%; }
+:root[data-theme] button.trackDetails > span { display:block; }
+
+
+:root[data-theme] .trackList:focus-visible { outline:2px solid var(--accent-color); outline-offset:-2px; }

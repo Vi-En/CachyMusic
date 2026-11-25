@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 // Orbit — detailed scene and companion dock illustration.
 import { emitTurntableShockwave, store } from '../state.js';
 import { drawInstrumentRim } from './instrument-rim.js';
@@ -37,7 +38,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.save();
         ctx.strokeStyle = sw.color === '#ff007f' ? `rgba(255, 0, 127, ${currentAlpha})` : `rgba(0, 240, 255, ${currentAlpha})`;
         ctx.shadowColor = sw.color || '#00f0ff';
-        ctx.shadowBlur = (8 + beatPulse * 8 * (0.35 + 0.65 * fidelity)) * s;
+        setCanvasShadowBlur(ctx, (8 + beatPulse * 8 * (0.35 + 0.65 * fidelity)) * s);
         ctx.lineWidth = Math.max(1.0, (2.0 + beatPulse * 1.2) * (1.0 - prog * 0.5));
         ctx.beginPath();
         ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
@@ -114,7 +115,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.strokeStyle = r % 2 === 0 ? `rgba(0, 240, 255, ${rAlpha})` : `rgba(255, 0, 128, ${rAlpha})`;
             ctx.lineWidth = Math.max(0.8, (r === 2 ? 2.4 : 1.2) * s);
             ctx.shadowColor = r % 2 === 0 ? '#00f0ff' : '#ff007f';
-            ctx.shadowBlur = (r === 2 ? 10 + beatPulse * 12 : 4) * s;
+            setCanvasShadowBlur(ctx, (r === 2 ? 10 + beatPulse * 12 : 4) * s);
             ctx.stroke();
         }
 
@@ -124,7 +125,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(0, 240, 255, ${0.28 + beatPulse * 0.28})`;
         ctx.lineWidth = Math.max(1.0, 1.5 * s);
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = (8 + beatPulse * 10) * s;
+        setCanvasShadowBlur(ctx, (8 + beatPulse * 10) * s);
         ctx.stroke();
 
         // Subtle dashed telemetry harmonic guide along ship orbit
@@ -167,7 +168,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ribbonGrad.addColorStop(1, `rgba(255, 255, 255, ${0.80 + beatPulse * 0.20})`);
         ctx.fillStyle = ribbonGrad;
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = (10 + beatPulse * 16) * s;
+        setCanvasShadowBlur(ctx, (10 + beatPulse * 16) * s);
         ctx.fill();
         ctx.restore();
 
@@ -188,7 +189,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = coreGrad;
         ctx.lineWidth = Math.max(1.0, (2.2 + beatPulse * 1.6) * s);
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = (12 + beatPulse * 18) * s;
+        setCanvasShadowBlur(ctx, (12 + beatPulse * 18) * s);
         ctx.stroke();
         ctx.restore();
 
@@ -206,7 +207,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(0, 240, 255, ${0.75 + beatPulse * 0.25})`;
         ctx.lineWidth = Math.max(0.7, 1.2 * s);
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 6 * s;
+        setCanvasShadowBlur(ctx, 6 * s);
         ctx.stroke();
 
         ctx.beginPath();
@@ -221,7 +222,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(0, 240, 255, ${0.75 + beatPulse * 0.25})`;
         ctx.lineWidth = Math.max(0.7, 1.2 * s);
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = 6 * s;
+        setCanvasShadowBlur(ctx, 6 * s);
         ctx.stroke();
         ctx.restore();
 
@@ -232,7 +233,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             const sparkAlpha = Math.sin(pt.u * Math.PI) * (0.6 + beatPulse * 0.4);
             ctx.fillStyle = i % 2 === 0 ? `rgba(255, 255, 255, ${sparkAlpha})` : `rgba(0, 240, 255, ${sparkAlpha})`;
             ctx.shadowColor = '#00f0ff';
-            ctx.shadowBlur = 4 * s;
+            setCanvasShadowBlur(ctx, 4 * s);
             const sparkSize = (1.2 + beatPulse * 0.8) * s;
             ctx.fillRect(pt.x - sparkSize / 2, pt.y - sparkSize / 2, sparkSize, sparkSize);
         }
@@ -272,7 +273,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = '#00f0ff';
         ctx.lineWidth = Math.max(1.0, 1.3 * s);
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = (6 + beatPulse * 8) * s;
+        setCanvasShadowBlur(ctx, (6 + beatPulse * 8) * s);
         ctx.stroke();
 
         // Cockpit canopy luminescent glass
@@ -284,7 +285,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.closePath();
         ctx.fillStyle = '#ffffff';
         ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 4 * s;
+        setCanvasShadowBlur(ctx, 4 * s);
         ctx.fill();
 
         ctx.restore();
@@ -320,7 +321,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(0, 240, 255, ${0.35 + beatPulse * 0.35})`;
         ctx.lineWidth = Math.max(1.5, 2.2 * s);
         ctx.shadowColor = '#00f0ff';
-        ctx.shadowBlur = (12 + beatPulse * 16) * s;
+        setCanvasShadowBlur(ctx, (12 + beatPulse * 16) * s);
         ctx.stroke();
 
         ctx.restore();
@@ -393,7 +394,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = rimGrad;
     ctx.lineWidth = Math.max(1.5, (2.2 + beatPulse * 1.4) * s);
     ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = (8 + beatPulse * 14) * s;
+    setCanvasShadowBlur(ctx, (8 + beatPulse * 14) * s);
     ctx.stroke();
     ctx.restore();
 
@@ -487,7 +488,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = '#00f0ff';
     ctx.lineWidth = Math.max(0.9, 1.2 * s);
     ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = 8 * s;
+    setCanvasShadowBlur(ctx, 8 * s);
     ctx.stroke();
     ctx.restore();
 
@@ -553,7 +554,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.closePath();
     ctx.fillStyle = trailGrad;
     ctx.shadowColor = '#00f0ff';
-    ctx.shadowBlur = (8 + beatPulse * 12) * s;
+    setCanvasShadowBlur(ctx, (8 + beatPulse * 12) * s);
     ctx.fill();
     ctx.restore();
 

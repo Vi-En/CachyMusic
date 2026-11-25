@@ -1,0 +1,60 @@
+/* Shape by interaction role, not by element type. Native CSS only.
+   Conventional rounded corners are the default; continuous corners are opt-in.
+   Preserve independent hit targets, artwork, slider mechanics and theme identity. */
+:root[data-theme] {
+  --shape-field: 8px;
+  --shape-action: 6px;
+  --shape-icon: 50%;
+  --shape-nav: 4px;
+  --shape-primary: 18px;
+  --shape-dialog: 18px;
+  --shape-thumb: 4px;
+}
+:root[data-theme="nms"] { --shape-field:3px; --shape-action:3px; --shape-icon:3px; --shape-nav:2px; --shape-primary:5px; --shape-dialog:8px; --shape-thumb:2px; }
+:root[data-theme="solar-eclipse"] { --shape-field:10px; --shape-action:8px; --shape-primary:50%; --shape-dialog:20px; }
+:root[data-theme="euclid-horizon"] { --shape-field:3px; --shape-action:2px; --shape-icon:2px; --shape-nav:0; --shape-primary:3px; --shape-dialog:6px; --shape-thumb:2px; }
+:root[data-theme="alien-paradise"] { --shape-field:9px; --shape-action:9px 4px; --shape-primary:18px 10px; --shape-dialog:19px 12px; --shape-thumb:5px; }
+:root[data-theme="abyssal-void"] { --shape-field:4px; --shape-action:4px; --shape-icon:4px; --shape-primary:10px; --shape-dialog:9px; --shape-thumb:3px; }
+:root[data-theme="dissonance"] { --shape-field:4px; --shape-action:4px 9px; --shape-icon:4px; --shape-nav:2px; --shape-primary:6px 15px; --shape-dialog:8px 16px; --shape-thumb:3px; }
+:root[data-theme="sentinel"] { --shape-field:4px; --shape-action:3px; --shape-icon:3px; --shape-nav:2px; --shape-primary:5px; --shape-dialog:8px; --shape-thumb:2px; }
+:root[data-theme="minimalist-light"] { --shape-field:4px; --shape-action:3px; --shape-icon:4px; --shape-nav:0; --shape-primary:4px; --shape-dialog:8px; --shape-thumb:2px; }
+:root[data-theme="minimalist-dark"] { --shape-field:4px; --shape-action:3px; --shape-icon:3px; --shape-nav:0; --shape-primary:5px; --shape-dialog:8px; --shape-thumb:2px; }
+:root[data-theme="minimalist-warm"] { --shape-field:9px; --shape-action:8px; --shape-primary:17px; --shape-dialog:20px; --shape-thumb:5px; }
+:root[data-theme="minimalist-obsidian"] { --shape-field:6px; --shape-action:5px; --shape-nav:3px; --shape-primary:50%; --shape-dialog:12px; --shape-thumb:3px; }
+
+/* Ordinary text actions and inputs: conventional rectangular boundaries. */
+:root[data-theme] :is(.actionBtn,.topBtn,.folderBrowseBtn,.scanFolderActionBtn,.slskSubmitBtn,.slskFilterToggleBtn,.slskConnectionToggleBtn,.slskMiniTransfersBtn,.slskPanelToggleControl,.slskDirPill,.settingsThemePickerBtn,.metaEditorCoverActionBtn,.sleepOptBtn,.playlistChipBtn,.eqDeckBtn,.miniDeckReturnBtn,.visModeBtn,.themeSelectCard,.slskTransferBtn,.slskShowMoreBtn,.slskActionBtn) { border-radius:var(--shape-action); }
+:root[data-theme] :is(select,textarea,.searchContainer input,.settingsSearch input,.settingsInput,.metaEditorInput,#slskSearchInput,.slskModeSelect,.slskDirInput,#slskAccountForm input,#newPlaylistInput,#batchAddSearchInput) { border-radius:var(--shape-field); }
+
+/* Navigation and disclosures read as grouped destinations, not individual cards. */
+:root[data-theme] :is(.wsTabBtn,.mobileTabBtn,.settingsCatBtn,.libTab,.deckTopControls .deckActionBtn) { border-radius:var(--shape-nav); }
+:root[data-theme] :is(.settingsAdvancedSummary,.trackMenuItemBtn) { border-radius:0; }
+
+/* Compact binary/filter choice: retain pill silhouette for chips, not DSP tiles. */
+:root[data-theme] :is(.formatFilterPill,.slskChip) { border-radius:999px; }
+:root[data-theme] :is(.peqDspBtn,.enginePrecisionBtn,.ditherModeBtn,.bufferLatencyBtn,.debugModeBtn,.toggleActiveBtn,.speedBtn,.speedPresetBtn,.peqMiniModeBtn,.peqMiniResetBtn,.peqBypassBtn) { border-radius:var(--shape-action); }
+:root[data-theme] :is(#androidNativeMode,#continuousPcmMode,#settingsBgNotificationsToggle) { border-radius:999px; }
+
+/* Icon-only actions retain quiet circular or precise instrument-style feedback.
+   Do not change the square hit rectangle or the existing hover/active states. */
+:root[data-theme] :is(.playerDeck .mediaBtn:not(.playPauseBtn),.miniBtn:not(.miniPlayBtn),.muteBtn,.miniMuteBtn,.trackMenuTriggerBtn,.closeModalBtn,.closeBtn,.searchClearBtn,.slskClearBtn,.slskInFilterClearBtn,.folderTrayCloseBtn) { border-radius:var(--shape-icon); }
+:root[data-theme] .mediaCon .playPauseBtn { border-radius:var(--shape-primary); }
+:root[data-theme] .miniPlayBtn { border-radius:var(--shape-icon); }
+
+/* Keep content surfaces restrained, not a stack of rounded containers. */
+:root[data-theme] :is(.settingsPanelContent,.metadataLookup,.peqCanvasContainer,.slskWorkspaceNotice) { border-radius:var(--shape-field); }
+:root[data-theme] :is(.modalCard,.slskModalCard,.audioChangeDialog) { border-radius:var(--shape-dialog); }
+:root[data-theme] .trackThumb { border-radius:var(--shape-thumb); }
+:root[data-theme][data-presentation="artwork"] :is(.vinylTurntable,.vinylLabel,.miniTurntableThumb) { border-radius:0; }
+
+/* A small, explicit set of opt-in shapes for soft themes only. No shape applied
+   to switches, slider thumbs, input fields, thumbnails, chips or navigation. */
+@supports (corner-shape: squircle) {
+  :root:is([data-theme="default"],[data-theme="alien-paradise"],[data-theme="minimalist-warm"]) .mediaCon .playPauseBtn,
+  :root:is([data-theme="default"],[data-theme="alien-paradise"],[data-theme="minimalist-warm"],[data-theme="solar-eclipse"]) :is(.modalCard,.slskModalCard,.audioChangeDialog) { corner-shape:squircle; }
+}
+/* Retain keyboard/forced-colors feedback from the previous release. */
+:root[data-theme] :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible { outline:2px solid var(--border-focus); outline-offset:-2px; }
+@media (forced-colors: active) {
+  :root[data-theme] :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible { outline-color:Highlight; }
+}

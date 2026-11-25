@@ -31,6 +31,16 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
     const cachedMobileTabBtns = Array.from(document.querySelectorAll('.mobileTabBtn'));
     const cachedAllPanelsList = [playerDeckEl, trackListPanelEl, settingsPanelEl].filter(Boolean);
 
+    function setLibraryTabActive(id) {
+        for (const name of ['tabLibrary','tabPlaylists','tabQueue']) {
+            const button = document.getElementById(name);
+            if (!button) continue;
+            button.classList.toggle('active',name===id);
+            if(name===id) button.setAttribute('aria-current','page');
+            else button.removeAttribute('aria-current');
+        }
+    }
+
     function setMobileTabActive(targetId) {
         for (let i = 0; i < cachedMobileTabBtns.length; i++) {
             const b = cachedMobileTabBtns[i];
@@ -659,6 +669,11 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
             }
         }
 
+        for (const button of [wsPlayerBtn, wsSoulseekBtn, wsDownloadBtn, wsSettingsBtn, topSettingsBtn]) {
+            if (!button) continue;
+            if (button.classList.contains('active')) button.setAttribute('aria-current','page');
+            else button.removeAttribute('aria-current');
+        }
         store.emit('workspace:change', { viewName, targetMobilePanel });
     }
 
@@ -669,36 +684,31 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
 
     // Blocking Track Loading Overlay & IndexedDB Library Persistence
     // =========================================================================
-    function showTrackLoadingOverlay(title = 'LOADING MUSIC LIBRARY...', statusText = 'Indexing audio files and metadata. Please wait...', progressPct = null) {
+    function setLoadingProgress(progressPct) {
+        const bar = document.getElementById('trackLoadingProgressBar');
+        const track = bar?.parentElement;
+        if (!bar || !track) return;
+        const known = typeof progressPct === 'number' && Number.isFinite(progressPct);
+        bar.classList.toggle('indeterminate', !known);
+        const pct = known ? Math.max(0, Math.min(100, progressPct)) : null;
+        bar.style.width = known ? `${pct}%` : '40%';
+        if (known) track.setAttribute('aria-valuenow', String(Math.round(pct)));
+        else track.removeAttribute('aria-valuenow');
+    }
+    function showTrackLoadingOverlay(title = 'Loading music library…', statusText = 'Indexing audio files and metadata.', progressPct = null) {
         store.state.isTrackLoadingCancelled = false;
         const overlay = document.getElementById('trackLoadingOverlay');
         const titleEl = document.getElementById('trackLoadingTitle');
         const statusEl = document.getElementById('trackLoadingStatusText');
-        const barEl = document.getElementById('trackLoadingProgressBar');
         if (titleEl && title) titleEl.textContent = title;
         if (statusEl && statusText) statusEl.textContent = statusText;
-        if (barEl) {
-            if (typeof progressPct === 'number') {
-                barEl.classList.remove('indeterminate');
-                barEl.style.width = `${Math.max(2, Math.min(100, progressPct))}%`;
-            } else {
-                barEl.classList.add('indeterminate');
-                barEl.style.width = '40%';
-            }
-        }
-        if (overlay) {
-            overlay.style.display = 'flex';
-        }
+        setLoadingProgress(progressPct);
+        if (overlay) overlay.style.display = 'flex';
     }
-
     function updateTrackLoadingOverlay(statusText, progressPct = null) {
         const statusEl = document.getElementById('trackLoadingStatusText');
-        const barEl = document.getElementById('trackLoadingProgressBar');
         if (statusEl && statusText) statusEl.textContent = statusText;
-        if (barEl && typeof progressPct === 'number') {
-            barEl.classList.remove('indeterminate');
-            barEl.style.width = `${Math.max(2, Math.min(100, progressPct))}%`;
-        }
+        setLoadingProgress(progressPct);
     }
 
     function hideTrackLoadingOverlay() {
@@ -882,6 +892,7 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         setMobilePanelsInactive,
         setMobileSearchPanelCollapsed,
         setMobileTabActive,
+        setLibraryTabActive,
         settingsPanelEl,
         settingsReturnBtn,
         settingsWorkspace,

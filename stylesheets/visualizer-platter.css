@@ -5,3 +5,39 @@
 :root[data-presentation="thematic"] .turntableCon.spinning .vinylTurntable { animation: none; }
 :root[data-presentation="thematic"] .turntableCenterVis { z-index: 3; overflow: hidden; }
 :root[data-presentation="thematic"] .turntableCenterCanvas { display: block; }
+
+/* Platter alignment invariant: center on the player, not a theme-specific column. */
+:root[data-theme] .playerDeck { flex-direction:column; align-items:center; }
+:root[data-theme] .playerDeck .turntableStage { align-items:center; width:100%; padding-inline:8px; border-inline-width:0; }
+:root[data-theme] .playerDeck .turntableCon { align-self:center; margin-inline:auto; transform:none; }
+@media (max-width:768px), (max-height:500px) and (orientation:landscape) {
+ :root[data-theme] .playerDeck.mobileActive { display:flex; }
+}
+
+/* Keep background coverage independent of platter geometry. */
+:root[data-theme] .playerDeck { --player-inline-inset:clamp(12px,2vw,24px); padding-inline:var(--player-inline-inset); }
+:root[data-theme]:is([data-presentation="thematic"],[data-presentation="wave"],[data-presentation="dash"]) .playerDeck:not(.empty-deck) { padding-block-start:0; padding-inline:0; }
+:root[data-theme]:is([data-presentation="thematic"],[data-presentation="wave"],[data-presentation="dash"]) .playerDeck:not(.empty-deck) .turntableStage { width:100%; align-self:center; border:0; border-radius:0; isolation:isolate; }
+:root[data-theme]:is([data-presentation="thematic"],[data-presentation="wave"],[data-presentation="dash"]) .playerDeck:not(.empty-deck) > :is(.trackMeta,.timelineCon,.mediaCon,.deckAudioControls) { width:min(calc(100% - 2 * var(--player-inline-inset)),var(--player-content-width)); }
+:root[data-presentation="artwork"] .deckArtworkWrapper,.playerDeck.empty-deck .deckArtworkWrapper { display:none; }
+@media (max-width:768px), (max-height:500px) and (orientation:landscape) {
+ :root[data-theme] .playerDeck.mobileActive { --player-inline-inset:max(12px,var(--safe-left),var(--safe-right)); padding-inline:var(--player-inline-inset); }
+}
+
+/* Theme materials, with consistent control placement. */
+:root[data-theme] { --artwork-backdrop-opacity:.22; }
+:root[data-theme="minimalist-light"] { --artwork-backdrop-opacity:.16; }
+:root[data-theme="minimalist-obsidian"] { --artwork-backdrop-opacity:.16; }
+:root[data-theme="minimalist-warm"] { --artwork-backdrop-opacity:.25; }
+:root[data-theme="solar-eclipse"] { --artwork-backdrop-opacity:.26; }
+:root[data-theme] .deckArtworkScrim { background:linear-gradient(to bottom, var(--workspace-canvas) 0%,transparent 20%,transparent 55%,var(--workspace-canvas) 100%); }
+:root[data-theme="nms"][data-presentation="artwork"] .turntableStage { background:var(--quiet-fill); border-block-end:2px solid var(--accent-color); }
+:root[data-theme="euclid-horizon"][data-presentation="artwork"] .turntableStage { background:var(--workspace-panel); border-block:1px solid var(--quiet-line); }
+:root[data-theme="sentinel"][data-presentation="artwork"] .turntableStage { background:var(--quiet-fill); border-block:2px solid var(--quiet-line); }
+:root[data-theme="minimalist-dark"][data-presentation="artwork"] .turntableStage { background:var(--quiet-fill); border-block:1px solid var(--quiet-line); }
+:root[data-theme="minimalist-obsidian"] .playerDeck { background:#000; }
+:root[data-theme="minimalist-obsidian"] .playerDeck .mediaCon { border:0; }
+:root[data-theme="minimalist-light"] .trackMeta { border-block-end:1px solid var(--quiet-line); }
+:root[data-theme="minimalist-warm"] .playerDeck .mediaCon { background:var(--quiet-fill); border-radius:var(--control-radius); }
+:root[data-theme="alien-paradise"] .playerDeck .mediaCon { background:var(--quiet-fill); border-radius:24px 8px; }
+:root[data-theme="dissonance"] .playerDeck .mediaCon { border-block-end:2px solid var(--quiet-line); }

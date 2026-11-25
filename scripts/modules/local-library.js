@@ -1,5 +1,6 @@
 // CachyMusic - Standalone PWA Offline Persistence (IndexedDB + OPFS + FileSystemDirectoryHandle)
 import { getRuntime } from './runtime-capabilities.js';
+import { withOfflineWriteLock, pendingAudioRecord, pendingAudioRecordKey, commitLibraryRecord, recoverPendingAudio } from './offline-write-journal.js';
 
 const DB_NAME = 'cachymusic_idb_v2';
 const LEGACY_DB_NAME = 'cachymusic_idb_v1';
@@ -80,13 +81,16 @@ async function getOpfsRootDir() {
     }
 }
 
-export async function writeFileToOpfs(fileKey, fileOrBlob) {
+export async function writeFileToOpfs(fileKey, fileOrBlob, journal = null) {
     const dir = await getOpfsRootDir();
     if (!dir || !fileOrBlob) return null;
     // A fresh UUID avoids destructive collisions, including duplicate file names.
     if (!globalThis.crypto?.randomUUID) return null;
     const safeKey = 'audio-' + crypto.randomUUID();
     let writable = null;
+    // Record ownership before creating a file; never create an unjournaled copy
+    // when cross-tab recovery is enabled.
+    if (journal) await commitLibraryRecord(journal, store => store.put(pendingAudioRecord(safeKey)));
     try {
         const handle = await dir.getFileHandle(safeKey, { create: true });
         if (typeof handle.createWritable !== 'function') throw new Error('OPFS writable stream unavailable');
@@ -98,15 +102,22 @@ export async function writeFileToOpfs(fileKey, fileOrBlob) {
         // A partially created file is ours, not the user's source audio. Never
         // leave it occupying offline storage after a failed import.
         try { await writable?.abort?.(); } catch (_) {}
-        try { await dir.removeEntry(safeKey); } catch (_) {}
+        if (await removeCreatedOpfsKey(safeKey) && journal) {
+            await commitLibraryRecord(journal, store => store.delete(pendingAudioRecordKey(safeKey))).catch(() => {});
+        }
         console.warn('[OPFS] writeFileToOpfs failed, falling back to IDB blob:', e);
         return null;
     }
 }
 
 async function removeCreatedOpfsKey(key) {
-    if (!key || !key.startsWith('audio-')) return;
-    try { const dir = await getOpfsRootDir(); await dir?.removeEntry(key); } catch (_) {}
+    if (!key || !key.startsWith('audio-')) return false;
+    try {
+        const dir = await getOpfsRootDir();
+        if (!dir) return false;
+        await dir.removeEntry(key);
+        return true;
+    } catch (error) { return error?.name === 'NotFoundError'; }
 }
 
 export async function readFileFromOpfs(opfsKey) {
@@ -155,15 +166,21 @@ export async function loadSavedDirectoryHandle() {
 
 let librarySaveTail = Promise.resolve();
 export function saveLibraryToLocalDb(tracks, directoryName) {
-    const run = librarySaveTail.then(() => performLibrarySave(tracks, directoryName));
+    const snapshot = [...tracks]; // Capture membership before waiting for older saves.
+    const run = librarySaveTail.then(() => withOfflineWriteLock(locked => performLibrarySave(snapshot, directoryName, locked))).catch(error => {
+        console.warn('[LocalLibrary] Offline write lock unavailable:', error);
+        return false;
+    });
     librarySaveTail = run.then(() => {}, () => {});
     return run;
 }
 
-async function performLibrarySave(tracks, directoryName) {
+async function performLibrarySave(tracks, directoryName, locked) {
     const newOpfsCopies = [];
+    let db;
     try {
-        const db = await openPwaDb();
+        db = await openPwaDb();
+        if (locked) await recoverPendingAudio(db, removeCreatedOpfsKey).catch(error => console.warn('[LocalLibrary] Offline recovery deferred:', error));
         const storableTracks = [];
         for (const t of tracks) {
             const storable = {
@@ -197,10 +214,9 @@ async function performLibrarySave(tracks, directoryName) {
             };
             // Store Blob only if neither server stream nor OPFS key is present
             if (!storable.src && !storable.opfsKey && (t._fileBlob || t.fileBlob)) {
-                const opfsKey = await writeFileToOpfs(t.fullPath || t.filename || t.id, t._fileBlob || t.fileBlob);
+                const opfsKey = await writeFileToOpfs(t.fullPath || t.filename || t.id, t._fileBlob || t.fileBlob, locked ? db : null);
                 if (opfsKey) {
                     storable.opfsKey = opfsKey;
-                    t.opfsKey = opfsKey;
                     newOpfsCopies.push({track:t,key:opfsKey});
                 } else {
                     storable.fileBlob = t._fileBlob || t.fileBlob;
@@ -211,28 +227,39 @@ async function performLibrarySave(tracks, directoryName) {
 
         await new Promise((resolve, reject) => {
             const tx=db.transaction(['library','tracks','artwork'],'readwrite');
-            const records=tx.objectStore('tracks'), artwork=tx.objectStore('artwork');
-            records.clear();artwork.clear();
-            const seenArt=new Set();
-            for(let i=0;i<storableTracks.length;i++) {
-                const t=storableTracks[i];
-                if(t.coverKey&&t.cover&&t.coverThumb){
-                    if(!seenArt.has(t.coverKey)){artwork.put({key:t.coverKey,cover:t.cover,coverThumb:t.coverThumb});seenArt.add(t.coverKey);}
-                    delete t.cover;delete t.coverThumb;
+            tx.oncomplete=resolve;
+            // Wait for an actual abort, not a bubbling request error. A
+            // synchronous put error must also abort the entire transaction.
+            tx.onabort=()=>reject(tx.error || new Error('Library transaction aborted'));
+            try {
+                const records=tx.objectStore('tracks'), artwork=tx.objectStore('artwork');
+                records.clear();artwork.clear();
+                const seenArt=new Set();
+                for(let i=0;i<storableTracks.length;i++) {
+                    const t=storableTracks[i];
+                    if(t.coverKey&&t.cover&&t.coverThumb){
+                        if(!seenArt.has(t.coverKey)){artwork.put({key:t.coverKey,cover:t.cover,coverThumb:t.coverThumb});seenArt.add(t.coverKey);}
+                        delete t.cover;delete t.coverThumb;
+                    }
+                    records.put({...t,storageKey:i});
                 }
-                records.put({...t,storageKey:i});
+                tx.objectStore('library').put({key:'active_library_v2',directoryName:directoryName||'',count:storableTracks.length,updatedAt:Date.now()});
+                if (locked) for (const {key} of newOpfsCopies) tx.objectStore('library').delete(pendingAudioRecordKey(key));
+                // Preserve the previous-format record as a migration backup, never overwrite it.
+            } catch (error) {
+                tx.abort();
             }
-            tx.objectStore('library').put({key:'active_library_v2',directoryName:directoryName||'',count:storableTracks.length,updatedAt:Date.now()});
-            // Preserve the previous-format record as a migration backup, never overwrite it.
-            tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
         });
+        for (const {track,key} of newOpfsCopies) track.opfsKey = key;
         return true;
     } catch (e) {
         // The DB transaction did not commit. Roll back only OPFS files created
         // by this attempt; preserve all pre-existing files and the old library.
         for (const {track,key} of newOpfsCopies) {
-            if (track.opfsKey === key) track.opfsKey = null;
-            await removeCreatedOpfsKey(key);
+            if (!track.opfsKey) track.opfsKey = null;
+            if (await removeCreatedOpfsKey(key) && locked && db) {
+                await commitLibraryRecord(db, store => store.delete(pendingAudioRecordKey(key))).catch(() => {});
+            }
         }
         console.warn('[LocalLibrary] IndexedDB save skipped:', e);
         return false;
@@ -240,6 +267,9 @@ async function performLibrarySave(tracks, directoryName) {
 }
 
 export async function loadLibraryFromLocalDb() {
+    // Recovery is best-effort: a failed cleanup must not prevent playback.
+    try { await withOfflineWriteLock(async locked => { if (locked) await recoverPendingAudio(await openPwaDb(), removeCreatedOpfsKey); }); }
+    catch (error) { console.warn('[LocalLibrary] Offline recovery deferred:', error); }
     try {
         const db = await openPwaDb();
         const normalized=await new Promise((resolve,reject)=>{
@@ -349,38 +379,44 @@ export async function loadAllMetadataOverrides() {
     return map;
 }
 
-export async function saveLocalPlaylists(playlists) {
+// Read and compare inside the same readwrite transaction as the mutation.
+// IndexedDB serializes overlapping write transactions across tabs.
+export async function mutateLocalPlaylist(expected, next) {
+    const id = next?.plid ?? expected?.plid;
+    if (!String(id || '').startsWith('local_pl_') || (expected && next && expected.plid !== next.plid)) return false;
+    const snapshot = p => JSON.stringify([String(p.plid), p.name, (p.tracks || []).map(String), Number(p.revision || 0)]);
     try {
         const db = await openPwaDb();
-        // Await transaction COMMIT, not merely request scheduling. Callers can
-        // now distinguish persistent success from quota/abort failures.
-        await new Promise((resolve, reject) => {
-            const tx = db.transaction('playlists', 'readwrite');
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error || new Error('Playlist save failed'));
-            tx.onabort = () => reject(tx.error || new Error('Playlist save aborted'));
+        return await new Promise((resolve, reject) => {
+            const tx = db.transaction('playlists','readwrite');
             const os = tx.objectStore('playlists');
-            os.clear();
-            for (const pl of playlists) os.put(pl);
+            let accepted = false;
+            tx.oncomplete = () => resolve(accepted);
+            tx.onerror = tx.onabort = () => reject(tx.error || Error('Playlist transaction failed'));
+            const request = os.getAll();
+            request.onsuccess = () => {
+                const records = request.result || [];
+                const actual = records.find(p => String(p.plid) === String(id));
+                if (expected ? !actual || snapshot(actual) !== snapshot(expected) : Boolean(actual)) return;
+                if (next && records.some(p => String(p.plid).startsWith('local_pl_') && String(p.plid) !== String(id) && String(p.name).toLowerCase() === String(next.name).toLowerCase())) return;
+                if (next) os.put(next); else os.delete(id);
+                accepted = true;
+            };
         });
-        return true;
-    } catch (error) {
-        console.warn('[LocalLibrary] Playlist persistence failed:', error);
-        return false;
-    }
+    } catch (error) { console.warn('[LocalLibrary] Playlist mutation failed:',error); return false; }
 }
 
-export async function loadLocalPlaylists() {
+export async function loadLocalPlaylists(failureValue = []) {
     try {
         const db = await openPwaDb();
         return await new Promise((resolve) => {
             const tx = db.transaction('playlists', 'readonly');
             const req = tx.objectStore('playlists').getAll();
             req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => resolve([]);
+            req.onerror = () => resolve(failureValue);
         });
     } catch (_) {
-        return [];
+        return failureValue;
     }
 }
 

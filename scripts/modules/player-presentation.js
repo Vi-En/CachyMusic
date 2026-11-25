@@ -35,9 +35,9 @@ export function renderTrackMetadata(track, isStandalone, updateDacStatusUi) {
 export function applyArtworkToDeck(coverSrc, hasCustomCover) {
     const fallback = 'resources/images/default.svg';
     if (deckArtworkBackdrop) {
-        deckArtworkBackdrop.onerror = () => { deckArtworkBackdrop.onerror = null; deckArtworkBackdrop.src = fallback; };
+        deckArtworkBackdrop.onerror = () => { deckArtworkBackdrop.onerror = null; deckArtworkBackdrop.style.opacity = '0'; deckArtworkBackdrop.src = fallback; };
         deckArtworkBackdrop.src = coverSrc;
-        deckArtworkBackdrop.style.opacity = hasCustomCover ? '0.28' : '0.04';
+        deckArtworkBackdrop.style.opacity = hasCustomCover ? 'var(--artwork-backdrop-opacity, .24)' : '0';
     }
     if (deckArtworkAmbient) {
         deckArtworkAmbient.onerror = () => { deckArtworkAmbient.onerror = null; deckArtworkAmbient.src = fallback; };

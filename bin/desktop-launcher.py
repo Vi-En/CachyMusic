@@ -24,6 +24,19 @@ SESSION = STATE / 'launcher-session.json'
 STOP = STATE / 'launcher-stop'
 HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
+def source_version():
+    return json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
+
+def assert_matching_session(active):
+    # Old sessions remain stoppable, but cannot masquerade as an upgraded build.
+    if active.get('version') != source_version() or active.get('root') != str(ROOT):
+        raise RuntimeError('A different CachyMusic build is running. Close its player, run --stop, then start this build again.')
+    if os.environ.get('CACHY_PORT') and int(os.environ['CACHY_PORT']) != active['port']:
+        raise RuntimeError('The running service uses a different port. Run --stop before changing it.')
+    for key, field in [('CACHYMUSIC_DATA_DIR', 'data'), ('CACHYMUSIC_CACHE_DIR', 'cache')]:
+        if os.environ.get(key) and os.path.normcase(str(Path(os.environ[key]).resolve())) != os.path.normcase(active.get(field, '')):
+            raise RuntimeError('The running service uses different storage. Run --stop before changing it.')
+
 
 def read_session():
     try:
@@ -136,7 +149,22 @@ def serve(port):
         env.pop('CACHYMUSIC_MPRIS_ACTIVE', None)
         use_mpris = not WINDOWS and env.get('CACHYMUSIC_MPRIS') == '1' and subprocess.run([sys.executable, '-c', 'import dbus; from gi.repository import GLib; dbus.SessionBus()'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
         if use_mpris: env['CACHYMUSIC_MPRIS_ACTIVE'] = '1' 
-        env['CACHYMUSIC_DATA_DIR'] = subprocess.check_output([php, '-r', 'require "php/platform.php"; echo cachy_data_dir();'], cwd=ROOT, env=env).decode('utf-8').strip()
+        # Validate runtime and both storage roots before starting any child service.
+        subprocess.run([php, '-r', 'if (PHP_VERSION_ID < 80100) { fwrite(STDERR, "PHP 8.1+ required\\n"); exit(1); }'], cwd=ROOT, env=env, check=True, timeout=10)
+        for key, function in [('CACHYMUSIC_DATA_DIR', 'cachy_data_dir'), ('CACHYMUSIC_CACHE_DIR', 'cachy_cache_dir')]:
+            env[key] = subprocess.check_output([php, '-r', f'require "php/platform.php"; echo {function}();'], cwd=ROOT, env=env, timeout=10).decode('utf-8').strip()
+        library = Path(env['CACHYMUSIC_DATA_DIR']) / 'library.json'
+        if library.exists() or library.is_symlink():
+            try:
+                with library.open(encoding='utf-8') as handle:
+                    data = json.load(handle)
+                if not isinstance(data, dict) or not isinstance(data.get('playlists'), list) or not isinstance(data.get('tracks'), (list, dict)):
+                    raise ValueError('Invalid library structure')
+            except (OSError, ValueError, UnicodeError) as exc:
+                raise RuntimeError('Existing library.json could not be read or validated. Back it up and recover it before starting; it has not been changed.') from exc
+            finally:
+                # Do not keep a parsed copy of a potentially large library in the supervisor.
+                data = None
         node = shutil.which('node')
         # Optional service: do not start if dependencies are missing or the port is occupied.
         if node and (ROOT / 'server/soulseek-service.js').is_file() and subprocess.run([node, '-e', "require.resolve('slsk-client')"], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
@@ -165,7 +193,7 @@ def serve(port):
         if use_mpris:
             launch([sys.executable, str(ROOT/'bin/cachymusic-mpris.py'), '--port', str(port)], env, 'mpris')
         tmp = SESSION.with_suffix('.tmp')
-        tmp.write_text(json.dumps({'port':port, 'instance':instance, 'mpris':use_mpris}))
+        tmp.write_text(json.dumps({'port':port, 'instance':instance, 'mpris':use_mpris, 'version':source_version(), 'root':str(ROOT), 'data':env['CACHYMUSIC_DATA_DIR'], 'cache':env['CACHYMUSIC_CACHE_DIR']}))
         tmp.replace(SESSION)
         (STATE / 'port').write_text(str(port))
         while not stopping and php_child.poll() is None:
@@ -206,9 +234,12 @@ def main():
     modes.add_argument('--tray',action='store_true')
     args = parser.parse_args()
     if args.serve is not None: serve(args.serve); return
+    for key in ('CACHYMUSIC_DATA_DIR', 'CACHYMUSIC_CACHE_DIR'):
+        if os.environ.get(key):
+            os.environ[key] = str(Path(os.environ[key]).resolve())
     active = active_session()
     if args.status:
-        print(f'CachyMusic running at http://127.0.0.1:{active["port"]}' if active else 'No managed CachyMusic session.'); return
+        print(f'CachyMusic {active.get("version", "(legacy build)")} running at http://127.0.0.1:{active["port"]}' if active else 'No managed CachyMusic session.'); return
     if args.stop:
         recorded = read_session()
         if recorded:
@@ -231,6 +262,7 @@ def main():
             if child.poll() is not None: break
             time.sleep(.1)
         if not active: raise RuntimeError(f'Server failed to start. See {STATE / "launcher.log"}')
+    assert_matching_session(active)
     url = f'http://127.0.0.1:{active["port"]}'
     print(url)
     if args.tray:

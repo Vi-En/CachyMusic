@@ -1,3 +1,4 @@
+import {playbackPool} from './playlist-playback.js';
 // Android-only native transport. The ordinary PWA never sees a privileged URI.
 import { sameTrack } from './pcm-transition.js';
 
@@ -125,9 +126,10 @@ export function buildNativeOrder(state, supportsQueue = false, shuffleToken = ''
 
     const repeatOne = state.repeatMode === 'one';
     const repeatAll = state.repeatMode === 'all';
-    const pool = state.displayedTracks?.length ? state.displayedTracks : state.allTracks;
+    const pool = playbackPool(state);
+    if(state.playlistPlayback?.historyIndex>=0 && (state.playlistPlayback.historyIndex<state.playlistPlayback.history.length-1 || !sameTrack(pool[state.playlistPlayback.cursor],current))) return {tracks:[entry],index:0,complete:false,repeatOne,repeatAll:false,sessionBoundary:true};
     const queued = supportsQueue && Boolean(state.playQueue?.length);
-    const shuffle = state.isShuffle && Boolean(shuffleToken);
+    const shuffle = !state.playlistPlayback && state.isShuffle && Boolean(shuffleToken);
     if (queued || shuffle) {
         const queue = queueWindow(queued ? state.playQueue : [], MAX_ORDER_TRACKS - 1,
             MAX_ORDER_LENGTH - JSON.stringify(entry).length - 256);
@@ -136,7 +138,7 @@ export function buildNativeOrder(state, supportsQueue = false, shuffleToken = ''
         if (shuffle) Object.assign(order, shuffleWindow(pool, shuffleToken, Math.max(0, queue.budget)));
         return order;
     }
-    const position = !state.isShuffle && !state.playQueue?.length
+    const position = (!state.isShuffle || state.playlistPlayback) && !state.playQueue?.length
         ? pool.findIndex(track => sameTrack(track, current)) : -1;
     if (position < 0) {
         return repeatOne ? { tracks: [entry], index: 0, complete: false, repeatOne } : null;
@@ -199,11 +201,12 @@ export class NativeTransport {
     buildOrder(state, token, queueEdits) {
         const order = buildNativeOrder(state, this.supportsQueue, this.supportsShuffle ? token : '');
         if (!order) return null;
+        if(order.sessionBoundary)return order;
         this.extendQueue(order, state.playQueue, token, queueEdits);
         const shuffle = Boolean(order.shuffleTracks);
         if (shuffle ? !this.supportsShuffleCatalog || order.shuffleComplete
-            : !this.supportsOrderedCatalog || state.isShuffle || state.playQueue?.length || order.complete) return order;
-        const pool = state.displayedTracks?.length ? state.displayedTracks : state.allTracks;
+            : !this.supportsOrderedCatalog || (state.isShuffle && !state.playlistPlayback) || state.playQueue?.length || order.complete) return order;
+        const pool = playbackPool(state);
         const current = order.tracks[order.index].uri;
         let catalog = this.catalog;
         if (catalog?.token !== token || catalog.pool !== pool || catalog.length !== pool.length
@@ -274,4 +277,28 @@ export class NativeTransport {
         }
         return false;
     }
+}
+
+// Only adopt a snapshot belonging to the exact service token. A snapshot
+// with missing/ambiguous catalog identities must not fall back to the library.
+export function saveNativePlaylist(token, session) {
+    if(!session)return JSON.stringify({token,session:null});
+    const ordered=session.ordered.map(indexedSource),saved=session.saved.map(indexedSource);
+    const history=(session.history||[]).map(e=>[indexedSource(e.track),e.cursor]);
+    const value=JSON.stringify({token,session:{id:session.id,ordered,saved,cursor:session.cursor,shuffle:session.shuffle,history,historyIndex:session.historyIndex}});
+    if(ordered.length>4096||ordered.some(u=>!u)||saved.some(u=>!u)||history.some(e=>!e[0])||value.length>256000)return JSON.stringify({token,unavailable:true});
+    return value;
+}
+export function restoreNativePlaylist(raw,token,library) {
+    let data;try{data=JSON.parse(raw);}catch(_){return {session:null,invalid:Boolean(raw)};}
+    if(!data||data.token!==token)return {session:null,invalid:false};
+    if(data.unavailable)return {session:null,invalid:true};
+    if(!data.session)return {session:null,invalid:false};
+    const s=data.session, map=new Map();
+    for(const track of library){const uri=indexedSource(track);if(uri)map.set(uri,map.has(uri)?null:track);}
+    if(!Array.isArray(s.ordered)||!Array.isArray(s.saved)||!Array.isArray(s.history)||!s.ordered.length||s.ordered.length>4096||s.history.length>512||!Number.isInteger(s.cursor)||s.cursor<0||s.cursor>=s.ordered.length||!Number.isInteger(s.historyIndex)||s.historyIndex< -1||s.historyIndex>=s.history.length)return {session:null,invalid:true};
+    const ordered=s.ordered.map(u=>map.get(u)),saved=s.saved.map(u=>map.get(u));
+    if(ordered.some(t=>!t)||saved.some(t=>!t)||new Set(ordered).size!==ordered.length||saved.length!==ordered.length||saved.some(t=>!ordered.includes(t)))return {session:null,invalid:true};
+    const history=[];for(const entry of s.history){if(!Array.isArray(entry)||!map.get(entry[0])||!Number.isInteger(entry[1])||entry[1]<0||entry[1]>=ordered.length)return {session:null,invalid:true};history.push({track:map.get(entry[0]),cursor:entry[1]});}
+    return {session:{id:s.id,ordered,saved,cursor:s.cursor,shuffle:Boolean(s.shuffle),history,historyIndex:s.historyIndex,historyTarget:null},invalid:false};
 }

@@ -1,9 +1,14 @@
+import {playlistNavigationToken} from './library.js';
+import {bindSettingsNavigation} from './settings-navigation.js';
+import {bindTransportControls} from './transport-controls.js';
+import {bindPlatterSwipe} from './platter-gesture.js';
+import {installModalFocus, visibleDialog} from './modal-focus.js';
 import {dismissalKey, findTrackIndex} from './track-session.js';
 import {bindDisclosure} from './control-ui.js';
 import {createProgressScrubber} from './progress-scrubber.js';
 import { uiIcon } from './icons.js';
 import {loadAllMetadataOverrides} from './local-library.js';
-import { setupMetadataLookup } from './library.js';
+import { bindMetadataEditor } from './library.js';
 // CachyMusic - Application Orchestrator & Lifecycle Bootstrap
 import {
     formatTime,
@@ -94,6 +99,7 @@ import {
     standaloneResumeLibraryBtn,
     switchWorkspace,
     tabLibrary,
+    setLibraryTabActive,
     tabPlaylists,
     tabQueue,
     themeModal,
@@ -128,7 +134,6 @@ import * as audioEngineModule from './audio-engine.js';
 import {
     checkHardwareGainStatus,
     closePeqModal,
-    dispatchHardwareVolume,
     initAudioContext,
     initPeqWorkstation,
     openPeqModal,
@@ -161,7 +166,7 @@ import {
     addTrackToPlaylist,
     applySearchAndSort,
     backToPlaylistsView,
-    cancelMetadataConfirmation,
+    backToAllTracks,
     clearQueue,
     closeBatchAddModal,
     closeMetadataEditor,
@@ -170,14 +175,14 @@ import {
     closeTrackActionMenu,
     createPlaylist,
     deletePlaylistById,
-    executeSaveMetadata,
-    handleCoverFileSelect,
     importLocalAudioFiles,
     loadLibraryFromIndexedDB,
     loadPlaylists,
     moveQueueItem,
     openAddToPlaylistModal,
     openBatchAddModal,
+    openPlaylistEditor,
+    queuePlaylistTracks,
     openMetadataEditor,
     openPlaylist,
     parseAudioFileMetadata,
@@ -188,10 +193,7 @@ import {
     removeTrackFromMainList,
     renderPlaylistsView,
     renderQueueView,
-    requestSaveMetadataConfirmation,
-    revertCover,
     saveLibraryToIndexedDB,
-    saveMetadata,
     scanDirectory,
     updateRestoreBtnUi,
     updateTrackMetadataDisplay
@@ -271,14 +273,6 @@ const cancelSleepTimer = (notify) => getSettingsModule().then(m => m && m.cancel
 const openSignalPathModal = () => getSettingsModule().then(m => m && m.openSignalPathModal && m.openSignalPathModal());
 const closeSignalPathModal = () => getSettingsModule().then(m => m && m.closeSignalPathModal && m.closeSignalPathModal());
 const setupPwaInstallPrompt = () => import('./pwa-install.js').then(m => m.setupPwaInstallPrompt());
-let downloadWorkspaceInitialized = false;
-const setupDownloadWorkspace = () => getP2pModule().then(m => {
-    if (!m || downloadWorkspaceInitialized) return m;
-    downloadWorkspaceInitialized = true;
-    m.setupDownloadWorkspace();
-    return m;
-});
-
 store.subscribe('track:change', ({ detail }) => {
     if (store.state.isLyricsView && detail && detail.track) {
         getLyricsModule().then(m => m && m.updateLyricsDisplay && m.updateLyricsDisplay(detail.track));
@@ -294,8 +288,6 @@ store.subscribe('workspace:change', ({ detail }) => {
             controller.checkStatus();
             if (controller.activeSubView === 'transfers') controller.startTransfersPolling();
         });
-    } else if (ws === 'download') {
-        setupDownloadWorkspace().then(m => m && m.fetchLanStreamingUrl && m.fetchLanStreamingUrl());
     }
 });
 
@@ -399,8 +391,9 @@ store.subscribe('workspace:change', ({ detail }) => {
         setupDspControls();
         initPeqWorkstation();
         setupNeutronSettingsControls();
-        checkHardwareGainStatus();
-        setVolume(s.currentVolumeValue, true);
+        bindSettingsNavigation({storage:safeStorage, initialCategory:new URLSearchParams(window.location.search).get('cat') || safeStorage.getItem('cachymusic_settings_cat') || 'audio'});
+        await checkHardwareGainStatus();
+        setVolume(s.currentVolumeValue, true, false, {preserveMute:true,dispatchSystem:false});
         await loadPlaylists();
 
         // Restore saved directory or cached library on startup
@@ -479,7 +472,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Restore saved metadata panel state (persisted across sessions)
         try {
             const savedMetaVisible = safeStorage.getItem('cachymusic_metadata_visible');
-            if (savedMetaVisible === 'false' && !compactLayout.matches) {
+            if (savedMetaVisible !== 'true' && !compactLayout.matches) {
                 toggleMetadataPanel(false);
             }
         } catch (_) {}
@@ -490,6 +483,7 @@ store.subscribe('workspace:change', ({ detail }) => {
 
     // Setup All Event Handlers
     function setupEventListeners() {
+        installModalFocus();
         if (visPillBtns && visPillBtns.length > 0) {
             visPillBtns.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -509,11 +503,6 @@ store.subscribe('workspace:change', ({ detail }) => {
                 getVisualizerModule();
             });
         }
-        if (turntableCenterCanvas) {
-            turntableCenterCanvas.addEventListener('click', () => {
-                getVisualizerModule();
-            });
-        }
 
         if (metadataToggleBtn) {
             metadataToggleBtn.addEventListener('click', () => toggleMetadataPanel());
@@ -528,67 +517,11 @@ store.subscribe('workspace:change', ({ detail }) => {
             tracklistToggleBtn.addEventListener('click', () => toggleTracklistPanel());
         }
 
-        if (playPauseBtn) {
-            playPauseBtn.addEventListener('click', () => {
-                togglePlayPause();
-                playPauseBtn.blur();
-            });
-        }
-        if (prevBtn) {
-            prevBtn.addEventListener('click', () => {
-                prevTrack();
-                prevBtn.blur();
-            });
-            ['touchend', 'pointerup'].forEach(evt => {
-                prevBtn.addEventListener(evt, () => prevBtn.blur(), { passive: true });
-            });
-        }
-        if (nextBtn) {
-            nextBtn.addEventListener('click', () => {
-                nextTrack();
-                nextBtn.blur();
-            });
-            ['touchend', 'pointerup'].forEach(evt => {
-                nextBtn.addEventListener(evt, () => nextBtn.blur(), { passive: true });
-            });
-        }
-
-        if (shuffleBtn) {
-            shuffleBtn.addEventListener('click', () => {
-                store.state.isShuffle = !store.state.isShuffle;
-                store.emit('playback:order-change');
-                shuffleBtn.classList.toggle('active', store.state.isShuffle);
-                shuffleBtn.setAttribute('title', store.state.isShuffle ? 'Shuffle Active' : 'Toggle Shuffle');
-                shuffleBtn.blur();
-            });
-        }
-
-        if (shufflePlayBtn) {
-            shufflePlayBtn.addEventListener('click', () => {
-                store.state.isShuffle = true;
-                store.emit('playback:order-change');
-                if (shuffleBtn) {
-                    shuffleBtn.classList.add('active');
-                    shuffleBtn.setAttribute('title', 'Shuffle Active');
-                }
-                nextTrack();
-                shufflePlayBtn.blur();
-            });
-        }
-
-        if (repeatBtn) {
-            repeatBtn.addEventListener('click', () => {
-                if (store.state.repeatMode === 'all') {
-                    store.state.repeatMode = 'one';
-                } else if (store.state.repeatMode === 'one') {
-                    store.state.repeatMode = 'off';
-                } else {
-                    store.state.repeatMode = 'all';
-                }
-                updateRepeatUI();
-                repeatBtn.blur();
-            });
-        }
+        bindTransportControls({ state: store.state, play: togglePlayPause, previous: prevTrack, next: nextTrack,
+            setVolume, syncVolume: audioEngineModule.syncSoftwareVolume, updateVolumeIcon, volumeLevel,
+            onOrderChange: () => store.emit('playback:order-change'), updateRepeat: updateRepeatUI,
+            playButtons: [playPauseBtn, miniPlayBtn], previousButtons: [prevBtn, miniPrevBtn], nextButtons: [nextBtn, miniNextBtn],
+            muteButtons: [muteBtn, miniMuteBtn], shuffleBtn, shufflePlayBtn, repeatBtn });
 
         // Continuous Native Media Event Synchronization
         attachAudioListeners(store.state.audio);
@@ -713,22 +646,6 @@ store.subscribe('workspace:change', ({ detail }) => {
             setVolume(vol, false);
         });
 
-        muteBtn.addEventListener('click', () => {
-            const s = store.state;
-            if (!s.audio) return;
-            s.audio.muted = !s.audio.muted;
-            audioEngineModule.syncSoftwareVolume();
-            if (s.audio.muted) {
-                volumeLevel.textContent = '0%';
-                updateVolumeIcon(0);
-                if (s.isHardwareGain) {
-                    dispatchHardwareVolume(0);
-                }
-            } else {
-                setVolume(s.currentVolumeValue, true);
-            }
-        });
-
         // Search Input (Debounced 80ms for fluid typing without layout stutter)
         let searchDebounceTimer = null;
         const trackSearchClearBtn = document.getElementById('trackSearchClearBtn');
@@ -828,9 +745,8 @@ store.subscribe('workspace:change', ({ detail }) => {
         bindDisclosure(libraryToolsToggleBtnEl, libraryControls);
 
         tabLibrary.addEventListener('click', () => {
-            tabLibrary.classList.add('active');
-            tabPlaylists.classList.remove('active');
-            if (tabQueue) tabQueue.classList.remove('active');
+            backToAllTracks();
+            setLibraryTabActive('tabLibrary');
             trackList.style.display = 'flex';
             playlistsView.style.display = 'none';
             if (queueView) queueView.style.display = 'none';
@@ -847,9 +763,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         });
 
         tabPlaylists.addEventListener('click', () => {
-            tabPlaylists.classList.add('active');
-            tabLibrary.classList.remove('active');
-            if (tabQueue) tabQueue.classList.remove('active');
+            backToPlaylistsView();
             trackList.style.display = 'none';
             libraryControls.style.display = 'none';
             if (quickFormatFilterBarEl) quickFormatFilterBarEl.style.display = 'none';
@@ -861,9 +775,7 @@ store.subscribe('workspace:change', ({ detail }) => {
 
         if (tabQueue) {
             tabQueue.addEventListener('click', () => {
-                tabQueue.classList.add('active');
-                tabLibrary.classList.remove('active');
-                tabPlaylists.classList.remove('active');
+                setLibraryTabActive('tabQueue');
                 trackList.style.display = 'none';
                 libraryControls.style.display = 'none';
                 if (quickFormatFilterBarEl) quickFormatFilterBarEl.style.display = 'none';
@@ -878,8 +790,9 @@ store.subscribe('workspace:change', ({ detail }) => {
         const formatPillBtns = document.querySelectorAll('.formatFilterPill');
         formatPillBtns.forEach(pill => {
             pill.addEventListener('click', () => {
-                formatPillBtns.forEach(p => p.classList.remove('active'));
+                formatPillBtns.forEach(p => {p.classList.remove('active');p.setAttribute('aria-pressed','false');});
                 pill.classList.add('active');
+                pill.setAttribute('aria-pressed','true');
                 store.state.currentFormatFilter = pill.dataset.filter || 'all';
                 applySearchAndSort();
             });
@@ -913,7 +826,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                         if (masterIdx !== -1) {
                             s.playQueue.splice(idx, 1);
                             store.emit('library:update-queue');
-                            loadTrack(masterIdx, true);
+                            loadTrack(masterIdx, true, 0, null, false, true);
                         }
                     }
                     return;
@@ -1034,9 +947,9 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         const doneBatchAddBtn = document.getElementById('doneBatchAddBtn');
-        if (doneBatchAddBtn) {
-            doneBatchAddBtn.addEventListener('click', closeBatchAddModal);
-        }
+        // The picker owns its commit button.
+        document.getElementById('bannerEditPlaylistBtn')?.addEventListener('click',openPlaylistEditor);
+        document.getElementById('bannerQueueBtn')?.addEventListener('click',()=>queuePlaylistTracks(store.state.currentPlaylistId,store.state.currentPlaylistName));
 
         const batchAddSongsModal = document.getElementById('batchAddSongsModal');
         if (batchAddSongsModal) {
@@ -1157,8 +1070,8 @@ store.subscribe('workspace:change', ({ detail }) => {
                 const plid = store.state.currentPlaylistId;
                 const plName = store.state.currentPlaylistName;
                 if (!plid) return;
-                if (!confirm(`Delete playlist "${plName}"?`)) return;
-                await deletePlaylistById(plid);
+                if (!confirm(`Delete playlist "${plName}"? Your audio files will be kept.`)) return;
+                await deletePlaylistById(plid,plName);
             });
         }
 
@@ -1223,7 +1136,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Native Android Bridge progress, cancellation & discovery receivers (registered on window.__cachyMusic.android)
         function handleAndroidScanProgress(count, total, folderName, etaSec) {
             if (store.state.isTrackLoadingCancelled) return;
-            const pct = total > 0 ? Math.min(98, Math.round((count / total) * 100)) : 50;
+            const pct = total > 0 ? Math.min(100, Math.round((count / total) * 100)) : null;
             const etaText = (typeof etaSec === 'number' && etaSec > 0)
                 ? ` • ETA: ~${etaSec}s`
                 : (count > 0 && total > 0 && count < total ? ' • Fast index in progress...' : '');
@@ -1363,7 +1276,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                 const rt = getRuntime();
                 if (rt.isAndroidNative && window.AndroidBridge && typeof window.AndroidBridge.scanDeviceMusic === 'function') {
                     setScanStatus('Scanning device music library...', false);
-                    showTrackLoadingOverlay('SCANNING DEVICE MUSIC...', 'Searching audio files across device storage...', 15);
+                    showTrackLoadingOverlay('SCANNING DEVICE MUSIC...', 'Searching audio files across device storage...');
                     window.AndroidBridge.scanDeviceMusic();
                 } else {
                     const mobileInput = document.getElementById('mobileAudioFilesInput');
@@ -1411,8 +1324,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                 if (rt.hasPhpBackend) {
                     showTrackLoadingOverlay(
                         'LOADING MUSIC LIBRARY...',
-                        `Scanning ${audioFiles.length} audio files from "${folderName}"...`,
-                        10
+                        `Scanning ${audioFiles.length} audio files from "${folderName}"...`
                     );
                     setScanStatus(`Reading ${audioFiles.length} audio files from "${folderName}"...`, false);
 
@@ -1481,14 +1393,8 @@ store.subscribe('workspace:change', ({ detail }) => {
                 newPlaylistInput.focus();
                 return;
             }
-            const created = await createPlaylist(name);
-            if (created) {
-                newPlaylistInput.value = '';
-                renderPlaylistsView();
-                showToast(`Playlist "${created.name}" created!`, 'OPEN', () => {
-                    openPlaylist(created.plid, created.name);
-                });
-            }
+            if(createPlaylistBtn.disabled)return;createPlaylistBtn.disabled=true;
+            const navigation=playlistNavigationToken();try {const created=await createPlaylist(name);if(created){if(newPlaylistInput.value.trim()===name)newPlaylistInput.value='';if(navigation===playlistNavigationToken()&&playlistsView?.getClientRects().length)await openPlaylist(created.plid,created.name);else showToast('Playlist created.');}}finally{createPlaylistBtn.disabled=false;}
         });
 
         newPlaylistInput.addEventListener('keydown', (e) => {
@@ -1511,11 +1417,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                 return;
             }
 
-            const created = await createPlaylist(name);
-            if (created) {
-                await addTrackToPlaylist(created.plid, targetTrack.tid || targetTrack.id, targetTrack);
-                closePlaylistModal();
-            }
+            if(modalCreateAndAddBtn.disabled)return;modalCreateAndAddBtn.disabled=true;try{const created=await createPlaylist(name,targetTrack);if(created&&store.state.selectedTrackForPlaylist===targetTrack){closePlaylistModal();showToast('Playlist created and song added.');}}finally{modalCreateAndAddBtn.disabled=false;}
         });
 
         modalNewPlaylistName.addEventListener('keydown', (e) => {
@@ -1600,90 +1502,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
         setupTrackActionMenuModal();
 
-        function setupMetadataEditorModal() {
-            const modal = document.getElementById('metadataEditorModal');
-            const closeBtn = document.getElementById('closeMetaEditorModalBtn');
-            const cancelBtn = document.getElementById('metaEditCancelBtn');
-            const form = document.getElementById('metaEditorForm');
-            const saveBtn = document.getElementById('metaEditSaveBtn');
-            const infoEditBtn = document.getElementById('infoPanelEditMetaBtn');
-            const confirmCancelBtn = document.getElementById('metaEditConfirmCancelBtn');
-            const confirmProceedBtn = document.getElementById('metaEditConfirmProceedBtn');
-
-            const coverFileInput = document.getElementById('metaEditorCoverFileInput');
-            const uploadOverlayBtn = document.getElementById('metaEditorUploadOverlayBtn');
-            const browseCoverBtn = document.getElementById('metaEditorBrowseCoverBtn');
-            const revertCoverBtn = document.getElementById('metaEditorRevertCoverBtn');
-
-            if (uploadOverlayBtn && coverFileInput) {
-                uploadOverlayBtn.addEventListener('click', () => coverFileInput.click());
-            }
-            if (browseCoverBtn && coverFileInput) {
-                browseCoverBtn.addEventListener('click', () => coverFileInput.click());
-            }
-            if (coverFileInput) {
-                coverFileInput.addEventListener('change', function() {
-                    if (this.files && this.files[0]) {
-                        handleCoverFileSelect(this.files[0]);
-                    }
-                });
-            }
-            if (revertCoverBtn) {
-                revertCoverBtn.addEventListener('click', () => {
-                    revertCover();
-                });
-            }
-            if (closeBtn) {
-                closeBtn.addEventListener('click', () => closeMetadataEditor());
-            }
-            if (cancelBtn) {
-                cancelBtn.addEventListener('click', () => closeMetadataEditor());
-            }
-            if (saveBtn) {
-                saveBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    if (typeof requestSaveMetadataConfirmation === 'function') {
-                        requestSaveMetadataConfirmation(e);
-                    } else {
-                        saveMetadata(e);
-                    }
-                });
-            }
-            if (confirmCancelBtn) {
-                confirmCancelBtn.addEventListener('click', () => cancelMetadataConfirmation());
-            }
-            if (confirmProceedBtn) {
-                confirmProceedBtn.addEventListener('click', () => executeSaveMetadata());
-            }
-            if (modal) {
-                modal.addEventListener('click', (e) => {
-                    if (e.target === modal) closeMetadataEditor();
-                });
-            }
-            if (form) {
-                form.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    if (typeof requestSaveMetadataConfirmation === 'function') {
-                        requestSaveMetadataConfirmation(e);
-                    } else {
-                        saveMetadata(e);
-                    }
-                });
-            }
-            if (infoEditBtn) {
-                infoEditBtn.addEventListener('click', () => {
-                    const s = store.state;
-                    const track = s.currentInspectedTrack || (Array.isArray(s.allTracks) && s.allTracks[s.currentTrackIndex]) || null;
-                    if (track) {
-                        openMetadataEditor(track);
-                    } else {
-                        showToast('No active track loaded to edit metadata');
-                    }
-                });
-            }
-        }
-        setupMetadataEditorModal();
-        setupMetadataLookup();
+        bindMetadataEditor();
 
         async function handleOpenStandaloneAudioFiles(files) {
             const s = store.state;
@@ -1697,7 +1516,7 @@ store.subscribe('workspace:change', ({ detail }) => {
             showTrackLoadingOverlay(
                 'OPENING AUDIO FILE...',
                 `Reading ${audioFiles.length} audio file(s)...`,
-                15
+                0
             );
             setScanStatus(`Reading ${audioFiles.length} standalone audio file(s)...`, false);
             const openedTracks = [];
@@ -1705,7 +1524,7 @@ store.subscribe('workspace:change', ({ detail }) => {
             for (let i = 0; i < audioFiles.length; i++) {
                 if (s.isTrackLoadingCancelled) break;
                 const file = audioFiles[i];
-                const pct = Math.min(98, Math.round(((i + 1) / audioFiles.length) * 100));
+                const pct = Math.round((i / audioFiles.length) * 100);
                 updateTrackLoadingOverlay(`Reading metadata (${i + 1}/${audioFiles.length}): ${file.name}`, pct);
                 if (i % 5 === 0 || i === audioFiles.length - 1) {
                     setScanStatus(`Reading audio metadata (${i + 1}/${audioFiles.length})...`, false);
@@ -1732,9 +1551,9 @@ store.subscribe('workspace:change', ({ detail }) => {
                     track: (parsed && parsed.track) ? parsed.track : null,
                     duration: (parsed && parsed.duration) ? parsed.duration : 0,
                     bitrate: (parsed && parsed.bitrate) ? parsed.bitrate : 0,
-                    sampleRate: (parsed && parsed.sampleRate) ? parsed.sampleRate : 44100,
+                    sampleRate: (parsed && parsed.sampleRate) ? parsed.sampleRate : 0,
                     bitDepth: (parsed && parsed.bitDepth) ? parsed.bitDepth : null,
-                    channels: (parsed && parsed.channels) ? parsed.channels : 2,
+                    channels: (parsed && parsed.channels) ? parsed.channels : null,
                     format: (parsed && parsed.format) ? parsed.format : (file.name.split('.').pop() || 'audio'),
                     size: (parsed && parsed.size) ? parsed.size : (file.size ? (file.size / (1024 * 1024)).toFixed(2) + ' MB' : 'N/A'),
                     cover: (parsed && parsed.cover) ? parsed.cover : null,
@@ -1828,38 +1647,8 @@ store.subscribe('workspace:change', ({ detail }) => {
             });
         });
 
-        // Mobile & Touch Ergonomics: Tactile Vinyl Swiping & Tapping
-        if (vinylTurntable) {
-            let touchStartX = 0;
-            let touchStartY = 0;
-            let touchStartTime = 0;
-
-            vinylTurntable.addEventListener('touchstart', (e) => {
-                if (!e.touches || e.touches.length !== 1) return;
-                touchStartX = e.touches[0].clientX;
-                touchStartY = e.touches[0].clientY;
-                touchStartTime = Date.now();
-            }, { passive: true });
-
-            vinylTurntable.addEventListener('touchend', (e) => {
-                if (!e.changedTouches || e.changedTouches.length !== 1) return;
-                const dx = e.changedTouches[0].clientX - touchStartX;
-                const dy = e.changedTouches[0].clientY - touchStartY;
-                const dt = Date.now() - touchStartTime;
-
-                if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.4 && dt < 600) {
-                    if (dx < 0) {
-                        nextTrack();
-                        showToast('Next Track ⏭');
-                    } else {
-                        prevTrack();
-                        showToast('Previous Track ⏮');
-                    }
-                } else if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && dt < 300) {
-                    togglePlayPause();
-                }
-            }, { passive: true });
-        }
+        // Taps are noninteractive; one deliberate touch swipe navigates.
+        if(vinylTurntable)bindPlatterSwipe(vinylTurntable,{next:nextTrack,previous:prevTrack});
 
         // Theme Overhaul Listeners
         if (themeModalBtn) {
@@ -1896,38 +1685,11 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Mini Player & Soulseek Studio Listeners
         scrubber.attach(miniProgressCon);
 
-        if (miniPlayBtn) miniPlayBtn.addEventListener('click', () => {
-            togglePlayPause();
-            miniPlayBtn.blur();
-        });
-        if (miniPrevBtn) miniPrevBtn.addEventListener('click', () => {
-            prevTrack();
-            miniPrevBtn.blur();
-        });
-        if (miniNextBtn) miniNextBtn.addEventListener('click', () => {
-            nextTrack();
-            miniNextBtn.blur();
-        });
         if (miniDeckReturnBtn) bindFastAction(miniDeckReturnBtn, () => switchWorkspace('player', 'playerDeck'));
         const miniPlayerLeftEl = document.querySelector('.miniPlayerLeft');
         if (miniPlayerLeftEl) {
             miniPlayerLeftEl.style.cursor = 'pointer';
             bindFastAction(miniPlayerLeftEl, () => switchWorkspace('player', 'playerDeck'));
-        }
-        if (miniMuteBtn) {
-            miniMuteBtn.addEventListener('click', () => {
-                const s = store.state;
-                if (!s.audio) return;
-                s.audio.muted = !s.audio.muted;
-                audioEngineModule.syncSoftwareVolume();
-                if (s.audio.muted) {
-                    volumeLevel.textContent = '0%';
-                    updateVolumeIcon(0);
-                    if (s.isHardwareGain) dispatchHardwareVolume(0);
-                } else {
-                    setVolume(s.currentVolumeValue, true);
-                }
-            });
         }
         if (miniVolumeSlider) {
             miniVolumeSlider.addEventListener('input', (e) => {
@@ -2015,50 +1777,27 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         window.addEventListener('keydown', (e) => {
-            // Dismiss open modals or unfocus search on Escape key
+            if (document.getElementById('audioChangeDialog')?.open) return;
+            // Only the topmost dialog receives Escape. Use its normal close
+            // path so EQ sampling, editor state and history are cleaned up.
             if (e.code === 'Escape') {
-                if (document.activeElement && document.activeElement.id === 'trackSearch') {
-                    document.activeElement.blur();
+                const dialog = visibleDialog();
+                if (dialog) {
+                    const close = {
+                        themeModal: closeThemeModal, playlistModal: closePlaylistModal,
+                        trackActionMenuModal: closeTrackActionMenu, signalPathModal: closeSignalPathModal,
+                        sleepTimerModal: closeSleepTimerModal, slskAccountModal: closeSlskAccountModal,
+                        peqModal: closePeqModal, batchAddSongsModal: closeBatchAddModal,
+                        metadataEditorModal: closeMetadataEditor
+                    }[dialog.id];
+                    if (close) { e.preventDefault(); close(); }
                     return;
                 }
-                if (themeModal && themeModal.style.display === 'flex') {
-                    closeThemeModal();
-                    return;
-                }
-                if (playlistModal && playlistModal.style.display === 'flex') {
-                    closePlaylistModal();
-                    return;
-                }
-                if (signalPathModal && signalPathModal.style.display === 'flex') {
-                    closeSignalPathModal();
-                    return;
-                }
-                if (sleepTimerModal && sleepTimerModal.style.display === 'flex') {
-                    closeSleepTimerModal();
-                    return;
-                }
-                if (slskAccountModal && slskAccountModal.style.display === 'flex') {
-                    closeSlskAccountModal();
-                    return;
-                }
-                const peqModalEl = document.getElementById('peqModal');
-                if (peqModalEl && peqModalEl.style.display === 'flex') {
-                    if (typeof closePeqModal === 'function') closePeqModal();
-                    else peqModalEl.style.display = 'none';
-                    return;
-                }
-                const batchModalEl = document.getElementById('batchAddSongsModal');
-                if (batchModalEl && batchModalEl.style.display === 'flex') {
-                    closeBatchAddModal();
-                    return;
-                }
-                const metaModalEl = document.getElementById('metadataEditorModal');
-                if (metaModalEl && (metaModalEl.style.display === 'flex' || window.getComputedStyle(metaModalEl).display === 'flex')) {
-                    if (typeof closeMetadataEditor === 'function') closeMetadataEditor();
-                    else metaModalEl.style.display = 'none';
-                    return;
-                }
+                if (document.activeElement?.id === 'trackSearch') document.activeElement.blur();
+                return;
             }
+
+            if (e.defaultPrevented || visibleDialog()) return;
 
             // Quick Search Shortcut: '/' or 'Cmd+K' / 'Ctrl+K'
             const isSearchTrigger = (e.key === '/' || ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')));
@@ -2134,6 +1873,9 @@ store.subscribe('workspace:change', ({ detail }) => {
             // (Completely prevents YouTube spacebar / media hotkey leakage from unpausing CachyMusic)
             if (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus())) return;
 
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            // Preserve native Space activation of focused controls.
+            if (document.activeElement?.closest('button, a[href], summary, [role=button], [role=slider], [role=tab]') && ['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) return;
             if (e.code === 'Space') {
                 e.preventDefault();
                 togglePlayPause();

@@ -1,0 +1,34 @@
+/* Functional grouping and restrained corners; theme colors remain inherited. */
+.playlistsViewHeader {display:grid;gap:8px;padding-block:8px;min-width:0;}
+.playlistsStatsRow {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.playlistsSectionTitle {font-weight:650;color:var(--text-primary);}
+.createPlaylistBar {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;}
+:is(#playlistSearchInput,#modalPlaylistSearch,#playlistEditName,#newPlaylistInput){width:100%;min-width:0;min-height:44px;padding:8px 10px;background:var(--bg-surface-2);color:var(--text-primary);border:1px solid var(--border-medium);border-radius:var(--shape-field,5px);font:inherit;}
+.playlistBrowseRow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px;border-bottom:1px solid var(--border-subtle);padding:4px 0;}
+.playlistOpenBtn{display:flex;align-items:center;text-align:start;gap:10px;min-width:0;min-height:60px;background:transparent;border:0;color:var(--text-primary);padding:6px;}
+.playlistBrowseInfo{display:grid;gap:4px;flex:1;min-width:0;overflow-wrap:anywhere;}.playlistBrowseInfo small{color:var(--text-muted);font-weight:400;}
+.playlistBrowseRow .actionBtn,.playlistPager .actionBtn,.playlistOrderRow .actionBtn,.playlistMore summary{min-height:44px;min-width:44px;}
+.playlistBanner{background:var(--bg-surface-2);gap:6px;}.playlistBannerHeaderTop{align-items:flex-start;justify-content:flex-start;}.playlistBannerMetaCol{flex:1;min-width:0;overflow-wrap:anywhere;display:grid;gap:4px;}.playlistBannerActions{justify-content:flex-start;gap:6px;}.playlistBannerActions button{min-height:44px;white-space:normal;}.playlistMore{min-width:0;}.playlistMore summary{display:flex;align-items:center;cursor:pointer;padding-inline:10px;}.playlistMore[open]{flex-basis:100%;}.playlistMoreActions{display:flex;flex-wrap:wrap;gap:6px;}.playlistMoreActions .deleteBtn{color:var(--status-error,var(--text-primary));}
+.playlistPickerRow{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;min-height:52px;border:0;border-bottom:1px solid var(--border-subtle);border-radius:0;background:transparent;cursor:pointer;}.playlistPickerRow input{width:20px;height:20px;accent-color:var(--accent-color);}.playlistPickerRow .batchAddInfo{display:grid;gap:3px;}.playlistPickerRow :is(strong,small){white-space:normal;overflow-wrap:anywhere;}
+.batchAddFooter{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center;}.playlistPager{display:flex;gap:6px;flex:1 1 100%;justify-content:space-between;align-items:center;font-size:var(--font-xs);}.playlistEditDialog{max-width:min(520px,calc(100vw - 24px));max-height:85dvh;width:100%;color:var(--text-primary);background:var(--bg-surface-2);border:1px solid var(--border-medium);border-radius:var(--shape-dialog,8px);padding:16px;overflow:auto;}.playlistEditDialog:not([open]){display:none;}.playlistEditDialog::backdrop{background:#0008;}.playlistEditDialog[open]{display:grid;gap:10px;margin:auto;}.playlistOrderRow{display:grid;grid-template-columns:minmax(0,1fr) 44px 44px;gap:6px;align-items:center;border-bottom:1px solid var(--border-subtle);padding:4px 0;}.playlistOrderRow span{overflow-wrap:anywhere;}#playlistEditRows{max-height:38dvh;overflow:auto;}.playlistEditActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}.playlistEditActions button{min-height:44px;}.modalPlaylistItem[hidden]{display:none!important;}
+
+.playlistPickerTools{display:flex;flex-wrap:wrap;gap:6px}.playlistPickerTools button{min-height:44px;flex:1 1 7rem;white-space:normal}.playlistDirectMove{grid-column:1/-1;display:flex;gap:6px;justify-content:flex-end}.playlistDirectMove input{width:5rem;min-width:0;min-height:44px;font:inherit;background:var(--bg-surface-2);color:var(--text-primary);border:1px solid var(--border-medium)}.playlistDirectMove button{min-height:44px}#batchResult:empty{display:none}#batchResult{margin:0;overflow-wrap:anywhere}
+
+.batchPageLabel{display:flex;gap:4px;align-items:center}.batchPageLabel input{min-height:44px;width:3.5rem;min-width:0;background:var(--bg-surface-2);color:var(--text-primary);font:inherit;border:1px solid var(--border-medium)}.playlistPager{flex-wrap:wrap}.playlistOrderRow [draggable=true]{cursor:grab}.playlistOrderRow [draggable=true]:active{cursor:grabbing}@media (pointer:coarse){.playlistOrderRow [draggable=true]{cursor:auto}}
+
+.playlistSearchBar{display:flex;gap:6px;align-items:center;min-width:0}.playlistSearchBar input{flex:1}.playlistSearchBar button{min-height:44px}.playlistSearchBar button[hidden]{display:none}.playlistPickerRow.hasPickerArt{grid-template-columns:24px 36px minmax(0,1fr) auto}.playlistPickerArt{width:36px;height:36px;object-fit:cover;border-radius:var(--shape-field,4px)}@media(max-width:360px){.playlistPickerRow.hasPickerArt{grid-template-columns:24px minmax(0,1fr) auto}.playlistPickerArt{display:none}}
+
+#playlistEditRecovery:not([hidden]),.playlistMissingActions {display:flex;flex-wrap:wrap;gap:6px;grid-column:1/-1;align-items:center;}
+#playlistEditRecovery button,.playlistMissingActions button {min-height:44px;white-space:normal;flex:1 1 8rem;}
+.playlistRelinkOptions{grid-column:1/-1;display:grid;gap:5px;min-width:0;}
+.playlistRelinkOptions input{width:100%;min-width:0;min-height:44px;font:inherit;color:var(--text-primary);background:var(--bg-surface-2);border:1px solid var(--border-medium);}
+.playlistRelinkOptions button{min-height:44px;white-space:normal;text-align:start;overflow-wrap:anywhere;}
+
+#batchReload:not([hidden]){min-height:44px;white-space:normal;}
+.playlistMissingRef{display:block;font-size:var(--font-xs);color:var(--text-secondary);overflow-wrap:anywhere;}
+/* Nested grid and flex children must also reflow with enlarged text. */
+#playlistEditRows,.playlistOrderRow,.playlistOrderRow > *, .playlistRelinkOptions > * {min-width:0;max-width:100%;}
+.playlistMissingActions button,#playlistEditRecovery button,.playlistRelinkOptions button {min-width:0;max-width:100%;overflow-wrap:anywhere;}
+.playlistMissingActions button,#playlistEditRecovery button {flex-basis:min(8rem,100%);}
+.playlistDirectMove{flex-wrap:wrap;}.playlistDirectMove input{max-width:100%;}.playlistDirectMove button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;}
+.playlistOrderRow{grid-template-columns:minmax(0,1fr) auto auto;}.playlistOrderRow>button[data-move]{min-width:44px;min-height:44px;}

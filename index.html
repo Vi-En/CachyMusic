@@ -7,7 +7,7 @@
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: https://musicbrainz.org https://coverartarchive.org https://archive.org https://*.archive.org https://lrclib.net; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
     <meta name="theme-color" content="#090e14">
-    <script src="scripts/theme-preload.js?v=3.0.0-dev.6.18-integrity-ux"></script>
+    <script src="scripts/theme-preload.js?v=3.0.0-dev.6.42-integrity-ux"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,7 +26,7 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.6.18-integrity-ux">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.6.42-integrity-ux">
     <script src="scripts/pwa-init.js" defer></script>
 </head>
 <body class="view-player mobile-tab-player">
@@ -49,7 +49,7 @@
         </div>
 
         <div class="workspaceSwitcher" id="workspaceSwitcher">
-            <button type="button" class="wsTabBtn active" id="wsPlayerBtn" data-view="player" title="Music Player (Alt+P)">
+            <button type="button" class="wsTabBtn active" id="wsPlayerBtn" aria-current="page" data-view="player" title="Music Player (Alt+P)">
                 <span class="wsLabel">Player</span>
             </button>
             <button type="button" class="wsTabBtn" id="wsSoulseekBtn" data-view="soulseek" title="Soulseek / Nicotine+ Network (Alt+S)">
@@ -99,7 +99,7 @@
             </button>
             <button type="button" id="closeFolderTrayBtn" class="folderTrayCloseBtn" title="Close Tray" aria-label="Close Tray"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
         </div>
-        <div id="scanStatus" class="scanStatus"></div>
+        <div id="scanStatus" class="scanStatus" role="status"></div>
     </div>
 
     <!-- Main Player Grid Container -->
@@ -126,17 +126,15 @@
                 </div>
 
                 <!-- Turntable Platter RPM & Speed (Transferred back to Metadata Inspector) -->
-                <div class="settingsGroup" id="metaTurntableSpeedGroup">
-                    <div class="settingsGroupHeader">
-                        <h3>Playback speed</h3>
-                    </div>
+                <details class="settingsGroup" id="metaTurntableSpeedGroup">
+                    <summary>Playback speed</summary>
                     <div class="speedSelector">
                         <button type="button" class="speedBtn active" data-speed="1">1×</button>
                         <button type="button" class="speedBtn" data-speed="1.25">1.25×</button>
                         <button type="button" class="speedBtn" data-speed="1.5">1.5×</button>
                         <button type="button" class="speedBtn" data-speed="2">2×</button>
                     </div>
-                </div>
+                </details>
 
                 <!-- Detailed Embedded Track Metadata -->
                 <div class="settingsGroup">
@@ -296,9 +294,9 @@
                         <span id="signalPathLabel">Not measured</span>
                     </button>
                 </div>
-                <h1 id="trackName" style="display: none;"></h1>
-                <h2 id="artistName" style="display: none;"></h2>
-                <p id="albumName" class="albumName" style="display: none;"></p>
+                <h1 id="trackName" dir="auto" style="display: none;"></h1>
+                <h2 id="artistName" dir="auto" style="display: none;"></h2>
+                <p id="albumName" dir="auto" class="albumName" style="display: none;"></p>
 
                 <!-- Empty State Prompt (Shown when no music directory is loaded yet) -->
                 <div class="playerEmptyPrompt" id="playerEmptyPrompt">
@@ -327,7 +325,7 @@
 
             <!-- Primary Media Controls -->
             <div class="mediaCon">
-                <button type="button" class="mediaBtn subBtn" id="shuffleBtn" title="Toggle Shuffle" aria-label="Toggle Shuffle">
+                <button type="button" class="mediaBtn subBtn" id="shuffleBtn" aria-pressed="false" title="Toggle Shuffle" aria-label="Toggle Shuffle">
                     <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                         <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
                     </svg>
@@ -363,7 +361,7 @@
             <div class="deckAudioControls">
                 <canvas id="desktopSpectrumCanvas" class="desktopSpectrumCanvas" aria-label="Input spectrum" role="img"></canvas>
                 <div class="volumeDeck">
-                    <button type="button" id="muteBtn" class="muteBtn" title="Mute/Unmute (M)" aria-label="Mute or Unmute">
+                    <button type="button" id="muteBtn" aria-pressed="false" class="muteBtn" title="Mute/Unmute (M)" aria-label="Mute or Unmute">
                         <svg id="volumeIcon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                             <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
                         </svg>
@@ -391,7 +389,7 @@
         <section class="panel trackListPanel">
             <!-- Library / Playlist / Up Next Navigation Tabs -->
             <div class="libraryTabs">
-                <button type="button" class="libTab active" id="tabLibrary">Library</button>
+                <button type="button" class="libTab active" id="tabLibrary" aria-current="page">Library</button>
                 <button type="button" class="libTab" id="tabPlaylists">Playlists</button>
                 <button type="button" class="libTab" id="tabQueue">Up next <span class="queueCountBadge" id="queueCountBadge" style="display: none;">0</span></button>
             </div>
@@ -399,10 +397,10 @@
             <!-- Instant Quality Format Filter Bar + Mobile Collapsible Sort & Tools Toggle -->
             <div class="quickFormatFilterBar" id="quickFormatFilterBar">
                 <div class="formatFilterPillsGroup">
-                    <button type="button" class="formatFilterPill active" data-filter="all">All</button>
-                    <button type="button" class="formatFilterPill" data-filter="hires" title="Filter for Hi-Res 24-bit/32-bit &amp; 96kHz+ tracks">Hi-res</button>
-                    <button type="button" class="formatFilterPill" data-filter="lossless" title="Filter for Lossless FLAC &amp; ALAC audio">Lossless</button>
-                    <button type="button" class="formatFilterPill" data-filter="lossy" title="Filter for standard MP3 / AAC / OGG tracks">Lossy</button>
+                    <button type="button" class="formatFilterPill active" data-filter="all" aria-pressed="true">All</button>
+                    <button type="button" class="formatFilterPill" data-filter="hires" title="Filter for Hi-Res 24-bit/32-bit &amp; 96kHz+ tracks" aria-pressed="false">Hi-res</button>
+                    <button type="button" class="formatFilterPill" data-filter="lossless" title="Filter for Lossless FLAC &amp; ALAC audio" aria-pressed="false">Lossless</button>
+                    <button type="button" class="formatFilterPill" data-filter="lossy" title="Filter for standard MP3 / AAC / OGG tracks" aria-pressed="false">Lossy</button>
                 </div>
                 <button type="button" class="libraryToolsToggleBtn" id="libraryToolsToggleBtn" aria-expanded="false" aria-controls="libraryControls" title="Toggle Sort &amp; Library Actions">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
@@ -469,24 +467,24 @@
                 <div class="playlistBannerHeaderTop">
                     <button type="button" id="backToLibraryBtn" class="backBtn" title="Back to All Playlists">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-                        <span>PLAYLISTS</span>
+                        <span>Playlists</span>
                     </button>
                     <div class="playlistBannerMetaCol">
                         <span id="currentPlaylistTitle" class="playlistBannerTitle">Playlist</span>
-                        <span id="currentPlaylistMeta" class="playlistBannerMeta">0 TRACKS • 0 MINS</span>
+                        <span id="currentPlaylistMeta" class="playlistBannerMeta">0 tracks</span>
                     </div>
                 </div>
                 <div class="playlistBannerActions">
                     <button type="button" id="bannerPlayAllBtn" class="actionBtn primaryBtn bannerPlayBtn" title="Play playlist from beginning">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-                        <span>PLAY ALL</span>
+                        <span>Play all</span>
                     </button>
                     <button type="button" id="bannerShuffleBtn" class="actionBtn bannerShuffleBtn" title="Shuffle playlist">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
-                        <span>SHUFFLE</span>
+                        <span>Shuffle</span>
                     </button>
-                    <button type="button" id="bannerAddTracksBtn" class="actionBtn bannerAddBtn" title="Quickly Add Songs From Library">+ ADD SONGS</button>
-                    <button type="button" id="deleteCurrentPlaylistBtn" class="deleteBtn" title="Delete Playlist">DELETE</button>
+                    <button type="button" id="bannerAddTracksBtn" class="actionBtn bannerAddBtn" title="Quickly Add Songs From Library">Add songs</button>
+                    <details class="playlistMore"><summary>More</summary><div class="playlistMoreActions"><button type="button" class="actionBtn" id="bannerEditPlaylistBtn">Edit name &amp; order</button><button type="button" class="actionBtn" id="bannerQueueBtn">Add to queue</button><button type="button" id="deleteCurrentPlaylistBtn" class="deleteBtn">Delete playlist</button></div></details>
                 </div>
             </div>
 
@@ -494,20 +492,14 @@
             <div class="playlistsView" id="playlistsView" style="display: none;">
                 <div class="playlistsViewHeader">
                     <div class="playlistsStatsRow">
-                        <span class="playlistsSectionTitle">MY PLAYLISTS</span>
+                        <span class="playlistsSectionTitle">My playlists</span>
                         <span class="playlistsCounterBadge" id="playlistsSummaryBadge">0 Playlists</span>
                     </div>
                     <div class="createPlaylistBar">
-                        <input type="text" id="newPlaylistInput" placeholder="Create new playlist... (Press Enter to save)" maxlength="50" aria-label="New playlist name">
-                        <button type="button" id="createPlaylistBtn" class="actionBtn primaryBtn">+ CREATE</button>
+                        <input type="text" id="newPlaylistInput" placeholder="Playlist name" maxlength="50" aria-label="New playlist name">
+                        <button type="button" id="createPlaylistBtn" class="actionBtn primaryBtn">Create</button>
                     </div>
-                    <div class="playlistQuickChips">
-                        <span class="quickChipsLabel">Quick:</span>
-                        <button type="button" class="playlistChipBtn" data-name="Favorites">Favorites</button>
-                        <button type="button" class="playlistChipBtn" data-name="Late Night">Late Night</button>
-                        <button type="button" class="playlistChipBtn" data-name="Workout Boost">Workout Boost</button>
-                        <button type="button" class="playlistChipBtn" data-name="Focus &amp; Work">Focus &amp; Work</button>
-                    </div>
+                    <div class="playlistSearchBar"><input type="search" id="playlistSearchInput" placeholder="Find playlists" aria-label="Find playlists"><button type="button" id="playlistSearchClear" class="actionBtn" hidden>Clear</button></div>
                 </div>
                 <div class="playlistList" id="playlistList">
                     <!-- Populated dynamically with rich MusicBee/Musicolet style cards -->
@@ -525,7 +517,7 @@
                 </div>
                 <div class="queueSectionLabel">UP NEXT (CUSTOM QUEUE)</div>
                 <div class="queueList" id="queueList">
-                    <div class="queueEmpty">Your queue is empty. Click "+ Queue" or "Play Next" on any track.</div>
+                    <div class="queueEmpty">Your queue is empty. Open a track’s menu to add it to the queue.</div>
                 </div>
                 <div class="queueSectionLabel">CONTINUING FROM LIBRARY</div>
                 <div class="upcomingLibraryList" id="upcomingLibraryList">
@@ -534,7 +526,7 @@
             </div>
 
             <!-- Track List View -->
-            <div class="trackList" id="trackList">
+            <div class="trackList" id="trackList" tabindex="-1" role="region" aria-label="Music tracks">
                 <!-- Populated dynamically with tracks -->
             </div>
 
@@ -547,7 +539,7 @@
     </main>
 
     <!-- Soulseek Account & Settings Modal (Direct child of body to guarantee topmost stacking context) -->
-    <div class="slskModalOverlay" id="slskAccountModal" style="display: none;">
+    <div class="slskModalOverlay" id="slskAccountModal" role="dialog" aria-modal="true" aria-label="Soulseek settings" style="display: none;">
         <div class="slskModalCard">
             <div class="slskModalHeader">
                 <h3>SOULSEEK SETTINGS</h3>
@@ -679,7 +671,7 @@
 <span class="slskBadge" id="slskBadge">NICOTINE+</span>
 <div class="slskStatusPill" id="slskStatusPill" title="Soulseek Network Status">
 <span class="slskStatusDot" id="slskStatusDot"></span>
-<span class="slskStatusText" id="slskStatusText">Connecting...</span>
+<span class="slskStatusText" id="slskStatusText" role="status">Checking connection…</span>
 </div>
 </div>
 <div class="slskQuickStats" id="slskQuickStats">
@@ -742,7 +734,7 @@
             </div>
 
             <!-- Scrollable Results Body -->
-            <div class="slskResultsList" id="slskResultsList">
+            <div class="slskResultsList" id="slskResultsList" role="region" aria-label="Search results" tabindex="-1">
                 <!-- Initial Welcome / Idle State -->
                 <div class="slskPlaceholder" id="slskPlaceholder">
                     <h3>Find music on Soulseek</h3>
@@ -810,6 +802,7 @@
         <!-- Settings Category Sub-Navigation Bar (Focused 2-Column Sub-Groupings) -->
         <div class="settingsSearch">
             <input id="settingsSearchInput" type="search" placeholder="Search settings" autocomplete="off" aria-label="Find a setting" aria-describedby="settingsSearchStatus">
+            <button type="button" id="settingsSearchResetBtn" class="actionBtn" hidden>Clear search</button>
             <span id="settingsSearchStatus" role="status"></span>
         </div>
         <nav class="settingsCategoryNav" id="settingsCategoryNav" aria-label="Settings Categories">
@@ -844,14 +837,14 @@
                     <div class="settingsPanelContent">
                         <div class="settingsRowItem" id="settingsRowAndroidNative" hidden>
                             <label class="settingsRowTitle" for="androidNativeMode">Android native playback <input type="checkbox" role="switch" id="androidNativeMode"></label>
-                            <p class="settingsRowDesc">Play in the background at normal speed. DSP and lossless gapless use the regular player.</p>
+                            <p class="settingsRowDesc">Plays in the background using Android audio. Web Audio effects are unavailable.</p>
                         </div>
                         <div class="settingsRowItem" id="settingsRowContinuousPcm">
                             <label class="settingsRowTitle" for="continuousPcmMode">Continuous lossless playback <input type="checkbox" role="switch" id="continuousPcmMode"></label>
-                            <p class="settingsRowDesc">Prebuffer compatible lossless tracks. Applies from the next track; gaps remain possible.</p>
+                            <p class="settingsRowDesc">Prebuffer the next compatible track. Uses additional memory.</p>
                         </div>
                         <details class="settingsAdvancedDetails" id="settingsAdvancedAudio">
-                            <summary class="settingsAdvancedSummary"><span class="settingsAdvancedSummaryText"><strong>Advanced signal processing</strong><small>Precision, dithering, buffers, diagnostic tools</small></span><span class="settingsAdvancedChevron" aria-hidden="true">⌄</span></summary>
+                            <summary class="settingsAdvancedSummary"><span class="settingsAdvancedSummaryText"><strong>Advanced signal processing</strong><small>Precision, dithering and buffer profile</small></span><span class="settingsAdvancedChevron" aria-hidden="true">⌄</span></summary>
                             <div class="settingsAdvancedContent">
 <!-- 1. Signal Path Metrics -->
                         <div class="settingsRowItem" id="settingsCardDsp">
@@ -862,24 +855,24 @@
                             </div>
                             <div class="settingsDspMetricsGrid">
                                 <div class="settingsDspMetricItem">
-                                    <span class="settingsDspKey">AUDIO ENGINE</span>
+                                    <span class="settingsDspKey">Engine</span>
                                     <span class="settingsDspVal" id="settingsDspEngineVal">Not initialized</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
-                                    <span class="settingsDspKey">HEADROOM</span>
+                                    <span class="settingsDspKey">Headroom</span>
                                     <span class="settingsDspVal" id="settingsDspHeadroomVal">Waiting for playback</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
-                                    <span class="settingsDspKey">BUFFER LATENCY</span>
+                                    <span class="settingsDspKey">Buffer latency</span>
                                     <span class="settingsDspVal" id="settingsDspLatencyVal">Checking output</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
-                                    <span class="settingsDspKey">CROSSFEED &amp; EQ</span>
+                                    <span class="settingsDspKey">Crossfeed &amp; EQ</span>
                                     <span class="settingsDspVal" id="settingsDspEqVal">Not initialized</span>
                                 </div>
                             </div>
                             <button type="button" id="settingsTabOpenSignalAuditBtn" class="actionBtn primaryBtn settingsFullWidthBtn signalPathAuditBtn">
-                                SIGNAL PATH &amp; AUDIT
+                                Signal path
                             </button>
                         </div>
 
@@ -887,14 +880,14 @@
                         <div class="settingsRowItem" id="settingsRowPrecision">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">MATH PRECISION<button type="button" class="settingHintBtn" title="Controls DSP calculation precision. Native Bypass routes audio directly at the Web Audio host rate without extra worklet float math when EQ/FX are flat; 32-bit saves CPU; 64-bit runs double-precision internal DSP accumulators." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">DSP precision<button type="button" class="settingHintBtn" title="Controls DSP calculation precision. Native Bypass routes audio directly at the Web Audio host rate without extra worklet float math when EQ/FX are flat; 32-bit rounds selected stages to Float32; 64-bit uses double-precision internal calculations." aria-label="Feature explanation">!</button></h4>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsEnginePrecisionPill">64-BIT DOUBLE FLOAT</span>
+                                <span class="settingsEnginePill" id="settingsEnginePrecisionPill">64-bit internal</span>
                             </div>
                             <div class="settingsOptionToggles">
-                                <button type="button" class="actionBtn enginePrecisionBtn" data-precision="native">NATIVE (BYPASS)</button>
-                                <button type="button" class="actionBtn enginePrecisionBtn active" data-precision="64">64-BIT STUDIO FLOAT</button>
-                                <button type="button" class="actionBtn enginePrecisionBtn" data-precision="32">32-BIT FAST FLOAT</button>
+                                <button type="button" class="actionBtn enginePrecisionBtn" data-precision="native">Bypass when flat</button>
+                                <button type="button" class="actionBtn enginePrecisionBtn active" data-precision="64">64-bit internal</button>
+                                <button type="button" class="actionBtn enginePrecisionBtn" data-precision="32">32-bit rounding</button>
                             </div>
                         </div>
 
@@ -902,7 +895,7 @@
                         <div class="settingsRowItem" id="settingsRowDither">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">DITHERING &amp; NOISE SHAPING<button type="button" class="settingHintBtn" title="Adds dither at the software quantization stage. This does not establish physical output bit depth." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">Dithering<button type="button" class="settingHintBtn" title="Adds dither at the software quantization stage. This does not establish physical output bit depth." aria-label="Feature explanation">!</button></h4>
                                     <p class="settingsRowDesc" id="settingsDetectedDacBadge">Physical output not verified</p>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsDitherPill">TPDF</span>
@@ -919,13 +912,13 @@
                         <div class="settingsRowItem" id="settingsRowBuffer">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">BUFFER &amp; LATENCY<button type="button" class="settingHintBtn" title="Set the Web Audio buffer preference. Low latency favors responsiveness. Stable favors uninterrupted playback. Actual latency depends on the device and browser." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">Buffer profile<button type="button" class="settingHintBtn" title="Set the Web Audio buffer preference. Low latency favors responsiveness. Stable favors uninterrupted playback. Actual latency depends on the device and browser." aria-label="Feature explanation">!</button></h4>
                                 </div>
-                                <span class="settingsEnginePill" id="settingsBufferPill">STABLE</span>
+                                <span class="settingsEnginePill" id="settingsBufferPill">Stable</span>
                             </div>
                             <div class="settingsOptionToggles">
-                                <button type="button" class="actionBtn bufferLatencyBtn" data-latency="interactive">LOW LATENCY</button>
-                                <button type="button" class="actionBtn bufferLatencyBtn active" data-latency="playback">STABLE</button>
+                                <button type="button" class="actionBtn bufferLatencyBtn" data-latency="interactive">Low latency</button>
+                                <button type="button" class="actionBtn bufferLatencyBtn active" data-latency="playback">Stable</button>
                             </div>
                         </div>
 
@@ -933,31 +926,20 @@
                         <div class="settingsRowItem" id="settingsRowDebugMode">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">AUDIO DIAGNOSTICS &amp; DEBUG MODE<button type="button" class="settingHintBtn" title="Opens a movable, on-screen window showing local diagnostics, decoder events, and audio health." aria-label="Feature explanation">!</button></h4>
+                                    <h4 class="settingsRowTitle">Diagnostic overlay<button type="button" class="settingHintBtn" title="Opens a movable, on-screen window showing local diagnostics, decoder events, and audio health." aria-label="Feature explanation">!</button></h4>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsDebugPill">DISABLED</span>
                             </div>
                             <div class="settingsOptionToggles">
-                                <button type="button" class="actionBtn debugModeBtn active" id="debugModeDisableBtn" data-debug="0">DISABLED</button>
-                                <button type="button" class="actionBtn debugModeBtn" id="debugModeEnableBtn" data-debug="1">ENABLED (HUD)</button>
+                                <button type="button" class="actionBtn debugModeBtn active" id="debugModeDisableBtn" data-debug="0">Off</button>
+                                <button type="button" class="actionBtn debugModeBtn" id="debugModeEnableBtn" data-debug="1">On</button>
                             </div>
                         </div>
 
                                                     </div>
                         </details>
 
-                        <!-- 6. Settings Confirmation & Apply Action -->
-                        <div class="settingsRowItem settingsApplyRow" id="settingsRowApplyAudio">
-                            <div class="settingsApplyBar">
-                                <button type="button" id="settingsApplyAudioBtn" class="actionBtn primaryBtn settingsApplyBtn">
-                                    Apply audio settings
-                                </button>
-                                <button type="button" id="settingsDiscardAudioBtn" class="actionBtn" style="display: none;">
-                                    DISCARD PENDING
-                                </button>
-                                <span class="settingsApplyStatus" id="settingsApplyAudioStatus">Saved audio preferences match the controls. Processing depends on the active playback mode.</span>
-                            </div>
-                        </div>
+                        <p class="audioPreferenceStatus" id="settingsApplyAudioStatus" role="status" aria-live="polite">Audio preferences take effect when supported. Some changes ask for confirmation.</p>
                     </div>
                 </div>
 
@@ -1058,8 +1040,8 @@
                         <div class="settingsRowItem" id="settingsRowHwGain">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">SYSTEM VOLUME CONTROL</h4>
-                                    <p class="settingsRowDesc">Uses the operating system volume control instead of the player’s digital volume. Does not guarantee analog DAC gain.</p>
+                                    <h4 class="settingsRowTitle">System volume</h4>
+                                    <p class="settingsRowDesc">Adjust system volume while preserving your current app attenuation.</p>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsHardwareGainPill">UNAVAILABLE</span>
                             </div>
@@ -1075,7 +1057,7 @@
                         <div class="settingsRowItem" id="settingsRowUltrasonic">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">ULTRASONIC IMD FILTER</h4>
+                                    <h4 class="settingsRowTitle">Ultrasonic filter</h4>
                                     <p class="settingsRowDesc">Attenuates ultrasonic content when the graph sample rate permits it.</p>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsUltrasonicPill">BYPASS</span>
@@ -1086,10 +1068,10 @@
                                     <span id="settingsUltrasonicText">ULTRASONIC FILTER: OFF</span>
                                 </button>
                                 <select id="settingsUltrasonicCutoffSelect" class="settingsSelect" aria-label="Ultrasonic Filter Cutoff">
-                                    <option value="24000">24 kHz (Extended Bandwidth)</option>
-                                    <option value="32000" selected>32 kHz (Balanced)</option>
-                                    <option value="40000">40 kHz (Hi-Res Audio)</option>
-                                    <option value="48000">48 kHz (Ultra-Wide)</option>
+                                    <option value="24000">24 kHz</option>
+                                    <option value="32000" selected>32 kHz</option>
+                                    <option value="40000">40 kHz</option>
+                                    <option value="48000">48 kHz</option>
                                 </select>
                             </div>
                         </div>
@@ -1098,8 +1080,8 @@
                         <div class="settingsRowItem" id="settingsRowAmbi">
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">SPEAKER AMBIOPHONICS (R.A.C.E.)</h4>
-                                    <p class="settingsRowDesc">Recursive crosstalk cancellation for physical stereo desk/room speakers.</p>
+                                    <h4 class="settingsRowTitle">Speaker crosstalk cancellation</h4>
+                                    <p class="settingsRowDesc">Crosstalk cancellation for stereo speakers.</p>
                                 </div>
                                 <span class="settingsEnginePill" id="settingsAmbiPill">BYPASS</span>
                             </div>
@@ -1116,7 +1098,7 @@
                             <div class="settingsRowHeader">
                                 <div class="settingsRowTitleGroup">
                                     <h4 class="settingsRowTitle">Background track notifications</h4>
-                                    <p class="settingsRowDesc">Send desktop/PWA OS track-change notifications when playback advances in the background.</p>
+                                    <p class="settingsRowDesc">Show track changes in background notifications.</p>
                                 </div>
                             </div>
                             <div class="settingsOptionToggles">
@@ -1128,40 +1110,37 @@
                         </div>
 
                         <!-- 4. Playback Diagnostics & Telemetry Log -->
-                        <div class="settingsRowItem" id="settingsCardAudioDebug">
-                            <div class="settingsRowHeader">
-                                <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">PLAYBACK DIAGNOSTICS &amp; DEBUG LOG</h4>
-                                    <p class="settingsRowDesc">Record decoder and playback events for troubleshooting.</p>
-                                </div>
-                                <span class="settingsEnginePill" id="settingsAudioDebugPill">DECODER ACTIVE</span>
-                            </div>
+                        <details class="settingsAdvancedDetails" id="settingsCardAudioDebug">
+                            <summary class="settingsAdvancedSummary"><span class="settingsAdvancedSummaryText"><strong>Playback diagnostics</strong><small>Decoder, format and troubleshooting log</small></span><span class="settingsAdvancedChevron" aria-hidden="true">⌄</span></summary>
+                            <div class="settingsAdvancedContent">
+                            <p class="settingsRowDesc" id="settingsAudioDebugPill" role="status">No active playback</p>
                             <div class="settingsDspMetricsGrid" id="settingsAudioDebugGrid">
                                 <div class="settingsDspMetricItem">
-                                    <span class="settingsDspKey">LAST STREAM</span>
-                                    <span class="settingsDspVal" id="debugStreamStatus">Ready (200 OK)</span>
+                                    <span class="settingsDspKey">Stream</span>
+                                    <span class="settingsDspVal" id="debugStreamStatus">No stream</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
-                                    <span class="settingsDspKey">MEDIA FORMAT</span>
-                                    <span class="settingsDspVal" id="debugFormatVal">44.1 kHz • 16-Bit • FLAC</span>
+                                    <span class="settingsDspKey">Format</span>
+                                    <span class="settingsDspVal" id="debugFormatVal">No track loaded</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
-                                    <span class="settingsDspKey">PIPELINE STATE</span>
-                                    <span class="settingsDspVal" id="debugPipelineState">Ready (Buffered) • DSP: Active</span>
+                                    <span class="settingsDspKey">Playback path</span>
+                                    <span class="settingsDspVal" id="debugPipelineState">Graph not initialized</span>
                                 </div>
                                 <div class="settingsDspMetricItem">
-                                    <span class="settingsDspKey">SKIP TELEMETRY</span>
+                                    <span class="settingsDspKey">Skipped tracks</span>
                                     <span class="settingsDspVal" id="debugSkipStatus">No abnormal skips (0)</span>
                                 </div>
                             </div>
                             <div class="settingsDebugLogBox" id="settingsAudioDebugLog">
-                                [AudioEngine] Telemetry active. Audio pipeline initialized.
+                                No playback events recorded.
                             </div>
                             <div class="settingsOptionToggles settingsDebugLogActions">
-                                <button type="button" id="settingsCopyDebugLogBtn" class="actionBtn">COPY DIAGNOSTICS</button>
-                                <button type="button" id="settingsClearDebugLogBtn" class="actionBtn">CLEAR LOG</button>
+                                <button type="button" id="settingsCopyDebugLogBtn" class="actionBtn">Copy diagnostics</button>
+                                <button type="button" id="settingsClearDebugLogBtn" class="actionBtn">Clear log</button>
                             </div>
-                        </div>
+                            </div>
+                        </details>
                     </div>
                 </div>
 
@@ -1196,8 +1175,8 @@
                 <div class="miniSpindle"></div>
             </div>
             <div class="miniTrackInfo">
-                <div class="miniTitle" id="miniTitle">No Track Loaded</div>
-                <div class="miniArtist" id="miniArtist">Choose directory</div>
+                <div class="miniTitle" id="miniTitle" dir="auto">No Track Loaded</div>
+                <div class="miniArtist" id="miniArtist" dir="auto">Choose directory</div>
             </div>
         </div>
 
@@ -1233,7 +1212,7 @@
 
         <div class="miniPlayerRight">
             <div class="miniVolumeCon">
-                <button type="button" class="miniMuteBtn" id="miniMuteBtn" title="Mute" aria-label="Mute or Unmute">
+                <button type="button" class="miniMuteBtn" id="miniMuteBtn" aria-pressed="false" title="Mute" aria-label="Mute or Unmute">
                     <svg id="miniVolumeIcon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                         <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
                     </svg>
@@ -1272,7 +1251,7 @@
             <div class="trackMenuHeader">
                 <img src="resources/images/default.svg" alt="Cover" class="trackMenuThumb" id="trackMenuThumb">
                 <div class="trackMenuMeta">
-                    <h3 class="trackMenuTitle" id="trackMenuTitle">Track Title</h3>
+                    <h3 class="trackMenuTitle" id="trackMenuTitle" dir="auto">Track Title</h3>
                     <p class="trackMenuArtist" id="trackMenuArtist">Artist • Album</p>
                     <div class="trackMenuPills">
                         <span class="trackMenuFormatPill" id="trackMenuFormatPill">FLAC</span>
@@ -1340,8 +1319,8 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                     </span>
                     <div>
-                        <h3 id="metaEditorTitle">METADATA &amp; ID3 EDITOR</h3>
-                        <p class="metaEditorSubtitle">Edit embedded audio tags and library attributes</p>
+                        <h3 id="metaEditorTitle">Edit track metadata</h3>
+                        <p class="metaEditorSubtitle">Update library information or export a tagged copy.</p>
                     </div>
                 </div>
                 <button type="button" id="closeMetaEditorModalBtn" class="closeModalBtn" aria-label="Close Metadata Editor"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
@@ -1357,15 +1336,15 @@
                             <span>Change</span>
                         </button>
                     </div>
-                    <input type="file" id="metaEditorCoverFileInput" accept="image/png, image/jpeg, image/webp" style="display: none;">
+                    <input type="file" id="metaEditorCoverFileInput" aria-label="Choose album artwork" accept="image/png, image/jpeg, image/webp" style="display: none;">
                     <div class="metaEditorSummaryDetails">
                         <div class="metaEditorFileTitle" id="metaEditorFileTitle">Track Title</div>
                         <div class="metaEditorFilePath" id="metaEditorFilePath">/path/to/audio/file.flac</div>
                         <div class="metaEditorPills">
                             <span class="metaEditorPill" id="metaEditorFormatPill">FLAC</span>
-                            <span class="metaEditorPill" id="metaEditorBitratePill">3120 kbps</span>
-                            <span class="metaEditorPill" id="metaEditorSampleRatePill">96.0 kHz</span>
-                            <span class="metaEditorPill" id="metaEditorBitDepthPill">24-Bit</span>
+                            <span class="metaEditorPill" id="metaEditorBitratePill">Not reported</span>
+                            <span class="metaEditorPill" id="metaEditorSampleRatePill">Not reported</span>
+                            <span class="metaEditorPill" id="metaEditorBitDepthPill">Not reported</span>
                         </div>
                         <div class="metaEditorCoverActions">
                             <button type="button" class="metaEditorCoverActionBtn" id="metaEditorBrowseCoverBtn">
@@ -1413,19 +1392,19 @@
                     <div class="metaEditorFormGrid">
                         <div class="metaEditorField metaFieldFull">
                             <label for="metaEditTitle" class="metaEditorLabel">TRACK TITLE</label>
-                            <input type="text" id="metaEditTitle" class="metaEditorInput" placeholder="Enter track title" autocomplete="off" required>
+                            <input type="text" id="metaEditTitle" dir="auto" class="metaEditorInput" placeholder="Enter track title" autocomplete="off" required>
                         </div>
                         <div class="metaEditorField">
                             <label for="metaEditArtist" class="metaEditorLabel">ARTIST</label>
-                            <input type="text" id="metaEditArtist" class="metaEditorInput" placeholder="Enter artist name" autocomplete="off">
+                            <input type="text" id="metaEditArtist" dir="auto" class="metaEditorInput" placeholder="Enter artist name" autocomplete="off">
                         </div>
                         <div class="metaEditorField">
                             <label for="metaEditAlbum" class="metaEditorLabel">ALBUM</label>
-                            <input type="text" id="metaEditAlbum" class="metaEditorInput" placeholder="Enter album name" autocomplete="off">
+                            <input type="text" id="metaEditAlbum" dir="auto" class="metaEditorInput" placeholder="Enter album name" autocomplete="off">
                         </div>
                         <div class="metaEditorField">
                             <label for="metaEditGenre" class="metaEditorLabel">GENRE</label>
-                            <input type="text" id="metaEditGenre" class="metaEditorInput" list="metaGenreList" placeholder="e.g. Electronic, Ambient, Rock" autocomplete="off">
+                            <input type="text" id="metaEditGenre" dir="auto" class="metaEditorInput" list="metaGenreList" placeholder="e.g. Electronic, Ambient, Rock" autocomplete="off">
                             <datalist id="metaGenreList">
                                 <option value="Electronic">
                                 <option value="Synthwave">
@@ -1451,13 +1430,13 @@
                         </div>
                         <div class="metaEditorField">
                             <label for="metaEditComment" class="metaEditorLabel">COMMENT / NOTES</label>
-                            <input type="text" id="metaEditComment" class="metaEditorInput" placeholder="Optional comments or tags" autocomplete="off">
+                            <input type="text" id="metaEditComment" dir="auto" class="metaEditorInput" placeholder="Optional comments or tags" autocomplete="off">
                         </div>
                     </div>
 
                     <div class="metaEditorField metaFieldFull metadataLyricsField">
                         <label for="metaEditLyrics" class="metaEditorLabel">Lyrics (plain text or LRC)</label>
-                        <textarea id="metaEditLyrics" class="metaEditorInput" rows="6" maxlength="65536" placeholder="Paste lyrics or import an LRC file"></textarea>
+                        <textarea id="metaEditLyrics" dir="auto" class="metaEditorInput" rows="6" maxlength="65536" placeholder="Paste lyrics or import an LRC file"></textarea>
                         <label for="metaLyricsFile" class="metaEditorLabel">Import lyrics file</label>
                         <input id="metaLyricsFile" type="file" accept=".lrc,.txt,text/plain">
                     </div>
@@ -1466,7 +1445,7 @@
                     </div>
                     <label class="metadataWriteHint" id="metaWriteFileRow" hidden><input type="checkbox" id="metaWriteFile"> Also embed changes into original audio file (FLAC, MP3, WAV, AIFF, Ogg Vorbis, Opus or M4A/ALAC). Unchecked by default.</label>
                     <p class="metadataWriteHint">Save updates the local library. Supported desktop files may be modified explicitly. Browser imports may export a tagged FLAC or MP3 copy without re-encoding. Android file writing is not enabled.</p>
-                    <div class="metaEditorStatus" id="metaEditorStatus" style="display: none;"></div>
+                    <div class="metaEditorStatus" id="metaEditorStatus" role="status" aria-live="polite" style="display: none;"></div>
 
                     <div class="metaEditorActions">
                         <button type="button" class="actionBtn metaEditorCancelBtn" id="metaEditCancelBtn">CANCEL</button>
@@ -1478,25 +1457,26 @@
     </div>
 
     <!-- Add Track To Playlist Modal -->
-    <div class="modalBackdrop" id="playlistModal" style="display: none;">
+    <div class="modalBackdrop" id="playlistModal" role="dialog" aria-modal="true" aria-label="Add to playlist" style="display: none;">
         <div class="modalCard">
             <div class="modalHeader">
-                <h3>ADD TO PLAYLIST</h3>
+                <h3>Add to playlist</h3>
                 <button type="button" id="closeModalBtn" class="closeModalBtn" aria-label="Close modal"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
             <p id="modalTrackTitle" class="modalTrackTitle">Track Title</p>
+            <input type="search" id="modalPlaylistSearch" aria-label="Find a playlist" placeholder="Find a playlist">
             <div class="modalPlaylistList" id="modalPlaylistList">
                 <!-- List of playlists with an Add button -->
             </div>
             <div class="modalCreateNew">
-                <input type="text" id="modalNewPlaylistName" placeholder="Or create new playlist... (Press Enter to create &amp; add)" aria-label="Playlist Name">
-                <button type="button" id="modalCreateAndAddBtn" class="actionBtn primaryBtn">CREATE &amp; ADD</button>
+                <input type="text" id="modalNewPlaylistName" placeholder="New playlist name" aria-label="Playlist Name">
+                <button type="button" id="modalCreateAndAddBtn" class="actionBtn primaryBtn">Create &amp; add</button>
             </div>
         </div>
     </div>
 
     <!-- MusicBee / Musicolet Batch Add Songs To Playlist Modal -->
-    <div class="modalBackdrop" id="batchAddSongsModal" style="display: none;">
+    <div class="modalBackdrop" id="batchAddSongsModal" role="dialog" aria-modal="true" aria-label="Add songs to playlist" style="display: none;">
         <div class="modalCard batchAddSongsCard">
             <div class="modalHeader">
                 <div class="batchAddHeaderTitle">
@@ -1505,19 +1485,26 @@
                 </div>
                 <button type="button" id="closeBatchAddModalBtn" class="closeModalBtn" title="Close song picker" aria-label="Close modal"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
-            <p class="batchAddSubtitle">Search your track library and tap "+" to instantly add songs to this playlist:</p>
+            <p class="batchAddSubtitle">Select songs, then add them together. Existing members are marked.</p>
             <div class="batchAddSearchBar">
                 <input type="text" id="batchAddSearchInput" placeholder="Filter library by title, artist, or album..." aria-label="Search library tracks">
             </div>
-            <div class="batchAddTracksList" id="batchAddTracksList">
+            <div class="playlistPickerTools"><button type="button" class="actionBtn" id="batchSelectPage">Select page</button><button type="button" class="actionBtn" id="batchReview" aria-pressed="false">Review selected</button><button type="button" class="actionBtn" id="batchClearSelection">Clear selection</button></div><div class="batchAddTracksList" id="batchAddTracksList">
                 <!-- Populated dynamically with track items -->
             </div>
-            <div class="batchAddFooter">
-                <span id="batchAddSummaryText">0 songs in playlist</span>
-                <button type="button" id="doneBatchAddBtn" class="actionBtn primaryBtn">DONE</button>
+            <p id="batchResult" role="status"></p><button type="button" id="batchReload" class="actionBtn" hidden>Reload playlist and review selection</button><div class="batchAddFooter">
+                <div class="playlistPager"><button type="button" class="actionBtn" id="batchPrev">Previous</button><span id="batchRange" role="status"></span><label class="batchPageLabel">Page <input type="number" id="batchPage" min="1" value="1" aria-label="Jump to song picker page"></label><button type="button" class="actionBtn" id="batchNext">Next</button></div><span id="batchAddSummaryText" role="status">0 selected</span>
+                <button type="button" id="doneBatchAddBtn" class="actionBtn primaryBtn">Add songs</button>
             </div>
         </div>
     </div>
+
+    <dialog id="playlistEditDialog" aria-labelledby="playlistEditTitle" class="modalCard playlistEditDialog">
+      <h3 id="playlistEditTitle">Edit playlist</h3><label for="playlistEditName">Name</label><input id="playlistEditName" maxlength="50" dir="auto">
+      <p class="batchAddSubtitle">Move songs to change their saved order. Remove or replace unavailable entries without deleting audio files.</p><div id="playlistEditRows"></div>
+      <div class="playlistPager"><button type="button" class="actionBtn" id="playlistEditPrev">Previous</button><span id="playlistEditRange"></span><button type="button" class="actionBtn" id="playlistEditNext">Next</button></div><p id="playlistEditStatus" role="status"></p><div id="playlistEditRecovery" hidden><button type="button" class="actionBtn" id="playlistEditRebase">Reload and reapply safe changes</button><button type="button" class="actionBtn" id="playlistEditReload">Discard draft and load latest</button></div>
+      <form method="dialog" class="playlistEditActions"><button class="actionBtn" value="cancel">Cancel</button><button type="button" class="actionBtn primaryBtn" id="playlistEditSave">Save changes</button></form>
+    </dialog>
 
     <!-- Studio Parametric Equalizer (PEQ) Workstation Modal -->
     <div class="modalBackdrop" id="peqModal" role="dialog" aria-modal="true" aria-labelledby="peqTitle" style="display: none;">
@@ -1573,7 +1560,7 @@
 
             <!-- AutoEq Drawer (Collapsible) -->
             <div class="peqAutoEqDrawer" id="peqAutoEqDrawer" style="display: none;">
-                <textarea id="peqAutoEqInput" class="peqAutoEqTextarea" placeholder="Paste AutoEq or Oratory1990 filter text (e.g. 'Filter 1: ON PK Fc 105 Hz Gain 3.5 dB Q 1.41')..."></textarea>
+                <textarea id="peqAutoEqInput" aria-label="AutoEq filter text" class="peqAutoEqTextarea" placeholder="Paste AutoEq or Oratory1990 filter text (e.g. 'Filter 1: ON PK Fc 105 Hz Gain 3.5 dB Q 1.41')..."></textarea>
                 <div class="peqAutoEqDrawerActions">
                     <button type="button" id="peqAutoEqApplyBtn" class="actionBtn primaryBtn">APPLY COMPENSATION</button>
                     <button type="button" id="peqAutoEqCancelBtn" class="actionBtn">CANCEL</button>
@@ -1610,7 +1597,7 @@
                         <span class="peqDspName">TREBLE</span>
                         <span class="peqDspSpec">+3.0 dB</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerLimiterBtn" data-target="limiter" title="Toggle stereo-linked lookahead limiter (4x peak estimation; -0.6 dBFS sample ceiling)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerLimiterBtn" data-target="limiter" title="Manual limiter. Automatic protection remains configured for gain-risk effects.">
                         <span class="dspDot"></span>
                         <span class="peqDspName">LIMITER</span>
                         <span class="peqDspSpec">-0.6 dBFS</span>
@@ -1661,12 +1648,12 @@
     </div>
 
     <!-- Signal Path & Audit Modal -->
-    <div class="modalBackdrop" id="signalPathModal" style="display: none;">
+    <div class="modalBackdrop" id="signalPathModal" role="dialog" aria-modal="true" aria-label="Signal path" style="display: none;">
         <div class="modalCard signalPathCard">
             <div class="modalHeader">
                 <div class="signalPathHeaderTitle">
                     <span class="signalDot" id="auditQualityDot" aria-hidden="true"></span>
-                    <h3>SIGNAL PATH &amp; AUDIT</h3>
+                    <h3>Signal path</h3>
                 </div>
                 <button type="button" id="closeSignalPathModalBtn" class="closeModalBtn" title="Close Signal Path &amp; Audit" aria-label="Close Signal Path &amp; Audit"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             </div>
@@ -1721,7 +1708,7 @@
     </div>
 
     <!-- Sleep Timer Modal -->
-    <div class="modalBackdrop" id="sleepTimerModal" style="display: none;">
+    <div class="modalBackdrop" id="sleepTimerModal" role="dialog" aria-modal="true" aria-label="Sleep timer" style="display: none;">
         <div class="modalCard sleepTimerCard">
             <div class="modalHeader">
                 <div class="sleepTimerHeaderTitle">
@@ -1760,7 +1747,7 @@
             <div class="trackLoadingSpinner" aria-hidden="true"></div>
             <h3 class="trackLoadingTitle" id="trackLoadingTitle">LOADING MUSIC LIBRARY...</h3>
             <p class="trackLoadingStatus" id="trackLoadingStatusText">Indexing audio files and metadata. Please wait...</p>
-            <div class="trackLoadingProgressTrack">
+            <div class="trackLoadingProgressTrack" role="progressbar" aria-label="Music import progress" aria-valuemin="0" aria-valuemax="100" aria-describedby="trackLoadingStatusText">
                 <div class="trackLoadingProgressBar" id="trackLoadingProgressBar"></div>
             </div>
             <button type="button" id="cancelTrackLoadingBtn" class="actionBtn dangerBtn trackLoadingCancelBtn">CANCEL</button>
@@ -1968,7 +1955,7 @@
     </div>
 
     <!-- Modern Floating Toast Container -->
-    <div id="cachyToastContainer" class="toastContainer" aria-live="polite"></div>
+    <div id="cachyToastContainer" class="toastContainer"></div>
 
     <!-- On-Screen Audio Diagnostics & Debug Mode HUD -->
     <div id="debugHudContainer" class="debugHudContainer" style="display: none;" aria-live="polite">
@@ -2006,5 +1993,15 @@
 
     <!-- Canonical ES Module Entry -->
     <script type="module" src="scripts/modules/app.js"></script>
+    <dialog id="audioChangeDialog" class="audioChangeDialog" aria-modal="true" aria-labelledby="audioChangeTitle" aria-describedby="audioChangeDescription">
+        <form method="dialog">
+            <h2 id="audioChangeTitle">Change audio setting?</h2>
+            <p id="audioChangeDescription"></p>
+            <div class="audioChangeActions">
+                <button type="submit" value="cancel" class="actionBtn" autofocus>Cancel</button>
+                <button type="submit" value="allow" class="actionBtn primaryBtn">Continue</button>
+            </div>
+        </form>
+    </dialog>
 </body>
 </html>

@@ -3,6 +3,7 @@
 // Cross-platform persistence in cachy_data_dir() via SQLite3 WAL (when loaded) + POSIX atomic JSON, with MySQL sync when available.
 
 require_once(__DIR__ . '/platform.php');
+require_once(__DIR__ . '/playlist-sql.php');
 
 class Storage {
     private static $dataFile = null;
@@ -13,19 +14,55 @@ class Storage {
     private static $batchDepth = 0;
     private static $isDirty = false;
     private static $pathToTidIndex = null;
+    private static $readBase = null;
+    private static $writeLock = null;
+
+    // Lock a stable sidecar inode, not the JSON inode replaced by rename.
+    private static function locked(callable $fn) {
+        if (self::$writeLock !== null) return $fn();
+        self::resolvePaths();
+        $lock = @fopen(self::$dataFile . '.lock', 'c');
+        if (!$lock) return false;
+        $deadline = microtime(true) + 3;
+        while (!@flock($lock, LOCK_EX | LOCK_NB)) {
+            if (microtime(true) >= $deadline) { fclose($lock); return false; }
+            usleep(20000);
+        }
+        self::$writeLock = $lock;
+        try { return $fn(); }
+        finally { self::$writeLock = null; flock($lock, LOCK_UN); fclose($lock); }
+    }
+
+    private static function freshData() {
+        clearstatcache(true, self::$dataFile);
+        $raw = @file_get_contents(self::$dataFile);
+        $data = $raw === false ? null : json_decode($raw, true);
+        return is_array($data) && isset($data['playlists'], $data['tracks']) && is_array($data['playlists']) && is_array($data['tracks']) ? $data : null;
+    }
+
+    private static function playlistMutation(callable $fn) {
+        if (self::hasMySQL() || PlaylistSql::enabled() || self::$batchDepth > 0) return false;
+        return self::locked(function() use ($fn) {
+            self::init();
+            $data = self::freshData();
+            if ($data === null) return false;
+            self::$readBase = $data;
+            self::$memoryCache = $data;
+            $result = $fn($data);
+            if ($result === false || $result === 'already_in_playlist') return $result;
+            return self::write($data, true) ? $result : false;
+        });
+    }
+
 
     private static function resolvePaths(): void {
         if (self::$dataFile !== null) return;
         $dir = cachy_data_dir();
         self::$dataFile = $dir . DIRECTORY_SEPARATOR . 'library.json';
         self::$sqliteFile = $dir . DIRECTORY_SEPARATOR . 'library.sqlite';
-        $legacyFile = __DIR__ . '/../data/library.json';
-        if (!file_exists(self::$dataFile) && is_file($legacyFile) && is_readable($legacyFile)) {
-            $raw = @file_get_contents($legacyFile);
-            if ($raw !== false && strlen($raw) > 2) {
-                @file_put_contents(self::$dataFile, $raw, LOCK_EX);
-            }
-        }
+        // The platform resolver already selects an existing portable data directory
+        // when no override is given. An explicit override must remain isolated;
+        // copying a legacy library here could silently mix different profiles.
     }
 
     public static function hasMySQL() {
@@ -115,8 +152,9 @@ class Storage {
         }
         if (self::$batchDepth === 0 && self::$isDirty && is_array(self::$memoryCache)) {
             self::$isDirty = false;
-            self::write(self::$memoryCache, true);
+            return self::write(self::$memoryCache, true);
         }
+        return true;
     }
 
     public static function init() {
@@ -225,85 +263,52 @@ class Storage {
                 }
             }
 
-            @file_put_contents(self::$dataFile, json_encode($initData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            self::locked(function() use ($initData) { if (!file_exists(self::$dataFile)) { $tmp = @tempnam(dirname(self::$dataFile), 'lib_init_'); if ($tmp !== false) { $raw = json_encode($initData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES); if ($raw === false || @file_put_contents($tmp,$raw) !== strlen($raw) || !@rename($tmp,self::$dataFile)) @unlink($tmp); } } });
         }
     }
 
     public static function read() {
         self::init();
-        if (self::$memoryCache !== null) {
-            if (self::$batchDepth > 0 || self::$isDirty) {
-                return self::$memoryCache;
-            }
-            clearstatcache(true, self::$dataFile);
-            $mtime = @filemtime(self::$dataFile) ?: 0;
-            if ($mtime > 0 && $mtime === self::$memoryCacheMtime) {
-                return self::$memoryCache;
-            }
-        }
-        $fp = @fopen(self::$dataFile, 'c+');
-        if (!$fp) return is_array(self::$memoryCache) ? self::$memoryCache : [];
-        @flock($fp, LOCK_SH);
-        $contents = @stream_get_contents($fp);
-        @flock($fp, LOCK_UN);
-        @fclose($fp);
-        
-        $data = json_decode($contents, true);
-        if (is_array($data)) {
-            self::$memoryCache = $data;
-            self::$memoryCacheMtime = @filemtime(self::$dataFile) ?: time();
-            self::$pathToTidIndex = null;
-        } else if (self::$memoryCache === null) {
-            // If file was genuinely empty (0 bytes), initialize empty schema
-            if (empty(trim($contents))) {
-                self::$memoryCache = [];
-            } else {
-                // Parse error on non-empty file: log warning and do not return empty array
-                error_log('[Storage] Warning: library.json parse failed; preserving in-memory state.');
-                self::$memoryCache = [];
-            }
-        }
-        return self::$memoryCache;
+        if ((self::$batchDepth > 0 || self::$isDirty) && self::$memoryCache !== null) return self::$memoryCache;
+        $data = self::freshData();
+        self::$readBase = $data;
+        self::$memoryCache = $data;
+        self::$pathToTidIndex = null;
+        return $data ?? [];
     }
 
     public static function write($data, $forceFlush = false) {
         self::init();
-        self::$memoryCache = $data;
+        if (!is_array($data) || self::$readBase === null) return false;
         if (self::$batchDepth > 0 && !$forceFlush) {
-            self::$isDirty = true;
+            self::$memoryCache = $data; self::$isDirty = true; return true;
+        }
+        return self::locked(function() use ($data) {
+            $fresh = self::freshData();
+            if ($fresh === null) return false;
+            $base = self::$readBase;
+            // Merge independent top-level changes, reject conflicts rather than
+            // allowing a stale scan or other writer to replace playlist data.
+            foreach (array_unique(array_merge(array_keys($base),array_keys($data))) as $key) {
+                if (array_key_exists($key,$base) === array_key_exists($key,$data) && ($base[$key]??null) === ($data[$key]??null)) continue;
+                if (array_key_exists($key,$base) !== array_key_exists($key,$fresh) || ($base[$key]??null) !== ($fresh[$key]??null)) return false;
+                if (array_key_exists($key,$data)) $fresh[$key] = $data[$key]; else unset($fresh[$key]);
+            }
+            $json = json_encode($fresh, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+            if ($json === false) return false;
+            $temp = @tempnam(dirname(self::$dataFile), 'lib_tmp_');
+            if ($temp === false) return false;
+            try {
+                if (@file_put_contents($temp,$json,LOCK_EX) !== strlen($json)) return false;
+                @chmod($temp,0640);
+                // Never copy over the existing file after a failed atomic replace.
+                if (!@rename($temp,self::$dataFile)) return false;
+            } finally { if (is_file($temp)) @unlink($temp); }
+            self::$memoryCache = self::$readBase = $fresh;
+            self::$isDirty = false;
+            self::syncSqliteFromData($fresh);
             return true;
-        }
-        $dir = dirname(self::$dataFile);
-        $tempFile = @tempnam($dir, 'lib_tmp_');
-        if ($tempFile === false) {
-            $tempFile = self::$dataFile . '.' . uniqid('tmp_', true);
-        }
-        // Use JSON_INVALID_UTF8_SUBSTITUTE to prevent json_encode returning false on non-UTF8 tag bytes
-        $jsonFlags = JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES;
-        if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
-            $jsonFlags |= JSON_INVALID_UTF8_SUBSTITUTE;
-        }
-        $json = json_encode($data, $jsonFlags);
-        if ($json === false) {
-            error_log('[Storage] Error: json_encode failed: ' . json_last_error_msg());
-            @unlink($tempFile);
-            return false;
-        }
-        if (@file_put_contents($tempFile, $json, LOCK_EX) === false) {
-            @unlink($tempFile);
-            return false;
-        }
-        @chmod($tempFile, 0640);
-        if (!@rename($tempFile, self::$dataFile)) {
-            // Fallback for filesystem boundary or Windows lock
-            @copy($tempFile, self::$dataFile);
-            @unlink($tempFile);
-        }
-        clearstatcache(true, self::$dataFile);
-        self::$memoryCacheMtime = @filemtime(self::$dataFile) ?: time();
-        self::$isDirty = false;
-        self::syncSqliteFromData($data);
-        return true;
+        });
     }
 
     // --- DEFAULT DIRECTORY ---
@@ -358,35 +363,21 @@ class Storage {
 
     // --- PLAYLISTS ---
     public static function getPlaylists($username = 'default') {
+        if (PlaylistSql::enabled()&&!self::hasMySQL()) throw new RuntimeException("Configured playlist database unavailable");
         if (self::hasMySQL()) {
             $conn = $GLOBALS['connection'];
-            $query = "
-                SELECT p.plid, p.playlist_name, p.username, COUNT(pt.ptid) as track_count
-                FROM Playlists p
-                LEFT JOIN PlaylistTracks pt ON p.plid = pt.plid
-                WHERE p.username = ? OR p.username = 'default'
-                GROUP BY p.plid, p.playlist_name, p.username
-                ORDER BY p.plid ASC
-            ";
-            $stmt = $conn->prepare($query);
-            if ($stmt) {
-                $stmt->bind_param("s", $username);
-                $stmt->execute();
-                $res = $stmt->get_result();
-                $playlists = [];
-                while ($row = mysqli_fetch_assoc($res)) {
-                    $playlists[] = [
-                        'plid'        => (int)$row['plid'],
-                        'name'        => $row['playlist_name'],
-                        'username'    => $row['username'],
-                        'track_count' => (int)$row['track_count']
-                    ];
-                }
-                return $playlists;
+            $revision = PlaylistSql::enabled() ? ",p.revision" : "";
+            $query = "SELECT p.plid,p.playlist_name,p.username $revision,pt.tid FROM Playlists p LEFT JOIN PlaylistTracks pt ON p.plid=pt.plid WHERE p.username=? OR p.username='default' ORDER BY p.plid,pt.position,pt.ptid";
+            $stmt=$conn->prepare($query);
+            if($stmt){$stmt->bind_param('s',$username);if(!$stmt->execute())throw new RuntimeException('MySQL playlist read failed');$res=$stmt->get_result();$playlists=[];
+                while($row=$res->fetch_assoc()){$id=(int)$row['plid'];if(!isset($playlists[$id]))$playlists[$id]=['plid'=>$id,'name'=>$row['playlist_name'],'username'=>$row['username'],'tracks'=>[],'track_count'=>0,'revision'=>(int)($row['revision']??0)];if($row['tid']!==null){$playlists[$id]['tracks'][]=(int)$row['tid'];$playlists[$id]['track_count']++;}}
+                return array_values($playlists);
             }
+            throw new RuntimeException("MySQL playlist read failed");
         }
 
         $data = self::read();
+        if (self::$readBase === null) throw new RuntimeException("Playlist storage unreadable");
         $playlists = [];
         foreach ($data['playlists'] ?? [] as $pl) {
             if ($pl['username'] === $username || $pl['username'] === 'default') {
@@ -394,69 +385,78 @@ class Storage {
                     'plid'        => (int)$pl['plid'],
                     'name'        => $pl['name'],
                     'username'    => $pl['username'],
-                    'track_count' => count($pl['tracks'] ?? [])
+                    'track_count' => count($pl['tracks'] ?? []),
+                    'tracks' => array_values($pl['tracks'] ?? []), 'revision' => (int)($pl['revision']??0)
                 ];
             }
         }
         return $playlists;
     }
 
+    private static function playlistTrackIds($plid) {
+        $stmt=$GLOBALS['connection']->prepare("SELECT tid FROM PlaylistTracks WHERE plid=? ORDER BY position,ptid");
+        $stmt->bind_param('i',$plid);$stmt->execute();$ids=[];$rows=$stmt->get_result();while($row=$rows->fetch_assoc())$ids[]=(int)$row['tid'];return $ids;
+    }
+
+    public static function editPlaylist($plid,$name,$tracks,$username='default',$revision=null,$changeMembership=false) {
+        if(self::hasMySQL())return PlaylistSql::mutate($GLOBALS['connection'],$changeMembership?'edit_members':'edit',['plid'=>$plid,'name'=>$name,'tracks'=>$tracks,'revision'=>$revision],$username);
+        $plid=(int)$plid; $name=trim($name);
+        if($plid<=0 || $name==='' || strlen($name)>200 || !is_array($tracks)) return false;
+        foreach($tracks as $id) if(!self::validPlaylistId($id)) return false;
+        $tracks=array_map('intval',$tracks);
+        if(count(array_unique($tracks))!==count($tracks)) return false;
+        return self::playlistMutation(function(&$data) use($plid,$name,$tracks,$username,$revision,$changeMembership) {
+            foreach($data['playlists'] as $other) if((int)$other['plid']!==$plid && self::playlistOwner($other,$username) && strcasecmp($other['name'],$name)===0) return false;
+            foreach($data['playlists'] as &$pl) if((int)$pl['plid']===$plid && self::playlistOwner($pl,$username)) {
+                $old=array_map('intval',$pl['tracks']??[]); $a=$old; $b=$tracks; sort($a); sort($b);
+                if((!$changeMembership && $a!==$b) || !self::validRevision($revision) || (int)$revision!==(int)($pl['revision']??0)) return false;
+                if($changeMembership) foreach(array_diff($tracks,$old) as $tid) if(!isset($data['tracks'][(string)$tid])) return false;
+                $pl['name']=$name; $pl['tracks']=$tracks; $pl['revision']=(int)($pl['revision']??0)+1; return true;
+            }
+            return false;
+        });
+    }
+
+    private static function playlistOwner($pl,$username) { return in_array($pl['username']??'',[$username,'default'],true); }
+    private static function validRevision($value) { return (is_int($value)||is_string($value)) && preg_match('/^(0|[1-9][0-9]*)$/D',(string)$value) && filter_var($value,FILTER_VALIDATE_INT)!==false; }
+    private static function validPlaylistId($id) { return (is_int($id)||is_string($id)) && preg_match('/^[1-9][0-9]*$/D',(string)$id) && filter_var($id,FILTER_VALIDATE_INT)!==false; }
+
     public static function getPlaylist($plid) {
         $plid = (int)$plid;
+        if (PlaylistSql::enabled()&&!self::hasMySQL()) throw new RuntimeException("Configured playlist database unavailable");
         if (self::hasMySQL()) {
             $conn = $GLOBALS['connection'];
-            $pStmt = $conn->prepare("SELECT plid, playlist_name, username FROM Playlists WHERE plid = ? LIMIT 1");
-            if ($pStmt) {
-                $pStmt->bind_param("i", $plid);
-                $pStmt->execute();
-                $pRes = $pStmt->get_result();
-                $playlist = $pRes->fetch_assoc();
-                if ($playlist) {
-                    $tStmt = $conn->prepare("
-                        SELECT 
-                            pt.ptid, 
-                            pt.tid, 
-                            pt.position, 
-                            t.file_path,
-                            t.full_path,
-                            t.title,
-                            t.artist,
-                            t.album,
-                            t.genre,
-                            t.year,
-                            t.track_num AS track,
-                            t.duration,
-                            t.bitrate,
-                            t.sample_rate AS sampleRate,
-                            t.channels,
-                            t.format,
-                            t.file_size AS size,
-                            t.has_cover AS hasCover,
-                            t.lyrics
-                        FROM PlaylistTracks pt
-                        JOIN Tracks t ON pt.tid = t.tid
-                        WHERE pt.plid = ?
-                        ORDER BY pt.position ASC
-                    ");
-                    $tracks = [];
-                    if ($tStmt) {
-                        $tStmt->bind_param("i", $plid);
-                        $tStmt->execute();
-                        $tRes = $tStmt->get_result();
-                        while ($row = mysqli_fetch_assoc($tRes)) {
-                            $row['hasCover'] = (bool)$row['hasCover'];
-                            $row['cover'] = $row['hasCover'] ? ('php/api/cover.php?tid=' . $row['tid']) : null;
-                            $row['src'] = 'php/api/stream.php?tid=' . $row['tid'];
-                            $tracks[] = $row;
-                        }
-                    }
-                    $playlist['tracks'] = $tracks;
-                    return $playlist;
+            // One statement provides one consistent playlist/membership snapshot.
+            // A separate metadata query could observe a different revision.
+            $revision = PlaylistSql::enabled() ? ',p.revision' : '';
+            $stmt = $conn->prepare("SELECT p.plid,p.playlist_name AS name,p.username $revision,
+                pt.ptid,pt.tid,pt.position,t.file_path,t.full_path,t.title,t.artist,t.album,
+                t.genre,t.year,t.track_num AS track,t.duration,t.bitrate,t.sample_rate AS sampleRate,
+                t.channels,t.format,t.file_size AS size,t.has_cover AS hasCover,t.lyrics
+                FROM Playlists p LEFT JOIN PlaylistTracks pt ON p.plid=pt.plid
+                LEFT JOIN Tracks t ON pt.tid=t.tid
+                WHERE p.plid=? ORDER BY pt.position,pt.ptid");
+            if (!$stmt) throw new RuntimeException('MySQL playlist read failed');
+            try {
+                if (!$stmt->bind_param('i',$plid) || !$stmt->execute()) throw new RuntimeException('MySQL playlist read failed');
+                $result=$stmt->get_result();
+                if (!$result) throw new RuntimeException('MySQL playlist read failed');
+                $playlist=null;
+                while ($row=$result->fetch_assoc()) {
+                    if ($playlist===null) $playlist=['plid'=>(int)$row['plid'],'name'=>$row['name'],'username'=>$row['username'],'revision'=>(int)($row['revision']??0),'tracks'=>[]];
+                    if ($row['ptid']===null || $row['file_path']===null) continue;
+                    unset($row['plid'],$row['name'],$row['username'],$row['revision']);
+                    $row['hasCover']=(bool)$row['hasCover'];
+                    $row['cover']=$row['hasCover']?'php/api/cover.php?tid='.$row['tid']:null;
+                    $row['src']='php/api/stream.php?tid='.$row['tid'];
+                    $playlist['tracks'][]=$row;
                 }
-            }
+                return $playlist;
+            } finally { $stmt->close(); }
         }
 
         $data = self::read();
+        if (self::$readBase === null) throw new RuntimeException("Playlist storage unreadable");
         foreach ($data['playlists'] ?? [] as $pl) {
             if ((int)$pl['plid'] === $plid) {
                 $tracks = [];
@@ -495,6 +495,7 @@ class Storage {
                     'plid' => (int)$pl['plid'],
                     'name' => $pl['name'],
                     'username' => $pl['username'],
+                    'revision' => (int)($pl['revision']??0),
                     'tracks' => $tracks
                 ];
             }
@@ -502,150 +503,71 @@ class Storage {
         return null;
     }
 
-    public static function createPlaylist($name, $username = 'default') {
-        $name = trim($name);
-        if (empty($name)) return false;
-
-        $newPlid = null;
-        if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $stmt = $conn->prepare("INSERT INTO Playlists (playlist_name, username) VALUES (?, ?) ON DUPLICATE KEY UPDATE playlist_name = VALUES(playlist_name)");
-            if ($stmt) {
-                $stmt->bind_param("ss", $name, $username);
-                if ($stmt->execute()) {
-                    $newPlid = $conn->insert_id ?: $stmt->insert_id;
-                }
+    public static function createPlaylist($name, $username = 'default',$tracks=[])  {
+        if(self::hasMySQL())return PlaylistSql::mutate($GLOBALS['connection'],'create',['name'=>$name,'tracks'=>$tracks],$username);
+        $name=trim($name); if(!is_array($tracks))return false;foreach($tracks as $id)if(!self::validPlaylistId($id))return false;$tracks=array_map('intval',$tracks);if(count(array_unique($tracks))!==count($tracks))return false; if($name==='' || strlen($name)>200) return false;
+        return self::playlistMutation(function(&$data) use($name,$username,$tracks) {
+            foreach($tracks as $tid)if(!isset($data['tracks'][(string)$tid]))return false;
+            $max=(int)($data['playlist_id_highwater']??0);
+            foreach($data['playlists'] as $pl) {
+                if(self::playlistOwner($pl,$username) && strcasecmp($pl['name'],$name)===0) return false;
+                $max=max($max,(int)$pl['plid']);
             }
-        }
-
-        $data = self::read();
-        if (!$newPlid) {
-            $maxId = 0;
-            foreach ($data['playlists'] ?? [] as $pl) {
-                if ((int)$pl['plid'] > $maxId) $maxId = (int)$pl['plid'];
-            }
-            $newPlid = $maxId + 1;
-        }
-
-        // Check if playlist with name already exists
-        $found = false;
-        foreach ($data['playlists'] as &$pl) {
-            if ($pl['name'] === $name && ($pl['username'] === $username || $pl['username'] === 'default')) {
-                $found = true;
-                $newPlid = (int)$pl['plid'];
-                break;
-            }
-        }
-        if (!$found) {
-            $data['playlists'][] = [
-                'plid' => (int)$newPlid,
-                'name' => $name,
-                'username' => $username,
-                'tracks' => []
-            ];
-            self::write($data);
-        }
-        return $newPlid;
+            // Legacy allocator never recorded deleted IDs. Start above ordinary
+            // legacy IDs, then persist the high-water mark even after deletion.
+            $id=max($max+1,(int)floor(microtime(true)*1000));
+            if($id>9007199254740991) return false;
+            $data['playlist_id_highwater']=$id;
+            $data['playlists'][]=['plid'=>$id,'name'=>$name,'username'=>$username,'tracks'=>$tracks,'revision'=>0];
+            return $id;
+        });
+    }
+    public static function deletePlaylist($plid,$username='default',$revision=null) {
+        if(self::hasMySQL())return PlaylistSql::mutate($GLOBALS['connection'],'delete',['plid'=>$plid,'revision'=>$revision],$username);
+        return self::playlistMutation(function(&$data) use($plid,$username,$revision) {
+            foreach($data['playlists'] as $i=>$pl) if((int)$pl['plid']===(int)$plid && self::playlistOwner($pl,$username)) {
+                if(!self::validRevision($revision) || (int)$revision!==(int)($pl['revision']??0)) return false;
+                $data['playlist_id_highwater']=max((int)($data['playlist_id_highwater']??0),(int)$plid);
+                array_splice($data['playlists'],$i,1); return true;
+            } return false;
+        });
+    }
+    public static function addTrackToPlaylist($plid,$tid,$username='default') {
+        if(self::hasMySQL())return PlaylistSql::mutate($GLOBALS['connection'],'add_track',['plid'=>$plid,'tid'=>$tid],$username);
+        if(!self::validPlaylistId($plid)||!self::validPlaylistId($tid)) return false;
+        return self::playlistMutation(function(&$data) use($plid,$tid,$username) {
+            $tid=(int)$tid; if(!isset($data['tracks'][(string)$tid])) return false;
+            foreach($data['playlists'] as &$pl) if((int)$pl['plid']===(int)$plid && self::playlistOwner($pl,$username)) {
+                if(in_array($tid,array_map('intval',$pl['tracks']??[]),true)) return 'already_in_playlist';
+                $pl['tracks'][]=$tid; $pl['revision']=(int)($pl['revision']??0)+1; return true;
+            } return false;
+        });
+    }
+    public static function addTracksToPlaylist($plid,$tracks,$username='default',$revision=null) {
+        if(self::hasMySQL())return PlaylistSql::mutate($GLOBALS['connection'],'add_tracks',['plid'=>$plid,'tracks'=>$tracks,'revision'=>$revision],$username);
+        if(!self::validPlaylistId($plid)||!self::validRevision($revision)||!is_array($tracks)||!count($tracks))return false;
+        foreach($tracks as $id)if(!self::validPlaylistId($id))return false;
+        $tracks=array_map('intval',$tracks);if(count(array_unique($tracks))!==count($tracks))return false;
+        return self::playlistMutation(function(&$data) use($plid,$tracks,$username,$revision) {
+            foreach($tracks as $tid)if(!isset($data['tracks'][(string)$tid]))return false;
+            foreach($data['playlists'] as &$pl)if((int)$pl['plid']===(int)$plid&&self::playlistOwner($pl,$username)){
+                if((int)($pl['revision']??0)!==(int)$revision)return false;
+                $old=array_map('intval',$pl['tracks']??[]);if(array_intersect($old,$tracks))return false;
+                $pl['tracks']=array_merge($old,$tracks);$pl['revision']=(int)($pl['revision']??0)+1;return true;
+            }return false;
+        });
     }
 
-    public static function deletePlaylist($plid, $username = 'default') {
-        $plid = (int)$plid;
-        $deleted = false;
-
-        if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $stmt = $conn->prepare("DELETE FROM Playlists WHERE plid = ? AND (username = ? OR username = 'default')");
-            if ($stmt) {
-                $stmt->bind_param("is", $plid, $username);
-                if ($stmt->execute() && $stmt->affected_rows > 0) {
-                    $deleted = true;
-                }
-            }
-        }
-
-        $data = self::read();
-        $initialCount = count($data['playlists'] ?? []);
-        $data['playlists'] = array_values(array_filter($data['playlists'] ?? [], function($pl) use ($plid, $username) {
-            if ((int)$pl['plid'] === $plid && ($pl['username'] === $username || $pl['username'] === 'default')) {
-                return false;
-            }
-            return true;
-        }));
-        if (count($data['playlists']) < $initialCount) {
-            $deleted = true;
-            self::write($data);
-        }
-        return $deleted;
-    }
-
-    public static function addTrackToPlaylist($plid, $tid) {
-        $plid = (int)$plid;
-        $tid = (int)$tid;
-        if (!$plid || !$tid) return false;
-
-        if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $checkStmt = $conn->prepare("SELECT ptid FROM PlaylistTracks WHERE plid = ? AND tid = ?");
-            if ($checkStmt) {
-                $checkStmt->bind_param("ii", $plid, $tid);
-                $checkStmt->execute();
-                if ($checkStmt->get_result()->num_rows > 0) {
-                    return 'already_in_playlist';
-                }
-            }
-            $posStmt = $conn->prepare("SELECT COALESCE(MAX(position), 0) + 1 AS next_pos FROM PlaylistTracks WHERE plid = ?");
-            if ($posStmt) {
-                $posStmt->bind_param("i", $plid);
-                $posStmt->execute();
-                $nextPos = (int)$posStmt->get_result()->fetch_assoc()['next_pos'];
-                $insStmt = $conn->prepare("INSERT INTO PlaylistTracks (plid, tid, position) VALUES (?, ?, ?)");
-                if ($insStmt) {
-                    $insStmt->bind_param("iii", $plid, $tid, $nextPos);
-                    $insStmt->execute();
-                }
-            }
-        }
-
-        $data = self::read();
-        foreach ($data['playlists'] as &$pl) {
-            if ((int)$pl['plid'] === $plid) {
-                if (!isset($pl['tracks'])) $pl['tracks'] = [];
-                if (in_array($tid, $pl['tracks'], true)) {
-                    return 'already_in_playlist';
-                }
-                $pl['tracks'][] = $tid;
-                self::write($data);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public static function removeTrackFromPlaylist($plid, $tid) {
-        $plid = (int)$plid;
-        $tid = (int)$tid;
-        if (!$plid || !$tid) return false;
-
-        if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $stmt = $conn->prepare("DELETE FROM PlaylistTracks WHERE plid = ? AND tid = ?");
-            if ($stmt) {
-                $stmt->bind_param("ii", $plid, $tid);
-                $stmt->execute();
-            }
-        }
-
-        $data = self::read();
-        foreach ($data['playlists'] as &$pl) {
-            if ((int)$pl['plid'] === $plid && isset($pl['tracks'])) {
-                $pl['tracks'] = array_values(array_filter($pl['tracks'], function($t) use ($tid) {
-                    return (int)$t !== $tid;
-                }));
-                self::write($data);
-                return true;
-            }
-        }
-        return false;
+    public static function removeTrackFromPlaylist($plid,$tid,$username='default') {
+        if(self::hasMySQL())return PlaylistSql::mutate($GLOBALS['connection'],'remove_track',['plid'=>$plid,'tid'=>$tid],$username);
+        if(!self::validPlaylistId($plid)||!self::validPlaylistId($tid)) return false;
+        return self::playlistMutation(function(&$data) use($plid,$tid,$username) {
+            foreach($data['playlists'] as &$pl) if((int)$pl['plid']===(int)$plid && self::playlistOwner($pl,$username)) {
+                $old=$pl['tracks']??[]; $new=array_values(array_filter($old,fn($t)=>(int)$t!==(int)$tid));
+                if(count($new)===count($old)) return false;
+                $pl['tracks']=$new; $pl['revision']=(int)($pl['revision']??0)+1; return true;
+            } return false;
+        });
     }
 
     // --- TRACKS CACHE ---

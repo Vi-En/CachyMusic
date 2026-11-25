@@ -136,7 +136,7 @@ export function getRuntime() {
 export function applyRuntimeUiAdaptation(runtime = getRuntime()) {
     if (typeof document === 'undefined') return;
 
-    // 1. Hardware Gain & Connected DAC card: show on Linux/Windows/macOS PHP desktop AND Android APK (hidden only on static pure-web if unavailable? Wait: allow web users with USB DACs/Moondrop May to see & scan!)
+    // Expose system volume only when the runtime reports a supported backend.
     const hwGainRow = document.getElementById('settingsRowHwGain')
         || document.getElementById('settingsHwGainToggleBtn')?.closest('.settingsRowItem, .settingsControlRow, .settingsCard, .settingRow')
         || document.getElementById('settingsHardwareGainCard');

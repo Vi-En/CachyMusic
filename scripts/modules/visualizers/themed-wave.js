@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 import { isFirefox } from '../utils.js';
 import { emitShockwave, store } from '../state.js';
 import { getActiveTheme, isAtlasThemeActive } from '../ui-elements.js';
@@ -260,7 +261,7 @@ export function drawThematicWave(ctx, width, height, bands, playing, now, dt, be
         ctx.stroke();
     } else {
         ctx.shadowColor = crestShadow;
-        ctx.shadowBlur = Math.min(12, 6 + beatPulse * 8);
+        setCanvasShadowBlur(ctx, Math.min(12, 6 + beatPulse * 8));
         ctx.lineWidth = 2.2 + beatPulse * 1.4;
         ctx.strokeStyle = thematicCrestStroke;
         ctx.beginPath();
@@ -307,7 +308,7 @@ export function drawThematicWave(ctx, width, height, bands, playing, now, dt, be
         ctx.stroke();
     } else {
         ctx.shadowColor = crestShadow;
-        ctx.shadowBlur = Math.min(12, 6 + beatPulse * 8 + snarePulse * 4);
+        setCanvasShadowBlur(ctx, Math.min(12, 6 + beatPulse * 8 + snarePulse * 4));
         ctx.lineWidth = 2.2 + beatPulse * 1.4 + snarePulse * 0.8;
         ctx.strokeStyle = thematicCrestStroke;
         ctx.beginPath();

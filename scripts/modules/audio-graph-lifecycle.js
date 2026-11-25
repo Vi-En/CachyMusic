@@ -2,6 +2,7 @@
 // asynchronous replacement. A failed close must never create a second graph.
 export function createGraphLifecycle({ current, create, clear, ready = () => true, onError = console.warn }) {
     let replacement = null;
+    let closing = null;
     function init() {
         if (replacement) return null;
         const ctx = current();
@@ -12,21 +13,29 @@ export function createGraphLifecycle({ current, create, clear, ready = () => tru
     function ensure(force = false) {
         if (replacement) return replacement;
         const ctx = current();
-        if ((!force && (!ctx || ready(ctx))) || !ctx || ctx.state === 'closed') return Promise.resolve(init());
+        if (!ctx || ctx.state === 'closed' || (!force && ready(ctx))) return Promise.resolve(init());
         // Publish the transition before executing any teardown callbacks.
+        closing = ctx;
         replacement = Promise.resolve().then(async () => {
             try { await ctx.close(); }
             catch (error) {
                 onError(error);
-                if (ctx.state !== 'closed') return ready(ctx) ? ctx : null;
+                if (ctx.state !== 'closed') return current() === ctx && ready(ctx) ? ctx : null;
             }
+            if (ctx.state !== 'closed') {
+                onError(new Error('AudioContext close completed without closing'));
+                return null;
+            }
+            // A stale completion may not clear or replace another owner.
+            if (current() !== ctx) return null;
             clear(ctx);
+            if (current()) return null;
             const next = create(); return next && ready(next) ? next : null;
         }).catch(error => { onError(error); return null; })
-          .finally(() => { replacement = null; });
+          .finally(() => { replacement = null; closing = null; });
         return replacement;
     }
-    return { init, ensure, get replacing() { return replacement !== null; } };
+    return { init, ensure, isClosing: ctx => closing === ctx, get replacing() { return replacement !== null; } };
 }
 
 // One load attempt per context, including failed attempts. Worklet failures
@@ -38,7 +47,8 @@ export function createWorkletLoader({ current, isCurrent, install, failed }) {
         if (!ctx?.audioWorklet || ctx.state === 'closed') return Promise.resolve();
         if (attempts.has(ctx)) return attempts.get(ctx);
         const task = Promise.resolve().then(async () => {
-            await ctx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=3.0.0-dev.6.18');
+            if (!isCurrent(ctx)) return;
+            await ctx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=3.0.0-dev.6.42');
             if (isCurrent(ctx)) install(ctx);
         }).catch(error => { if (isCurrent(ctx)) failed(error); });
         attempts.set(ctx, task);
@@ -49,7 +59,7 @@ export function createWorkletLoader({ current, isCurrent, install, failed }) {
 // Explicitly release all graph-owned references, including inactive fallback
 // nodes. Never leave a closed graph discoverable by readers of the store.
 const NODE_KEYS = ['audioSourceNode', 'softwareSourceNode', 'softwareSourceGainNode',
-    'analyser', 'subsonicFilter', 'replayGainNode', 'preAmpGainNode', 'bassFilter',
+    'outputGate', 'analyser', 'subsonicFilter', 'replayGainNode', 'preAmpGainNode', 'bassFilter',
     'vocalFilter', 'trebleFilter', 'ampGainNode', 'dspLimiter', 'ceilingTrimGain', 'ampSoftClipper'];
 export function clearGraphNodes(state) {
     const disconnect = node => { try { node?.disconnect(); } catch (_) {} };

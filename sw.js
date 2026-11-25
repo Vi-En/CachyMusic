@@ -1,11 +1,23 @@
 // CachyMusic Audio Workstation - High-Performance Service Worker v3.0.0-dev.6
-const CACHE_NAME = 'cachymusic-v3.0.0-dev.6.18-integrity-ux';
+// Cache Storage is shared by every installation on an origin. Scope the
+// cache name so a subdirectory installation cannot evict another one.
+const CACHE_PREFIX = 'cachymusic-shell:' + encodeURIComponent(self.registration.scope) + ':';
+const CACHE_NAME = CACHE_PREFIX + '3.0.0-dev.6.42';
 
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './stylesheets/homepage.css',
+  './stylesheets/interaction.css',
+  './stylesheets/library-rows.css',
+  './stylesheets/playlist-workspace.css',
+  './stylesheets/settings-navigation.css',
+  './stylesheets/surface-shapes.css',
+  './stylesheets/metadata-editor.css',
+  './scripts/modules/library-query-controller.js',
+  './scripts/modules/transport-controls.js',
+  './scripts/modules/settings-navigation.js',
   './stylesheets/volume-controls.css',
   './stylesheets/eq-spectrum.css',
   './stylesheets/tokens.css',
@@ -19,14 +31,20 @@ const PRECACHE_ASSETS = [
   './scripts/theme-preload.js',
   './scripts/pwa-init.js',
   './scripts/modules/pwa-install.js',
+  './scripts/modules/preference-storage.js',
   './scripts/modules/utils.js',
+  './scripts/modules/notification-center.js',
+  './stylesheets/task-feedback.css',
   './scripts/modules/icons.js',
   './scripts/modules/soulseek-ui-budget.js',
+  './scripts/modules/soulseek-transport.js',
   './scripts/modules/soulseek-result-metadata.js',
   './scripts/modules/state.js',
   './scripts/modules/runtime-capabilities.js',
   './scripts/modules/tag-parser.js',
   './scripts/modules/local-library.js',
+  './scripts/modules/offline-write-journal.js',
+  './scripts/modules/modal-focus.js',
   './scripts/modules/local-source.js',
   './scripts/modules/decode-budget.js',
   './scripts/modules/artwork-cache.js',
@@ -43,6 +61,13 @@ const PRECACHE_ASSETS = [
   './scripts/modules/ultrasonic-status.js',
   './scripts/modules/audio-engine.js',
   './scripts/modules/audio-policies.js',
+  './scripts/modules/audio-settings-status.js',
+  './scripts/modules/audio-change-policy.js',
+  './scripts/modules/dsp-control-transaction.js',
+  './scripts/modules/mixer-write-queue.js',
+    './scripts/modules/audio-output-hold.js',
+    './scripts/modules/worklet-ack.js',
+    './scripts/modules/platter-gesture.js',
   './scripts/modules/player-core.js',
   './scripts/modules/track-session.js',
   './scripts/modules/player-marquee.js',
@@ -52,6 +77,16 @@ const PRECACHE_ASSETS = [
   './scripts/modules/signal-path-ui.js',
   './scripts/modules/progress-scrubber.js',
   './scripts/modules/library.js',
+  './scripts/modules/playlist-model.js',
+  './scripts/modules/playlist-playback.js',
+  './scripts/modules/metadata-editor.js',
+  './scripts/modules/peq-workstation.js',
+  './scripts/modules/software-audio-decoder.js',
+  './scripts/modules/soulseek-client.js',
+  './scripts/modules/soulseek-controls.js',
+  './scripts/modules/player-progress.js',
+  './scripts/modules/media-element-events.js',
+  './scripts/modules/audio-preferences-ui.js',
   './scripts/modules/library-query.js',
   './scripts/modules/library-query-worker.js',
   './scripts/modules/metadata-providers.js',
@@ -69,6 +104,7 @@ const PRECACHE_ASSETS = [
   './scripts/modules/visualizers/amethyst.js',
   './scripts/modules/visualizers/bloom.js',
   './scripts/modules/visualizers/canvas-geometry.js',
+  './scripts/modules/visualizers/canvas-shadow.js',
   './scripts/modules/visualizers/crimson.js',
   './scripts/modules/visualizers/graphite.js',
   './scripts/modules/visualizers/instrument-rim.js',
@@ -120,7 +156,7 @@ self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.filter(key => key !== CACHE_NAME &&
-      (key.startsWith('cachymusic-v') || key.startsWith('cachymusic-artwork-'))).map(key => caches.delete(key)));
+      key.startsWith(CACHE_PREFIX)).map(key => caches.delete(key)));
     await self.clients.claim();
   })());
 });

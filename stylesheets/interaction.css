@@ -1,0 +1,48 @@
+/* Shared interaction feedback. Never animate continuous control values. */
+:root { --motion-feedback: cubic-bezier(.2,0,0,1); --motion-short: 140ms; --motion-standard: 200ms; }
+:root :is(button,summary,[role="button"],input[type="checkbox"],select) {
+ transition: background-color var(--motion-short) var(--motion-feedback), border-color var(--motion-short) var(--motion-feedback), color var(--motion-short) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback);
+}
+:root :is(button,summary,[role="button"]):not(:disabled):not([aria-disabled="true"]):active { opacity:.76; transform:none; }
+:root :is(input[type="checkbox"],.toolsChevron,.settingsAdvancedChevron) { transition: background-color var(--motion-standard) var(--motion-feedback), border-color var(--motion-standard) var(--motion-feedback), transform var(--motion-standard) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback); }
+:root input[type="checkbox"]::before { transition: transform var(--motion-standard) var(--motion-feedback), background-color var(--motion-short) var(--motion-feedback); }
+:root input[type="range"]::-webkit-slider-thumb { transition: background-color var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback); }
+:root input[type="range"]::-moz-range-thumb { transition: background-color var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback); }
+:root[data-theme] .queueItem { display:grid; grid-template-columns:40px minmax(0,1fr) max-content; gap:8px; }
+:root[data-theme] .queueItem .queueItemActions { grid-column:2 / -1; justify-content:flex-end; flex-wrap:wrap; }
+:root[data-theme] .queueItem .queueDuration { justify-self:end; }
+:root[data-theme] .settingsRowHeader > * { min-width:0; max-width:100%; }
+:root[data-theme] .settingsOptionToggles > button { white-space:normal; overflow-wrap:anywhere; min-height:44px; }
+:root[data-theme] .settingsApplyStatus { overflow-wrap:anywhere; }
+@media (prefers-reduced-motion:reduce) {
+ :root :is(button,summary,[role="button"],input,select,.trackItem,.toolsChevron,.settingsAdvancedChevron), :root input[type="checkbox"]::before { transition:none!important; }
+}
+
+:root[data-theme] .trackMeta :is(#trackName,#artistName,.albumName) { text-align:var(--player-text-align); align-self:stretch; }
+
+/* Native modal: focus and Escape are owned by the browser. Shared geometry,
+   theme-specific material and color; no ornamental warning graphics. */
+:root[data-theme] .audioChangeDialog {
+    box-sizing: border-box; width: min(420px, calc(100% - 32px)); max-height: calc(100% - 32px);
+    margin: auto; padding: 24px; overflow: auto; color: var(--text-primary);
+    background: var(--bg-surface-2); border: 1px solid var(--border-medium);
+    border-radius: var(--group-radius, 14px); box-shadow: 0 12px 44px #0005;
+}
+.audioChangeDialog::backdrop { background: #0009; }
+.audioChangeDialog form { display: grid; gap: 14px; }
+.audioChangeDialog h2 { font-size: 1.2rem; font-weight: 650; line-height: 1.3; margin: 0; }
+.audioChangeDialog p { color: var(--text-secondary); font-size: .94rem; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.audioChangeActions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 6px; }
+.audioChangeActions button { min-height: 48px; white-space: normal; }
+:root[data-theme] .audioPreferenceStatus { margin: 0; padding: 10px 0 2px; color: var(--text-secondary); font-size: .83rem; line-height: 1.45; overflow-wrap: anywhere; }
+:root[data-theme] :is(.turntableCon,.vinylTurntable,.turntableCenterVis,.turntableCenterCanvas) { cursor: default; }
+:root[data-theme] .settingsRowItem .settingsOptionToggles { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,104px),1fr)); align-items: stretch; gap: 6px; }
+:root[data-theme] .settingsRowItem .settingsOptionToggles button { min-width: 0; padding: 8px; font-weight: 550; line-height: 1.25; text-transform: none; }
+:root[data-theme] .settingsRowItem .settingsRowTitleGroup { flex: 1 1 140px; }
+
+/* Contextual inspector controls and quieter preference rows. */
+:root[data-theme] #metaTurntableSpeedGroup summary { min-height:44px; display:flex; align-items:center; cursor:pointer; font-size:.94rem; font-weight:600; }
+:root[data-theme] #metaTurntableSpeedGroup summary::before { content:"▸"; margin-inline-end:8px; }
+:root[data-theme] #metaTurntableSpeedGroup[open] summary::before { content:"▾"; }
+:root[data-theme] .settingsRowDesc { max-inline-size:54ch; }
+:root[data-theme] [data-effect-state="unsupported"] .dspDot,:root[data-theme] [data-effect-state="pending"] .dspDot { opacity:.35; }

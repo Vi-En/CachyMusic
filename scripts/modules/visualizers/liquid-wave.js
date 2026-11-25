@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 import { isFirefox } from '../utils.js';
 import { NUM_BANDS, store, emitShockwave } from '../state.js';
 import { getActiveTheme, isAtlasThemeActive } from '../ui-elements.js';
@@ -34,7 +35,7 @@ export function updateAndDrawSparkles(ctx, dt) {
         const a = sp.life * sp.intensity;
         ctx.fillStyle = `rgba(255, 255, 255, ${a})`;
         ctx.shadowColor = 'rgba(255, 255, 255, 0.95)';
-        ctx.shadowBlur = 6;
+        setCanvasShadowBlur(ctx, 6);
         const s = sp.size * (0.5 + sp.life * 0.5);
         ctx.beginPath();
         ctx.moveTo(0, -s);
@@ -295,7 +296,7 @@ export function drawSolidWave(ctx, width, height, bands, playing, now, dt, beatP
         ctx.stroke();
     } else {
         ctx.shadowColor = waveShadowColor;
-        ctx.shadowBlur = Math.min(12, 4 + beatPulse * 8 + snarePulse * 4);
+        setCanvasShadowBlur(ctx, Math.min(12, 4 + beatPulse * 8 + snarePulse * 4));
         ctx.lineWidth = 2.0 + beatPulse * 1.2 + snarePulse * 0.6;
         ctx.strokeStyle = crestStrokeColor;
         ctx.beginPath();
@@ -311,7 +312,7 @@ export function drawSolidWave(ctx, width, height, bands, playing, now, dt, beatP
         ctx.save();
         ctx.fillStyle = '#00e5ff';
         ctx.shadowColor = '#00e5ff';
-        ctx.shadowBlur = 8;
+        setCanvasShadowBlur(ctx, 8);
         for (let i = 2; i < pointsCount - 2; i += 3) {
             if (bands[i] > 0.35) {
                 const nx = forePoints[i].x;
@@ -343,7 +344,7 @@ export function drawSolidWave(ctx, width, height, bands, playing, now, dt, beatP
                     ctx.quadraticCurveTo(px, py - loopH, px + 8, py);
                     ctx.strokeStyle = 'rgba(255, 0, 128, 0.85)';
                     ctx.shadowColor = '#00f0ff';
-                    ctx.shadowBlur = 10;
+                    setCanvasShadowBlur(ctx, 10);
                     ctx.lineWidth = 1.8;
                     ctx.stroke();
                 }

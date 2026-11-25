@@ -20,9 +20,10 @@
 
 ## Features
 
-- **10-Band Parametric Equalizer & DSP**: Built-in AudioWorklet DSP with parametric EQ, subsonic high-pass filter, Bauer/Meier crossfeed, peak limiting, real-time EQ spectrum view, and experimental shared-clock WAV/AIFF/FLAC playback transitions.
-- **Standalone Offline PWA**: Import folders or audio files directly in modern browsers with IndexedDB persistence, bounded artwork caching, and offline Service Worker shell caching (`sw.js`).
-- **Themes & Visualizers**: Multiple visual themes with lazily loaded canvas visualizers.
+- **10-Band Parametric Equalizer & DSP**: Built-in AudioWorklet DSP with parametric EQ, subsonic high-pass filter, Bauer/Meier crossfeed, peak limiting, transactional DSP control persistence, real-time EQ spectrum view, and experimental shared-clock WAV/AIFF/FLAC playback transitions.
+- **Standalone Offline PWA**: Import folders or audio files directly in modern browsers with IndexedDB + OPFS persistence, an atomic offline write journal, bounded artwork caching, and scope-isolated Service Worker shell caching (`sw.js`).
+- **Playlists & Optional SQL Backend**: Playlist workspace with revision-checked mutations, JSON storage by default, and an optional MySQL schema/migration (`schema.sql`, `php/migrations/playlist-revision.sql`, opt-in via `CACHYMUSIC_PLAYLIST_SQL=1`).
+- **Themes & Visualizers**: Twelve visual themes with lazily loaded canvas visualizers.
 - **Metadata & Tag Editing**: Client-side and desktop metadata/artwork parsing across FLAC, WAV, AIFF, MP3, Ogg Vorbis/Opus, and M4A/MP4, optional explicit online lookup (MusicBrainz, Cover Art Archive, LRCLIB), and conservative non-re-encoding tag writing.
 - **Desktop & Android Hosts**:
   - **Linux / Windows**: Managed loopback PHP desktop host (`bin/cachymusic`, `bin/cachymusic.bat`) with SQLite3/JSON storage, optional Linux MPRIS2/tray integration, and AUR/Debian/AppImage/Electron packaging recipes.
@@ -35,7 +36,7 @@
 
 ### Linux (Arch / CachyOS & General Linux)
 
-Requires PHP, Python 3, and a Chromium-compatible or default browser (optional: `php-sqlite`, `ffmpeg`, `nodejs`, `zenity`/`kdialog`).
+Requires PHP 8.1+, Python 3.10+, and a Chromium-compatible or default browser (optional: `php-sqlite`, `ffmpeg`, `nodejs`, `zenity`/`kdialog`).
 
 ```sh
 bash bin/cachymusic
@@ -80,7 +81,7 @@ npm install
 
 ### Android APK
 
-Requires JDK 17, Gradle 8.2, and Android SDK platform 34 / build-tools 34.0.0 with `ANDROID_HOME` set:
+Requires JDK 17, Gradle 8.2+, and Android SDK platform 34 / build-tools 34.0.0 with `ANDROID_HOME` set:
 
 ```sh
 bash tools/packager/build-apk-local.sh
@@ -91,7 +92,6 @@ On Windows:
 ```bat
 tools\packager\build-apk-local.bat
 ```
-
 
 ---
 
@@ -107,9 +107,9 @@ tools\packager\build-apk-local.bat
 ├── manifest.json           # Web App Manifest (PWA)
 ├── package.json            # Node.js package manifest for optional Soulseek adapter
 ├── packaging/              # AUR, Debian, AppImage & portable Electron packaging scripts
-├── php/                    # Loopback desktop REST API, metadata readers & storage layer
+├── php/                    # Loopback desktop REST API, metadata readers, SQL & storage layer
 ├── resources/              # App icons, SVG assets & bundled font (SIL OFL 1.1)
-├── schema.sql              # SQLite database schema
+├── schema.sql              # Database schema
 ├── scripts/                # Modular ES6 client, DSP AudioWorklet & theme visualizers
 ├── server/                 # Local Soulseek Node.js service & tag rewrite helper
 ├── stylesheets/            # Layered CSS stylesheets & theme definitions

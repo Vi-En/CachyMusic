@@ -164,6 +164,7 @@ public class SoulseekClient {
         public volatile String transferToken;
         public volatile boolean userCancelled = false;
         public volatile boolean userPaused = false;
+        public volatile long attemptGeneration;
         public volatile Socket fileSocket;
         public long startTime;
     }
@@ -459,7 +460,8 @@ public class SoulseekClient {
 
 
     private void finalizeTransfer(DownloadTransfer transfer, File partFile) {
-        if (transfer.userCancelled || transfer.userPaused) return;
+        synchronized (transfer) {
+        if (transfer.userCancelled || transfer.userPaused || mTransfers.get(transfer.id) != transfer) return;
 
         if (transfer.size > 0 && transfer.bytesDownloaded == transfer.size && partFile.length() == transfer.size) {
             File targetFile = new File(transfer.localFilePath);
@@ -478,6 +480,7 @@ public class SoulseekClient {
                 Log.w(TAG, "MediaScanner error: " + e.getMessage());
             }
         } else { transfer.status = "Error: incomplete download"; transfer.speed = 0; }
+        }
     }
 
     // =========================================================================
@@ -1036,6 +1039,11 @@ public class SoulseekClient {
     }
 
     private void sendQueueUploadMessages(PeerConnection peerConn, DownloadTransfer transfer) {
+        sendQueueUploadMessages(peerConn, transfer, transfer.attemptGeneration);
+    }
+
+    private void sendQueueUploadMessages(PeerConnection peerConn, DownloadTransfer transfer, long attempt) {
+        if (!ownsAttempt(transfer, attempt)) return;
         byte[] vBytes = transfer.virtualPath.getBytes(StandardCharsets.UTF_8);
         // Send QueueUpload (Code 43)
         ByteBuffer qUp = ByteBuffer.allocate(4 + 4 + vBytes.length).order(ByteOrder.LITTLE_ENDIAN);
@@ -1050,7 +1058,7 @@ public class SoulseekClient {
         pInQ.putInt(vBytes.length);
         pInQ.put(vBytes);
         peerConn.send(pInQ.array());
-        transfer.status = "Queued";
+        synchronized (transfer) { if (ownsAttempt(transfer, attempt) && transfer.transferToken == null && "Connecting".equals(transfer.status)) transfer.status = "Queued"; }
     }
 
     public class PeerConnection {
@@ -1130,7 +1138,7 @@ public class SoulseekClient {
                 if (direction == 1) {
                     long reportedSize = buf.remaining() >= 8 ? buf.getLong() : 0L;
                     // Peer is ready to upload the file we queued!
-                    DownloadTransfer d = mTransfers.get(peer.username + ":" + file);
+                    DownloadTransfer d = mTransfers.get(downloadIdentity(peer.username, file));
                     if (d != null && !d.userCancelled && !d.userPaused && reportedSize == d.size) {
                         synchronized (d) {
                             if (d.userCancelled || d.userPaused || d.fileSocket != null || !("Queued".equals(d.status) || "Connecting".equals(d.status))) break;
@@ -1176,7 +1184,7 @@ public class SoulseekClient {
             case 44: { // PlaceInQueue
                 String file = readStr(buf);
                 int place = buf.getInt();
-                DownloadTransfer d = mTransfers.get(peer.username + ":" + file);
+                DownloadTransfer d = mTransfers.get(downloadIdentity(peer.username, file));
                 if (d != null) synchronized (d) {
                     if (d.fileSocket == null && d.transferToken == null && !d.userCancelled && !d.userPaused && !"Finished".equals(d.status)) {
                         d.queuePosition = Math.max(0, place); d.status = "Queued";
@@ -1188,7 +1196,7 @@ public class SoulseekClient {
             case 50: { // UploadDenied
                 String file = readStr(buf);
                 String reason = readStr(buf);
-                DownloadTransfer d = mTransfers.get(peer.username + ":" + file);
+                DownloadTransfer d = mTransfers.get(downloadIdentity(peer.username, file));
                 if (d != null) synchronized (d) {
                     if (d.fileSocket == null && !d.userCancelled && !d.userPaused && !"Finished".equals(d.status)) {
                         if (d.transferToken != null) mTransfersByToken.remove(transferKey(d.username, d.transferToken), d);
@@ -1341,11 +1349,13 @@ public class SoulseekClient {
     // File Downloading Implementation
     // =========================================================================
 
+    static String downloadIdentity(String username, String path) { return username.length() + ":" + username + path; }
+
     public synchronized DownloadTransfer enqueueDownload(String username, String virtualPath, long size) {
         if (!mIsConnected) throw new IllegalStateException("Connect to Soulseek first");
         if (username == null || username.isEmpty() || username.length() > 256 || username.matches(".*[\\p{Cntrl}].*") || virtualPath == null || virtualPath.length() > 4096 || size <= 0 || size > 20L * 1024 * 1024 * 1024) throw new IllegalArgumentException("Invalid transfer metadata");
         if (mTransfers.size() >= 1000) throw new IllegalStateException("Transfer queue is full");
-        final String transferId = username + ":" + virtualPath;
+        final String transferId = downloadIdentity(username, virtualPath);
         DownloadTransfer existing = mTransfers.get(transferId);
         if (existing != null) {
             return existing;
@@ -1384,14 +1394,29 @@ public class SoulseekClient {
 
         mTransfers.put(transferId, transfer);
 
-        try { mExecutor.execute(() -> initiatePeerDownload(transfer)); } catch(java.util.concurrent.RejectedExecutionException busy){transfer.status="Busy: retry download";}
+        scheduleDownload(transfer);
         return transfer;
     }
 
-    private void initiatePeerDownload(DownloadTransfer transfer) {
-        if (!mIsConnected || transfer.userPaused || transfer.userCancelled || transfer.fileSocket != null) return;
+    private boolean ownsAttempt(DownloadTransfer transfer, long attempt) {
+        return mIsConnected && transfer.attemptGeneration == attempt && !transfer.userPaused && !transfer.userCancelled && mTransfers.get(transfer.id) == transfer;
+    }
+
+    private boolean scheduleDownload(DownloadTransfer transfer) {
+        synchronized (transfer) {
+            final long attempt = ++transfer.attemptGeneration;
+            try { mExecutor.execute(() -> initiatePeerDownload(transfer, attempt)); return true; }
+            catch (java.util.concurrent.RejectedExecutionException busy) { transfer.status = "Busy: retry download"; return false; }
+        }
+    }
+
+    private void initiatePeerDownload(DownloadTransfer transfer, long attempt) {
+        if (!ownsAttempt(transfer, attempt) || transfer.fileSocket != null) return;
         try {
-            transfer.status = "Connecting";
+            synchronized (transfer) {
+                if (!ownsAttempt(transfer, attempt) || !"Queued".equals(transfer.status)) return;
+                transfer.status = "Connecting";
+            }
             // 1. Resolve peer address
             PeerAddr addr = mPeerAddresses.get(transfer.username);
             if (addr == null || System.currentTimeMillis() - addr.timestamp > 300000) {
@@ -1414,16 +1439,17 @@ public class SoulseekClient {
                 peerConn = dialDirectPeerConnection(transfer.username, addr.host, addr.port);
             }
 
+            if (!ownsAttempt(transfer, attempt)) return;
             if (peerConn != null) {
-                sendQueueUploadMessages(peerConn, transfer);
+                sendQueueUploadMessages(peerConn, transfer, attempt);
             } else {
                 // Ask server to relay ConnectToPeer (Code 18)
                 sendServerConnectToPeer(transfer.username, tokenHex, "P");
-                transfer.status = "Queued";
+                synchronized (transfer) { if (ownsAttempt(transfer, attempt) && "Connecting".equals(transfer.status)) transfer.status = "Queued"; }
             }
         } catch (Exception e) {
             Log.w(TAG, "Initiate peer download error: " + e.getMessage());
-            transfer.status = "Error: " + e.getMessage();
+            synchronized (transfer) { if (ownsAttempt(transfer, attempt) && "Connecting".equals(transfer.status)) transfer.status = "Error: " + e.getMessage(); }
         }
     }
 
@@ -1592,6 +1618,52 @@ public class SoulseekClient {
     // =========================================================================
     // REST API Dispatcher (Serving WebView fetch calls)
     // =========================================================================
+
+    private static String actionFailure(String reason) {
+        try { return new JSONObject().put("ok", false).put("error", reason).toString(); }
+        catch (Exception ignored) { return "{\"ok\":false}"; }
+    }
+
+    private static boolean retryable(DownloadTransfer d) {
+        return !d.userCancelled && (d.userPaused || d.status.startsWith("Error") || d.status.startsWith("Denied") || d.status.startsWith("Busy"));
+    }
+
+    // Exact ID only; a successful response means the state transition was accepted,
+    // not that a remote peer has completed the requested transfer.
+    String transferAction(String action, String id) {
+        DownloadTransfer d = mTransfers.get(id);
+        if (d == null) return actionFailure("Unknown transfer");
+        synchronized (d) {
+            if (mTransfers.get(id) != d) return actionFailure("Transfer no longer exists");
+            boolean finished = "Finished".equals(d.status);
+            switch (action) {
+                case "pause_download":
+                    if (finished || d.userCancelled) return actionFailure("Transfer cannot be paused");
+                    d.attemptGeneration++; d.userPaused = true; d.status = "Paused";
+                    if (d.fileSocket == null && d.transferToken != null) { mTransfersByToken.remove(transferKey(d.username, d.transferToken), d); d.transferToken = null; }
+                    try { if (d.fileSocket != null) d.fileSocket.close(); } catch (IOException ignored) {}
+                    break;
+                case "resume_download":
+                    if (!mIsConnected || !retryable(d) || d.fileSocket != null) return actionFailure("Transfer cannot be resumed yet");
+                    if (d.transferToken != null) mTransfersByToken.remove(transferKey(d.username, d.transferToken), d);
+                    d.transferToken = null; d.userPaused = false; d.status = "Queued";
+                    if (!scheduleDownload(d)) return actionFailure("Transfer queue busy");
+                    break;
+                case "clear_download":
+                    if (d.fileSocket != null || !(finished || d.userCancelled || retryable(d))) return actionFailure("Active transfer cannot be cleared");
+                    // Fall through to exact record removal. Do not delete local files.
+                case "cancel_download":
+                    if (!finished) { d.attemptGeneration++; d.userCancelled = true; d.status = "Cancelled"; }
+                    mTransfers.remove(id, d);
+                    if (d.transferToken != null) mTransfersByToken.remove(transferKey(d.username, d.transferToken), d);
+                    if (d.fileSocket == null) d.transferToken = null;
+                    try { if (d.fileSocket != null) d.fileSocket.close(); } catch (IOException ignored) {}
+                    break;
+                default: return actionFailure("Unsupported transfer action");
+            }
+            return "{\"ok\":true}";
+        }
+    }
 
     public String dispatchApi(String action,String bodyJson,String queryString){return dispatchApi(action,bodyJson,queryString,()->true);}
     String dispatchApi(String action, String bodyJson, String queryString, java.util.function.BooleanSupplier allowed) {
@@ -1814,59 +1886,21 @@ public class SoulseekClient {
                     return getTransfersJson().toString();
                 }
 
-                case "pause_download": {
-                    JSONObject body = new JSONObject(bodyJson != null && !bodyJson.isEmpty() ? bodyJson : "{}");
-                    String id = body.optString("id");
-                    DownloadTransfer d = mTransfers.get(id);
-                    if (d != null) synchronized (d) {
-                        if (!"Finished".equals(d.status) && !d.userCancelled) {
-                            d.userPaused = true; d.status = "Paused";
-                            if (d.fileSocket == null && d.transferToken != null) { mTransfersByToken.remove(transferKey(d.username, d.transferToken), d); d.transferToken = null; }
-                            try { if (d.fileSocket != null) d.fileSocket.close(); } catch (Exception ignored) {}
-                        }
-                    }
-                    return "{\"ok\": true}";
-                }
-
-                case "resume_download": {
-                    JSONObject body = new JSONObject(bodyJson != null && !bodyJson.isEmpty() ? bodyJson : "{}");
-                    String id = body.optString("id");
-                    DownloadTransfer d = mTransfers.get(id);
-                    if (d != null && mIsConnected && !d.userCancelled && !"Finished".equals(d.status) && d.fileSocket == null) {
-                        synchronized (d) {
-                            if (d.fileSocket == null && !d.userCancelled && !"Finished".equals(d.status)) {
-                                if (d.transferToken != null) mTransfersByToken.remove(transferKey(d.username, d.transferToken), d);
-                                d.transferToken = null; d.userPaused = false; d.status = "Queued";
-                                try {mExecutor.execute(() -> initiatePeerDownload(d));}catch(java.util.concurrent.RejectedExecutionException busy){d.status="Busy: retry download";}
-                            }
-                        }
-                    }
-                    return "{\"ok\": true}";
-                }
-
-                case "cancel_download": {
-                    JSONObject body = new JSONObject(bodyJson != null && !bodyJson.isEmpty() ? bodyJson : "{}");
-                    String id = body.optString("id");
-                    DownloadTransfer d = mTransfers.get(id);
-                    if (d != null) synchronized (d) {
-                        if (!"Finished".equals(d.status)) {
-                            d.userCancelled = true; d.status = "Cancelled";
-                            if (d.fileSocket == null && d.transferToken != null) { mTransfersByToken.remove(transferKey(d.username, d.transferToken), d); d.transferToken = null; }
-                            try { if (d.fileSocket != null) d.fileSocket.close(); } catch (Exception ignored) {}
-                        }
-                    }
-                    return "{\"ok\": true}";
-                }
-
+                case "pause_download":
+                case "resume_download":
+                case "cancel_download":
                 case "clear_download": {
                     JSONObject body = new JSONObject(bodyJson != null && !bodyJson.isEmpty() ? bodyJson : "{}");
-                    String id = body.optString("id");
-                    DownloadTransfer d = mTransfers.get(id);
-                    if (d != null && d.fileSocket == null && (d.userCancelled || "Finished".equals(d.status) || d.status.startsWith("Error"))) {
-                        mTransfers.remove(id, d);
-                        if (d.transferToken != null) mTransfersByToken.remove(transferKey(d.username, d.transferToken), d);
+                    return transferAction(action.toLowerCase(Locale.ROOT), body.optString("id"));
+                }
+                case "resume_all": {
+                    if (!mIsConnected) return actionFailure("Not connected");
+                    int resumed = 0, failed = 0;
+                    for (DownloadTransfer d : mTransfers.values()) {
+                        if (!retryable(d)) continue;
+                        if (transferAction("resume_download", d.id).contains("\"ok\":true")) resumed++; else failed++;
                     }
-                    return "{\"ok\": true}";
+                    return new JSONObject().put("ok", failed == 0).put("resumed", resumed).put("failed", failed).toString();
                 }
 
                 case "uploads": {

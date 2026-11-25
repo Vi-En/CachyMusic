@@ -10,7 +10,7 @@ function cm_packet_rewrite(string $path,array $fields,?string $picture=null,?arr
         $payload=json_encode(['fields'=>(object)$fields,'picture'=>$picture!==null&&$info?['bytes'=>base64_encode($picture),'mime'=>$info['mime'],'width'=>$info[0],'height'=>$info[1]]:null],JSON_THROW_ON_ERROR);
         if(strlen($payload)>15*1024*1024)throw new RuntimeException('Oversized tag request');
         $input=tmpfile();$log=tmpfile();if(!$input||!$log)throw new RuntimeException('Temporary stream unavailable');cm_flac_write($input,$payload);rewind($input);
-        $proc=proc_open([$node,'--experimental-default-type=module',__DIR__.'/../server/tag-rewrite.mjs',$path,$temp],[0=>$input,1=>$log,2=>$log],$pipes,null,null,['bypass_shell'=>true]);
+        $proc=proc_open([$node,__DIR__.'/../server/tag-rewrite.mjs',$path,$temp],[0=>$input,1=>$log,2=>$log],$pipes,null,null,['bypass_shell'=>true]);
         if(!is_resource($proc))throw new RuntimeException('Cannot launch local writer');
         $deadline=microtime(true)+120;$code=-1;
         while(true){$status=proc_get_status($proc);if(!$status['running']){$code=$status['exitcode'];break;}if(microtime(true)>$deadline){proc_terminate($proc,9);throw new RuntimeException('Tag write timeout');}usleep(50000);}

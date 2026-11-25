@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS `Playlists` (
   `plid` INT(11) NOT NULL AUTO_INCREMENT,
   `username` VARCHAR(50) DEFAULT 'default',
   `playlist_name` VARCHAR(50) NOT NULL,
+  `revision` BIGINT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (`plid`),
   UNIQUE KEY `playlist_name` (`playlist_name`),
   KEY `idx_user_playlist` (`username`, `playlist_name`)
@@ -108,3 +109,7 @@ CREATE TABLE IF NOT EXISTS `SoulseekAccount` (
   CONSTRAINT `chk_single_slsk` CHECK (`id` = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- Playlist allocator is authoritative and never lowered on delete.
+CREATE TABLE IF NOT EXISTS PlaylistAllocator (singleton INT NOT NULL PRIMARY KEY, highwater INT NOT NULL) ENGINE=InnoDB;
+INSERT INTO PlaylistAllocator(singleton,highwater) SELECT 1,COALESCE(MAX(plid),0) FROM Playlists ON DUPLICATE KEY UPDATE highwater=GREATEST(PlaylistAllocator.highwater,VALUES(highwater));

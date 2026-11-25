@@ -1,27 +1,40 @@
-import {renderPeqCurve} from './peq-curve.js';
-import {createSpectrumView} from './eq-spectrum.js';
+import {createAudioPreferencesUi} from './audio-preferences-ui.js';
+import {createMixerWriteQueue} from './mixer-write-queue.js';
+import {createDspControlTransaction, createLatestControlQueue} from './dsp-control-transaction.js';
+import {createOutputHold} from './audio-output-hold.js';
+import {createWorkletAcknowledgements} from './worklet-ack.js';
+import {effectState} from './audio-settings-status.js';
+import {createPeqWorkstation} from './peq-workstation.js';
 import {createGraphLifecycle, createWorkletLoader, clearGraphNodes} from './audio-graph-lifecycle.js';
 import {syncVolumeSliders} from './control-ui.js';
 // CachyMusic - Audiophile DSP Engine (64-Bit Worklet & Web Audio Fallback)
 import {
     getValidSampleRate,
-    popModalState,
-    pushModalState,
     safeStorage,
-    showCachyToast,
     showToast
 } from './utils.js';
-import { PEQ_FREQS, PEQ_Q_STEPS, hasActiveDsp, store } from './state.js';
+import { PEQ_FREQS, hasActiveDsp, store } from './state.js';
 import { miniVolumeSlider, volumeLevel, volumeSlider } from './ui-elements.js';
-import { logAudioPlaybackEvent, setDebugMode, updateAudioDiagnosticsUi, updateDebugHudState } from './settings.js';
 import { getRuntime } from './runtime-capabilities.js';
 import { createPlaybackAudioContext } from './audio-context-policy.js';
-import { ultrasonicFilterStatus } from './ultrasonic-status.js';
-import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as computeLimiterProfilePolicy, getEffectiveAmplification as getEffectiveAmplificationPolicy, getPreAmpGainValue as getPreAmpGainValuePolicy, computeReplayGainMultiplier as computeReplayGainMultiplierPolicy, hasUserShapingDsp as hasUserShapingDspPolicy } from './audio-policies.js';
+import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, createLinearCurve, computeLimiterProfile as computeLimiterProfilePolicy, getEffectiveAmplification as getEffectiveAmplificationPolicy, getPreAmpGainValue as getPreAmpGainValuePolicy, computeReplayGainMultiplier as computeReplayGainMultiplierPolicy, hasUserShapingDsp as hasUserShapingDspPolicy } from './audio-policies.js';
 
 
 
 
+
+    const workletAcks=createWorkletAcknowledgements();
+    export const outputHold=createOutputHold(()=>({ctx:store.state.audioContext,node:store.state.outputGate}));
+    export async function acknowledgeAudioEdit(){
+        const s=store.state;
+        if(s.isNativePlaybackActive?.())return;
+        if(s.audioContext&&s.audioContext.state!=='closed'&&!getConfirmedAudioRoute())throw Error('Audio route not ready');
+        if(getConfirmedAudioRoute()==='worklet'){
+            const ctx=s.audioContext,node=s.dspWorkletNode;
+            await workletAcks.wait(node);
+            if(s.audioContext!==ctx||s.dspWorkletNode!==node||getConfirmedAudioRoute()!=='worklet')throw Error('DSP route changed during acknowledgement');
+        }
+    }
 
     function computeLimiterProfile() { return computeLimiterProfilePolicy(store.state); }
 
@@ -163,50 +176,51 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
 
         if (type === 'limiter') {
             s.isLimiter = active;
-            safeStorage.setItem('cachymusic_limiter', s.isLimiter ? 'true' : 'false');
+            controlTransaction.write('cachymusic_limiter', s.isLimiter ? 'true' : 'false');
         } else if (type === 'amp') {
             s.isAmpBoost = active;
-            safeStorage.setItem('cachymusic_amp_boost', s.isAmpBoost ? 'true' : 'false');
+            controlTransaction.write('cachymusic_amp_boost', s.isAmpBoost ? 'true' : 'false');
             updateAmpGain(now);
         } else if (type === 'bass') {
             s.isBassBoost = active;
-            safeStorage.setItem('cachymusic_bass_boost', s.isBassBoost ? 'true' : 'false');
+            controlTransaction.write('cachymusic_bass_boost', s.isBassBoost ? 'true' : 'false');
             if (s.bassFilter && s.audioContext) {
                 s.bassFilter.gain.setTargetAtTime(s.isBassBoost ? 3.8 : 0, now, 0.04);
             }
         } else if (type === 'vocal') {
             s.isVocalBoost = active;
-            safeStorage.setItem('cachymusic_vocal_boost', s.isVocalBoost ? 'true' : 'false');
+            controlTransaction.write('cachymusic_vocal_boost', s.isVocalBoost ? 'true' : 'false');
             if (s.vocalFilter && s.audioContext) {
                 s.vocalFilter.gain.setTargetAtTime(s.isVocalBoost ? 2.8 : 0, now, 0.04);
             }
         } else if (type === 'treble') {
             s.isTrebleBoost = active;
-            safeStorage.setItem('cachymusic_treble_boost', s.isTrebleBoost ? 'true' : 'false');
+            controlTransaction.write('cachymusic_treble_boost', s.isTrebleBoost ? 'true' : 'false');
             if (s.trebleFilter && s.audioContext) {
                 s.trebleFilter.gain.setTargetAtTime(s.isTrebleBoost ? 3.0 : 0, now, 0.04);
             }
         } else if (type === 'xfeed') {
             s.isCrossfeed = active;
-            safeStorage.setItem('cachymusic_crossfeed', s.isCrossfeed ? 'true' : 'false');
+            if (active && s.isAmbiophonics) { s.isAmbiophonics = false; controlTransaction.write('cachymusic_ambiophonics','false'); store.emit('audio:preferences-changed'); }
+            controlTransaction.write('cachymusic_crossfeed', s.isCrossfeed ? 'true' : 'false');
         } else if (type === 'subsonic') {
             s.isSubsonic = active;
-            safeStorage.setItem('cachymusic_subsonic', s.isSubsonic ? 'true' : 'false');
+            controlTransaction.write('cachymusic_subsonic', s.isSubsonic ? 'true' : 'false');
             if (s.subsonicFilter && s.audioContext) {
                 s.subsonicFilter.frequency.setTargetAtTime(s.isSubsonic ? 20 : 5, now, 0.04);
             }
         } else if (type === 'agp') {
             s.isAgpEnabled = active;
-            safeStorage.setItem('cachymusic_agp', s.isAgpEnabled ? 'true' : 'false');
+            controlTransaction.write('cachymusic_agp', s.isAgpEnabled ? 'true' : 'false');
         } else if (type === 'surround') {
             s.isSurroundWidener = active;
-            safeStorage.setItem('cachymusic_surround_ms', s.isSurroundWidener ? 'true' : 'false');
+            controlTransaction.write('cachymusic_surround_ms', s.isSurroundWidener ? 'true' : 'false');
         } else if (type === 'phase') {
             s.isPhaseInvert = active;
-            safeStorage.setItem('cachymusic_phase_invert', s.isPhaseInvert ? 'true' : 'false');
+            controlTransaction.write('cachymusic_phase_invert', s.isPhaseInvert ? 'true' : 'false');
         } else if (type === 'mono') {
             s.isMonoMix = active;
-            safeStorage.setItem('cachymusic_mono_mix', s.isMonoMix ? 'true' : 'false');
+            controlTransaction.write('cachymusic_mono_mix', s.isMonoMix ? 'true' : 'false');
         }
 
         updateWorkletParams();
@@ -248,8 +262,11 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         }
     }
 
-    function updateDspButtonsUi() {
+    function updateDspButtonsUi(emit = true) {
         const s = store.state;
+        const route = s.isNativePlaybackActive?.() ? "native" : getConfirmedAudioRoute();
+        const status = key => effectState(s,key,route,{ackPending:workletAcks.pending(s.dspWorkletNode)});
+        const statusLabel = (key, on, off) => ({unsupported:"Unavailable",pending:"Pending",applied:on,off})[status(key)];
         const dspBtns = document.querySelectorAll('[data-target="limiter"], [data-target="amp"], [data-target="bass"], [data-target="vocal"], [data-target="treble"], [data-target="xfeed"], [data-target="subsonic"], [data-target="agp"], [data-target="surround"], [data-target="phase"], [data-target="mono"], [data-target="peq"]');
         dspBtns.forEach(btn => {
             const target = btn.dataset.target;
@@ -266,30 +283,38 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
                              (target === 'mono' && s.isMonoMix) ||
                              (target === 'peq' && !s.isPeqBypassed && s.peqGains.some(g => g !== 0));
             btn.classList.toggle('active', isActive);
+            btn.dataset.effectState=status(target);
+            if(target==='limiter'){
+                const auto=requiresPeakProtection(s)&&!s.isLimiter;
+                btn.dataset.autoProtection=String(auto);
+                btn.title=auto?'Automatic peak protection required by active processing. Enable manual limiting to retain protection when effects are off.':'Manual limiter; automatic peak protection remains enabled for gain-risk effects.';
+                btn.setAttribute('aria-label',auto?'Limiter: automatic protection configured':'Manual limiter');
+                const spec=btn.querySelector('.peqDspSpec');if(spec)spec.textContent=auto?(status(target)==='applied'?'Auto':status(target)==='pending'?'Pending':'Unavailable'):(status(target)==='applied'&&route==='fallback'?'Fallback':status(target)==='unsupported'?'Unavailable':'−0.6 dBFS');
+            }
             btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             const dot = btn.querySelector('.dspDot');
-            if (dot) dot.classList.toggle('active', isActive);
+            if (dot) dot.classList.toggle('active', isActive || (target==='limiter' && status(target)==='applied'));
         });
 
         const peqXfeedStatus = document.getElementById('peqXfeedStatus');
-        if (peqXfeedStatus) peqXfeedStatus.textContent = s.isCrossfeed ? 'ON' : 'OFF';
+        if (peqXfeedStatus) peqXfeedStatus.textContent = statusLabel("xfeed","ON","OFF");
         const peqAgpStatus = document.getElementById('peqAgpStatus');
-        if (peqAgpStatus) peqAgpStatus.textContent = s.isAgpEnabled ? 'GUARD ON' : 'BYPASS';
+        if (peqAgpStatus) peqAgpStatus.textContent = statusLabel("agp","GUARD ON","BYPASS");
         const peqSurroundStatus = document.getElementById('peqSurroundStatus');
-        if (peqSurroundStatus) peqSurroundStatus.textContent = s.isSurroundWidener ? '135% WIDE' : '100%';
+        if (peqSurroundStatus) peqSurroundStatus.textContent = statusLabel("surround","135% WIDE","100%");
         const peqPhaseStatus = document.getElementById('peqPhaseStatus');
-        if (peqPhaseStatus) peqPhaseStatus.textContent = s.isPhaseInvert ? '180° INV' : '0° NORM';
+        if (peqPhaseStatus) peqPhaseStatus.textContent = statusLabel("phase","180° INV","0° NORM");
         const peqMonoStatus = document.getElementById('peqMonoStatus');
-        if (peqMonoStatus) peqMonoStatus.textContent = s.isMonoMix ? 'MONO L+R' : 'STEREO';
+        if (peqMonoStatus) peqMonoStatus.textContent = statusLabel("mono","MONO L+R","STEREO");
 
         const isPeqActive = !s.isPeqBypassed && s.peqGains.some(g => g !== 0);
         const playerPeqBadge = document.getElementById('playerPeqBadge');
         if (playerPeqBadge) {
-            playerPeqBadge.textContent = isPeqActive ? 'ACTIVE' : '10-BAND';
+            playerPeqBadge.textContent = isPeqActive ? (status('peq')==='applied'?'ACTIVE':'SET') : '10-BAND';
             playerPeqBadge.classList.toggle('active', isPeqActive);
         }
 
-        const activeDspCount = [s.isAmpBoost, s.isBassBoost, s.isVocalBoost, s.isTrebleBoost, s.isLimiter, s.isCrossfeed, s.isSurroundWidener, s.isPhaseInvert, s.isMonoMix].filter(Boolean).length;
+        const activeDspCount = ['amp','bass','vocal','treble','limiter','xfeed','surround','phase','mono'].filter(key=>status(key)==='applied').length;
         const playerDspCountBadge = document.getElementById('playerDspCountBadge');
         if (playerDspCountBadge) {
             if (activeDspCount > 0) {
@@ -304,7 +329,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
 
         const peqDspActiveSummary = document.getElementById('peqDspActiveSummary');
         if (peqDspActiveSummary) {
-            peqDspActiveSummary.textContent = activeDspCount > 0 ? `${activeDspCount} ACTIVE` : (s.isAgpEnabled ? 'AGP GUARD READY' : 'ALL BYPASSED');
+            peqDspActiveSummary.textContent = activeDspCount > 0 ? `${activeDspCount} ACTIVE` : (s.isAgpEnabled ? 'AGP configured' : 'No active effects');
             peqDspActiveSummary.classList.toggle('active', activeDspCount > 0 || s.isAgpEnabled);
         }
 
@@ -313,16 +338,69 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
             playerPeqBtn.classList.toggle('active', isPeqActive || activeDspCount > 0);
         }
 
-        store.emit('ui:sync-dac-status');
-        store.emit('ui:sync-track-badge');
+        if (emit) {
+            store.emit('ui:sync-dac-status');
+            store.emit('ui:sync-track-badge');
+        }
     }
+
+    function syncBipolarSliderFill(slider, val, minVal, maxVal) {
+        if (!slider) return;
+        const span = (maxVal - minVal) || 1;
+        const pct = Math.max(0, Math.min(100, ((val - minVal) / span) * 100));
+        slider.style.setProperty('--fill-low', `${Math.min(50, pct).toFixed(2)}%`);
+        slider.style.setProperty('--fill-high', `${Math.max(50, pct).toFixed(2)}%`);
+        slider.dataset.polarity = val > 0.01 ? 'boost' : (val < -0.01 ? 'cut' : 'flat');
+    }
+
+    function restoreControlRoute() {
+        const s=store.state, now=s.audioContext?.currentTime || 0;
+        for (const [node,param,value] of [[s.bassFilter,'gain',s.isBassBoost?3.8:0],[s.vocalFilter,'gain',s.isVocalBoost?2.8:0],[s.trebleFilter,'gain',s.isTrebleBoost?3:0],[s.subsonicFilter,'frequency',s.isSubsonic?20:5]]) {
+            node?.[param]?.setTargetAtTime(value,now,.04);
+        }
+        s.peqNodes?.forEach((node,i)=>{
+            node.gain.setTargetAtTime(s.isPeqBypassed?0:s.peqGains[i],now,.04);
+            node.Q.setTargetAtTime(s.peqQs[i],now,.03);
+        });
+        if(s.audio) for(const key of ['preservesPitch','mozPreservesPitch','webkitPreservesPitch']) s.audio[key]=s.isPitchLockTempo;
+        updateAmpGain(now);updatePreAmpGain(now);updateLimiterState(now);updateAudioRouting();updateWorkletParams();
+    }
+    function refreshControlUi() {
+        const s=store.state;
+        PEQ_FREQS.forEach((_,i)=>{
+            const gain=s.peqGains[i],slider=document.getElementById(`peqSlider-${i}`),db=document.getElementById(`peqFaderDb-${i}`),q=document.getElementById(`peqFaderQ-${i}`);
+            if(slider){slider.value=gain;syncBipolarSliderFill(slider,gain,-15,15);}
+            if(db){db.textContent=`${gain>0?'+':''}${gain.toFixed(1)}`;db.className=`peqFaderDb ${gain>0?'boost':gain<0?'cut':''}`;}
+            if(q)q.textContent=`Q ${s.peqQs[i].toFixed(1)}`;
+        });
+        const balance=document.getElementById('peqStereoBalanceSlider'),label=document.getElementById('peqStereoBalanceValue');
+        const pct=Math.round(s.stereoBalance*100);
+        if(balance){balance.value=pct;syncBipolarSliderFill(balance,pct,-100,100);}
+        if(label)label.textContent=Math.abs(pct)<=1?'CENTER':`${Math.abs(pct)}% ${pct<0?'L':'R'}`;
+        const bypass=document.getElementById('peqBypassToggleBtn');bypass?.classList.toggle('bypassed',s.isPeqBypassed);
+        const bypassText=document.getElementById('peqBypassStatusText');if(bypassText)bypassText.textContent=s.isPeqBypassed?'BYPASS':'ACTIVE';
+        const pitchLock = document.getElementById('peqPitchLockBtn');
+        if (pitchLock) { pitchLock.classList.toggle('active', s.isPitchLockTempo); pitchLock.setAttribute('aria-pressed', String(s.isPitchLockTempo)); pitchLock.textContent = s.isPitchLockTempo ? 'Pitch locked' : 'Pitch follows speed'; }
+        updateDspButtonsUi();drawPeqCurve();store.emit('audio:preferences-changed');
+    }
+    const controlTransaction=createDspControlTransaction({state:store.state,storage:safeStorage,acknowledge:acknowledgeAudioEdit,restore:restoreControlRoute,refresh:committed=>{if(committed){updateDspButtonsUi();store.emit('audio:preferences-changed');}else refreshControlUi();}});
+    function editAudioControl(change) {
+        const run = store.state.withAudioEdit;
+        const edit=checkpoint=>controlTransaction.run(change,checkpoint);
+        return Promise.resolve().then(() => run ? run(edit) : edit()).catch(error => {
+            console.warn('Audio control change failed', error);
+            refreshControlUi();showToast('Audio change could not be completed.');
+        });
+    }
+    const latestControl=createLatestControlQueue(editAudioControl,()=>store.state.audioEditIntent?.());
 
     function setupDspControls() {
         updateDspButtonsUi();
         const dspBtns = document.querySelectorAll('[data-target="limiter"], [data-target="amp"], [data-target="bass"], [data-target="vocal"], [data-target="treble"], [data-target="xfeed"], [data-target="subsonic"], [data-target="agp"], [data-target="surround"], [data-target="phase"], [data-target="mono"], [data-target="peq"]');
         dspBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                toggleDspBoost(btn.dataset.target);
+                if (btn.dataset.target === 'peq') toggleDspBoost('peq');
+                else void editAudioControl(() => toggleDspBoost(btn.dataset.target));
             });
         });
     }
@@ -336,7 +414,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         const clampedGain = Math.max(-15, Math.min(15, Number(gainDb) || 0));
         s.peqGains[bandIndex] = clampedGain;
         try {
-            safeStorage.setItem('cachymusic_peq_gains', JSON.stringify(s.peqGains));
+            controlTransaction.write('cachymusic_peq_gains', JSON.stringify(s.peqGains));
         } catch (_) {}
 
         if (s.peqNodes && s.peqNodes[bandIndex] && s.audioContext) {
@@ -356,7 +434,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         const clampedQ = Math.max(0.4, Math.min(8.0, Number(qVal) || 1.41));
         s.peqQs[bandIndex] = clampedQ;
         try {
-            safeStorage.setItem('cachymusic_peq_qs', JSON.stringify(s.peqQs));
+            controlTransaction.write('cachymusic_peq_qs', JSON.stringify(s.peqQs));
         } catch (_) {}
 
         if (s.peqNodes && s.peqNodes[bandIndex] && s.audioContext) {
@@ -437,359 +515,19 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         return true;
     }
 
-    function drawPeqCurve() {
-        renderPeqCurve(document.getElementById('peqCurveCanvas'), store.state, PEQ_FREQS);
-    }
-
-    let spectrumView = null;
-    function refreshSpectrum() { spectrumView?.refresh(); }
-    function getSpectrumSignal() {
-        const s = store.state;
-        if (!s.isPlaying) return {reason: 'Spectrum · paused'};
-        if (!s.isSoftwareDecoding && (!s.audio || s.audio.paused || !s.audio.getAttribute('src'))) {
-            return {reason: 'Spectrum unavailable for this playback route'};
-        }
-        if (!getConfirmedAudioRoute() || s.analyser?.context !== s.audioContext) return {reason: 'Spectrum unavailable'};
-        return {analyser: s.analyser, context: s.audioContext};
-    }
-
-    function initPeqWorkstation() {
-        const peqGrid = document.getElementById('peqFadersGrid');
-        const peqModal = document.getElementById('peqModal');
-        const playerEqBtn = document.getElementById('playerPeqBtn');
-        const closeBtn = document.getElementById('closePeqModalBtn');
-        const bypassBtn = document.getElementById('peqBypassToggleBtn');
-        const bypassText = document.getElementById('peqBypassStatusText');
-        const resetBtn = document.getElementById('peqResetBtn');
-        const presetSelect = document.getElementById('peqPresetSelect');
-        const autoEqOpenBtn = document.getElementById('peqAutoEqOpenBtn');
-        const autoEqDrawer = document.getElementById('peqAutoEqDrawer');
-        const autoEqInput = document.getElementById('peqAutoEqInput');
-        const autoEqApplyBtn = document.getElementById('peqAutoEqApplyBtn');
-        const autoEqCancelBtn = document.getElementById('peqAutoEqCancelBtn');
-
-        if (!peqGrid) return;
-        spectrumView?.dispose();
-        spectrumView = createSpectrumView({
-            eqCanvas: document.getElementById('peqSpectrumCanvas'),
-            desktopCanvas: document.getElementById('desktopSpectrumCanvas'),
-            status: document.getElementById('peqSpectrumStatus'),
-            getSignal: getSpectrumSignal
-        });
-        refreshSpectrum();
-
-        function syncBipolarSliderFill(slider, val, minVal, maxVal) {
-            if (!slider) return;
-            const span = (maxVal - minVal) || 1;
-            const pct = Math.max(0, Math.min(100, ((val - minVal) / span) * 100));
-            slider.style.setProperty('--fill-low', `${Math.min(50, pct).toFixed(2)}%`);
-            slider.style.setProperty('--fill-high', `${Math.max(50, pct).toFixed(2)}%`);
-            slider.dataset.polarity = val > 0.01 ? 'boost' : (val < -0.01 ? 'cut' : 'flat');
-        }
-
-        // Populate 10 Tactile Vertical Faders
-        const s = store.state;
-        peqGrid.innerHTML = '';
-        PEQ_FREQS.forEach((freq, i) => {
-            const col = document.createElement('div');
-            col.className = 'peqFaderCol';
-            const val = s.peqGains[i] || 0;
-            const qVal = (s.peqQs && s.peqQs[i]) ? s.peqQs[i] : 1.41;
-            const sign = val > 0 ? '+' : '';
-            const dbClass = val > 0 ? 'boost' : (val < 0 ? 'cut' : '');
-            const hzText = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
-
-            col.innerHTML = `
-                <span class="peqFaderDb ${dbClass}" id="peqFaderDb-${i}">${sign}${val.toFixed(1)}</span>
-                <div class="peqFaderTrackCon">
-                    <div class="peqFaderTrackZero"></div>
-                    <input type="range" class="peqSlider" id="peqSlider-${i}" min="-15" max="15" step="0.5" value="${val}" aria-label="${hzText} Hz Band Gain" aria-orientation="vertical">
-                </div>
-                <span class="peqFaderHz">${hzText}</span>
-                <button type="button" class="peqFaderQBtn" id="peqFaderQ-${i}" title="Click to adjust Q-Factor (Bandwidth) for ${hzText} Hz">${`Q ${qVal.toFixed(1)}`}</button>
-            `;
-
-            const slider = col.querySelector('.peqSlider');
-            syncBipolarSliderFill(slider, val, -15, 15);
-            slider.addEventListener('input', (e) => {
-                const gain = parseFloat(e.target.value);
-                setPeqBandGain(i, gain);
-                syncBipolarSliderFill(slider, gain, -15, 15);
-                const dbEl = document.getElementById(`peqFaderDb-${i}`);
-                if (dbEl) {
-                    const sgn = gain > 0 ? '+' : '';
-                    dbEl.textContent = `${sgn}${gain.toFixed(1)}`;
-                    dbEl.className = `peqFaderDb ${gain > 0 ? 'boost' : (gain < 0 ? 'cut' : '')}`;
-                }
-                drawPeqCurve();
-            });
-            slider.addEventListener('dblclick', () => {
-                slider.value = 0;
-                setPeqBandGain(i, 0);
-                syncBipolarSliderFill(slider, 0, -15, 15);
-                const dbEl = document.getElementById(`peqFaderDb-${i}`);
-                if (dbEl) {
-                    dbEl.textContent = '0.0';
-                    dbEl.className = 'peqFaderDb';
-                }
-                drawPeqCurve();
-            });
-
-            const qBtn = col.querySelector('.peqFaderQBtn');
-            if (qBtn) {
-                qBtn.addEventListener('click', () => {
-                    const curQ = s.peqQs[i] || 1.41;
-                    let nextIdx = PEQ_Q_STEPS.findIndex(q => q > curQ + 0.05);
-                    if (nextIdx === -1) nextIdx = 0;
-                    const nextQ = PEQ_Q_STEPS[nextIdx];
-                    setPeqBandQ(i, nextQ);
-                    qBtn.textContent = `Q ${nextQ.toFixed(1)}`;
-                    drawPeqCurve();
-                });
-            }
-
-            peqGrid.appendChild(col);
-        });
-
-        function updateBypassUi() {
-            if (bypassBtn) bypassBtn.classList.toggle('bypassed', s.isPeqBypassed);
-            if (bypassText) bypassText.textContent = s.isPeqBypassed ? 'BYPASS' : 'ACTIVE';
-            if (playerEqBtn) {
-                const isPeqActive = !s.isPeqBypassed && s.peqGains.some(g => g !== 0);
-                const activeDspCount = [s.isAmpBoost, s.isBassBoost, s.isVocalBoost, s.isTrebleBoost, s.isLimiter, s.isCrossfeed].filter(Boolean).length;
-                playerEqBtn.classList.toggle('active', isPeqActive || activeDspCount > 0);
-                const playerPeqBadge = document.getElementById('playerPeqBadge');
-                if (playerPeqBadge) {
-                    playerPeqBadge.textContent = isPeqActive ? 'ACTIVE' : '10-BAND';
-                    playerPeqBadge.classList.toggle('active', isPeqActive);
-                }
-            }
-        }
-        updateBypassUi();
-
-        if (bypassBtn) {
-            bypassBtn.addEventListener('click', () => {
-                s.isPeqBypassed = !s.isPeqBypassed;
-                safeStorage.setItem('cachymusic_peq_bypassed', s.isPeqBypassed ? 'true' : 'false');
-                updateBypassUi();
-                for (let i = 0; i < PEQ_FREQS.length; i++) {
-                    if (s.peqNodes[i] && s.audioContext) {
-                        s.peqNodes[i].gain.setTargetAtTime(s.isPeqBypassed ? 0 : s.peqGains[i], s.audioContext.currentTime, 0.04);
-                    }
-                }
-                updateWorkletParams();
-                updatePreAmpGain(s.audioContext ? s.audioContext.currentTime : 0);
-                updateAudioRouting();
-                drawPeqCurve();
-            });
-        }
-
-        if (resetBtn) {
-            resetBtn.addEventListener('click', () => {
-                for (let i = 0; i < PEQ_FREQS.length; i++) {
-                    setPeqBandGain(i, 0);
-                    setPeqBandQ(i, 1.41);
-                    const slider = document.getElementById(`peqSlider-${i}`);
-                    const dbEl = document.getElementById(`peqFaderDb-${i}`);
-                    const qBtn = document.getElementById(`peqFaderQ-${i}`);
-                    if (slider) {
-                        slider.value = 0;
-                        syncBipolarSliderFill(slider, 0, -15, 15);
-                    }
-                    if (dbEl) {
-                        dbEl.textContent = '0.0';
-                        dbEl.className = 'peqFaderDb';
-                    }
-                    if (qBtn) qBtn.textContent = 'Q 1.4';
-                }
-                if (presetSelect) presetSelect.value = 'flat';
-                updateBypassUi();
-                drawPeqCurve();
-            });
-        }
-
-        // Stereo Balance & Pitch-Lock Controls inside Equalizer Workstation
-        const balanceSlider = document.getElementById('peqStereoBalanceSlider');
-        const balanceValueEl = document.getElementById('peqStereoBalanceValue');
-        const balanceResetBtn = document.getElementById('peqBalanceResetBtn');
-        const pitchLockBtn = document.getElementById('peqPitchLockBtn');
-
-        function formatStereoBalanceText(bal) {
-            const pct = Math.round(bal * 100);
-            if (Math.abs(pct) <= 1) return 'CENTER';
-            return pct < 0 ? `${Math.abs(pct)}% L` : `${pct}% R`;
-        }
-
-        if (balanceSlider) {
-            const initBalPct = Math.round(s.stereoBalance * 100);
-            balanceSlider.value = initBalPct;
-            syncBipolarSliderFill(balanceSlider, initBalPct, -100, 100);
-            if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(s.stereoBalance);
-            balanceSlider.addEventListener('input', (e) => {
-                const rawPct = parseInt(e.target.value, 10) || 0;
-                s.stereoBalance = Math.max(-1.0, Math.min(1.0, rawPct / 100));
-                syncBipolarSliderFill(balanceSlider, rawPct, -100, 100);
-                safeStorage.setItem('cachymusic_stereo_balance', s.stereoBalance.toFixed(2));
-                if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(s.stereoBalance);
-                updateWorkletParams();
-                updateAudioRouting();
-            });
-        }
-
-        if (balanceResetBtn) {
-            balanceResetBtn.addEventListener('click', () => {
-                s.stereoBalance = 0;
-                safeStorage.setItem('cachymusic_stereo_balance', '0');
-                if (balanceSlider) {
-                    balanceSlider.value = 0;
-                    syncBipolarSliderFill(balanceSlider, 0, -100, 100);
-                }
-                if (balanceValueEl) balanceValueEl.textContent = formatStereoBalanceText(0);
-                updateWorkletParams();
-                updateAudioRouting();
-            });
-        }
-
-        function applyAudioPitchLockMode() {
-            const audioEl = s.audio;
-            if (!audioEl) return;
-            try {
-                audioEl.preservesPitch = s.isPitchLockTempo;
-                audioEl.mozPreservesPitch = s.isPitchLockTempo;
-                audioEl.webkitPreservesPitch = s.isPitchLockTempo;
-            } catch (_) {}
-            if (pitchLockBtn) {
-                pitchLockBtn.textContent = s.isPitchLockTempo ? 'PITCH-LOCK TEMPO' : 'ANALOG VINYL PITCH';
-                pitchLockBtn.classList.toggle('active', s.isPitchLockTempo);
-            }
-        }
-        applyAudioPitchLockMode();
-
-        if (pitchLockBtn) {
-            pitchLockBtn.addEventListener('click', () => {
-                s.isPitchLockTempo = !s.isPitchLockTempo;
-                safeStorage.setItem('cachymusic_pitch_lock', s.isPitchLockTempo ? 'true' : 'false');
-                applyAudioPitchLockMode();
-                showToast(s.isPitchLockTempo ? 'Pitch-Lock Enabled: Independent Tempo' : 'Pitch follows playback speed');
-            });
-        }
-
-        if (presetSelect) {
-            presetSelect.addEventListener('change', () => {
-                setPeqPreset(presetSelect.value);
-                for (let i = 0; i < PEQ_FREQS.length; i++) {
-                    const slider = document.getElementById(`peqSlider-${i}`);
-                    const dbEl = document.getElementById(`peqFaderDb-${i}`);
-                    const g = s.peqGains[i];
-                    if (slider) {
-                        slider.value = g;
-                        syncBipolarSliderFill(slider, g, -15, 15);
-                    }
-                    if (dbEl) {
-                        const sgn = g > 0 ? '+' : '';
-                        dbEl.textContent = `${sgn}${g.toFixed(1)}`;
-                        dbEl.className = `peqFaderDb ${g > 0 ? 'boost' : (g < 0 ? 'cut' : '')}`;
-                    }
-                }
-                if (s.isPeqBypassed) {
-                    s.isPeqBypassed = false;
-                    safeStorage.setItem('cachymusic_peq_bypassed', 'false');
-                    updateBypassUi();
-                }
-                drawPeqCurve();
-            });
-        }
-
-        if (autoEqOpenBtn && autoEqDrawer) {
-            autoEqOpenBtn.addEventListener('click', () => {
-                const isOpen = autoEqDrawer.style.display !== 'none';
-                autoEqDrawer.style.display = isOpen ? 'none' : 'flex';
-                if (!isOpen && autoEqInput) setTimeout(() => autoEqInput.focus(), 50);
-            });
-        }
-
-        if (autoEqCancelBtn && autoEqDrawer) {
-            autoEqCancelBtn.addEventListener('click', () => {
-                autoEqDrawer.style.display = 'none';
-            });
-        }
-
-        if (autoEqApplyBtn && autoEqInput) {
-            autoEqApplyBtn.addEventListener('click', () => {
-                const text = autoEqInput.value.trim();
-                if (text && importAutoEqProfile(text)) {
-                    for (let i = 0; i < PEQ_FREQS.length; i++) {
-                        const slider = document.getElementById(`peqSlider-${i}`);
-                        const dbEl = document.getElementById(`peqFaderDb-${i}`);
-                        const g = s.peqGains[i];
-                        if (slider) {
-                            slider.value = g;
-                            syncBipolarSliderFill(slider, g, -15, 15);
-                        }
-                        if (dbEl) {
-                            const sgn = g > 0 ? '+' : '';
-                            dbEl.textContent = `${sgn}${g.toFixed(1)}`;
-                            dbEl.className = `peqFaderDb ${g > 0 ? 'boost' : (g < 0 ? 'cut' : '')}`;
-                        }
-                    }
-                    if (autoEqDrawer) autoEqDrawer.style.display = 'none';
-                    if (s.isPeqBypassed) {
-                        s.isPeqBypassed = false;
-                        safeStorage.setItem('cachymusic_peq_bypassed', 'false');
-                        updateBypassUi();
-                    }
-                    drawPeqCurve();
-                }
-            });
-        }
-
-        s.openPeqModal = function() {
-            if (!peqModal) return;
-            peqModal.style.display = 'flex';
-            pushModalState('peqModal');
-            refreshSpectrum();
-            drawPeqCurve();
-            requestAnimationFrame(() => {
-                drawPeqCurve();
-                setTimeout(drawPeqCurve, 60);
-            });
-        };
-
-        s.closePeqModal = function() {
-            if (!peqModal) return;
-            peqModal.style.display = 'none';
-            popModalState('peqModal');
-            spectrumView?.stop();
-            refreshSpectrum();
-        };
-
-        if (closeBtn) closeBtn.addEventListener('click', s.closePeqModal);
-
-        if (peqModal) {
-            peqModal.addEventListener('click', (e) => {
-                if (e.target === peqModal) s.closePeqModal();
-            });
-        }
-
-        window.addEventListener('resize', () => {
-            if (peqModal && peqModal.style.display !== 'none') {
-                drawPeqCurve();
-            }
-        }, { passive: true });
-
-        setTimeout(drawPeqCurve, 100);
-    }
+    const {drawPeqCurve, refreshSpectrum, initPeqWorkstation} = createPeqWorkstation({getConfirmedAudioRoute, syncBipolarSliderFill, latestControl, editAudioControl, setPeqBandGain, setPeqBandQ, setPeqPreset, importAutoEqProfile, controlTransaction, updateWorkletParams, updatePreAmpGain, updateAudioRouting});
 
     // AudioWorklet 64-Bit Processor Loader
     const loadDspWorklet = createWorkletLoader({
         current: () => store.state.audioContext,
-        isCurrent: ctx => store.state.audioContext === ctx && ctx.state !== 'closed',
+        isCurrent: ctx => store.state.audioContext === ctx && ctx.state !== 'closed' && !graphLifecycle.isClosing(ctx),
         install(targetCtx) {
             const s = store.state;
             const node = new AudioWorkletNode(targetCtx, 'cachymusic-dsp-processor', {
                 numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2]
             });
             s.dspWorkletNode = node;
+            workletAcks.register(node);
             node.onprocessorerror = error => {
                 if (s.dspWorkletNode !== node) return;
                 console.warn('[AudioWorklet] Processor failed; using fallback:', error);
@@ -797,7 +535,10 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
                 updateAudioRouting();
             };
             node.port.onmessage = ({data}) => {
-                if (s.dspWorkletNode !== node || data?.type !== 'agp_telemetry') return;
+                if (s.dspWorkletNode !== node) return;
+                workletAcks.receive(node,data);
+                if(data?.type==='status'){updateDspButtonsUi(false);store.emit('audio:preferences-changed');return;}
+                if(data?.type !== 'agp_telemetry') return;
                 const status = document.getElementById('peqAgpStatus');
                 if (status && s.isAgpEnabled && Number.isFinite(data.gainReductionDb)) {
                     status.textContent = data.gainReductionDb < -0.1 ? `${data.gainReductionDb.toFixed(1)} dB` : 'GUARD ON';
@@ -817,6 +558,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         const node = s.dspWorkletNode;
         if (!node) return;
         s.dspWorkletNode = null;
+        workletAcks.close(node);
         node.onprocessorerror = null;
         node.port.onmessage = null;
         try { node.port.close(); } catch (_) {}
@@ -836,13 +578,13 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         const amp = getEffectiveAmplification();
         const curTrack = s.allTracks[s.currentTrackIndex];
         const trackBits = (curTrack && curTrack.bitsPerSample) ? Number(curTrack.bitsPerSample) : 0;
-        const usePrecision64 = (s.mathPrecision === '64') && s.isPrecision64;
+        const usePrecision64 = s.mathPrecision !== '32';
         const quantBits = (trackBits === 16 && sr <= 48000 && !usePrecision64) ? 16 : 24;
 
-        s.dspWorkletNode.port.postMessage({
+        workletAcks.send(s.dspWorkletNode,{
             precision64: usePrecision64,
             agpEnabled: s.isAgpEnabled,
-            limiterEnabled: Boolean(s.isLimiter || s.currentVolumeValue > 1.0),
+            limiterEnabled: effectiveLimiterEnabled(s),
             subsonicEnabled: s.isSubsonic,
             ultrasonicEnabled: s.isUltrasonic,
             ultrasonicCutoff: s.ultrasonicCutoff,
@@ -885,8 +627,13 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
 
     // System Volume Control (Android AudioManager / Linux PipeWire / ALSA Bridge)
     let hwVolumeDebounceTimer = null;
-    async function checkHardwareGainStatus() {
+    let mixerReadGeneration=0;
+    let mixerModeChanging=false;
+    async function checkHardwareGainStatus(checkpoint = () => {}, transition=false) {
+        if(!transition && (mixerModeChanging||mixerWrites.busy||hwVolumeDebounceTimer!==null))return;
         const s = store.state;
+        const generation=++mixerReadGeneration;
+        const current=()=>generation===mixerReadGeneration;
         const rt = getRuntime();
         const hasAndroidBridge = typeof window !== 'undefined' && Boolean(window.AndroidBridge && typeof window.AndroidBridge.getHardwareVolumeStatusJson === 'function');
         if (!rt.hasHardwareGain && !hasAndroidBridge) {
@@ -900,12 +647,16 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
             } else if (rt.hasPhpBackend) {
                 const res = await fetch('php/api/hardware_volume.php?action=status');
                 if (!res.ok) {
+                    if(!current())return;
+                    checkpoint();
                     markHwGainUnavailable();
                     return;
                 }
                 data = await res.json();
             }
 
+            if(!current())return;
+            checkpoint();
             if (data && data.success) {
                 s.hwVolumeBackend = data.backend || 'none';
                 s.hwGainAvailable = Boolean(data.available);
@@ -918,7 +669,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
                     pill.textContent = data.available ? `READY (${devTag})` : 'UNAVAILABLE';
                 }
                 if (!data.available) {
-                    s.isHardwareGain = false;
+                    markHwGainUnavailable();
                     if (hwGainBtn) {
                         hwGainBtn.disabled = true;
                         hwGainBtn.classList.add('disabled');
@@ -952,15 +703,17 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
                     }
                     store.emit('ui:sync-volume-icon', { volume: Math.min(1.0, s.currentVolumeValue) });
                     if (s.audio) {
-                        s.audio.volume = 1.0; // Unity media gain; physical output is not verified.
-                        s.audio.muted = data.muted || false;
+                        // Preserve explicit application mute; mixer mute belongs to the OS.
+                        s.audio.volume = s.hardwareAppGain;
                     }
                     syncSoftwareVolume();
                 }
             } else {
                 markHwGainUnavailable();
             }
-        } catch (_) {
+        } catch (error) {
+            if(!current())return;
+            checkpoint();
             markHwGainUnavailable();
         }
     }
@@ -970,10 +723,9 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         const wasHardware = s.isHardwareGain;
         s.isHardwareGain = false;
         s.hwGainAvailable = false;
-        if (wasHardware) {
-            if (s.audio) s.audio.volume = Math.max(0, Math.min(1, s.currentVolumeValue));
-            syncSoftwareVolume();
-        }
+        safeStorage.setItem('cachymusic_hardware_gain','false');
+        safeStorage.setItem('cachymusic_hw_gain','false');
+        if(wasHardware)setVolume(s.hardwareAppGain,true,true,{preserveMute:true,dispatchSystem:false});
         const pill = document.getElementById('settingsHardwareGainPill');
         const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
         const hwGainDot = document.getElementById('settingsHwGainDot');
@@ -998,605 +750,40 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         }
     }
 
+    const mixerWrites=createMixerWriteQueue({
+        enabled:()=>store.state.isHardwareGain && !mixerModeChanging,
+        write:async vol=>{
+            const rt=getRuntime();
+            if(typeof window.AndroidBridge?.setHardwareStreamVolume==='function'){
+                if(window.AndroidBridge.setHardwareStreamVolume(Math.max(0,Math.min(1,vol)))!==true)throw Error('Mixer write failed');
+            } else if(rt.hasPhpBackend){
+                const res=await fetch('php/api/hardware_volume.php?action=set_volume',{
+                    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({volume:vol})
+                });
+                if(!res.ok||!(await res.json()).success)throw Error('Mixer write failed');
+            } else throw Error('Mixer unavailable');
+        },
+        report:()=>{showToast('System volume update failed.');void checkHardwareGainStatus(undefined,true);}
+    });
     function dispatchHardwareVolume(vol) {
-        const rt = getRuntime();
-        const hasAndroidBridge = typeof window !== 'undefined' && Boolean(window.AndroidBridge && typeof window.AndroidBridge.setHardwareStreamVolume === 'function');
-        if (!store.state.isHardwareGain || (!rt.hasHardwareGain && !hasAndroidBridge)) return;
-        if (hwVolumeDebounceTimer) clearTimeout(hwVolumeDebounceTimer);
-        hwVolumeDebounceTimer = setTimeout(() => {
-            if (hasAndroidBridge) {
-                try {
-                    window.AndroidBridge.setHardwareStreamVolume(Math.max(0, Math.min(1.0, vol)));
-                } catch (_) {}
-                return;
-            }
-            if (rt.hasPhpBackend) {
-                fetch('php/api/hardware_volume.php?action=set_volume', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ volume: vol })
-                }).catch(() => {});
-            }
-        }, 35);
+        const rt=getRuntime();
+        if (!store.state.isHardwareGain || mixerModeChanging || (!rt.hasHardwareGain && !window.AndroidBridge?.setHardwareStreamVolume)) return;
+        mixerReadGeneration++;
+        if(hwVolumeDebounceTimer)clearTimeout(hwVolumeDebounceTimer);
+        hwVolumeDebounceTimer=setTimeout(()=>{
+            hwVolumeDebounceTimer=null;
+            if(store.state.isHardwareGain&&!mixerModeChanging)mixerWrites.submit(vol);
+        },35);
     }
 
-    // Neutron HiFi™ Settings Controls Wiring
-    function setupNeutronSettingsControls() {
-        const s = store.state;
-        const applyAudioBtn = document.getElementById('settingsApplyAudioBtn');
-        const discardAudioBtn = document.getElementById('settingsDiscardAudioBtn');
-        const applyAudioStatus = document.getElementById('settingsApplyAudioStatus');
-
-        function snapshotCommittedAudioState() {
-            return {
-                mathPrecision: s.mathPrecision || (s.isPrecision64 ? '64' : '32'),
-                isHardwareGain: Boolean(s.isHardwareGain),
-                isUltrasonic: Boolean(s.isUltrasonic),
-                ultrasonicCutoff: parseInt(s.ultrasonicCutoff, 10) || 32000,
-                ditherMode: s.ditherMode || 'tpdf',
-                isAmbiophonics: Boolean(s.isAmbiophonics),
-                bufferLatencyTarget: s.bufferLatencyTarget || 'playback',
-                debugModeActive: Boolean(s.debugModeActive)
-            };
-        }
-
-        let draft = snapshotCommittedAudioState();
-
-        function getPendingDiffList() {
-            const committed = snapshotCommittedAudioState();
-            const diffs = [];
-            if (draft.mathPrecision !== committed.mathPrecision) {
-                diffs.push(`Precision: ${draft.mathPrecision === 'native' ? 'Native' : (draft.mathPrecision === '64' ? '64-Bit' : '32-Bit')}`);
-            }
-            if (draft.isHardwareGain !== committed.isHardwareGain) {
-                diffs.push(`Hardware Gain: ${draft.isHardwareGain ? 'ON' : 'OFF'}`);
-            }
-            if (draft.isUltrasonic !== committed.isUltrasonic || draft.ultrasonicCutoff !== committed.ultrasonicCutoff) {
-                diffs.push(`Ultrasonic: ${draft.isUltrasonic ? Math.round(draft.ultrasonicCutoff / 1000) + 'kHz' : 'OFF'}`);
-            }
-            if (draft.ditherMode !== committed.ditherMode) {
-                diffs.push(`Dither: ${draft.ditherMode.toUpperCase()}`);
-            }
-            if (draft.isAmbiophonics !== committed.isAmbiophonics) {
-                diffs.push(`Ambiophonics: ${draft.isAmbiophonics ? 'ON' : 'OFF'}`);
-            }
-            if (draft.bufferLatencyTarget !== committed.bufferLatencyTarget) {
-                diffs.push(`Buffer: ${draft.bufferLatencyTarget === 'interactive' ? 'Low-Latency' : 'Playback'}`);
-            }
-            if (draft.debugModeActive !== committed.debugModeActive) {
-                diffs.push(`Debug HUD: ${draft.debugModeActive ? 'ON' : 'OFF'}`);
-            }
-            return diffs;
-        }
-
-        function refreshPendingAudioBanner() {
-            const diffs = getPendingDiffList();
-            const count = diffs.length;
-            if (applyAudioBtn) {
-                applyAudioBtn.textContent = count > 0
-                    ? `APPLY AUDIO SETTINGS (${count} PENDING)`
-                    : 'APPLY AUDIO SETTINGS';
-                applyAudioBtn.style.boxShadow = count > 0
-                    ? '0 0 16px var(--accent-glow, rgba(0,240,255,0.4))'
-                    : '';
-            }
-            if (discardAudioBtn) {
-                discardAudioBtn.style.display = count > 0 ? '' : 'none';
-            }
-            if (applyAudioStatus) {
-                if (count > 0) {
-                    applyAudioStatus.textContent = `Staged (not active yet): ${diffs.join(' • ')}. Click Apply to activate.`;
-                    applyAudioStatus.style.color = 'var(--accent-primary, #38bdf8)';
-                } else {
-                    applyAudioStatus.textContent = 'Saved audio preferences match the controls. Processing depends on the active playback mode.';
-                    applyAudioStatus.style.color = '';
-                }
-            }
-        }
-
-        // 1. Math Precision Architecture (Native Bypass | 64-Bit Studio | 32-Bit Fast)
-        const precisionBtns = document.querySelectorAll('.enginePrecisionBtn');
-        const precisionPill = document.getElementById('settingsEnginePrecisionPill');
-        const updatePrecisionUi = () => {
-            const cur = draft.mathPrecision;
-            precisionBtns.forEach(b => {
-                b.classList.toggle('active', b.getAttribute('data-precision') === cur);
-            });
-            if (precisionPill) {
-                precisionPill.textContent = cur === 'native'
-                    ? 'NATIVE (SOURCE BYPASS)'
-                    : (cur === '64' ? '64-BIT DOUBLE FLOAT' : '32-BIT FAST FLOAT');
-            }
-        };
-        updatePrecisionUi();
-        precisionBtns.forEach(b => {
-            b.addEventListener('click', () => {
-                const nextMode = b.getAttribute('data-precision') || '64';
-                draft.mathPrecision = (nextMode === 'native' || nextMode === '32' || nextMode === '64') ? nextMode : '64';
-                updatePrecisionUi();
-                refreshPendingAudioBanner();
-            });
-        });
-
-        // 2. System Volume Control (Android AudioManager / Linux PipeWire / ALSA)
-        const hwGainBtn = document.getElementById('settingsHwGainToggleBtn');
-        const hwGainDot = document.getElementById('settingsHwGainDot');
-        const hwGainText = document.getElementById('settingsHwGainText');
-        const updateHwGainUi = () => {
-            if (!s.hwGainAvailable) {
-                if (hwGainBtn) hwGainBtn.classList.remove('active');
-                if (hwGainDot) hwGainDot.classList.remove('active');
-                if (hwGainText) {
-                    hwGainText.textContent = s.hasExternalDac ? 'SYSTEM VOLUME: BROWSER OS-LOCKED' : 'SYSTEM VOLUME: UNAVAILABLE';
-                }
-                return;
-            }
-            if (hwGainBtn) hwGainBtn.classList.toggle('active', draft.isHardwareGain);
-            if (hwGainDot) hwGainDot.classList.toggle('active', draft.isHardwareGain);
-            if (hwGainText) {
-                hwGainText.textContent = draft.isHardwareGain
-                    ? `SYSTEM VOLUME: ON (${String(s.hwVolumeBackend || 'READY').toUpperCase()})`
-                    : 'SYSTEM VOLUME: OFF';
-            }
-        };
-        s.syncHwGainDraftUi = updateHwGainUi;
-        s.syncHwGainCapabilitiesUi = () => {
-            const pill = document.getElementById('settingsHardwareGainPill');
-            if (!s.hwGainAvailable && pill) {
-                pill.textContent = s.hasExternalDac
-                    ? `DAC DETECTED (${s.detectedDacLabel}) • OS VOL ONLY`
-                    : 'UNAVAILABLE';
-            }
-            updateHwGainUi();
-        };
-        updateHwGainUi();
-        if (hwGainBtn) {
-            hwGainBtn.addEventListener('click', () => {
-                if (hwGainBtn.disabled || hwGainBtn.classList.contains('disabled') || !s.hwGainAvailable) return;
-                draft.isHardwareGain = !draft.isHardwareGain;
-                updateHwGainUi();
-                refreshPendingAudioBanner();
-            });
-        }
-
-        // 3. Ultrasonic IMD Filter
-        const ultrasonicBtn = document.getElementById('settingsUltrasonicToggleBtn');
-        const ultrasonicDot = document.getElementById('settingsUltrasonicDot');
-        const ultrasonicText = document.getElementById('settingsUltrasonicText');
-        const ultrasonicSelect = document.getElementById('settingsUltrasonicCutoffSelect');
-        const ultrasonicPill = document.getElementById('settingsUltrasonicPill');
-        const updateUltrasonicUi = () => {
-            if (ultrasonicBtn) ultrasonicBtn.classList.toggle('active', draft.isUltrasonic);
-            if (ultrasonicDot) ultrasonicDot.classList.toggle('active', draft.isUltrasonic);
-            if (ultrasonicText) {
-                ultrasonicText.textContent = draft.isUltrasonic ? 'ULTRASONIC FILTER: ON' : 'ULTRASONIC FILTER: OFF';
-            }
-            if (ultrasonicPill) {
-                ultrasonicPill.textContent = ultrasonicFilterStatus({enabled:draft.isUltrasonic, cutoffHz:draft.ultrasonicCutoff, contextRateHz:s.audioContext?.sampleRate, workletReady:Boolean(s.dspWorkletNode) && draft.isUltrasonic === s.isUltrasonic && draft.ultrasonicCutoff === s.ultrasonicCutoff}).text;
-            }
-            if (ultrasonicSelect) {
-                ultrasonicSelect.value = draft.ultrasonicCutoff.toString();
-            }
-        };
-        updateUltrasonicUi();
-        if (ultrasonicBtn) {
-            ultrasonicBtn.addEventListener('click', () => {
-                draft.isUltrasonic = !draft.isUltrasonic;
-                updateUltrasonicUi();
-                refreshPendingAudioBanner();
-            });
-        }
-        if (ultrasonicSelect) {
-            ultrasonicSelect.addEventListener('change', () => {
-                draft.ultrasonicCutoff = parseInt(ultrasonicSelect.value, 10) || 32000;
-                updateUltrasonicUi();
-                refreshPendingAudioBanner();
-            });
-        }
-
-        // 4. Dithering & Noise Shaping
-        const ditherBtns = document.querySelectorAll('.ditherModeBtn');
-        const ditherPill = document.getElementById('settingsDitherPill');
-        const updateDitherUi = () => {
-            ditherBtns.forEach(b => {
-                const mode = b.getAttribute('data-dither');
-                b.classList.toggle('active', mode === draft.ditherMode);
-            });
-            if (ditherPill) {
-                ditherPill.textContent = draft.ditherMode === 'shaped'
-                    ? 'Noise-shaped'
-                    : (draft.ditherMode === 'tpdf' ? 'TPDF' : 'Off');
-            }
-        };
-        updateDitherUi();
-        ditherBtns.forEach(b => {
-            b.addEventListener('click', () => {
-                if (b.disabled || b.classList.contains('disabled')) return;
-                draft.ditherMode = b.getAttribute('data-dither') || 'tpdf';
-                updateDitherUi();
-                refreshPendingAudioBanner();
-            });
-        });
-
-        const scanDacBtn = document.getElementById('settingsScanDacBtn');
-        if (scanDacBtn) {
-            scanDacBtn.addEventListener('click', async () => {
-                const origText = scanDacBtn.textContent;
-                scanDacBtn.disabled = true;
-                scanDacBtn.textContent = 'SCANNING...';
-                try {
-                    const res = await checkDacCapabilities(true);
-                    showCachyToast('Audio output', res.dacLabel, 'info');
-                } finally {
-                    scanDacBtn.textContent = origText;
-                    scanDacBtn.disabled = false;
-                }
-            });
-        }
-
-        // 5. Speaker Ambiophonics R.A.C.E.
-        const ambiBtn = document.getElementById('settingsAmbiToggleBtn');
-        const ambiDot = document.getElementById('settingsAmbiDot');
-        const ambiText = document.getElementById('settingsAmbiText');
-        const ambiPill = document.getElementById('settingsAmbiPill');
-        const updateAmbiUi = () => {
-            if (ambiBtn) ambiBtn.classList.toggle('active', draft.isAmbiophonics);
-            if (ambiDot) ambiDot.classList.toggle('active', draft.isAmbiophonics);
-            if (ambiText) {
-                ambiText.textContent = draft.isAmbiophonics ? 'AMBIOPHONICS: ON (R.A.C.E.)' : 'AMBIOPHONICS: OFF (SPEAKERS ONLY)';
-            }
-            if (ambiPill) {
-                ambiPill.textContent = draft.isAmbiophonics ? 'ACTIVE (R.A.C.E.)' : 'BYPASS';
-            }
-        };
-        updateAmbiUi();
-        if (ambiBtn) {
-            ambiBtn.addEventListener('click', () => {
-                draft.isAmbiophonics = !draft.isAmbiophonics;
-                updateAmbiUi();
-                refreshPendingAudioBanner();
-            });
-        }
-
-        // 6. Audio Buffer & Latency Tuning
-        const bufferBtns = document.querySelectorAll('.bufferLatencyBtn');
-        const bufferPill = document.getElementById('settingsBufferPill');
-        const updateBufferUi = () => {
-            bufferBtns.forEach(b => {
-                const latency = b.getAttribute('data-latency');
-                b.classList.toggle('active', latency === draft.bufferLatencyTarget);
-            });
-            if (bufferPill) {
-                bufferPill.textContent = draft.bufferLatencyTarget === 'interactive'
-                    ? 'LOW LATENCY'
-                    : 'STABLE';
-            }
-        };
-        updateBufferUi();
-        bufferBtns.forEach(b => {
-            b.addEventListener('click', () => {
-                draft.bufferLatencyTarget = b.getAttribute('data-latency') || 'playback';
-                updateBufferUi();
-                refreshPendingAudioBanner();
-            });
-        });
-
-        // 7. Settings Confirmation & Apply / Discard Action Handlers
-        const syncAllSettingsDraftUi = () => {
-            updatePrecisionUi();
-            updateHwGainUi();
-            updateUltrasonicUi();
-            updateDitherUi();
-            updateAmbiUi();
-            updateBufferUi();
-            updateDebugDraftUi();
-            refreshPendingAudioBanner();
-        };
-
-        if (discardAudioBtn) {
-            discardAudioBtn.addEventListener('click', () => {
-                draft = snapshotCommittedAudioState();
-                syncAllSettingsDraftUi();
-                showToast('Pending audio settings discarded.');
-            });
-        }
-
-        if (applyAudioBtn) {
-            applyAudioBtn.addEventListener('click', async () => {
-                const prevHwGain = s.isHardwareGain;
-                const prevLatency = s.bufferLatencyTarget;
-                const prevDebug = s.debugModeActive;
-
-                s.mathPrecision = draft.mathPrecision;
-                s.isPrecision64 = (s.mathPrecision === '64');
-                s.isHardwareGain = Boolean(draft.isHardwareGain && s.hwGainAvailable);
-                s.isUltrasonic = Boolean(draft.isUltrasonic);
-                s.ultrasonicCutoff = parseInt(draft.ultrasonicCutoff, 10) || 32000;
-                s.ditherMode = draft.ditherMode || 'tpdf';
-                s.isAmbiophonics = Boolean(draft.isAmbiophonics);
-                s.bufferLatencyTarget = draft.bufferLatencyTarget || 'playback';
-
-                try {
-                    safeStorage.setItem('cachymusic_engine_precision', s.mathPrecision);
-                    safeStorage.setItem('cachymusic_precision_64', s.isPrecision64 ? 'true' : 'false');
-                    safeStorage.setItem('cachymusic_hardware_gain', s.isHardwareGain ? 'true' : 'false');
-                    safeStorage.setItem('cachymusic_hw_gain', s.isHardwareGain ? 'true' : 'false');
-                    safeStorage.setItem('cachymusic_ultrasonic', s.isUltrasonic ? 'true' : 'false');
-                    safeStorage.setItem('cachymusic_ultrasonic_cutoff', s.ultrasonicCutoff.toString());
-                    safeStorage.setItem('cachymusic_dither_mode', s.ditherMode);
-                    safeStorage.setItem('cachymusic_ambiophonics', s.isAmbiophonics ? 'true' : 'false');
-                    safeStorage.setItem('cachymusic_buffer_latency', s.bufferLatencyTarget);
-                } catch (_) {}
-
-                if (draft.debugModeActive !== prevDebug) {
-                    setDebugMode(draft.debugModeActive);
-                }
-
-                if (s.isHardwareGain !== prevHwGain) {
-                    if (s.isHardwareGain) {
-                        await checkHardwareGainStatus();
-                    } else if (s.audio) {
-                        s.audio.volume = Math.min(1.0, s.currentVolumeValue);
-                    }
-                }
-
-                if (s.bufferLatencyTarget !== prevLatency && audioBufferChangePending() && !s.isPlaying
-                    && !s.isSoftwareDecoding && !s.audio?.getAttribute('src')) {
-                    const curTrack = s.allTracks[s.currentTrackIndex];
-                    const sr = (curTrack && curTrack.sampleRate) ? getValidSampleRate(curTrack.sampleRate) : 44100;
-                    await ensureAudioEngineForSampleRate(sr, true);
-                }
-
-                draft = snapshotCommittedAudioState();
-                syncAllSettingsDraftUi();
-                updateWorkletParams();
-                updateAudioRouting();
-                store.emit('ui:sync-signal-path');
-
-                if (applyAudioStatus) {
-                    applyAudioStatus.textContent = audioBufferChangePending()
-                        ? 'Settings saved. Buffer profile takes effect on the next Web Audio track.'
-                        : 'Audio preferences saved. Applicable processing updates during playback.';
-                    applyAudioStatus.style.color = 'var(--status-success)';
-                }
-                showCachyToast('Audio settings saved', applyAudioStatus?.textContent || '', 'success');
-                logAudioPlaybackEvent('info', `Applied audio settings (Precision=${s.mathPrecision}, Dither=${s.ditherMode}, Ultrasonic=${s.isUltrasonic ? s.ultrasonicCutoff + 'Hz' : 'OFF'}, Latency=${s.bufferLatencyTarget}).`);
-            });
-        }
-
-        // 7b. Opt-in Desktop Background Web Notifications (Default OFF)
-        const bgNotifToggle = document.getElementById('settingsBgNotificationsToggle');
-        const rt = getRuntime();
-        if (bgNotifToggle && (typeof Notification === 'undefined' || rt.isAndroidNative
-            || rt.osFamily === 'android' || rt.isIOS)) {
-            s.backgroundNotificationsEnabled = false;
-            bgNotifToggle.disabled = true;
-            bgNotifToggle.closest('.settingsRowItem').style.display = 'none';
-        } else if (bgNotifToggle) {
-            if (s.backgroundNotificationsEnabled && Notification.permission !== 'granted') {
-                s.backgroundNotificationsEnabled = false;
-                safeStorage.setItem('cachymusic_bg_notifications', 'false');
-            }
-            const syncBgNotifUi = () => {
-                const on = Boolean(s.backgroundNotificationsEnabled);
-                if ('checked' in bgNotifToggle) bgNotifToggle.checked = on;
-                bgNotifToggle.classList.toggle('active', on);
-                bgNotifToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
-            };
-            syncBgNotifUi();
-            bgNotifToggle.addEventListener('click', async () => {
-                const wantsEnable = !s.backgroundNotificationsEnabled;
-                let allowed = !wantsEnable || Notification.permission === 'granted';
-                if (wantsEnable && Notification.permission === 'default') {
-                    bgNotifToggle.disabled = true;
-                    try { allowed = await Notification.requestPermission() === 'granted'; }
-                    catch (_) { allowed = false; }
-                    finally { bgNotifToggle.disabled = false; }
-                }
-                s.backgroundNotificationsEnabled = wantsEnable && allowed;
-                safeStorage.setItem('cachymusic_bg_notifications', String(s.backgroundNotificationsEnabled));
-                syncBgNotifUi();
-                showToast(allowed ? `Background alerts ${wantsEnable ? 'enabled' : 'disabled'}`
-                    : 'Browser notification permission is required.');
-            });
-        }
-
-        // 8. Playback Diagnostics & Debug Log Actions
-        document.querySelectorAll('#settingsCopyDebugLogBtn, #debugHudCopyBtn').forEach(button => {
-            button.addEventListener('click', async () => {
-                const logs = s.audioPlaybackDebugLogs.join('\n') || 'No telemetry events logged yet.';
-                try {
-                    await navigator.clipboard.writeText(logs);
-                    showToast('Playback Diagnostics Copied');
-                } catch (_) {
-                    showToast('Could not copy diagnostics.');
-                }
-            });
-        });
-        document.querySelectorAll('#settingsClearDebugLogBtn, #debugHudClearBtn').forEach(button => {
-            button.addEventListener('click', () => {
-                s.audioPlaybackDebugLogs.length = 0;
-                s.consecutiveSkipCount = 0;
-                document.getElementById('debugHudLogList')?.replaceChildren();
-                const logBox = document.getElementById('settingsAudioDebugLog');
-                if (logBox) logBox.textContent = '[AudioEngine] Diagnostics log cleared.';
-                updateAudioDiagnosticsUi();
-                showToast('Diagnostics Log Cleared');
-            });
-        });
-
-        // 9. On-Screen Audio Diagnostics & Debug Mode Controls (staged until Apply)
-        const debugEnableBtn = document.getElementById('debugModeEnableBtn');
-        const debugDisableBtn = document.getElementById('debugModeDisableBtn');
-        const debugPill = document.getElementById('settingsDebugPill');
-        function updateDebugDraftUi() {
-            if (debugPill) {
-                debugPill.textContent = draft.debugModeActive ? 'ENABLED (HUD)' : 'DISABLED';
-                debugPill.className = `settingsEnginePill ${draft.debugModeActive ? 'active' : ''}`;
-            }
-            if (debugEnableBtn) debugEnableBtn.classList.toggle('active', draft.debugModeActive);
-            if (debugDisableBtn) debugDisableBtn.classList.toggle('active', !draft.debugModeActive);
-        }
-        if (debugEnableBtn) {
-            debugEnableBtn.addEventListener('click', () => {
-                draft.debugModeActive = true;
-                updateDebugDraftUi();
-                refreshPendingAudioBanner();
-            });
-        }
-        if (debugDisableBtn) {
-            debugDisableBtn.addEventListener('click', () => {
-                draft.debugModeActive = false;
-                updateDebugDraftUi();
-                refreshPendingAudioBanner();
-            });
-        }
-
-        const hudCloseBtn = document.getElementById('debugHudCloseBtn');
-        if (hudCloseBtn) {
-            hudCloseBtn.addEventListener('click', () => {
-                setDebugMode(false);
-                draft.debugModeActive = false;
-                updateDebugDraftUi();
-                refreshPendingAudioBanner();
-            });
-        }
-
-        // Make Diagnostics HUD Draggable by Header
-        const hudEl = document.getElementById('debugHudContainer');
-        const hudHeaderEl = hudEl ? hudEl.querySelector('.debugHudHeader') : null;
-        if (hudEl && hudHeaderEl) {
-            let isDragging = false;
-            let startPointerX = 0;
-            let startPointerY = 0;
-            let startLeft = 0;
-            let startTop = 0;
-
-            const headerBtns = hudHeaderEl.querySelectorAll('button');
-            headerBtns.forEach(btn => {
-                btn.addEventListener('pointerdown', (e) => e.stopPropagation());
-            });
-
-            hudHeaderEl.addEventListener('pointerdown', (e) => {
-                if (e.button !== 0) return;
-                isDragging = true;
-                try {
-                    hudHeaderEl.setPointerCapture(e.pointerId);
-                } catch (_) {}
-                const rect = hudEl.getBoundingClientRect();
-                startPointerX = e.clientX;
-                startPointerY = e.clientY;
-                startLeft = rect.left;
-                startTop = rect.top;
-
-                hudEl.style.bottom = 'auto';
-                hudEl.style.transform = 'none';
-                hudEl.style.left = `${startLeft}px`;
-                hudEl.style.top = `${startTop}px`;
-            });
-
-            hudHeaderEl.addEventListener('pointermove', (e) => {
-                if (!isDragging) return;
-                const dx = e.clientX - startPointerX;
-                const dy = e.clientY - startPointerY;
-                const rect = hudEl.getBoundingClientRect();
-                const maxLeft = Math.max(0, window.innerWidth - rect.width);
-                const maxTop = Math.max(0, window.innerHeight - rect.height);
-                const newLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
-                const newTop = Math.max(0, Math.min(maxTop, startTop + dy));
-                hudEl.style.left = `${newLeft}px`;
-                hudEl.style.top = `${newTop}px`;
-            });
-
-            const stopDrag = (e) => {
-                if (!isDragging) return;
-                isDragging = false;
-                try {
-                    hudHeaderEl.releasePointerCapture(e.pointerId);
-                } catch (_) {}
-            };
-            hudHeaderEl.addEventListener('pointerup', stopDrag);
-            hudHeaderEl.addEventListener('pointercancel', stopDrag);
-        }
-
-        // Initial DAC & Hardware Output Capability Scan + Hotplug Listener
-        checkDacCapabilities(false);
-        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-            navigator.mediaDevices.addEventListener('devicechange', () => checkDacCapabilities(false));
-        }
-        if (navigator.usb && navigator.usb.addEventListener) {
-            navigator.usb.addEventListener('connect', () => checkDacCapabilities(false));
-            navigator.usb.addEventListener('disconnect', () => checkDacCapabilities(false));
-        }
-
-        // Ensure sleep timer cancel button is hidden initially if no timer is active
-        const initCancelSleepBtn = document.getElementById('settingsTabCancelSleepBtn');
-        if (initCancelSleepBtn && !s.sleepTimerMode) {
-            initCancelSleepBtn.style.display = 'none';
-        }
-
-        updateDebugHudState();
-
-        // 7. Settings Category Sub-Navigation Filter Bar (Balanced 2-Column Sub-Groupings)
-        const catBtns = document.querySelectorAll('#settingsCategoryNav .settingsCatBtn');
-        const settingsGrid = document.getElementById('settingsLayoutGrid');
-        if (catBtns.length > 0 && settingsGrid) {
-            const searchInput=document.getElementById('settingsSearchInput');
-            const searchStatus=document.getElementById('settingsSearchStatus');
-            let currentCategory='audio';
-            const applySettingsCategory = (cat) => {
-                if(!Array.from(catBtns).some(b=>b.dataset.cat===cat))cat='audio';
-                currentCategory=cat;
-                const query=(searchInput?.value||'').trim().toLowerCase();let count=0;
-                catBtns.forEach(b => {
-                    const selected = b.getAttribute('data-cat') === cat;
-                    b.classList.toggle('active', selected);
-                    if (selected) b.setAttribute('aria-current', 'page');
-                    else b.removeAttribute('aria-current');
-                });
-                settingsGrid.setAttribute('data-active-cat', cat);
-
-                const audioCol = document.getElementById('settingsColAudio');
-                const sysCol = document.getElementById('settingsColSystem');
-                if (audioCol) audioCol.style.display = '';
-                if (sysCol) sysCol.style.display = '';
-
-                const panels = settingsGrid.querySelectorAll('.settingsSectionPanel[data-settings-cat]');
-                panels.forEach(panel => {
-                    const panelCats = (panel.getAttribute('data-settings-cat') || '').split(/\s+/);
-                    const isMatch = query ? panel.textContent.toLowerCase().includes(query) : (cat === 'all') || panelCats.includes(cat);
-                    if (isMatch) count++;
-                    // Searching a collapsed advanced section must expose its match.
-                    if (query && isMatch) {
-                        panel.querySelectorAll('details.settingsAdvancedDetails').forEach(details => {
-                            if (details.textContent.toLowerCase().includes(query)) details.open = true;
-                        });
-                    }
-                    panel.style.display = isMatch ? '' : 'none';
-                });
-                if(searchStatus)searchStatus.textContent=query?`${count} matching sections`:'';
-            };
-            searchInput?.addEventListener('input',()=>applySettingsCategory(currentCategory));
-
-            catBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    if(searchInput)searchInput.value='';
-                    const cat = btn.getAttribute('data-cat') || 'audio';
-                    try { safeStorage.setItem('cachymusic_settings_cat', cat); } catch (_) {}
-                    applySettingsCategory(cat);
-                    // Keep the selected category visible in the compact mobile rail.
-                    if (window.matchMedia('(max-width: 768px)').matches) {
-                        btn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
-                    }
-                });
-            });
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const urlCat = urlParams.get('cat');
-            const savedCat = urlCat || safeStorage.getItem('cachymusic_settings_cat') || 'audio';
-            applySettingsCategory(savedCat);
-        }
+    // Audio preferences: commit each control independently.
+    async function beginMixerTransition(){
+        mixerModeChanging=true; mixerReadGeneration++;
+        if(hwVolumeDebounceTimer){clearTimeout(hwVolumeDebounceTimer);hwVolumeDebounceTimer=null;}
+        await mixerWrites.invalidate();
     }
+    function endMixerTransition(){mixerModeChanging=false;}
+    const setupNeutronSettingsControls=createAudioPreferencesUi({acknowledgeAudioEdit, audioBufferChangePending, checkDacCapabilities, checkHardwareGainStatus, ensureAudioEngineForSampleRate, getConfirmedAudioRoute, setVolume, syncSoftwareVolume, updateAmpGain, updateAudioRouting, updateDspButtonsUi, updateLimiterState, updateWorkletParams, workletAcks, beginMixerTransition, endMixerTransition});
 
     function toggleReplayGain(active) {
         const s = store.state;
@@ -1609,10 +796,11 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
             s.replayGainNode.gain.setTargetAtTime(targetGain, s.audioContext.currentTime, 0.04);
         }
         updateWorkletParams();
+        updateAudioRouting();
         store.emit('ui:sync-dac-status');
     }
 
-    function setVolume(val, updateInput = false, persist = true) {
+    function setVolume(val, updateInput = false, persist = true, {preserveMute=false,dispatchSystem=true}={}) {
         const s = store.state;
         if (typeof val !== 'number' || isNaN(val) || !isFinite(val)) {
             val = 0.8;
@@ -1622,18 +810,22 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         syncVolumeSliders(s.currentVolumeValue, volumeSlider, miniVolumeSlider);
 
         if (s.isHardwareGain && s.hwGainAvailable && getRuntime().hasHardwareGain) {
-            // Bit-Perfect System Volume Control: Keep software digital stream at 0 dBFS full precision
+            // Keep the pre-switch app attenuation; changing the OS mixer must not reset it.
             if (s.audio) {
-                s.audio.volume = 1.0;
-                s.audio.muted = false;
+                s.audio.volume = s.hardwareAppGain;
+                // Do not clear application mute when adjusting the OS mixer.
             }
-            dispatchHardwareVolume(s.currentVolumeValue);
+            if(dispatchSystem)dispatchHardwareVolume(s.currentVolumeValue);
+            updateAmpGain(s.audioContext?.currentTime || 0);
+            updateLimiterState(s.audioContext?.currentTime || 0);
+            updateWorkletParams();
+            updateAudioRouting();
         } else {
             // Standard HTML5 audio.volume clamped to [0.0, 1.0]
             const baseVol = Math.min(1.0, s.currentVolumeValue);
             if (s.audio) {
                 s.audio.volume = baseVol;
-                s.audio.muted = false;
+                if(!preserveMute)s.audio.muted = false;
             }
 
             if (s.audioContext) {
@@ -1672,6 +864,9 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         const s = store.state;
         if (!s.audioContext) return;
         const ctx = s.audioContext;
+        s.outputGate = ctx.createGain();
+        outputHold.initialize(s.outputGate);
+        s.outputGate.connect(ctx.destination);
         s.analyser = ctx.createAnalyser();
         s.analyser.fftSize = 2048; // FFT bin spacing is context sample rate / fftSize.
         s.analyser.smoothingTimeConstant = 0.38; // Smooth display at the cost of temporal resolution.
@@ -1733,7 +928,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         // 5. Dedicated Studio-Grade Transparent Brickwall Limiter (Master anti-clipping protection)
         s.dspLimiter = ctx.createDynamicsCompressor();
         const initProfile = computeLimiterProfile();
-        if (s.isLimiter && !initProfile.isBypassed) {
+        if (!initProfile.isBypassed) {
             s.dspLimiter.threshold.value = initProfile.threshold;
             s.dspLimiter.knee.value = initProfile.knee;
             s.dspLimiter.ratio.value = initProfile.ratio;
@@ -1749,11 +944,11 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
 
         // 6. Sample-peak output trim (not a DAC reconstruction guarantee)
         s.ceilingTrimGain = ctx.createGain();
-        s.ceilingTrimGain.gain.value = s.isLimiter ? Math.pow(10, -0.6 / 20) : 1.0;
+        s.ceilingTrimGain.gain.value = effectiveLimiterEnabled(s) ? Math.pow(10, -0.6 / 20) : 1.0;
 
         // 7. Digital soft clipping stage.
         s.ampSoftClipper = ctx.createWaveShaper();
-        s.ampSoftClipper.curve = s.isLimiter ? createSoftClipCurve(2048) : createLinearCurve(2048);
+        s.ampSoftClipper.curve = effectiveLimiterEnabled(s) ? createSoftClipCurve(2048) : createLinearCurve(2048);
         // Reduce fallback waveshaper cost at higher graph rates. This is a policy,
         // not proof of alias-free processing.
         s.ampSoftClipper.oversample = (ctx.sampleRate >= 88200) ? 'none' : '2x';
@@ -1844,7 +1039,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
     function syncSoftwareVolume(immediate=false) {
         const s=store.state,node=s.softwareSourceGainNode;
         if(!node||!s.audioContext||node.context!==s.audioContext)return;
-        const target=s.audio?.muted?0:(s.isHardwareGain&&s.hwGainAvailable&&getRuntime().hasHardwareGain?1:Math.max(0,Math.min(1,s.currentVolumeValue)));
+        const target=s.audio?.muted?0:(s.isHardwareGain&&s.hwGainAvailable&&getRuntime().hasHardwareGain?Math.max(0,Math.min(1,s.hardwareAppGain)):Math.max(0,Math.min(1,s.currentVolumeValue)));
         const now=s.audioContext.currentTime;
         node.gain.cancelScheduledValues(now);
         if(immediate)node.gain.setValueAtTime(target,now);else node.gain.setTargetAtTime(target,now,0.01);
@@ -1853,7 +1048,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
     let confirmedRoute = null;
     export function getConfirmedAudioRoute() {
         const s = store.state;
-        if (!confirmedRoute || confirmedRoute.ctx !== s.audioContext || s.audioContext?.state === 'closed') return null;
+        if (!s.outputGate || !confirmedRoute || confirmedRoute.ctx !== s.audioContext || s.audioContext?.state === 'closed') return null;
         const active = s.isSoftwareDecoding && s.softwareSourceGainNode ? s.softwareSourceGainNode : s.audioSourceNode;
         return confirmedRoute.active === active && (confirmedRoute.route !== 'worklet' || confirmedRoute.worklet === s.dspWorkletNode) ? confirmedRoute.route : null;
     }
@@ -1880,11 +1075,13 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         if(s.isSoftwareDecoding)syncSoftwareVolume(previousCoreRoute?.active!==s.softwareSourceGainNode);
         const active=s.isSoftwareDecoding&&s.softwareSourceGainNode?s.softwareSourceGainNode:s.audioSourceNode;
         const route=(s.mathPrecision==='native'&&!hasUserShapingDsp())?'direct':s.dspWorkletNode?'worklet':'fallback';
-        // Parameter-only changes do not tear down a live worklet graph.
-        if(route!=='fallback'&&previousCoreRoute?.active===active&&previousCoreRoute?.route===route&&previousCoreRoute?.ctx===s.audioContext&&previousCoreRoute?.worklet===s.dspWorkletNode){updateWorkletParams();store.emit('ui:sync-dac-status');return;}
+        const topology=route==='fallback'?[s.isSubsonic&&s.mathPrecision!=='native',Boolean(hasActiveDsp()),Boolean(s.isCrossfeed&&s.xfeedNetwork),effectiveLimiterEnabled(s)].join(':'):route;
+        // Parameter-only edits do not disconnect the live audio route.
+        if(previousCoreRoute?.active===active&&previousCoreRoute?.route===route&&previousCoreRoute?.ctx===s.audioContext&&previousCoreRoute?.worklet===s.dspWorkletNode&&previousCoreRoute?.topology===topology){updateWorkletParams();store.emit('ui:sync-dac-status');return;}
         previousCoreRoute=null;
         confirmedRoute=null;
         try {
+            updateLimiterState(s.audioContext.currentTime);
             disconnectRouteNodes(s);
 
             // Active source: if in software decoding buffer mode, route through softwareSourceGainNode
@@ -1899,8 +1096,8 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
 
             // Native Host Bypass mode: skip worklet DSP math & re-dither when user EQ/FX are flat
             if (s.mathPrecision === 'native' && !hasUserShapingDsp()) {
-                activeSource.connect(s.audioContext.destination);
-                confirmedRoute = previousCoreRoute={active,route,ctx:s.audioContext,worklet:s.dspWorkletNode};
+                activeSource.connect(s.outputGate);
+                confirmedRoute = previousCoreRoute={active,route,ctx:s.audioContext,worklet:s.dspWorkletNode,topology};
                 store.emit('ui:sync-dac-status');
                 return;
             }
@@ -1910,8 +1107,8 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
             if (s.dspWorkletNode) {
                 updateWorkletParams();
                 activeSource.connect(s.dspWorkletNode);
-                s.dspWorkletNode.connect(s.audioContext.destination);
-                confirmedRoute = previousCoreRoute={active,route,ctx:s.audioContext,worklet:s.dspWorkletNode};
+                s.dspWorkletNode.connect(s.outputGate);
+                confirmedRoute = previousCoreRoute={active,route,ctx:s.audioContext,worklet:s.dspWorkletNode,topology};
                 store.emit('ui:sync-dac-status');
                 return;
             }
@@ -1933,7 +1130,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
             }
 
             if ((s.mathPrecision === 'native' && !hasUserShapingDsp()) || !hasActiveDsp()) {
-                rootNode.connect(s.audioContext.destination);
+                rootNode.connect(s.outputGate);
             } else {
                 let current = rootNode;
 
@@ -1959,7 +1156,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
 
                 // Only route through DynamicsCompressor + SoftClipper when Limiter or Volume Overdrive (>100%) is active
                 let terminalNode = s.ampGainNode;
-                if ((s.isLimiter || s.currentVolumeValue > 1.0) && s.dspLimiter && s.ampSoftClipper) {
+                if (effectiveLimiterEnabled(s) && s.dspLimiter && s.ampSoftClipper) {
                     s.ampGainNode.connect(s.dspLimiter);
                     if (s.ceilingTrimGain) {
                         s.dspLimiter.connect(s.ceilingTrimGain);
@@ -1969,9 +1166,9 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
                     }
                     terminalNode = s.ampSoftClipper;
                 }
-                terminalNode.connect(s.audioContext.destination);
+                terminalNode.connect(s.outputGate);
             }
-            confirmedRoute = {active, route, ctx:s.audioContext, worklet:s.dspWorkletNode};
+            confirmedRoute = previousCoreRoute={active,route,ctx:s.audioContext,worklet:s.dspWorkletNode,topology};
         } catch (e) {
             console.warn('Audio routing update warning:', e);
             disconnectRouteNodes(s);
@@ -2075,7 +1272,7 @@ import { createSoftClipCurve, createLinearCurve, computeLimiterProfile as comput
         const ctx = await graphLifecycle.ensure(force);
         if (ctx && !s.audioSourceNode) { getOrCreateAudioSourceNode(); updateAudioRouting(); }
         store.emit('ui:sync-dac-status');
-        return resumeGraph(ctx);
+        return ctx === s.audioContext && getConfirmedAudioRoute() ? resumeGraph(ctx) : null;
     }
 
     function initAudioContext(preferredRate = null) {

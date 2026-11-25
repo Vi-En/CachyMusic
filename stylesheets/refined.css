@@ -21,20 +21,7 @@
 
 @font-face { font-family: NMS; src: url('../resources/fonts/NMSFuturaProBook_Kerned.ttf') format('truetype'); font-display: swap; font-weight: 400; }
 /* NMS typography for identity; keep system font for dense controls and accessibility. */
-#metaEditorTitle, .metaEditorFileTitle, #trackName { font-family: NMS, system-ui, sans-serif; }
-.metadataLookup { padding: 14px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--bg-surface-2); margin: 12px 0; min-width: 0; }
-.metadataLookup h4 { font-size: 1rem; color: var(--text-primary); }
-.metadataLookup p, .metadataWriteHint { color: var(--text-secondary); font-size: .83rem; line-height: 1.5; overflow-wrap: anywhere; margin: 6px 0; }
-.metadataLookupActions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
-.metadataLookupActions .actionBtn, .metadataLookupResults button { min-height: 48px; }
-.metadataLookupResults { display: grid; gap: 8px; max-height: 300px; overflow: auto; }
-.metadataMatch { border: 1px solid var(--border-subtle); padding: 12px; border-radius: 10px; min-width: 0; }
-.metadataMatch p { overflow-wrap: anywhere; }
-.metadataMatch button { margin: 4px 6px 0 0; }
-.metadataLyricsField textarea { width: 100%; min-height: 120px; resize: vertical; white-space: pre-wrap; }
-.metadataLyricsField input[type=file] { max-width: 100%; min-height: 48px; }
-@media (max-width: 480px) { .metadataLookupActions .actionBtn { flex: 1 1 130px; } .metadataLookup { padding: 10px; } .metadataLyricsField textarea { font-size: 16px; } }
-
+#trackName { font-family: NMS, system-ui, sans-serif; }
 /* 3.x listening-first layout. The original animated deck is an explicit option. */
 :root[data-presentation="artwork"] .turntableCon { width:min(100%, 360px, max(0px, calc(100cqh - 64px))); max-width:100%; }
 :root[data-presentation="artwork"] .vinylTurntable { border:0; background:var(--bg-surface-2); border-radius:12px; box-shadow:none; animation:none!important; transform:none!important; }
@@ -210,13 +197,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
   .settingsBadge, .settingsSectionBadge, .settingsHubHeaderRight { display: none; }
   .settingsSearch { grid-template-columns: minmax(0, 1fr); }
   #settingsSearchStatus:empty { display: none; }
-  .settingsCategoryNav {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-    padding-block: 2px 8px;
-  }
-  .settingsCatBtn { min-width: 0; padding-inline: 6px; min-height: 44px; font-size: .875rem; white-space: normal; }
   .settingsLayoutGrid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .settingsSectionPanel { padding: 12px; }
   .settingsSectionTitle { font-size: 1.0625rem; }
@@ -277,7 +257,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
   .playPauseBtn { width: 50px; height: 50px; }
   .miniScrubberRow { display: none; }
   .persistentMiniPlayer { margin-bottom: 4px; padding-bottom: 4px; }
-  .settingsCategoryNav { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
 /* Shared controls use each theme's surfaces and accent. */
@@ -338,17 +317,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
 .libraryToolsToggleBtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; }
 .libraryToolsToggleBtn .toolsChevron { display: flex; align-items: center; }
 .libraryToolsToggleBtn[aria-expanded="true"] .toolsChevron { transform: rotate(180deg); }
-.trackList { gap: 0; overflow-x: clip; }
-.trackList > :is(.trackListSpacerTop, .trackListSpacerBottom, .trackListItemsContainer) { flex: none; min-width: 0; }
-.trackListItemsContainer .trackItem {
-  height: var(--track-row-height, 64px);
-  min-width: 0;
-  border: 0;
-  border-block-end: 1px solid var(--border-subtle);
-  border-radius: 0;
-  background: transparent;
-}
-.trackListItemsContainer .trackItem:is(:hover, .active) { background: var(--accent-surface); }
 
 .playerDeck { overflow: hidden; }
 .deckAudioControls { display: flex; flex: none; align-items: center; min-width: 0; gap: 8px; }
@@ -371,7 +339,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
 .eqDeckBtn :is(.eqDeckBadge, .eqDeckDspBadge) { display: none !important; }
 .playerDeck.empty-deck .deckAudioControls { display: none; }
 .turntableStage { background: transparent; border-radius: 0; }
-.deckArtworkBackdrop, .deckArtworkScrim { display: none; }
+
 .turntableCon { contain: layout; }
 
 
@@ -379,42 +347,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
 
 
 :root[data-presentation="artwork"] :is(.vinylTurntable, .vinylLabel) { border-radius: var(--radius-sm); }
-
-.peqModalCard { overflow-x: clip; gap: 14px; min-inline-size: 0; }
-.peqModalCard > * { flex: none; min-inline-size: 0; }
-.peqModalCard .modalHeader { align-items: center; }
-.peqModalCard :is(.peqBypassBtn, .peqResetBtn, .peqAutoEqBtn, .closeModalBtn) { min-height: 44px; }
-.peqModalCard .peqCanvasContainer { height: clamp(105px, 19dvh, 180px); border-radius: var(--radius-sm); }
-.peqFadersGrid {
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 3px;
-  padding: 10px 0;
-  background: transparent;
-  border: 0;
-  overflow: visible;
-}
-.peqFaderCol { min-width: 0; }
-#peqModal { overflow: hidden; }
-.peqFaderTrackCon { --band-height: 108px; width: 100%; height: var(--band-height); }
-.peqSlider {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: calc(var(--band-height) - 8px);
-  height: 38px;
-  margin: 0;
-  transform: translate(-50%, -50%) rotate(-90deg);
-}
-.peqSlider::-webkit-slider-runnable-track { height: 4px; }
-.peqSlider::-webkit-slider-thumb { width: 14px; height: 17px; margin-top: -6.5px; border-radius: 3px; box-shadow: none; }
-.peqSlider::-moz-range-thumb { width: 14px; height: 17px; border-radius: 3px; box-shadow: none; }
-.peqFaderQBtn { min-width: 0; width: 100%; min-height: 36px; padding: 0; border: 0; background: transparent; }
-.peqToolbarRow { padding-block: 6px; }
-.peqPresetGroup { min-width: 0; }
-.peqSelect { min-width: 0; max-width: 100%; }
-.peqDspStrip { border-block-start: 1px solid var(--border-subtle); padding-block-start: 10px; }
-.peqDspGrid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 90px), 1fr)); gap: 4px; }
-.peqDspBtn { min-height: 48px; background: transparent; }
 
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
   .playerDeck.mobileActive { overflow: hidden; padding-block: 8px; gap: clamp(4px, 1dvh, 9px); }
@@ -435,10 +367,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
   .mobileTabBtn.active .mobileTabIcon { padding: 0; border-radius: 0; background: none; }
   .persistentMiniPlayer { border-radius: var(--radius-sm); }
   .quickFormatFilterBar { align-items: center; gap: 4px 8px; }
-  .settingsCategoryNav { overflow: visible; }
-  .peqModalCard { width: 100%; border-radius: var(--radius-md); }
-  .peqFadersGrid { grid-template-columns: repeat(5, minmax(0, 1fr)); row-gap: 7px; }
-  .peqFaderTrackCon { --band-height: 78px; }
 }
 @media (max-height: 500px) and (orientation: landscape) and (min-width: 540px) {
   .playerDeck.mobileActive:not(.empty-deck) {

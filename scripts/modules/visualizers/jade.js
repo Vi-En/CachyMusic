@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 // Jade — detailed scene and companion dock illustration.
 import { emitTurntableShockwave, store } from '../state.js';
 import { drawInstrumentRim } from './instrument-rim.js';
@@ -30,7 +31,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.save();
         ctx.strokeStyle = `rgba(0, 255, 170, ${currentAlpha})`;
         ctx.shadowColor = '#00ffaa';
-        ctx.shadowBlur = (8 + beatPulse * 8 * (0.35 + 0.65 * fidelity)) * s;
+        setCanvasShadowBlur(ctx, (8 + beatPulse * 8 * (0.35 + 0.65 * fidelity)) * s);
         ctx.lineWidth = Math.max(1.0, (2.0 + beatPulse * 1.2) * (1.0 - prog * 0.5));
         ctx.beginPath();
         ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
@@ -58,7 +59,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(0, 255, 170, ${0.5 + beatPulse * 0.45})`;
         ctx.lineWidth = Math.max(1.8, 2.4 * s);
         ctx.shadowColor = '#00ffaa';
-        ctx.shadowBlur = (10 + beatPulse * 16) * s;
+        setCanvasShadowBlur(ctx, (10 + beatPulse * 16) * s);
         ctx.stroke();
 
         // 36 Compass Degree Tick Marks
@@ -75,24 +76,8 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.stroke();
         }
 
-        // Cardinal Degree Text: 000°, 090°, 180°, 270°
-        ctx.font = `${Math.max(9, Math.round(8 * s))}px monospace`;
-        ctx.fillStyle = `rgba(0, 255, 170, 0.85)`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const cardinals = ['000° N', '090° E', '180° S', '270° W'];
-        for (let cd = 0; cd < 4; cd++) {
-            const cdAng = (cd * Math.PI) / 2;
-            ctx.save();
-            ctx.rotate(cdAng);
-            ctx.translate(0, -maxRadius * 0.82);
-            ctx.fillText(cardinals[cd], 0, 0);
-            ctx.restore();
-        }
-
         // Concentric Distance Range Rings (100M, 250M, 500M)
         const rangeRings = [hubRadius * 1.3, hubRadius * 1.8, maxRadius * 0.72];
-        const rangeLabels = ['I', 'II', 'III'];
         for (let rg = 0; rg < rangeRings.length; rg++) {
             ctx.beginPath();
             ctx.arc(0, 0, rangeRings[rg], 0, Math.PI * 2);
@@ -102,7 +87,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.stroke();
             ctx.setLineDash([]);
             ctx.fillStyle = `rgba(0, 255, 170, 0.5)`;
-            ctx.fillText(rangeLabels[rg], rangeRings[rg] - 14 * s, -4 * s);
+
         }
 
         // Tactical Crosshairs (North-South & East-West)
@@ -137,7 +122,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = Math.max(1.2, 1.8 * s);
         ctx.shadowColor = '#00ffaa';
-        ctx.shadowBlur = 12 * s;
+        setCanvasShadowBlur(ctx, 12 * s);
         ctx.stroke();
         ctx.restore();
 
@@ -182,7 +167,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = beatPulse > 0.4 ? '#ffffff' : '#00ffaa';
     ctx.lineWidth = Math.max(2.0, (2.8 + beatPulse * 2.0) * s);
     ctx.shadowColor = '#00ffaa';
-    ctx.shadowBlur = (14 + beatPulse * 20) * s;
+    setCanvasShadowBlur(ctx, (14 + beatPulse * 20) * s);
     ctx.stroke();
     ctx.restore();
 
@@ -228,7 +213,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(255, 255, 255, ${0.7 + snarePulse * 0.3})`;
         ctx.lineWidth = Math.max(0.8, (1.2 + beatPulse * 0.8) * s);
         ctx.shadowColor = '#00ffaa';
-        ctx.shadowBlur = (6 + beatPulse * 8) * s;
+        setCanvasShadowBlur(ctx, (6 + beatPulse * 8) * s);
         ctx.stroke();
     }
 
@@ -236,7 +221,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.arc(endX, endY, (2.2 + beatPulse * 1.5) * s, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = '#00ffaa';
-    ctx.shadowBlur = 10 * s;
+    setCanvasShadowBlur(ctx, 10 * s);
     ctx.fill();
     ctx.restore();
 
@@ -261,7 +246,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
             : `rgba(16, 185, 129, ${ringAlpha})`;
         ctx.lineWidth = Math.max(1.0, (1.2 + prog * 2.2) * s);
         ctx.shadowColor = '#00ffaa';
-        ctx.shadowBlur = (8 + beatPulse * 14) * s;
+        setCanvasShadowBlur(ctx, (8 + beatPulse * 14) * s);
         ctx.stroke();
     }
     ctx.restore();
@@ -288,7 +273,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = streakColor;
         ctx.lineWidth = Math.max(0.8, (1.1 + beatPulse * 1.4) * s);
         ctx.shadowColor = '#00ffaa';
-        ctx.shadowBlur = (6 + beatPulse * 10) * s;
+        setCanvasShadowBlur(ctx, (6 + beatPulse * 10) * s);
         ctx.stroke();
 
         if (isWhite || isMint) {
@@ -296,7 +281,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
             ctx.arc(cosA * rEnd, sinA * rEnd, (1.1 + beatPulse * 1.1) * s, 0, Math.PI * 2);
             ctx.fillStyle = '#ffffff';
             ctx.shadowColor = '#00ffaa';
-            ctx.shadowBlur = 8 * s;
+            setCanvasShadowBlur(ctx, 8 * s);
             ctx.fill();
         }
     }
@@ -313,7 +298,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.arc(0, 0, coreR, 0, Math.PI * 2);
     ctx.fillStyle = vortexGrad;
     ctx.shadowColor = '#00ffaa';
-    ctx.shadowBlur = (18 + beatPulse * 28) * s;
+    setCanvasShadowBlur(ctx, (18 + beatPulse * 28) * s);
     ctx.fill();
 
     ctx.save();
@@ -334,7 +319,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
         ctx.arc(0, 0, coreR * 1.6, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
         ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 24 * s;
+        setCanvasShadowBlur(ctx, 24 * s);
         ctx.fill();
         ctx.restore();
     }
@@ -344,7 +329,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.font = `700 ${Math.max(6, Math.round(7.2 * s))}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'center';
     ctx.shadowColor = '#00ffaa';
-    ctx.shadowBlur = 6 * s;
+    setCanvasShadowBlur(ctx, 6 * s);
 
     const retW = 30 * s;
     ctx.strokeStyle = 'rgba(0, 255, 170, 0.65)';

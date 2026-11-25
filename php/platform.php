@@ -39,21 +39,29 @@ if (!function_exists('cachy_is_windows')) {
 
     function cachy_ensure_dir(string $dir, int $mode = 0750): bool {
         if (is_dir($dir)) return is_writable($dir);
-        return @mkdir($dir, $mode, true) && is_writable($dir);
+        @mkdir($dir, $mode, true);
+        return is_dir($dir) && is_writable($dir);
+    }
+
+    // Do not redirect a failed storage path to an unrelated database or a shared
+    // temporary directory. A failed preflight must be visible to the launcher.
+    function cachy_require_dir(string $dir): string {
+        if (!cachy_ensure_dir($dir, 0700)) {
+            throw new RuntimeException('CachyMusic storage directory is unavailable or not writable. Check the configured path and permissions.');
+        }
+        $canonical = realpath($dir);
+        if ($canonical === false) throw new RuntimeException('CachyMusic storage directory could not be resolved.');
+        return $canonical;
     }
 
     function cachy_data_dir(): string {
         $envDir = getenv('CACHYMUSIC_DATA_DIR');
-        if (is_string($envDir) && $envDir !== '' && cachy_ensure_dir($envDir)) {
-            return rtrim($envDir, "/\\");
-        }
+        if (is_string($envDir) && $envDir !== '') return cachy_require_dir($envDir);
 
-        // Legacy in-repo /data directory when project root itself is user-writable (portable USB / dev mode)
+        // Preserve existing portable libraries, including an explicit failure if
+        // their storage becomes inaccessible. Never create a new fallback library.
         $repoData = __DIR__ . '/../data';
-        $projectRoot = realpath(__DIR__ . '/..') ?: dirname(__DIR__);
-        if (is_dir($repoData) && is_writable($repoData)) {
-            return rtrim($repoData, "/\\");
-        }
+        if (file_exists($repoData) || is_link($repoData)) return cachy_require_dir($repoData);
 
         $home = cachy_home_dir();
         if (cachy_is_windows()) {
@@ -65,19 +73,12 @@ if (!function_exists('cachy_is_windows')) {
             $xdg = getenv('XDG_DATA_HOME') ?: ($home . '/.local/share');
             $dir = rtrim($xdg, '/') . '/cachymusic';
         }
-
-        if (cachy_ensure_dir($dir)) return $dir;
-        if (is_writable($projectRoot) && cachy_ensure_dir($repoData)) return $repoData;
-        $tmpDir = rtrim(sys_get_temp_dir(), "/\\") . DIRECTORY_SEPARATOR . 'cachymusic-data';
-        cachy_ensure_dir($tmpDir);
-        return $tmpDir;
+        return cachy_require_dir($dir);
     }
 
     function cachy_cache_dir(): string {
         $envDir = getenv('CACHYMUSIC_CACHE_DIR');
-        if (is_string($envDir) && $envDir !== '' && cachy_ensure_dir($envDir)) {
-            return rtrim($envDir, "/\\");
-        }
+        if (is_string($envDir) && $envDir !== '') return cachy_require_dir($envDir);
         $home = cachy_home_dir();
         if (cachy_is_windows()) {
             $base = getenv('LOCALAPPDATA') ?: ($home . '\\AppData\\Local');
@@ -88,10 +89,7 @@ if (!function_exists('cachy_is_windows')) {
             $xdg = getenv('XDG_CACHE_HOME') ?: ($home . '/.cache');
             $dir = rtrim($xdg, '/') . '/cachymusic';
         }
-        if (cachy_ensure_dir($dir, 0755)) return $dir;
-        $tmpDir = rtrim(sys_get_temp_dir(), "/\\") . DIRECTORY_SEPARATOR . 'cachymusic-cache';
-        cachy_ensure_dir($tmpDir, 0755);
-        return $tmpDir;
+        return cachy_require_dir($dir);
     }
 
     function cachy_normalize_path(string $path): string {

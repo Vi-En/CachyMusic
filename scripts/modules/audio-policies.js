@@ -26,8 +26,19 @@ export function createLinearCurve(samples = 2048) {
     return curve;
 }
 
+// Auto-protection is a routing policy, not a change to the limiter algorithm.
+// Filter overshoot and combined boosts can exceed full scale even when each
+// individual control appears modest. Flat bypass stays unprocessed.
+export function requiresPeakProtection(s) {
+    return Boolean(hasDigitalOverdrive(s) || s.isAmpBoost || s.isBassBoost || s.isVocalBoost || s.isTrebleBoost ||
+        s.isCrossfeed || s.isAmbiophonics || s.isSurroundWidener || s.isSubsonic || s.isUltrasonic ||
+        (!s.isPeqBypassed && s.peqGains?.some(g=>Math.abs(g)>.001)) ||
+        (s.isReplayGain && computeReplayGainMultiplier(s)>1));
+}
+export function effectiveLimiterEnabled(s) { return Boolean(s.isLimiter || requiresPeakProtection(s)); }
+
 export function computeLimiterProfile(s) {
-    if (!s.isLimiter) {
+    if (!effectiveLimiterEnabled(s)) {
         return {
             threshold: 0,
             knee: 0,
@@ -88,9 +99,13 @@ export function computeLimiterProfile(s) {
     };
 }
 
+export function hasDigitalOverdrive(s) {
+    return s.currentVolumeValue > 1 && !(s.isHardwareGain && s.hwGainAvailable);
+}
+
 export function getEffectiveAmplification(s) {
     let ampDb = s.isAmpBoost ? 3.6 : 0;
-    if (s.currentVolumeValue > 1.0) {
+    if (hasDigitalOverdrive(s)) {
         const overdrive = (s.currentVolumeValue - 1.0) / 0.5;
         ampDb += overdrive * 3.0;
     }
@@ -118,7 +133,7 @@ export function getPreAmpGainValue(s) {
 }
 
 export function computeReplayGainMultiplier(s) {
-    const curTrack = s.currentTrack || s.allTracks[s.currentTrackIndex];
+    const curTrack = s.currentTrack || s.allTracks?.[s.currentTrackIndex];
     let rg = 1.0;
     if (s.isReplayGain && curTrack && typeof curTrack.replayGain === 'number' && !isNaN(curTrack.replayGain)) {
         rg = Math.pow(10, curTrack.replayGain / 20);
@@ -134,6 +149,6 @@ export function hasUserShapingDsp(s) {
     const hasTone = s.isBassBoost || s.isVocalBoost || s.isTrebleBoost;
     const hasStage = s.isAmpBoost || s.isLimiter || s.isCrossfeed || s.isAmbiophonics
         || s.isSurroundWidener || s.isPhaseInvert || s.isMonoMix || s.isUltrasonic
-        || s.isReplayGain || s.isSubsonic || s.isAgpEnabled || s.ditherMode!=='off' || (Math.abs(s.stereoBalance) > 0.005) || (s.currentVolumeValue > 1.0);
+        || s.isReplayGain || s.isSubsonic || s.isAgpEnabled || s.ditherMode!=='off' || (Math.abs(s.stereoBalance) > 0.005) || hasDigitalOverdrive(s);
     return hasPeq || hasTone || hasStage;
 }

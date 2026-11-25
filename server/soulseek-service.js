@@ -462,35 +462,18 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-function normPath(p) {
-  return (p || '').replace(/\\/g, '/').toLowerCase();
-}
-
+// Transfer IDs are authoritative; never guess a target by filename or a
+// case-folded peer path. A supplied but unknown ID is not a fallback request.
 function findDownload(body) {
-  if (!body) return null;
-  if (body.id && activeDownloads.has(body.id)) {
-    return activeDownloads.get(body.id);
+  if (!body || typeof body !== 'object') return null;
+  if (body.id != null && body.id !== '') {
+    return activeDownloads.get(body.id) || null;
   }
-  if (body.username && body.virtual_path) {
-    const key = `${body.username}:${body.virtual_path}`;
-    if (activeDownloads.has(key)) {
-      return activeDownloads.get(key);
-    }
-  }
-
-  const targetNorm = normPath(body.virtual_path || body.file || '');
-  const targetUser = (body.username || '').toLowerCase();
-  const targetId = body.id || '';
-
-  for (const [key, d] of activeDownloads.entries()) {
-    if (targetId && (d.id === targetId || key === targetId)) return d;
-    const dNorm = normPath(d.virtual_path);
-    const dUser = (d.username || '').toLowerCase();
-    if (targetNorm && dNorm === targetNorm) {
-      if (!targetUser || dUser === targetUser) return d;
-    }
-  }
-  return null;
+  if (typeof body.username !== 'string' || !body.username ||
+      typeof body.virtual_path !== 'string' || !body.virtual_path) return null;
+  const matches = [...activeDownloads.values()].filter(d =>
+    d.username === body.username && d.virtual_path === body.virtual_path);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function startTransfer(transferEntry, reqOffset = 0) {
@@ -929,7 +912,8 @@ function startTransfer(transferEntry, reqOffset = 0) {
     const body = await parseJsonBody(req);
     const entry = findDownload(body);
 
-    if (entry) {
+    if (!entry) return sendJson(404, { ok: false, error: 'Transfer not found' });
+    {
       entry.userCancelled = true;
       if (entry.downloadHandle && typeof entry.downloadHandle.cancel === 'function') {
         try {
@@ -953,19 +937,6 @@ function startTransfer(transferEntry, reqOffset = 0) {
         if (d === entry || d.id === entry.id) activeDownloads.delete(k);
       }
     }
-    if (body.id) {
-      activeDownloads.delete(body.id);
-    }
-    if (body.username && body.virtual_path) {
-      activeDownloads.delete(`${body.username}:${body.virtual_path}`);
-    }
-    if (body.virtual_path) {
-      const bn = normPath(body.virtual_path);
-      for (const [k, d] of activeDownloads.entries()) {
-        if (normPath(d.virtual_path) === bn) activeDownloads.delete(k);
-      }
-    }
-
     saveTransfers();
     return sendJson(200, { ok: true, removed: true });
   }

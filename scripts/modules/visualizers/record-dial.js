@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 // Shared drawing primitives for the five quieter editions. All dimensions are
 // relative to the circular record; callers supply only existing analyser data.
 const TAU = Math.PI * 2;
@@ -35,7 +36,7 @@ export function drawDial(ctx, width, height, draw) {
     const r = Math.min(width, height) / 2;
     if (r <= 0) return;
     ctx.save();
-    try { ctx.translate(width / 2, height / 2); ctx.scale(r, r); ctx.shadowBlur = 0; draw(ctx); }
+    try { ctx.translate(width / 2, height / 2); ctx.scale(r, r); setCanvasShadowBlur(ctx, 0); draw(ctx); }
     finally { ctx.restore(); }
 }
 // Small dock uses the same design, without duplicating art or maintaining a second scene.

@@ -1,3 +1,4 @@
+import {playbackPool, playlistNeighbor} from './playlist-playback.js';
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A single prebuffered successor. No second clock, graph rebuild or crossfade.
 export function sameTrack(a,b) {
@@ -14,7 +15,8 @@ export function nextPcmCandidate(state) {
     if(state.repeatMode==='one')return {track:current,index:state.currentTrackIndex,queue:null};
     const first=state.playQueue?.[0];
     if(first){const index=all.findIndex(t=>sameTrack(t,first));return index<0?null:{track:all[index],index,queue:first};}
-    const pool=state.displayedTracks?.length?state.displayedTracks:all;
+    if(state.playlistPlayback){const index=playlistNeighbor(state);return index<0?null:{track:all[index],index,queue:null};}
+    const pool=playbackPool(state);
     if(state.isShuffle)return null; // normal shuffle owns random selection
     const pos=pool.findIndex(t=>sameTrack(t,current));
     if(pos<0)return null;

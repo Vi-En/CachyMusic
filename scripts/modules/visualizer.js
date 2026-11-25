@@ -234,8 +234,10 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
 
 
 
-    // Dynamic Crest Sparkles for Solid Wave (reacts to snares & treble transients)
+    let visualizerInitialized = false;
     function startVisualizerLoop() {
+        if (visualizerInitialized) return;
+        visualizerInitialized = true;
         let rawFreqArray = new Uint8Array(1024);
         let timeSamples = new Float32Array(2048);
         const bandRawVals = new Float32Array(NUM_BANDS);
@@ -270,8 +272,8 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             cachedSampleRate = sampleRate;
             cachedBinCount = binCount;
             const hzPerBin = sampleRate / (binCount * 2);
-            const minFreq = 20; // Human audiophile sub-bass threshold
-            // Full 24 kHz high-fidelity frequency range (utilizing complete 48 kHz+ Nyquist headroom):
+            const minFreq = 20;
+            // Display range is capped by Nyquist.
             const nyquist = sampleRate / 2;
             const maxFreq = Math.min(24000, nyquist);
             const logRatio = Math.log(maxFreq / minFreq);
@@ -283,9 +285,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
                 const endBin = Math.max(startBin + 1, Math.min(binCount, Math.ceil(f1 / hzPerBin)));
                 const count = endBin - startBin;
                 const normB = b / (NUM_BANDS - 1);
-                // Equal-loudness Fletcher-Munson contour tilt compensation across 20Hz - 24kHz:
-                // Upper treble (16-24kHz) has lower acoustic energy in natural recordings,
-                // so an organic contour tilt highlights high-resolution air, sparkles, and cymbal harmonics!
+                // Decorative spectrum weighting; not calibrated SPL or equal-loudness compensation.
                 const tilt = 0.94 + Math.pow(normB, 1.1) * 0.65;
                 precomputedBands[b] = { startBin, endBin, count, tilt };
             }
@@ -294,7 +294,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
 
         store.state.resumeVisualizerLoop = function() {
             const st = store.state;
-            if (st.activeVisualizerMode==='artwork') return;
+            if (document.hidden || st.currentWorkspace !== 'player' || st.activeVisualizerMode==='artwork') return;
             if (!st.isVisualizerLoopRunning) {
                 st.isVisualizerLoopRunning = true;
                 idleFramesAfterPause = 0;
@@ -303,23 +303,32 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             }
         };
 
+        function stop() {
+            const st = store.state;
+            if (st.animFrameId != null) cancelAnimationFrame(st.animFrameId);
+            st.animFrameId = null;
+            st.isVisualizerLoopRunning = false;
+            resetPeak();
+        }
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && typeof store.state.resumeVisualizerLoop === 'function') {
-                store.state.resumeVisualizerLoop();
-            }
+            if (document.hidden) stop();
+            else store.state.resumeVisualizerLoop();
         });
-
-        store.subscribe('visualizer:resume', () => {
-            if (typeof store.state.resumeVisualizerLoop === 'function') store.state.resumeVisualizerLoop();
+        window.addEventListener('pagehide', stop);
+        window.addEventListener('pageshow', () => store.state.resumeVisualizerLoop());
+        store.subscribe('visualizer:resume', () => store.state.resumeVisualizerLoop());
+        store.subscribe('visualizer:change', () => {
+            if (store.state.activeVisualizerMode === 'artwork') stop();
         });
         store.subscribe('workspace:change', ({ detail }) => {
-            if (detail && detail.viewName === 'player') {
-                if (typeof store.state.resumeVisualizerLoop === 'function') store.state.resumeVisualizerLoop();
+            if (detail?.viewName === 'player') {
                 refreshCanvasDimensions();
-            }
+                store.state.resumeVisualizerLoop();
+            } else stop();
         });
 
         function renderFrame(now) {
+            store.state.animFrameId = null;
             try { renderFrameBody(now); }
             catch (error) {
                 store.state.isVisualizerLoopRunning = false;
@@ -647,23 +656,8 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             }
         }
 
-        store.state.isVisualizerLoopRunning = true;
-        store.state.animFrameId = requestAnimationFrame(renderFrame);
+        store.state.resumeVisualizerLoop();
     }
-
-    // -------------------------------------------------------------------------
-    // Visualizer 1: Reworked Solid Wave ("All wavy and stuff" - Liquid Mercury)
-    // Multi-layer translucent fluid Catmull-Rom spline wave with glowing crest & spray motes
-    // -------------------------------------------------------------------------
-
-
-    // -------------------------------------------------------------------------
-    // Visualizer 2: Segmented Hi-Fi Equalizer (Unique & Distinct for EACH Theme)
-    // Dynamic theme-specific column geometry, segment shapes, peak caps & HUD grids
-    // -------------------------------------------------------------------------
-
-
-
 
     export {
         setupVisualizerMode,

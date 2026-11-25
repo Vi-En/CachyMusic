@@ -15,10 +15,15 @@ export function clampTransferProgress(value) {
     return Math.max(0, Math.min(100, number));
 }
 
+export function isTransferFinished(item) {
+    return item?.isFinished === true && item?.status === 'Finished';
+}
+
+export function isTransferPlayable(item) {
+    return isTransferFinished(item) && item.fileExists === true && typeof item.localFile === 'string' && item.localFile.length > 0;
+}
+
 export function transferActionSignature(item) {
-    const progress = clampTransferProgress(item?.progress);
-    // The backend can mark a transfer finished before changing its status text.
-    // Actions must track completion as well as the status label.
-    const finished = Boolean(item?.isFinished) || progress >= 100;
+    const finished = isTransferFinished(item);
     return JSON.stringify([finished, item?.status || '', item?.localFile || '', item?.fileExists ?? null]);
 }

@@ -14,3 +14,51 @@
 }
 
 #peqStereoBalanceSlider { accent-color: var(--accent-color); }
+
+/* Equalizer workstation geometry and responsive controls. */
+.peqModalCard { overflow-x: clip; gap: 14px; min-inline-size: 0; }
+.peqModalCard > * { flex: none; min-inline-size: 0; }
+.peqModalCard .modalHeader { align-items: center; }
+.peqModalCard :is(.peqBypassBtn, .peqResetBtn, .peqAutoEqBtn, .closeModalBtn) { min-height: 44px; }
+.peqModalCard .peqCanvasContainer { height: clamp(105px, 19dvh, 180px); border-radius: var(--radius-sm); }
+.peqFadersGrid {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 3px;
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  overflow: visible;
+}
+.peqFaderCol { min-width: 0; }
+#peqModal { overflow: hidden; }
+.peqFaderTrackCon { --band-height: 108px; width: 100%; height: var(--band-height); }
+.peqSlider {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--band-height) - 8px);
+  height: 38px;
+  margin: 0;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+.peqSlider::-webkit-slider-runnable-track { height: 4px; }
+.peqSlider::-webkit-slider-thumb { width: 14px; height: 17px; margin-top: -6.5px; border-radius: 3px; box-shadow: none; }
+.peqSlider::-moz-range-thumb { width: 14px; height: 17px; border-radius: 3px; box-shadow: none; }
+.peqFaderQBtn { min-width: 0; width: 100%; min-height: 44px; padding: 0; border: 0; background: transparent; }
+.peqToolbarRow { padding-block: 6px; }
+.peqPresetGroup { min-width: 0; }
+.peqSelect { min-width: 0; max-width: 100%; }
+.peqDspStrip { border-block-start: 1px solid var(--border-subtle); padding-block-start: 10px; }
+.peqDspGrid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 90px), 1fr)); gap: 4px; }
+.peqDspBtn { min-height: 48px; background: transparent; }
+
+
+@media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
+  .peqModalCard { width: 100%; border-radius: var(--radius-md); }
+  .peqFadersGrid { grid-template-columns: repeat(5, minmax(0, 1fr)); row-gap: 7px; }
+  .peqFaderTrackCon { --band-height: 78px; }
+}
+
+/* Keep DSP effect names inside their cells at enlarged text sizes. */
+.peqDspGrid > .peqDspBtn { min-width: 0; max-width: 100%; white-space: normal; }
+.peqDspBtn :is(.peqDspName,.peqDspSpec) { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }

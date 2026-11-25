@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 // Alloy — detailed scene and companion dock illustration.
 import { emitTurntableShockwave, store } from '../state.js';
 import { drawInstrumentRim } from './instrument-rim.js';
@@ -36,7 +37,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.save();
         ctx.strokeStyle = sw.color === '#ff2a00' ? `rgba(255, 42, 0, ${currentAlpha})` : `rgba(0, 229, 255, ${currentAlpha})`;
         ctx.shadowColor = sw.color || '#00e5ff';
-        ctx.shadowBlur = (10 + beatPulse * 10 * (0.35 + 0.65 * fidelity)) * s;
+        setCanvasShadowBlur(ctx, (10 + beatPulse * 10 * (0.35 + 0.65 * fidelity)) * s);
         ctx.lineWidth = Math.max(1.0, (2.2 + beatPulse * 1.5) * (1.0 - prog * 0.5));
         ctx.beginPath();
         ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
@@ -146,18 +147,6 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.stroke();
         }
 
-        // Degree Telemetry Glyphs
-        const degLabels = ['090°', '180°', '270°', '360°'];
-        ctx.font = `700 ${Math.max(5, Math.round(6.0 * s))}px "JetBrains Mono", monospace`;
-        ctx.fillStyle = 'rgba(0, 229, 255, 0.75)';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        for (let d = 0; d < 4; d++) {
-            const dAng = (d * Math.PI) / 2 + Math.PI / 4;
-            const dx = Math.cos(dAng) * (gyroOuterR - 7 * s);
-            const dy = Math.sin(dAng) * (gyroOuterR - 7 * s);
-            ctx.fillText(degLabels[d], dx, dy);
-        }
         ctx.restore();
 
         // Inner Gyro Ring (Precision Dotted Telemetry)
@@ -211,7 +200,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.strokeStyle = strokeColor;
             ctx.lineWidth = Math.max(0.9, (1.2 + bVal * 1.6) * s);
             ctx.shadowColor = strokeColor;
-            ctx.shadowBlur = (4 + bVal * 8) * s;
+            setCanvasShadowBlur(ctx, (4 + bVal * 8) * s);
             ctx.stroke();
 
             // Radiant White Tip Spark Bead
@@ -219,7 +208,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.arc(tipX, tipY, (1.0 + bVal * 1.8) * s, 0, Math.PI * 2);
             ctx.fillStyle = '#ffffff';
             ctx.shadowColor = '#ffffff';
-            ctx.shadowBlur = (6 + bVal * 10) * s;
+            setCanvasShadowBlur(ctx, (6 + bVal * 10) * s);
             ctx.fill();
 
             // Faint perimeter wave mesh connection between tips
@@ -232,7 +221,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
                 ctx.lineTo(tipX, tipY);
                 ctx.strokeStyle = `rgba(0, 229, 255, ${0.12 + bVal * 0.25})`;
                 ctx.lineWidth = 0.6 * s;
-                ctx.shadowBlur = 0;
+                setCanvasShadowBlur(ctx, 0);
                 ctx.stroke();
             }
             prevTipX = tipX;
@@ -277,7 +266,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.strokeStyle = isCombat ? '#ff2a00' : '#00e5ff';
             ctx.lineWidth = 1.8 * s;
             ctx.shadowColor = isCombat ? '#ff2a00' : '#00e5ff';
-            ctx.shadowBlur = 12 * s;
+            setCanvasShadowBlur(ctx, 12 * s);
             ctx.stroke();
 
             // Radar Contact Ping Blips
@@ -288,7 +277,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
                 ctx.arc(bx, by, (1.8 + snarePulse * 1.5) * s, 0, Math.PI * 2);
                 ctx.fillStyle = '#ffffff';
                 ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 8 * s;
+                setCanvasShadowBlur(ctx, 8 * s);
                 ctx.fill();
             });
             ctx.restore();
@@ -312,7 +301,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.arc(px, py, pSize, 0, Math.PI * 2);
             ctx.fillStyle = isAmberParticle ? `rgba(255, 145, 0, ${pAlpha})` : `rgba(0, 229, 255, ${pAlpha})`;
             ctx.shadowColor = isAmberParticle ? '#ff9100' : '#00e5ff';
-            ctx.shadowBlur = 6 * s;
+            setCanvasShadowBlur(ctx, 6 * s);
             ctx.fill();
         }
         ctx.restore();
@@ -341,8 +330,8 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#ff3d00';
         ctx.shadowColor = '#ff2a00';
-        ctx.shadowBlur = (8 + beatPulse * 10) * s;
-        ctx.fillText('ALLOY', 0, -arcR - 7.5 * s);
+        setCanvasShadowBlur(ctx, (8 + beatPulse * 10) * s);
+
 
         // 5 Holographic Wanted Diamond Glyphs along the arc (Lower portion of backing strip)
         const pipsCount = 5;
@@ -359,7 +348,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             const pipSz = (4.0 + beatPulse * 1.8) * s;
             ctx.fillStyle = '#ff2a00';
             ctx.shadowColor = '#ff2a00';
-            ctx.shadowBlur = (10 + beatPulse * 12) * s;
+            setCanvasShadowBlur(ctx, (10 + beatPulse * 12) * s);
             ctx.fillRect(-pipSz / 2, -pipSz / 2, pipSz, pipSz);
 
             ctx.strokeStyle = '#ffffff';
@@ -397,8 +386,8 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.textBaseline = 'middle';
         ctx.fillStyle = '#00e5ff';
         ctx.shadowColor = '#00e5ff';
-        ctx.shadowBlur = 6 * s;
-        ctx.fillText('', 0, arcR);
+        setCanvasShadowBlur(ctx, 6 * s);
+
         ctx.restore();
 
         ctx.restore();
@@ -430,7 +419,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = 'rgba(0, 229, 255, 0.75)';
     ctx.lineWidth = Math.max(1.6, 2.2 * s);
     ctx.shadowColor = '#00e5ff';
-    ctx.shadowBlur = (12 + beatPulse * 14) * s;
+    setCanvasShadowBlur(ctx, (12 + beatPulse * 14) * s);
     ctx.stroke();
 
     // 12 Recessed Socket Hex Bolts on Hub Rim
@@ -483,7 +472,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.closePath();
         ctx.fillStyle = jetGrad;
         ctx.shadowColor = isCombat ? '#ff2a00' : '#00e5ff';
-        ctx.shadowBlur = (14 + beatPulse * 18) * s;
+        setCanvasShadowBlur(ctx, (14 + beatPulse * 18) * s);
         ctx.fill();
 
         // Inner Blazing White Core Jet
@@ -539,7 +528,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = '#00e5ff';
     ctx.lineWidth = Math.max(1.2, 1.5 * s);
     ctx.shadowColor = '#00e5ff';
-    ctx.shadowBlur = 6 * s;
+    setCanvasShadowBlur(ctx, 6 * s);
     ctx.stroke();
 
     // Left Wing Specular Edge Chamfer
@@ -560,7 +549,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = '#ff2a00';
     ctx.lineWidth = 3.2 * s;
     ctx.shadowColor = '#ff2a00';
-    ctx.shadowBlur = 8 * s;
+    setCanvasShadowBlur(ctx, 8 * s);
     ctx.stroke();
     ctx.restore();
     ctx.restore();
@@ -604,7 +593,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = '#00e5ff';
     ctx.lineWidth = Math.max(1.2, 1.5 * s);
     ctx.shadowColor = '#00e5ff';
-    ctx.shadowBlur = 6 * s;
+    setCanvasShadowBlur(ctx, 6 * s);
     ctx.stroke();
 
     // Right Wing Specular Edge Chamfer
@@ -625,7 +614,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = '#ff2a00';
     ctx.lineWidth = 3.2 * s;
     ctx.shadowColor = '#ff2a00';
-    ctx.shadowBlur = 8 * s;
+    setCanvasShadowBlur(ctx, 8 * s);
     ctx.stroke();
     ctx.restore();
     ctx.restore();
@@ -651,7 +640,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = '#00e5ff';
     ctx.lineWidth = Math.max(1.2, 1.6 * s);
     ctx.shadowColor = '#00e5ff';
-    ctx.shadowBlur = 8 * s;
+    setCanvasShadowBlur(ctx, 8 * s);
     ctx.stroke();
 
     // Central Facet Ridge (Illuminated 3D Spine)
@@ -721,7 +710,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
         ctx.closePath();
         ctx.fillStyle = jetGrad;
         ctx.shadowColor = isCombatJet ? '#ff3d00' : '#00e5ff';
-        ctx.shadowBlur = (12 + beatPulse * 18) * s;
+        setCanvasShadowBlur(ctx, (12 + beatPulse * 18) * s);
         ctx.fill();
         ctx.restore();
     });
@@ -803,13 +792,13 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     const reticleY = -27 * s;
     ctx.fillStyle = '#ff3d00';
     ctx.shadowColor = '#ff3d00';
-    ctx.shadowBlur = 8 * s;
+    setCanvasShadowBlur(ctx, 8 * s);
     ctx.font = `800 ${Math.max(6, Math.round(7.5 * s))}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'center';
 
     ctx.fillStyle = 'rgba(0, 229, 255, 0.9)';
     ctx.shadowColor = '#00e5ff';
-    ctx.shadowBlur = 5 * s;
+    setCanvasShadowBlur(ctx, 5 * s);
 
     ctx.restore();
 
@@ -831,7 +820,7 @@ export { drawDockScene };
 function drawHullVents(ctx, scale, size, energy) {
     const s = scale * size;
     ctx.save();
-    ctx.shadowBlur = 0;
+    setCanvasShadowBlur(ctx, 0);
     for (const side of [-1, 1]) {
         const x = side < 0 ? -10 * s : 3 * s;
         ctx.fillStyle = '#18232e';

@@ -14,8 +14,23 @@
 
 @import url('./theme-identities.css');
 
-@import url("./visualizer-platter.css");
 
 @import url("./volume-controls.css");
 
 @import url("./eq-spectrum.css");
+
+@import url("./interaction.css");
+
+@import url("./visualizer-platter.css");
+
+@import url("./library-rows.css");
+
+@import url("./settings-navigation.css");
+
+@import url("./metadata-editor.css");
+
+@import url("./surface-shapes.css");
+
+@import url("./task-feedback.css");
+
+@import url("./playlist-workspace.css");

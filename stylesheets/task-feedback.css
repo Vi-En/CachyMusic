@@ -1,0 +1,26 @@
+/* Functional feedback uses quiet conventional corners, not additional squircles. */
+:root[data-theme] .cachyToast { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; min-width:0; width:min(24rem,calc(100vw - 24px)); max-width:100%; flex:0 1 auto; min-height:0; overflow:auto; padding:8px 12px; border-radius:var(--shape-field,6px); corner-shape:round; color:var(--text-primary); }
+.toastMsg { flex:1 1 12rem; overflow-wrap:anywhere; min-width:0; }
+.toastActions { display:flex; align-items:center; gap:4px; margin-inline-start:auto; }
+.toastActions button { min-height:44px; min-width:44px; padding:6px 10px; background:transparent; color:var(--text-primary); border:1px solid var(--border-subtle); border-radius:4px; cursor:pointer; }
+.toastUndoBtn { font-weight:600; }
+.toastDismissBtn { font-size:1.25rem; }
+.toastActions button:focus-visible { outline:2px solid var(--border-focus); outline-offset:2px; }
+:root[data-theme] .emptyTrackSearchHint { display:grid; justify-items:center; gap:12px; }
+.emptyTrackSearchHint p { margin:0; }
+:root[data-theme] .toastContainer { bottom:var(--toast-bottom,12px); max-height:calc(100dvh - var(--toast-bottom,12px) - 16px); }
+@media (prefers-reduced-motion:reduce) { .cachyToast,.trackLoadingProgressBar { animation:none; transition:none; } }
+
+:root[data-theme] .settingsSearch { grid-template-columns:minmax(0,1fr) auto; }
+:root[data-theme] #settingsSearchStatus { grid-column:1/-1; }
+#settingsSearchResetBtn[hidden] { display:none; }
+#settingsSearchResetBtn { min-height:44px; white-space:normal; }
+@media (max-width:480px) { :root[data-theme] .settingsSearch:has(#settingsSearchResetBtn:not([hidden])) { grid-template-columns:minmax(0,1fr); } }
+/* Entry motion must never move a notification across a transport control. */
+@keyframes taskNoticeFade { from { opacity:0; } to { opacity:1; } }
+:root[data-theme] .cachyToast { animation:taskNoticeFade 120ms ease-out; }
+@media (prefers-reduced-motion:reduce) { :root[data-theme] .cachyToast { animation:none; } }
+
+#cachyToastContainer[hidden]{display:none!important}
+
+.modalInlineNotice{margin:8px 0 0;padding:8px 10px;max-width:100%;overflow-wrap:anywhere;font-size:var(--font-sm);color:var(--text-primary);border-inline-start:2px solid var(--border-medium);flex:0 0 auto;grid-column:1/-1;}

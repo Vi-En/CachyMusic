@@ -1,3 +1,4 @@
+import {hasDigitalOverdrive} from './audio-policies.js';
 // CachyMusic - Centralized Reactive WorkstationStore & State Architecture
 import { safeStorage } from './utils.js';
 import { ultrasonicFilterPossible } from './ultrasonic-status.js';
@@ -147,6 +148,7 @@ export class WorkstationStore extends EventTarget {
             displayedTracks: [],
             playlists: [],
             playQueue: [],
+            playlistPlayback: null,
             currentPlaylistId: null,
             currentPlaylistName: '',
             currentTrackIndex: 0,
@@ -182,6 +184,7 @@ export class WorkstationStore extends EventTarget {
             // Audio Context & DSP Engine
             audioContext: null,
             analyser: null,
+            outputGate: null,
             audioSourceNode: null,
             subsonicFilter: null,
             preAmpGainNode: null,
@@ -208,6 +211,7 @@ export class WorkstationStore extends EventTarget {
             isCrossfeed: safeStorage.getItem('cachymusic_crossfeed') === 'true',
             isSubsonic: safeStorage.getItem('cachymusic_subsonic') === 'true',
             currentVolumeValue: initVol,
+            hardwareAppGain: Math.min(1,Math.max(0,Number(safeStorage.getItem('cachymusic_hw_app_gain') ?? initVol)||0)),
             mathPrecision: (() => {
                 const raw = safeStorage.getItem('cachymusic_engine_precision');
                 if (raw === 'native' || raw === '32' || raw === '64') return raw;
@@ -231,9 +235,9 @@ export class WorkstationStore extends EventTarget {
             isHardwareGain: safeStorage.getItem('cachymusic_hardware_gain') === 'true' || safeStorage.getItem('cachymusic_hw_gain') === 'true',
             isUltrasonic: safeStorage.getItem('cachymusic_ultrasonic') === 'true',
             ultrasonicCutoff: parseInt(safeStorage.getItem('cachymusic_ultrasonic_cutoff') || '32000', 10),
-            ditherMode: safeStorage.getItem('cachymusic_dither_mode') || 'off',
+            ditherMode: ['off','tpdf','shaped'].includes(safeStorage.getItem('cachymusic_dither_mode')) ? safeStorage.getItem('cachymusic_dither_mode') : 'off',
             isAmbiophonics: safeStorage.getItem('cachymusic_ambiophonics') === 'true',
-            bufferLatencyTarget: safeStorage.getItem('cachymusic_buffer_latency') || 'playback',
+            bufferLatencyTarget: safeStorage.getItem('cachymusic_buffer_latency') === 'interactive' ? 'interactive' : 'playback',
             isPeqBypassed: safeStorage.getItem('cachymusic_peq_bypassed') === 'true',
             peqGains,
             peqQs,
@@ -282,6 +286,7 @@ export class WorkstationStore extends EventTarget {
             consecutiveSkipCount: 0,
             trackPlaybackRetryCount: 0,
             userExplicitlyPaused: true,
+            audioEditPaused: false,
             isPlayPending: false,
             lastSyncedPlayingState: null,
             currentPlayRequestId: 0,
@@ -336,7 +341,7 @@ export function hasActiveDsp() {
     const hasWorkletDsp = hasEffectiveUltrasonic || (s.ditherMode !== 'off') || s.isAmbiophonics
         || s.isSurroundWidener || s.isPhaseInvert || s.isMonoMix || (Math.abs(s.stereoBalance) > 0.005);
     return s.isAmpBoost || s.isBassBoost || s.isVocalBoost || s.isTrebleBoost
-        || s.isLimiter || s.isCrossfeed || s.isSubsonic || s.isReplayGain || s.isAgpEnabled || hasPeq || hasWorkletDsp || (s.currentVolumeValue > 1.0);
+        || s.isLimiter || s.isCrossfeed || s.isSubsonic || s.isReplayGain || s.isAgpEnabled || hasPeq || hasWorkletDsp || hasDigitalOverdrive(s);
 }
 
 export function emitShockwave(x, y, maxRadius, initialAlpha = 0.75) {

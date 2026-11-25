@@ -177,7 +177,7 @@ switch ($action) {
             'downloads_total' => $statusData['downloads_total'] ?? 0,
             'downloads_dir' => $activeDownDir,
             'shared_dir' => $activeShareDir,
-            'standalone' => true,
+            'standalone' => false,
             'nicotine' => false,
             'error' => $statusData['error'] ?? null,
             'raw' => $statusData
@@ -647,6 +647,7 @@ switch ($action) {
         echo json_encode([
             'ok' => true,
             'queued' => true,
+            'id' => $res['data']['id'] ?? null,
             'data' => $res['data']
         ]);
         exit;
@@ -655,6 +656,7 @@ switch ($action) {
         $raw   = file_get_contents('php://input');
         $input = json_decode($raw, true) ?? [];
         $res   = call_nicotine_api('POST', '/downloads/abort', [
+            'id'           => $input['id']           ?? '',
             'username'     => $input['username']     ?? '',
             'virtual_path' => $input['virtual_path'] ?? '',
             'status'       => 'Paused',
@@ -663,20 +665,15 @@ switch ($action) {
         exit;
 
     case 'cancel_download':
-        $raw   = file_get_contents('php://input');
-        $input = json_decode($raw, true) ?? [];
-
-        // First abort it as Cancelled, then clear it from the list
-        call_nicotine_api('POST', '/downloads/abort', [
-            'username'     => $input['username']     ?? '',
-            'virtual_path' => $input['virtual_path'] ?? '',
-            'status'       => 'Cancelled',
-        ]);
+        $input = json_decode(file_get_contents('php://input'), true) ?? [];
+        // Clear the exact transfer in one operation, not an abort followed by
+        // a second broad path lookup after the first has removed the entry.
         $res = call_nicotine_api('POST', '/downloads/clear', [
-            'username'     => $input['username']     ?? '',
+            'id' => $input['id'] ?? '',
+            'username' => $input['username'] ?? '',
             'virtual_path' => $input['virtual_path'] ?? '',
         ]);
-        echo json_encode(['ok' => true, 'cleared' => $res['ok']]);
+        echo json_encode(['ok' => $res['ok'], 'cleared' => $res['ok'], 'error' => $res['data']['error'] ?? $res['error'] ?? null]);
         exit;
 
     case 'resume_download':
@@ -705,6 +702,7 @@ switch ($action) {
         $raw   = file_get_contents('php://input');
         $input = json_decode($raw, true) ?? [];
         $res   = call_nicotine_api('POST', '/downloads/clear', [
+            'id'           => $input['id'] ?? '',
             'username'     => $input['username']     ?? '',
             'virtual_path' => $input['virtual_path'] ?? '',
         ]);
@@ -729,14 +727,11 @@ switch ($action) {
             $status = $item['status'] ?? 'Unknown';
             $progress = round((float)($item['progress_pct'] ?? 0), 1);
 
-            // Compute local target file path
-            $folder = !empty($item['folder_path']) ? $item['folder_path'] : $DOWNLOADS_DIR;
-            $targetLocalFile = !empty($item['local_file']) ? $item['local_file'] : ($folder . '/' . $fn);
-            if (!file_exists($targetLocalFile) && file_exists($DOWNLOADS_DIR . '/' . $fn)) {
-                $targetLocalFile = $DOWNLOADS_DIR . '/' . $fn;
-            }
-            $fileExists = file_exists($targetLocalFile);
-            $isFin = ($status === 'Finished') || ($progress >= 100 && $fileExists && !in_array($status, ['Paused', 'Cancelled']));
+            // Only the exact backend-owned final path can identify a download.
+            // A matching basename in another folder may be a different song.
+            $targetLocalFile = !empty($item['local_file']) && is_string($item['local_file']) ? $item['local_file'] : '';
+            $fileExists = $targetLocalFile !== '' && !is_link($targetLocalFile) && is_file($targetLocalFile) && is_safe_soulseek_directory(dirname($targetLocalFile));
+            $isFin = $status === 'Finished';
 
             // Instant Auto-Indexing (deduplicated against cached mtime & size to prevent re-index storms on polling)
             if ($isFin && $fileExists) {
@@ -780,8 +775,8 @@ switch ($action) {
                 }
             }
 
-            $partFile = !empty($item['part_file']) ? $item['part_file'] : ($targetLocalFile . '.part');
-            $partExists = file_exists($partFile);
+            $partFile = !empty($item['part_file']) ? $item['part_file'] : ($targetLocalFile !== '' ? $targetLocalFile . '.part' : '');
+            $partExists = $partFile !== '' && is_file($partFile) && is_safe_soulseek_directory(dirname($partFile));
             $bytesDownloaded = !empty($item['bytes_downloaded']) ? (int)$item['bytes_downloaded'] : ($partExists ? filesize($partFile) : ($fileExists ? filesize($targetLocalFile) : 0));
 
             $formatted[] = [
@@ -804,7 +799,7 @@ switch ($action) {
                 'fileExists' => $fileExists
             ];
         }
-        Storage::commitBatch();
+        if (!Storage::commitBatch()) { echo json_encode(['ok'=>false,'error'=>'Library changed during indexing or storage commit failed. Retry indexing.']); exit; }
 
         echo json_encode([
             'ok' => true,

@@ -1,3 +1,4 @@
+import { setCanvasShadowBlur } from './canvas-shadow.js';
 // Amethyst — detailed scene and companion dock illustration.
 import { emitTurntableShockwave, store } from '../state.js';
 import { drawInstrumentRim } from './instrument-rim.js';
@@ -39,7 +40,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.save();
         ctx.strokeStyle = sw.color === '#d946ef' ? `rgba(217, 70, 239, ${currentAlpha})` : `rgba(168, 85, 247, ${currentAlpha})`;
         ctx.shadowColor = sw.color || '#d946ef';
-        ctx.shadowBlur = (10 + beatPulse * 10 * (0.35 + 0.65 * fidelity)) * s;
+        setCanvasShadowBlur(ctx, (10 + beatPulse * 10 * (0.35 + 0.65 * fidelity)) * s);
         ctx.lineWidth = Math.max(1.0, (2.2 + beatPulse * 1.5) * (1.0 - prog * 0.5));
         ctx.beginPath();
         const sides = 6;
@@ -103,7 +104,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = `rgba(217, 70, 239, ${0.55 + beatPulse * 0.45})`;
         ctx.lineWidth = Math.max(1.8, 2.2 * s);
         ctx.shadowColor = '#d946ef';
-        ctx.shadowBlur = (12 + beatPulse * 16) * s;
+        setCanvasShadowBlur(ctx, (12 + beatPulse * 16) * s);
         ctx.stroke();
 
         // -----------------------------------------------------------------
@@ -139,9 +140,9 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             ctx.lineWidth = Math.max(1.0, (isHighSpire ? 2.2 : 1.4) * s);
             if (isHighSpire) {
                 ctx.shadowColor = '#d946ef';
-                ctx.shadowBlur = (6 + beatPulse * 8) * s;
+                setCanvasShadowBlur(ctx, (6 + beatPulse * 8) * s);
             } else {
-                ctx.shadowBlur = 0;
+                setCanvasShadowBlur(ctx, 0);
             }
             ctx.stroke();
 
@@ -185,29 +186,12 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
                 ctx.closePath();
                 ctx.fillStyle = '#fae8ff';
                 ctx.shadowColor = '#d946ef';
-                ctx.shadowBlur = 6 * s;
+                setCanvasShadowBlur(ctx, 6 * s);
                 ctx.fill();
                 ctx.restore();
             }
         }
         ctx.restore();
-
-        // Corrupted Telemetry Glyphs: 16 // ECHO // DISSONANCE // ATLANTIDEUM
-        ctx.font = `600 ${Math.max(9, Math.round(7.5 * s))}px "JetBrains Mono", monospace`;
-        ctx.fillStyle = 'rgba(217, 70, 239, 0.9)';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = '#d946ef';
-        ctx.shadowBlur = 4 * s;
-        const glyphs = ['I', 'II', 'III', 'IV'];
-        for (let g = 0; g < 4; g++) {
-            const gAng = (g * Math.PI) / 2 + dissonanceTime * 0.05;
-            ctx.save();
-            ctx.rotate(gAng);
-            ctx.translate(0, -maxRadius * 0.82);
-            ctx.fillText(glyphs[g], 0, 0);
-            ctx.restore();
-        }
 
         // Concentric Guidance Rings (Echo Locator Grid)
         const locatorRings = [hubRadius * 1.30, maxRadius * 0.77];
@@ -243,7 +227,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = Math.max(1.4, 2.0 * s);
         ctx.shadowColor = '#d946ef';
-        ctx.shadowBlur = 10 * s;
+        setCanvasShadowBlur(ctx, 10 * s);
         ctx.stroke();
 
         ctx.beginPath();
@@ -263,7 +247,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
             const mSize = (m % 3 === 0 ? 2.2 : 1.3) * s;
             ctx.fillStyle = m % 2 === 0 ? '#d946ef' : '#c084fc';
             ctx.shadowColor = '#d946ef';
-            ctx.shadowBlur = 6 * s;
+            setCanvasShadowBlur(ctx, 6 * s);
             ctx.fillRect(mx - mSize / 2, my - mSize / 2, mSize, mSize);
         }
 
@@ -283,7 +267,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.strokeStyle = `rgba(217, 70, 239, ${0.55 + snarePulse * 0.35})`;
     ctx.lineWidth = Math.max(1.5, 2.0 * s);
     ctx.shadowColor = '#d946ef';
-    ctx.shadowBlur = (10 + beatPulse * 12) * s;
+    setCanvasShadowBlur(ctx, (10 + beatPulse * 12) * s);
     ctx.stroke();
 
     // Harmonic Concentric Frequency Ring inside Hub
@@ -354,7 +338,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         grad.addColorStop(1, gradBottom);
         ctx.fillStyle = grad;
         ctx.shadowColor = glowColor;
-        ctx.shadowBlur = (10 + beatPulse * 16) * s;
+        setCanvasShadowBlur(ctx, (10 + beatPulse * 16) * s);
         ctx.fill();
 
         ctx.strokeStyle = strokeColor;
@@ -406,7 +390,7 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
         ctx.closePath();
         ctx.fillStyle = sat % 2 === 0 ? '#fae8ff' : '#d946ef';
         ctx.shadowColor = '#d946ef';
-        ctx.shadowBlur = (8 + beatPulse * 8) * s;
+        setCanvasShadowBlur(ctx, (8 + beatPulse * 8) * s);
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 0.6 * s;
@@ -468,7 +452,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
         ctx.closePath();
         ctx.fillStyle = sat % 2 === 0 ? '#fae8ff' : '#d946ef';
         ctx.shadowColor = '#d946ef';
-        ctx.shadowBlur = (8 + beatPulse * 10) * s;
+        setCanvasShadowBlur(ctx, (8 + beatPulse * 10) * s);
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 0.8 * s;
@@ -499,7 +483,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     monoGradL.addColorStop(1, '#1e0538');
     ctx.fillStyle = monoGradL;
     ctx.shadowColor = '#d946ef';
-    ctx.shadowBlur = (14 + beatPulse * 20) * s;
+    setCanvasShadowBlur(ctx, (14 + beatPulse * 20) * s);
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = Math.max(1.0, 1.4 * s);
@@ -532,7 +516,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.font = `800 ${Math.max(5, Math.round(5.5 * s))}px "JetBrains Mono", monospace`;
     ctx.fillStyle = '#ffffff';
     ctx.shadowColor = '#d946ef';
-    ctx.shadowBlur = 8 * s;
+    setCanvasShadowBlur(ctx, 8 * s);
     ctx.textAlign = 'center';
 
 
@@ -543,7 +527,7 @@ function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, 
     ctx.font = `700 ${Math.max(6, Math.round(7.2 * s))}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'center';
     ctx.shadowColor = '#d946ef';
-    ctx.shadowBlur = 6 * s;
+    setCanvasShadowBlur(ctx, 6 * s);
 
     ctx.restore();
 }

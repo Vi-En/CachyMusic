@@ -13,21 +13,8 @@
 .slskShowMoreBtn:hover { border-color: var(--accent-color); }
 .slskShowMoreBtn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 3px; }
 .slskPaginationSummary { color: var(--text-secondary); font-size: .76rem; font-variant-numeric: tabular-nums; }
-/* Settings categories are a compact, one-row navigational rail, not six large tiles. */
+/* Compact workspace spacing. Category geometry lives in settings-navigation.css. */
 @media (max-width: 768px) {
-  .settingsWorkspace .settingsCategoryNav {
-    display: flex; flex-wrap: nowrap; justify-content: flex-start;
-    gap: 7px; overflow-x: auto; overflow-y: hidden;
-    scroll-snap-type: x proximity; overscroll-behavior-inline: contain;
-    padding: 4px 0 12px; margin: 0;
-    scrollbar-width: thin; scrollbar-color: var(--border-medium) transparent;
-  }
-  .settingsWorkspace .settingsCatBtn {
-    flex: 0 0 auto; min-width: max-content; max-width: none;
-    min-height: 44px; padding-inline: 17px; white-space: nowrap;
-    border-radius: 999px; scroll-snap-align: start;
-    font-size: .86rem; line-height: 1.2;
-  }
   .settingsWorkspace .settingsSearch { margin-bottom: 3px; }
   .settingsWorkspace .settingsSectionPanel { padding: 13px; }
   .settingsWorkspace .settingsRowItem { padding-block: 13px; }
@@ -44,20 +31,16 @@
 .settingsWorkspace .settingsRowDesc { max-width: 65ch; }
 .settingsWorkspace .settingsRowTitle { line-height: 1.35; }
 :root[data-theme="nms"] .settingsCategoryNav { border-bottom: 3px double var(--border-bold); }
-:root[data-theme="nms"] :is(.settingsCatBtn,.mobileTabBtn,.slskShowMoreBtn) { border-radius: 2px; }
 :root[data-theme="solar-eclipse"] .settingsSectionPanel { border-radius: 22px; }
-:root[data-theme="solar-eclipse"] :is(.mobileTabBtn,.slskSearchArea,.slskShowMoreBtn) { border-radius: 999px; }
-:root[data-theme="euclid-horizon"] :is(.settingsCatBtn,.slskSearchArea,.slskShowMoreBtn,.slskResultRow) { border-radius: 0; }
+:root[data-theme="solar-eclipse"] .slskSearchArea { border-radius: 0; }
+:root[data-theme="euclid-horizon"] :is(.slskSearchArea,.slskResultRow) { border-radius: 0; }
 :root[data-theme="euclid-horizon"] .settingsCategoryNav { border-bottom: 2px solid var(--accent-color); }
-:root[data-theme="alien-paradise"] :is(.settingsCatBtn,.slskShowMoreBtn) { border-radius: 18px 7px 18px 7px; }
 :root[data-theme="abyssal-void"] .settingsCategoryNav { border-bottom: 1px dashed var(--border-bold); }
-:root[data-theme="abyssal-void"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 0; border-inline-start: 3px solid var(--accent-color); }
-:root[data-theme="dissonance"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 2px 15px 2px 15px; }
-:root[data-theme="sentinel"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 3px; border-width: 2px; }
+:root[data-theme="abyssal-void"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-inline-start: 3px solid var(--accent-color); }
+:root[data-theme="sentinel"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-width: 2px; }
 :root[data-theme="minimalist-light"] :is(.slskShowMoreBtn,.settingsCatBtn),
 :root[data-theme="minimalist-dark"] :is(.slskShowMoreBtn,.settingsCatBtn),
-:root[data-theme="minimalist-obsidian"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 0; box-shadow: none; }
-:root[data-theme="minimalist-warm"] :is(.slskShowMoreBtn,.settingsCatBtn) { border-radius: 16px; }
+:root[data-theme="minimalist-obsidian"] :is(.slskShowMoreBtn,.settingsCatBtn) { box-shadow: none; }
 @media (prefers-reduced-motion: reduce) { .settingsWorkspace .settingsCategoryNav { scroll-behavior: auto; } }
 
 /* Advanced controls stay available without being the default home-screen contents. */

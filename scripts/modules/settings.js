@@ -240,8 +240,8 @@ import {
         }
         if (codecEl && curTrack) {
             const fmt = (curTrack.format || 'AUDIO').toUpperCase();
-            const rate = curTrack.sampleRate ? `${curTrack.sampleRate}Hz` : '44100Hz';
-            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : (curTrack.sampleRate >= 88200 ? '24-Bit' : '16-Bit');
+            const rate = curTrack.sampleRate ? `${curTrack.sampleRate}Hz` : 'Rate unknown';
+            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : 'Depth unknown';
             codecEl.textContent = `${fmt} • ${depth} • ${rate}`;
         }
         if (html5El) {
@@ -290,32 +290,40 @@ import {
         const curTrack = s.allTracks[s.currentTrackIndex];
         const audio = s.audio;
 
+        const native=Boolean(s.isNativePlaybackActive?.());
+        const diagPill=document.getElementById('settingsAudioDebugPill');
+        if(diagPill)diagPill.textContent=s.audioEditPaused?'Applying audio change':s.isPlaying?'Playing':curTrack?'Paused':'No active playback';
         if (streamVal) {
-            if (audio && audio.error) {
+            if (native || s.isSoftwareDecoding) {
+                streamVal.textContent=`${native?'Native Android':'Software decoder'} · ${s.isPlaying?'Playing':'Paused'}`;
+                streamVal.style.color='inherit';
+            } else if (audio && audio.error) {
                 streamVal.textContent = `Error (Code ${audio.error.code})`;
                 streamVal.style.color = 'var(--status-danger)';
             } else if (audio && !audio.paused) {
-                streamVal.textContent = 'Streaming Active (206/200)';
+                streamVal.textContent = 'Media element playing';
                 streamVal.style.color = 'var(--status-success)';
             } else {
                 streamVal.textContent = 'Standby / Paused';
                 streamVal.style.color = 'inherit';
             }
         }
+        if (formatVal && !curTrack) formatVal.textContent="No track loaded";
         if (formatVal && curTrack) {
             const fmt = (curTrack.format || 'AUDIO').toUpperCase();
-            const rate = curTrack.sampleRate ? `${Math.round(curTrack.sampleRate / 1000)} kHz` : '44.1 kHz';
-            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : (curTrack.sampleRate >= 88200 ? '24-Bit' : '16-Bit');
+            const rate = curTrack.sampleRate ? `${curTrack.sampleRate / 1000} kHz` : 'Rate unknown';
+            const depth = curTrack.bitDepth ? `${curTrack.bitDepth}-Bit` : 'Depth unknown';
             const br = curTrack.bitrate ? `${curTrack.bitrate} kbps` : '';
             formatVal.textContent = `${rate} • ${depth} • ${fmt} ${br ? '• ' + br : ''}`;
         }
         if (pipeVal) {
-            const ctxState = s.audioContext ? (s.audioContext.state === 'running' ? 'Active' : 'Standby') : 'Inactive';
-            if (s.isSoftwareDecoding && s.activeDecodedBuffer) {
+            const ctxState = s.audioContext?.state || 'not initialized';
+            if (native) pipeVal.textContent='Native playback · Web Audio DSP bypassed';
+            else if (s.isSoftwareDecoding && s.activeDecodedBuffer) {
                 const swState = s.isSoftwarePaused ? 'Software Paused' : 'Software Engine Active';
-                pipeVal.textContent = `${swState} • DSP: ${ctxState}`;
+                pipeVal.textContent = `${swState} · AudioContext: ${ctxState}`;
             } else if (s.isSoftwareDecoding) {
-                pipeVal.textContent = `Decompressing Bitstream... • DSP: ${ctxState}`;
+                pipeVal.textContent = `Decompressing Bitstream... · AudioContext: ${ctxState}`;
             } else if (audio) {
                 const rStates = [
                     'Idle (No Data)',
@@ -325,7 +333,7 @@ import {
                     'Ready (Buffered)'
                 ];
                 const r = rStates[audio.readyState] || 'Ready';
-                pipeVal.textContent = `${r} • DSP: ${ctxState}`;
+                pipeVal.textContent = `${r} · AudioContext: ${ctxState}`;
             }
         }
         if (skipVal) {
