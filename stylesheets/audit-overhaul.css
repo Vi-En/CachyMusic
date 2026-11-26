@@ -1,4 +1,5 @@
 /* CachyMusic: targeted ergonomics and visual hierarchy (no animation loops or assets). */
+@layer refinements {
 .slskResultPagination {
   display: flex; align-items: center; justify-content: center;
   flex-wrap: wrap; gap: 12px; padding: 17px 12px 22px;
@@ -103,4 +104,5 @@
   .soulseekWorkspace .slskResultRow { grid-template-columns: minmax(0,1fr) 98px; gap: 6px; padding: 10px 8px; }
   .soulseekWorkspace .slskResultRow .slskCompactMeta { gap: 3px 8px; }
   .soulseekWorkspace .slskResultRow .slskCompactMeta .col { font-size: .68rem; }
+}
 }

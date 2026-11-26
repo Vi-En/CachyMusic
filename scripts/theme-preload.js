@@ -1,8 +1,7 @@
-// CachyMusic v2.0.0 — Pre-Paint Theme & Engine Bootstrap (Zero FOUC)
+// CachyMusic v3.0.0 — Pre-Paint Theme & Engine Bootstrap (Zero FOUC)
 (function () {
     try {
         // Remove legacy CachyMusic cookies; preferences are now browser-local only.
-        // On hosted upgrades the first request can still contain old cookies before this runs.
         try {
             document.cookie.split(';').forEach(function (entry) {
                 var name = entry.split('=')[0].trim();
@@ -11,6 +10,7 @@
                 }
             });
         } catch (_) {}
+
         var root = document.documentElement;
         if (/firefox|fxios/i.test(navigator.userAgent)) {
             root.classList.add('is-firefox');
@@ -29,17 +29,50 @@
         }
 
         var t = urlT || savedT || 'default';
+        var valid = [
+            'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
+            'abyssal-void', 'dissonance', 'sentinel',
+            'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian'
+        ];
+        var metaTheme = document.querySelector('meta[name="theme-color"]');
+
+        // Hydrate saved Custom Theme snapshot synchronously before first paint when active
+        if (!urlT && typeof t === 'string' && (t === 'custom' || t.indexOf('custom:') === 0)) {
+            try {
+                var snapRaw = window.localStorage ? localStorage.getItem('cachymusic_custom_theme_snapshot') : null;
+                var snap = snapRaw ? JSON.parse(snapRaw) : null;
+                if (snap && snap.v === 1 && snap.vars && typeof snap.vars === 'object' && (!snap.id || t === 'custom' || snap.id === t)) {
+                    var rootStyle = root.style;
+                    if (rootStyle && typeof rootStyle.setProperty === 'function') {
+                        Object.keys(snap.vars).forEach(function (prop) {
+                            if (typeof prop === 'string' && prop.indexOf('--') === 0) {
+                                var val = String(snap.vars[prop]);
+                                if (val.length < 180 && !/(?:expression\(|javascript:|url\(|<|>|;)/i.test(val)) {
+                                    rootStyle.setProperty(prop, val);
+                                }
+                            }
+                        });
+                    }
+                    root.setAttribute('data-theme', 'custom');
+                    if (snap.id && typeof root.setAttribute === 'function') {
+                        root.setAttribute('data-custom-theme-id', String(snap.id));
+                    }
+                    if (metaTheme && /^#[0-9a-f]{6}$/i.test(String(snap.chrome || ''))) {
+                        metaTheme.setAttribute('content', snap.chrome);
+                    }
+                    return;
+                }
+            } catch (_) {}
+            t = 'default';
+        }
+
         if (t === 'atlas' || t === 'spotify' || t === 'apple') t = 'nms';
         if (t === 'studio-dark') t = 'default';
         if (t === 'cyberpunk' || t === 'neon-night') t = 'solar-eclipse';
         if (t === 'midnight-amoled') t = 'minimalist-obsidian';
         if (t === 'brutalist-minimalism-light' || t === 'brutalist-light') t = 'minimalist-light';
         if (t === 'brutalist-minimalism-dark' || t === 'brutalist-dark') t = 'minimalist-dark';
-        var valid = [
-            'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
-            'abyssal-void', 'dissonance', 'sentinel',
-            'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian'
-        ];
+
         if (!valid.includes(t)) {
             t = 'default';
         }
@@ -60,7 +93,6 @@
             'minimalist-warm': '#faf8f5',
             'minimalist-obsidian': '#000000', 'midnight-amoled': '#000000'
         };
-        var metaTheme = document.querySelector('meta[name="theme-color"]');
         if (metaTheme && themeMetaColors[t]) {
             metaTheme.setAttribute('content', themeMetaColors[t]);
         }

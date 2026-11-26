@@ -1,6 +1,7 @@
 /* Shape by interaction role, not by element type. Native CSS only.
    Conventional rounded corners are the default; continuous corners are opt-in.
    Preserve independent hit targets, artwork, slider mechanics and theme identity. */
+@layer refinements {
 :root[data-theme] {
   --shape-field: 8px;
   --shape-action: 6px;
@@ -55,6 +56,9 @@
 }
 /* Retain keyboard/forced-colors feedback from the previous release. */
 :root[data-theme] :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible { outline:2px solid var(--border-focus); outline-offset:-2px; }
+}
+@layer utilities {
 @media (forced-colors: active) {
   :root[data-theme] :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible { outline-color:Highlight; }
+}
 }

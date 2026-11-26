@@ -16,7 +16,7 @@
         height: clamp(5rem, 13dvh, 9.5rem);
         pointer-events: none;
         z-index: var(--z-visualizer);
-        contain: layout paint;
+        contain: strict;
         opacity: 0.72;
     }
 
@@ -37,8 +37,7 @@
         grid-template-columns: auto minmax(180px, 1fr) auto;
         align-items: center;
         gap: var(--space-sm);
-        background: var(--bg-glass);
-        backdrop-filter: blur(16px);
+        background: var(--bg-chrome, var(--bg-surface-1));
         border-bottom: 0;
     }
 
@@ -149,7 +148,6 @@
         grid-template-columns: minmax(215px, 16rem) minmax(320px, 1fr) minmax(260px, 23.5rem);
         gap: clamp(0.35rem, 0.7vw, 0.7rem);
         padding: var(--space-xs) max(var(--space-sm), var(--safe-right)) var(--space-xs) max(var(--space-sm), var(--safe-left));
-        transition: grid-template-columns var(--transition-base);
     }
 
     body.metadata-collapsed .gridContainer {
@@ -241,9 +239,8 @@
         align-items: center;
         gap: var(--space-sm);
         padding: 0.3rem var(--space-md);
-        background: var(--bg-glass);
-        backdrop-filter: blur(18px);
-        border: 1px solid var(--border-medium);
+        background: var(--bg-chrome, var(--bg-surface-1));
+        border: 1px solid var(--border-control);
         border-radius: var(--radius-md);
         box-shadow: var(--shadow-modal);
     }
@@ -376,9 +373,8 @@
             grid-template-columns: repeat(4, minmax(0, 1fr));
             min-height: var(--mobile-tabbar-height);
             padding: 0.15rem var(--safe-right) var(--safe-bottom) var(--safe-left);
-            background: var(--bg-glass);
-            backdrop-filter: blur(18px);
-            border-top: 1px solid var(--border-medium);
+            background: var(--bg-chrome, var(--bg-surface-1));
+            border-top: 1px solid var(--border-surface);
         }
 
         .mobileTabBtn {

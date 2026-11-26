@@ -11,10 +11,12 @@ import android.graphics.Shader;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Generates theme-matched fallback artwork and palette specs for Android media notifications
- * across all 12 CachyMusic themes without altering user-supplied album covers.
+ * across all 12 built-in CachyMusic themes and validated user custom themes.
  */
 public final class NotificationThemeArt {
     public static final class ThemeSpec {
@@ -44,6 +46,13 @@ public final class NotificationThemeArt {
             0.34f, 0.56f, 0.78f, 0.92f, 0.68f, 0.48f,
             0.84f, 0.96f, 0.72f, 0.54f, 0.64f, 0.38f
     };
+
+    private static final Pattern HEX_FIELD_BG = Pattern.compile("\"bg\"\\s*:\\s*\"(#(?:[0-9a-fA-F]{6}))\"");
+    private static final Pattern HEX_FIELD_SURFACE = Pattern.compile("\"surface\"\\s*:\\s*\"(#(?:[0-9a-fA-F]{6}))\"");
+    private static final Pattern HEX_FIELD_ACCENT = Pattern.compile("\"accent\"\\s*:\\s*\"(#(?:[0-9a-fA-F]{6}))\"");
+    private static final Pattern HEX_FIELD_SECONDARY = Pattern.compile("\"secondary\"\\s*:\\s*\"(#(?:[0-9a-fA-F]{6}))\"");
+    private static final Pattern BOOL_FIELD_LIQUID = Pattern.compile("\"liquid\"\\s*:\\s*(true|false)");
+    private static final Pattern BOOL_FIELD_LIGHT = Pattern.compile("\"light\"\\s*:\\s*(true|false)");
 
     static {
         Map<String, ThemeSpec> m = new HashMap<>();
@@ -78,11 +87,56 @@ public final class NotificationThemeArt {
 
     private NotificationThemeArt() {}
 
+    public static ThemeSpec customSpec(int bgColor, int surfaceColor, int accentColor,
+            int secondaryColor, boolean isLiquid, boolean isLight) {
+        return new ThemeSpec("custom", bgColor, surfaceColor, accentColor, secondaryColor, isLiquid, isLight);
+    }
+
+    private static int parseHex6(String hex, int fallback) {
+        if (hex == null || hex.length() != 7 || hex.charAt(0) != '#') return fallback;
+        try {
+            return 0xFF000000 | Integer.parseInt(hex.substring(1), 16);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    public static ThemeSpec parseCustomPaletteJson(String json) {
+        if (json == null || json.isEmpty() || json.length() > 1024) {
+            return SPECS.get("default");
+        }
+        Matcher mBg = HEX_FIELD_BG.matcher(json);
+        Matcher mSurf = HEX_FIELD_SURFACE.matcher(json);
+        Matcher mAcc = HEX_FIELD_ACCENT.matcher(json);
+        Matcher mSec = HEX_FIELD_SECONDARY.matcher(json);
+        if (!mBg.find() || !mSurf.find() || !mAcc.find()) {
+            return SPECS.get("default");
+        }
+        int bg = parseHex6(mBg.group(1), 0xFF090E14);
+        int surface = parseHex6(mSurf.group(1), 0xFF13202E);
+        int accent = parseHex6(mAcc.group(1), 0xFF38BDF8);
+        int secondary = mSec.find() ? parseHex6(mSec.group(1), accent) : accent;
+
+        Matcher mLiq = BOOL_FIELD_LIQUID.matcher(json);
+        boolean isLiquid = mLiq.find() && "true".equals(mLiq.group(1));
+        Matcher mLight = BOOL_FIELD_LIGHT.matcher(json);
+        boolean isLight = mLight.find() && "true".equals(mLight.group(1));
+
+        return customSpec(bg, surface, accent, secondary, isLiquid, isLight);
+    }
+
     public static ThemeSpec specFor(String themeId) {
         if (themeId == null) return SPECS.get("default");
         String resolved = ALIASES.getOrDefault(themeId, themeId);
         ThemeSpec spec = SPECS.get(resolved);
         return spec != null ? spec : SPECS.get("default");
+    }
+
+    public static ThemeSpec resolveSpec(String themeId, String customPaletteJson) {
+        if ("custom".equals(themeId)) {
+            return parseCustomPaletteJson(customPaletteJson);
+        }
+        return specFor(themeId);
     }
 
     private static int withAlpha(int color, int alpha) {
@@ -91,8 +145,12 @@ public final class NotificationThemeArt {
     }
 
     public static Bitmap renderFallbackCover(String themeId, int sizePx) {
+        return renderFallbackCover(specFor(themeId), sizePx);
+    }
+
+    public static Bitmap renderFallbackCover(ThemeSpec spec, int sizePx) {
+        if (spec == null) spec = SPECS.get("default");
         int size = Math.max(64, Math.min(512, sizePx));
-        ThemeSpec spec = specFor(themeId);
         Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bmp);
 

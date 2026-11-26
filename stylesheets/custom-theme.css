@@ -1,0 +1,555 @@
+/* CachyMusic Custom Theme Engine & Theme Studio UI Styles */
+
+@layer custom-theme {
+    /* Fixed GPU-Isolated Canvas Backdrop Stack */
+    .customCanvasBackdrop {
+        position: absolute;
+        inset: 0;
+        display: none;
+        overflow: hidden;
+        pointer-events: none;
+        contain: strict;
+        background: var(--ct-canvas-bg, var(--bg-canvas));
+    }
+
+    :root[data-theme="custom"] .customCanvasBackdrop {
+        display: block;
+    }
+
+    .customCanvasImage,
+    .customCanvasTexture,
+    .customCanvasScrim {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    .customCanvasImage {
+        background-image: var(--ct-canvas-image, none);
+        background-size: var(--ct-canvas-image-size, cover);
+        background-repeat: var(--ct-canvas-image-repeat, no-repeat);
+        background-position: var(--ct-canvas-image-pos, 50% 50%);
+        opacity: var(--ct-canvas-image-opacity, 1);
+        filter: blur(var(--ct-canvas-image-blur, 0px));
+        mix-blend-mode: var(--ct-canvas-blend, normal);
+        transform: translateZ(0);
+    }
+
+    .customCanvasTexture {
+        background-image: var(--ct-canvas-texture, none);
+        background-size: var(--ct-canvas-texture-size, 32px);
+        background-repeat: repeat;
+    }
+
+    .customCanvasScrim {
+        background: var(--ct-canvas-scrim, transparent);
+    }
+
+    /* Typography, Borders, Surfaces, and Scopes under Custom Theme */
+    :root[data-theme="custom"] body {
+        font-family: var(--font-body, system-ui, sans-serif);
+        font-weight: var(--ct-body-weight, 450);
+        line-height: var(--ct-line-height, 1.45);
+        font-size: calc(var(--font-base) * var(--ct-font-scale, 1));
+    }
+
+    :root[data-theme="custom"] :is(#trackName, .settingsHubHeader h2, .settingsSectionTitle, .panelHeader h2, .slskPlaceholder h3, .modalHeader h3) {
+        font-family: var(--font-display, var(--font-body));
+        font-variant-caps: var(--ct-heading-variant, normal);
+        text-transform: var(--ct-heading-case, none);
+    }
+
+    :root[data-theme="custom"][data-has-custom-panel-media="1"] :is(.trackListPanel, #infoPanel, .settingsSectionPanel, .slskSearchArea, .slskResultsCon, .slskTransfersDrawer, .modalCard, .slskModalCard) {
+        background-color: var(--bg-surface-1);
+        background-image:
+            linear-gradient(var(--ct-panel-scrim, transparent), var(--ct-panel-scrim, transparent)),
+            var(--ct-panel-texture, none),
+            var(--ct-panel-image, none),
+            linear-gradient(var(--ct-panel-bg, var(--bg-surface-1)), var(--ct-panel-bg, var(--bg-surface-1)));
+        background-size: auto, var(--ct-panel-texture-size, 32px), var(--ct-panel-image-size, cover), auto;
+        background-repeat: repeat, repeat, var(--ct-panel-image-repeat, no-repeat), no-repeat;
+        background-position: center, center, var(--ct-panel-image-pos, 50% 50%), center;
+    }
+
+    :root[data-theme="custom"] :is(.trackListPanel, #infoPanel, .settingsSectionPanel, .slskSearchArea, .slskResultsCon, .slskTransfersDrawer, .modalCard, .slskModalCard) {
+        border: var(--ct-panel-border, 1px solid var(--border-surface));
+        border-radius: var(--identity-radius, 12px);
+        box-shadow: var(--shadow-card);
+    }
+
+    :root[data-theme="custom"] :is(.topBar, .mobileTabBar, .persistentMiniPlayer) {
+        background-color: var(--bg-chrome, var(--bg-surface-1));
+        background-image:
+            linear-gradient(var(--ct-chrome-scrim, transparent), var(--ct-chrome-scrim, transparent)),
+            var(--ct-chrome-texture, none),
+            var(--ct-chrome-image, none);
+        background-size: auto, var(--ct-chrome-texture-size, 32px), var(--ct-chrome-image-size, cover);
+        background-repeat: repeat, repeat, var(--ct-chrome-image-repeat, no-repeat);
+        background-position: center, center, var(--ct-chrome-image-pos, 50% 50%);
+        backdrop-filter: blur(var(--ct-glass-blur, 0px));
+    }
+
+    :root[data-theme="custom"] .turntableStage {
+        background-color: transparent;
+        background-image:
+            linear-gradient(var(--ct-stage-scrim, transparent), var(--ct-stage-scrim, transparent)),
+            var(--ct-stage-texture, none),
+            var(--ct-stage-image, none),
+            var(--ct-stage-bg, transparent);
+        background-size: auto, var(--ct-stage-texture-size, 32px), var(--ct-stage-image-size, cover), auto;
+        background-repeat: repeat, repeat, var(--ct-stage-image-repeat, no-repeat), no-repeat;
+        background-position: center, center, var(--ct-stage-image-pos, 50% 50%), center;
+        border-radius: var(--identity-radius, 12px);
+    }
+
+    :root[data-theme="custom"] :is(.topBtn, .actionBtn, .folderBrowseBtn, .backBtn, .miniBtn:not(.miniPlayBtn), .settingsSelect, .sortSelect, .peqSelect, .settingsSearch input, #slskSearchInput, .visModeBtn) {
+        border: var(--ct-control-border, 1px solid var(--border-control));
+        border-radius: var(--shape-action, 6px);
+    }
+
+    :root[data-theme="custom"] :is(.trackItem, .queueItem, .settingsRowItem, .slskResultRow) {
+        border-block-end: var(--ct-divider-border, 1px solid var(--border-divider));
+    }
+
+    :root[data-theme="custom"][data-density="compact"] .settingsRowItem { padding-block: 8px; }
+    :root[data-theme="custom"][data-density="spacious"] .settingsRowItem { padding-block: 16px; }
+
+    /* Motion Profiles, Micro-Interactions, Morphs & Ambient GPU Motion */
+    :root[data-theme="custom"][data-motion-btn="pop"] :is(.mediaBtn, .actionBtn, .deckActionBtn, .topBtn):not(:disabled):active {
+        transform: scale(0.92);
+    }
+    :root[data-theme="custom"][data-motion-btn="crisp"] :is(.mediaBtn, .actionBtn, .deckActionBtn, .topBtn):not(:disabled):active {
+        transform: translateY(1px);
+    }
+    :root[data-theme="custom"][data-motion-btn="none"] :is(.mediaBtn, .actionBtn, .deckActionBtn, .topBtn):not(:disabled):active {
+        transform: none;
+    }
+
+    @media (hover: hover) {
+        :root[data-theme="custom"][data-row-hover-lift="1"] :is(.trackItem, .themeSelectCard, .ctLibraryCard):hover {
+            transform: translateY(-1px);
+        }
+    }
+
+    @keyframes ctModalSheet { from { opacity: 0; transform: translate3d(0, 18px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+    @keyframes ctModalBloom { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
+    @keyframes ctAmbientDrift {
+        0% { transform: scale(1.04) translate3d(-1.5%, -1%, 0); }
+        100% { transform: scale(1.09) translate3d(1.5%, 1%, 0); }
+    }
+
+    :root[data-theme="custom"][data-motion-modal="sheet"] :is(.modalCard, .slskModalCard) {
+        animation: ctModalSheet var(--transition-base);
+    }
+    :root[data-theme="custom"][data-motion-modal="bloom"] :is(.modalCard, .slskModalCard) {
+        animation: ctModalBloom var(--transition-base);
+    }
+    :root[data-theme="custom"][data-motion-modal="fade"] :is(.modalCard, .slskModalCard) {
+        animation: lyricsReveal var(--transition-fast);
+    }
+
+    :root[data-theme="custom"][data-motion-ambient="gradient-drift"] .customCanvasBackdrop,
+    :root[data-theme="custom"][data-motion-ambient="aura-breathe"] .ambientAuraGlow {
+        animation: ctAmbientDrift 16s ease-in-out infinite alternate;
+        will-change: transform;
+    }
+    :root[data-theme="custom"][data-motion-ambient="subtle-parallax"] .customCanvasImage {
+        animation: ctAmbientDrift 22s ease-in-out infinite alternate;
+        will-change: transform;
+    }
+
+    /* Native View Transitions Morphs */
+    @keyframes ctViewSlideIn { from { opacity: 0; transform: translate3d(16px, 0, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+    @keyframes ctViewSlideOut { from { opacity: 1; transform: translate3d(0, 0, 0); } to { opacity: 0; transform: translate3d(-16px, 0, 0); } }
+    @keyframes ctViewScaleIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+    @keyframes ctViewDepthOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.96); } }
+
+    :root[data-theme="custom"][data-motion-view="crossfade"]::view-transition-old(root),
+    :root[data-theme="custom"][data-motion-view="crossfade"]::view-transition-new(root) {
+        animation-duration: calc(180ms * var(--motion-scale, 1));
+    }
+    :root[data-theme="custom"][data-motion-view="slide-morph"]::view-transition-old(root) {
+        animation: ctViewSlideOut calc(220ms * var(--motion-scale, 1)) var(--motion-ease);
+    }
+    :root[data-theme="custom"][data-motion-view="slide-morph"]::view-transition-new(root) {
+        animation: ctViewSlideIn calc(220ms * var(--motion-scale, 1)) var(--motion-ease);
+    }
+    :root[data-theme="custom"][data-motion-view="scale-zoom"]::view-transition-new(root) {
+        animation: ctViewScaleIn calc(240ms * var(--motion-scale, 1)) var(--motion-ease);
+    }
+    :root[data-theme="custom"][data-motion-view="depth-lift"]::view-transition-old(root) {
+        animation: ctViewDepthOut calc(220ms * var(--motion-scale, 1)) var(--motion-ease);
+    }
+    :root[data-theme="custom"][data-motion-view="depth-lift"]::view-transition-new(root) {
+        animation: ctViewScaleIn calc(240ms * var(--motion-scale, 1)) var(--motion-ease);
+    }
+
+    /* Theme Modal Custom Section */
+    .themeCategoryActions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+        flex-wrap: wrap;
+    }
+
+    .themeCardCustomActions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .ctMiniCardBtn {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 4px 8px;
+        border-radius: var(--shape-action, 6px);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-1);
+        color: var(--text-primary);
+        font-size: var(--font-3xs);
+        font-weight: 700;
+    }
+
+    /* Custom Theme Studio Modal & Peek Mode */
+    .ctStudioCard {
+        width: min(100%, 66rem);
+        max-height: min(92dvh, 60rem);
+        padding: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modalBackdrop.ct-peek-mode {
+        background: transparent;
+        backdrop-filter: none;
+        pointer-events: none;
+        align-items: flex-end;
+        padding-bottom: max(12px, var(--safe-bottom));
+    }
+
+    .modalBackdrop.ct-peek-mode .ctStudioCard {
+        pointer-events: auto;
+        width: min(100%, 34rem);
+        max-height: none;
+    }
+
+    .modalBackdrop.ct-peek-mode .ctStudioBody,
+    .modalBackdrop.ct-peek-mode .ctStudioTabs,
+    .modalBackdrop.ct-peek-mode .ctContrastBar {
+        display: none;
+    }
+
+    .ctStudioHeader {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-xs);
+        padding: var(--space-sm) var(--space-md);
+        border-bottom: 1px solid var(--border-divider);
+        background: var(--bg-surface-1);
+    }
+
+    .ctStudioNameWrap {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+        flex: 1 1 220px;
+        min-width: 0;
+    }
+
+    .ctStudioNameInput {
+        min-height: 44px;
+        padding: 6px 12px;
+        border-radius: var(--shape-field, 6px);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-2);
+        color: var(--text-primary);
+        font-weight: 700;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .ctStudioHeaderActions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .ctStudioHeaderActions .actionBtn {
+        min-height: 44px;
+    }
+
+    .ctContrastBar {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px 10px;
+        padding: 8px var(--space-md);
+        background: var(--bg-surface-2);
+        border-bottom: 1px solid var(--border-divider);
+    }
+
+    .ctContrastMeters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        flex: 1 1 auto;
+    }
+
+    .ctContrastPill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 8px;
+        border-radius: var(--radius-xs);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-1);
+        font-family: var(--font-mono);
+        font-size: var(--font-3xs);
+        color: var(--text-primary);
+    }
+
+    .ctContrastPill.is-pass { border-color: var(--status-success); }
+    .ctContrastPill.is-fail { border-color: var(--status-danger); color: var(--status-danger); }
+
+    .ctStudioTabs {
+        flex: 0 0 auto;
+        display: flex;
+        gap: 4px;
+        padding: 6px var(--space-md);
+        overflow-x: auto;
+        scrollbar-width: none;
+        border-bottom: 1px solid var(--border-divider);
+        background: var(--bg-surface-1);
+    }
+    .ctStudioTabs::-webkit-scrollbar { display: none; }
+
+    .ctStudioTabBtn {
+        flex: 0 0 auto;
+        min-height: 44px;
+        padding: 6px 12px;
+        border-radius: var(--shape-nav, 6px);
+        border: 1px solid transparent;
+        color: var(--text-secondary);
+        font-size: var(--font-xs);
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .ctStudioTabBtn.active {
+        background: var(--accent-surface);
+        border-color: var(--border-control);
+        color: var(--text-accent);
+    }
+
+    .ctStudioBody {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: var(--space-md);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+    }
+
+    .ctSectionGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+        gap: var(--space-sm);
+    }
+
+    .ctCard {
+        padding: var(--space-sm);
+        border-radius: var(--shape-field, 8px);
+        border: 1px solid var(--border-surface);
+        background: var(--bg-surface-2);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-xs);
+    }
+
+    .ctCard h4 {
+        font-size: var(--font-xs);
+        font-weight: 800;
+        color: var(--text-accent);
+        letter-spacing: 0.03em;
+    }
+
+    .ctColorRow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+    }
+
+    .ctColorRow label {
+        font-size: var(--font-xs);
+        color: var(--text-primary);
+    }
+
+    .ctColorInput {
+        width: 44px;
+        height: 36px;
+        padding: 2px;
+        border-radius: var(--radius-xs);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-1);
+        cursor: pointer;
+    }
+
+    .ctHexInput {
+        width: 5.8rem;
+        min-height: 36px;
+        padding: 4px 6px;
+        border-radius: var(--radius-xs);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-1);
+        color: var(--text-primary);
+        font-family: var(--font-mono);
+        font-size: var(--font-2xs);
+    }
+
+    .ctSliderRow {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .ctSliderHeader {
+        display: flex;
+        justify-content: space-between;
+        font-size: var(--font-xs);
+        color: var(--text-secondary);
+    }
+
+    .ctSliderHeader output {
+        font-family: var(--font-mono);
+        color: var(--text-primary);
+    }
+
+    .ctTextureGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 6px;
+    }
+
+    .ctTextureTileBtn {
+        min-height: 54px;
+        padding: 6px;
+        border-radius: var(--radius-xs);
+        border: 1px solid var(--border-control);
+        display: flex;
+        align-items: flex-end;
+        font-size: var(--font-3xs);
+        font-weight: 700;
+        color: var(--text-primary);
+        background-color: var(--bg-surface-1);
+        text-align: left;
+    }
+
+    .ctTextureTileBtn.active {
+        border: 2px solid var(--accent-color);
+        color: var(--text-accent);
+    }
+
+    .ctBezierSvg {
+        width: 100%;
+        height: 110px;
+        border-radius: var(--radius-xs);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-1);
+    }
+
+    .ctPillGroup {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .ctPillBtn {
+        min-height: 40px;
+        padding: 6px 10px;
+        border-radius: var(--shape-action, 6px);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-1);
+        color: var(--text-secondary);
+        font-size: var(--font-xs);
+        font-weight: 600;
+    }
+
+    .ctPillBtn.active {
+        background: var(--accent-color);
+        color: var(--text-on-accent);
+        border-color: var(--accent-color);
+    }
+
+    .ctLibraryCard {
+        padding: var(--space-sm);
+        border-radius: var(--shape-field, 8px);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-2);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-xs);
+        contain: layout style;
+    }
+
+    .ctLibraryCard.active {
+        border-color: var(--accent-color);
+        box-shadow: inset 3px 0 var(--accent-color);
+    }
+
+    .ctLibraryCardTop {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-xs);
+    }
+
+    .ctLibraryCardActions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    @media (max-width: 768px) {
+        .ctStudioCard {
+            width: 100%;
+            max-height: calc(100dvh - 8px - var(--safe-bottom));
+            border-radius: var(--radius-md);
+        }
+        .ctStudioBody { padding: var(--space-sm); }
+    }
+}
+
+@layer utilities {
+    body:not(.view-player) :is(.customCanvasBackdrop, .customCanvasImage) {
+        animation-play-state: paused;
+    }
+
+    @media (prefers-reduced-transparency: reduce) {
+        :root[data-theme="custom"] :is(.topBar, .mobileTabBar, .persistentMiniPlayer) {
+            backdrop-filter: none;
+            background-color: var(--bg-surface-1);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        :root[data-theme="custom"] .customCanvasBackdrop,
+        :root[data-theme="custom"] .customCanvasImage,
+        :root[data-theme="custom"] .ambientAuraGlow,
+        :root[data-theme="custom"]::view-transition-old(root),
+        :root[data-theme="custom"]::view-transition-new(root) {
+            animation: none !important;
+            transition: none !important;
+        }
+    }
+}

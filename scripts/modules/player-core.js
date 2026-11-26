@@ -4,8 +4,8 @@ import {appAttenuation} from './audio-policies.js';
 import {interruptListening,finishListeningVisit,observeListening,hasNativeListening,markNativeListening,syncNativeHistory} from './listening-history.js';
 import {saveNativePlaylist,restoreNativePlaylist} from './android-native-playback.js';
 import {playbackPool, playlistNeighbor, recordPlaylistVisit, historyNeighbor, seekPlaylistHistory, syncPlaylistShuffle} from './playlist-playback.js';
-import {createMediaElementListener} from './media-element-events.js';
-import {updatePlaybackProgress} from './player-progress.js';
+import { createMediaElementListener } from './media-element-events.js';
+import { setProgressFraction, updatePlaybackProgress } from './player-progress.js';
 import {createBoundedDecoder,validateDecodedAudioBuffer} from './software-audio-decoder.js';
 import {createAudioEditGuard, confirmAudioChange} from './audio-change-policy.js';
 import {findTrackIndex, findSavedTrackIndex, rememberTrack} from './track-session.js';
@@ -80,10 +80,10 @@ function canUseAndroidDecoder(track) {
     const s = store.state;
     return androidNative && Boolean(indexedSource(track)) && !hasActiveDsp()
         && (s.currentPlaybackSpeed || 1) === 1
-        && safeStorage.getItem('cachymusic_continuous_pcm') !== 'true';
+        && !s.continuousPcmEnabled;
 }
 function nativeEligible(track) {
-    return canUseAndroidDecoder(track) && (safeStorage.getItem('cachymusic_android_native') === 'true'
+    return canUseAndroidDecoder(track) && (store.state.androidNativeEnabled
         || (nativeRecoveryToken && nativeRecoveryToken === androidNative.token));
 }
 function nativeGain(){const s=store.state;return s.audio?.muted?0:appAttenuation(s);}
@@ -259,12 +259,12 @@ let pcmStream = null;
 let pcmStartEpoch = 0;
 let pcmFile = null;
 let pendingPcm = null;
-function continuousPcmEnabled(){return store.state.sleepTimerMode!=='end' && safeStorage.getItem('cachymusic_continuous_pcm')==='true' && (store.state.currentPlaybackSpeed||1)===1;}
+function continuousPcmEnabled(){return store.state.sleepTimerMode!=='end' && store.state.continuousPcmEnabled && (store.state.currentPlaybackSpeed||1)===1;}
 function pcmExtension(track,file){return /\.(wav|wave|aif|aiff|flac)$/i.test(track?.filename||file?.name||'');}
 function canAndroidDirectDecode(track) {
     return Boolean(
         androidNative
-        && safeStorage.getItem('cachymusic_experimental_android_pcm') === 'true'
+        && store.state.experimentalAndroidPcm
         && indexedSource(track)
         && typeof window !== 'undefined'
         && typeof window.AndroidBridge?.supportsDirectPcm === 'function'
@@ -639,8 +639,8 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
             s.audio.currentTime = 0;
             if (currentTimeEl) currentTimeEl.textContent = '0:00';
             if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
-            if (progressBar) progressBar.style.width = '0%';
-            if (miniProgressBar) miniProgressBar.style.width = '0%';
+            setProgressFraction(progressBar, 0);
+            setProgressFraction(miniProgressBar, 0);
             try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
             return;
         }
@@ -648,16 +648,16 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
         if (targetTime === 0) {
             if (currentTimeEl) currentTimeEl.textContent = '0:00';
             if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
-            if (progressBar) progressBar.style.width = '0%';
-            if (miniProgressBar) miniProgressBar.style.width = '0%';
+            setProgressFraction(progressBar, 0);
+            setProgressFraction(miniProgressBar, 0);
         } else {
             if (currentTimeEl) currentTimeEl.textContent = formatTime(targetTime);
             if (miniCurrentTime) miniCurrentTime.textContent = formatTime(targetTime);
             const dur = s.audio.duration || track.duration || 0;
             if (dur > 0) {
-                const pct = Math.min(100, Math.max(0, (targetTime / dur) * 100));
-                if (progressBar) progressBar.style.width = `${pct}%`;
-                if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
+                const frac = Math.min(1, Math.max(0, targetTime / dur));
+                setProgressFraction(progressBar, frac);
+                setProgressFraction(miniProgressBar, frac);
             }
         }
     };
@@ -702,13 +702,13 @@ async function loadTrack(index, autoPlay = true, initialTime = 0, adoptNative = 
         if (miniCurrentTime) miniCurrentTime.textContent = formatTime(targetTime);
         const totalSec = track.duration || 0;
         if (totalSec > 0) {
-            const pct = Math.min(100, Math.max(0, (targetTime / totalSec) * 100));
-            if (progressBar) progressBar.style.width = `${pct}%`;
-            if (miniProgressBar) miniProgressBar.style.width = `${pct}%`;
+            const frac = Math.min(1, Math.max(0, targetTime / totalSec));
+            setProgressFraction(progressBar, frac);
+            setProgressFraction(miniProgressBar, frac);
         }
     } else {
-        if (progressBar) progressBar.style.width = '0%';
-        if (miniProgressBar) miniProgressBar.style.width = '0%';
+        setProgressFraction(progressBar, 0);
+        setProgressFraction(miniProgressBar, 0);
         if (currentTimeEl) currentTimeEl.textContent = '0:00';
         if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
     }
@@ -842,8 +842,8 @@ async function loadStandaloneTrack(indexOrTrack = 0, autoPlay = true) {
 
     if (currentTimeEl) currentTimeEl.textContent = '0:00';
     if (miniCurrentTime) miniCurrentTime.textContent = '0:00';
-    if (progressBar) progressBar.style.width = '0%';
-    if (miniProgressBar) miniProgressBar.style.width = '0%';
+    setProgressFraction(progressBar, 0);
+    setProgressFraction(miniProgressBar, 0);
 
     updateEmptyPlayerState();
     const audioSrcBadge = document.getElementById('audioSourceBadge');
@@ -1479,7 +1479,7 @@ async function nextTrack(manual = true, allowNative = true) {
             if (!manual && s.repeatMode === 'off') {
                 pauseAudio();
                 seekAudio(0);
-                if (progressBar) progressBar.style.width = '0%';
+                setProgressFraction(progressBar, 0);
                 if (currentTimeEl) currentTimeEl.textContent = '0:00';
                 return;
             }
@@ -2076,6 +2076,7 @@ if (nativeModeControl) {
         try { if (!await confirmAudioChange('androidNative', next)) return; }
         finally { nativeModeControl.disabled = false; }
         nativeModeControl.checked = next;
+        store.state.androidNativeEnabled = next;
         safeStorage.setItem('cachymusic_android_native', String(next));
         const s = store.state;
         if (!androidNative || s.isStandalonePlayback) return;
@@ -2097,6 +2098,7 @@ if (continuousPcmControl) {
         try { if (!await confirmAudioChange('continuousPcm', next)) return; }
         finally { continuousPcmControl.disabled = false; }
         continuousPcmControl.checked = next;
+        store.state.continuousPcmEnabled = next;
         safeStorage.setItem('cachymusic_continuous_pcm', String(next));
         if (!continuousPcmControl.checked) cancelPcmSuccessor();
         else if (pcmStream) { pcmStream.lastAttempt = null; checkPcmSuccessor(pcmStream); }

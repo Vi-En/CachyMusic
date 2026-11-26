@@ -6,7 +6,7 @@ import {playlistNavigationToken} from './library.js';
 import {bindSettingsNavigation} from './settings-navigation.js';
 import {bindTransportControls} from './transport-controls.js';
 import {bindPlatterSwipe} from './platter-gesture.js';
-import {installModalFocus, visibleDialog} from './modal-focus.js';
+import {installModalFocus} from './modal-focus.js';
 import {findTrackIndex} from './track-session.js';
 import {bindDisclosure} from './control-ui.js';
 import {createProgressScrubber} from './progress-scrubber.js';
@@ -128,10 +128,14 @@ import {
     wsSettingsBtn,
     wsSoulseekBtn
 } from './ui-elements.js';
+import { installKeyboardShortcuts } from './keyboard-shortcuts.js';
+import { setProgressFraction } from './player-progress.js';
+import { hydrateActiveCustomThemeOnBoot } from './custom-theme-engine.js';
 import {
     applyTheme,
     closeThemeModal,
-    openThemeModal
+    openThemeModal,
+    openThemeStudio
 } from './themes.js';
 import * as audioEngineModule from './audio-engine.js';
 import {
@@ -483,6 +487,12 @@ store.subscribe('workspace:change', ({ detail }) => {
         } catch (_) {}
 
         initMprisBridge();
+        void hydrateActiveCustomThemeOnBoot().then(applied => {
+            if (applied) {
+                store.emit('visualizer:ensure-themes');
+                store.emit('peq:redraw');
+            }
+        });
     }
 
 
@@ -579,7 +589,7 @@ store.subscribe('workspace:change', ({ detail }) => {
             duration:getDuration, position:getPosition, identity:() => playerCoreModule.currentTrackGeneration,
             seek:seekAudio, dragging:active => {store.state.isDraggingScrubber = active;},
             paint:(pct, dur, el) => {
-                for (const bar of [progressBar, miniProgressBar]) if (bar) bar.style.width = `${pct * 100}%`;
+                for (const bar of [progressBar, miniProgressBar]) setProgressFraction(bar, pct);
                 const time = formatTime(pct * dur);
                 for (const label of [currentTimeEl, miniCurrentTime]) if (label) label.textContent = time;
                 if (tooltip && el === progressCon) {tooltip.textContent = time; tooltip.style.left = `${pct * 100}%`;}
@@ -1604,6 +1614,20 @@ store.subscribe('workspace:change', ({ detail }) => {
             });
         });
 
+        const settingsTabOpenStudioBtn = document.getElementById('settingsTabOpenThemeStudioBtn');
+        if (settingsTabOpenStudioBtn) {
+            settingsTabOpenStudioBtn.addEventListener('click', () => {
+                void openThemeStudio();
+            });
+        }
+        const themeModalOpenStudioBtn = document.getElementById('themeModalOpenStudioBtn');
+        if (themeModalOpenStudioBtn) {
+            themeModalOpenStudioBtn.addEventListener('click', () => {
+                closeThemeModal();
+                void openThemeStudio();
+            });
+        }
+
         // Mini Player & Soulseek Studio Listeners
         scrubber.attach(miniProgressCon);
 
@@ -1701,149 +1725,38 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
         applyInitialUrlIntent();
 
-        window.addEventListener('keydown', (e) => {
-            if (document.getElementById('audioChangeDialog')?.open) return;
-            // Only the topmost dialog receives Escape. Use its normal close
-            // path so EQ sampling, editor state and history are cleaned up.
-            if (e.code === 'Escape') {
-                const dialog = visibleDialog();
-                if (dialog) {
-                    const close = {
-                        themeModal: closeThemeModal, playlistModal: closePlaylistModal,
-                        trackActionMenuModal: closeTrackActionMenu, signalPathModal: closeSignalPathModal,
-                        sleepTimerModal: closeSleepTimerModal, slskAccountModal: closeSlskAccountModal,
-                        peqModal: closePeqModal, batchAddSongsModal: closeBatchAddModal,
-                        metadataEditorModal: closeMetadataEditor
-                    }[dialog.id];
-                    if (close) { e.preventDefault(); close(); }
-                    return;
-                }
-                if (document.activeElement?.id === 'trackSearch') document.activeElement.blur();
-                return;
-            }
-
-            if (e.defaultPrevented || visibleDialog()) return;
-
-            // Quick Search Shortcut: '/' or 'Cmd+K' / 'Ctrl+K'
-            const isSearchTrigger = (e.key === '/' || ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')));
-            if (isSearchTrigger && !['input', 'select', 'textarea'].includes(document.activeElement.tagName.toLowerCase()) && !document.activeElement.isContentEditable) {
-                const searchEl = document.getElementById('trackSearch');
-                if (searchEl) {
-                    e.preventDefault();
-                    if (compactLayout.matches) {
-                        switchWorkspace('player', 'trackListPanel');
-                        tabLibrary.click();
-                    }
-                    searchEl.focus();
-                    searchEl.select();
-                    return;
-                }
-            }
-
-            // Workspace Hotkeys (Alt+S for Soulseek, Alt+P for Player, Alt+D for Settings (legacy shortcut))
-            if (e.altKey && (e.code === 'KeyS' || e.key === 's' || e.key === 'S')) {
-                e.preventDefault();
-                switchWorkspace(store.state.currentWorkspace === 'soulseek' ? 'player' : 'soulseek');
-                return;
-            }
-            if (e.altKey && (e.code === 'KeyD' || e.key === 'd' || e.key === 'D')) {
-                e.preventDefault();
-                switchWorkspace(store.state.currentWorkspace === 'settings' ? 'player' : 'settings');
-                return;
-            }
-            if (e.altKey && (e.code === 'KeyO' || e.key === 'o' || e.key === 'O')) {
-                e.preventDefault();
-                switchWorkspace(store.state.currentWorkspace === 'settings' ? 'player' : 'settings');
-                return;
-            }
-            if (e.altKey && (e.code === 'KeyP' || e.key === 'p' || e.key === 'P')) {
-                e.preventDefault();
-                switchWorkspace('player');
-                return;
-            }
-
-            if (['input', 'select', 'textarea'].includes(document.activeElement.tagName.toLowerCase()) || document.activeElement.isContentEditable) return;
-
-            // Quick Queue Hotkey: 'Q' toggles Up Next queue view
-            if ((e.code === 'KeyQ' || e.key === 'q' || e.key === 'Q') && !e.ctrlKey && !e.altKey && !e.metaKey) {
-                e.preventDefault();
-                if (tabQueue && queueView && queueView.style.display !== 'none') {
-                    tabLibrary.click();
-                } else if (tabQueue) {
-                    tabQueue.click();
-                }
-                return;
-            }
-
-            // Quick Equalizer Hotkey: 'E' toggles 10-Band Parametric Equalizer modal
-            if ((e.code === 'KeyE' || e.key === 'e' || e.key === 'E') && !e.ctrlKey && !e.altKey && !e.metaKey) {
-                e.preventDefault();
-                const peqBtn = document.getElementById('playerPeqBtn');
-                if (peqBtn) {
-                    peqBtn.click();
-                } else {
-                    const peqModalEl = document.getElementById('peqModal');
-                    if (peqModalEl && (peqModalEl.style.display === 'flex' || window.getComputedStyle(peqModalEl).display === 'flex')) {
-                        if (typeof closePeqModal === 'function') closePeqModal();
-                        else peqModalEl.style.display = 'none';
-                    } else if (typeof openPeqModal === 'function') {
-                        openPeqModal();
-                    }
-                }
-                return;
-            }
-
-            // Background Tab & Focus Protection:
-            // Never capture spacebar or media playback keys if the tab is hidden or window is not focused!
-            // (Completely prevents YouTube spacebar / media hotkey leakage from unpausing CachyMusic)
-            if (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus())) return;
-
-            if (e.ctrlKey || e.metaKey || e.altKey) return;
-            // Preserve native Space activation of focused controls.
-            if (document.activeElement?.closest('button, a[href], summary, [role=button], [role=slider], [role=tab]') && ['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) return;
-            if (e.code === 'Space') {
-                e.preventDefault();
-                togglePlayPause();
-            } else if (e.code === 'ArrowRight') {
-                e.preventDefault();
-                if (e.shiftKey) nextTrack();
-                else {
-                    const s = store.state;
-                    const curTime = playerCoreModule.nativePosition() ?? (s.isSoftwareDecoding ? softwarePosition() : (s.audio ? s.audio.currentTime : 0));
-                    seekAudio(curTime + 5);
-                }
-            } else if (e.code === 'ArrowLeft') {
-                e.preventDefault();
-                if (e.shiftKey) prevTrack();
-                else {
-                    const s = store.state;
-                    const curTime = playerCoreModule.nativePosition() ?? (s.isSoftwareDecoding ? softwarePosition() : (s.audio ? s.audio.currentTime : 0));
-                    seekAudio(Math.max(0, curTime - 5));
-                }
-            } else if (e.code === 'ArrowUp') {
-                e.preventDefault();
-                setVolume(store.state.currentVolumeValue + 0.05, true);
-            } else if (e.code === 'ArrowDown') {
-                e.preventDefault();
-                setVolume(store.state.currentVolumeValue - 0.05, true);
-            } else if (e.code === 'KeyM') {
-                e.preventDefault();
-                muteBtn.click();
-            } else if (e.code === 'KeyL') {
-                e.preventDefault();
-                toggleLyricsView();
-            } else if (e.code === 'KeyI' || e.key === 'i' || e.key === 'I') {
-                e.preventDefault();
-                toggleMetadataPanel();
-            } else if ((e.code === 'KeyT' || e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                e.preventDefault();
-                toggleTracklistPanel();
-            } else if ((e.code === 'KeyN' || e.key === 'n') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                e.preventDefault();
-                nextTrack();
-            } else if ((e.code === 'KeyP' || e.key === 'p') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                e.preventDefault();
-                prevTrack();
+        installKeyboardShortcuts({
+            store,
+            compactLayout,
+            tabLibrary,
+            tabQueue,
+            queueView,
+            muteBtn,
+            switchWorkspace,
+            nextTrack,
+            prevTrack,
+            togglePlayPause,
+            seekAudio,
+            setVolume,
+            toggleLyricsView,
+            toggleMetadataPanel,
+            toggleTracklistPanel,
+            getPosition: () => {
+                const s = store.state;
+                return playerCoreModule.nativePosition() ?? (s.isSoftwareDecoding ? softwarePosition() : (s.audio ? s.audio.currentTime : 0));
+            },
+            openPeqModal,
+            closePeqModal,
+            modalClosers: {
+                themeModal: closeThemeModal,
+                playlistModal: closePlaylistModal,
+                trackActionMenuModal: closeTrackActionMenu,
+                signalPathModal: closeSignalPathModal,
+                sleepTimerModal: closeSleepTimerModal,
+                slskAccountModal: closeSlskAccountModal,
+                peqModal: closePeqModal,
+                batchAddSongsModal: closeBatchAddModal,
+                metadataEditorModal: closeMetadataEditor
             }
         });
 

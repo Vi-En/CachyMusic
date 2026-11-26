@@ -7,7 +7,7 @@
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: https://musicbrainz.org https://coverartarchive.org https://archive.org https://*.archive.org https://lrclib.net; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
     <meta name="theme-color" content="#090e14">
-    <script src="scripts/theme-preload.js?v=3.0.0-dev.6.74-resource-isolation"></script>
+    <script src="scripts/theme-preload.js?v=3.0.0-dev.7.0"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,13 +26,18 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.6.74-resource-isolation">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.7.0">
     <script src="scripts/pwa-init.js" defer></script>
 </head>
 <body class="view-player mobile-tab-player">
 
-    <!-- Dynamic Acoustic Ambiance & Ambient Artwork Bleed -->
+    <!-- Dynamic Acoustic Ambiance & Custom Theme Canvas Layers -->
     <div class="ambientAtmosphere" id="ambientAtmosphere" aria-hidden="true">
+        <div class="customCanvasBackdrop" id="customCanvasBackdrop">
+            <div class="customCanvasImage" id="customCanvasImage"></div>
+            <div class="customCanvasTexture" id="customCanvasTexture"></div>
+            <div class="customCanvasScrim" id="customCanvasScrim"></div>
+        </div>
         <div class="ambientAuraGlow" id="ambientAuraGlow"></div>
     </div>
 
@@ -294,9 +299,8 @@
             <div class="timelineCon">
                 <span id="currentTime" class="timeLabel">0:00</span>
                 <div class="progressBarCon" id="progressCon" role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true">
-                    <div class="progressBar" id="progressBar">
-                        <span class="progressPlayhead" id="progressPlayhead"></span>
-                    </div>
+                    <div class="progressBar" id="progressBar"></div>
+                    <div class="progressPlayheadTrack" aria-hidden="true"><span class="progressPlayhead" id="progressPlayhead"></span></div>
                     <div class="progressHover" id="progressHover"></div>
                     <div class="progressHoverTooltip" id="progressHoverTooltip">0:00</div>
                 </div>
@@ -962,6 +966,7 @@
                                 </div>
                                 <span class="settingsThemePickerAction">CHANGE THEME</span>
                             </button>
+                            <button type="button" id="settingsTabOpenThemeStudioBtn" class="actionBtn" title="Customize colors, backgrounds, textures, borders, fonts &amp; motion">Open Theme Studio</button>
                         </div>
                     </div>
                 </div>
@@ -1205,9 +1210,8 @@
             <div class="miniScrubberRow">
                 <span class="miniTime" id="miniCurrentTime">0:00</span>
                 <div class="miniProgressBarCon" id="miniProgressCon" role="slider" tabindex="0" aria-label="Mini player playback position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-disabled="true">
-                    <div class="miniProgressBar" id="miniProgressBar">
-                        <div class="progressPlayhead"></div>
-                    </div>
+                    <div class="miniProgressBar" id="miniProgressBar"></div>
+                    <div class="progressPlayheadTrack" aria-hidden="true"><div class="progressPlayhead"></div></div>
                 </div>
                 <span class="miniTime" id="miniTotalDuration">0:00</span>
             </div>
@@ -1772,6 +1776,19 @@
             
             <div class="themeModalScrollArea" id="themeModalScrollArea">
                 <div class="themeColumnsContainer" id="themeColumnsContainer">
+                    <!-- Custom Saved Themes & Studio Launcher -->
+                    <div class="themeCategoryGroup" id="customThemeCategoryGroup" data-category="custom">
+                        <div class="themeCategoryHeader">
+                            <div class="themeCategoryHeading">
+                                <h4>Custom themes</h4>
+                            </div>
+                            <div class="themeCategoryActions">
+                                <button type="button" id="themeModalOpenStudioBtn" class="actionBtn primaryBtn">Create / Customize Theme</button>
+                            </div>
+                        </div>
+                        <p class="themeCategoryLead">Build themes with custom colors, gradients, images, textures, borders, typography and motion.</p>
+                        <div class="themeModalGrid" id="customThemeModalGrid"></div>
+                    </div>
                     <!-- Category 1: Sci-Fi & Universe (No Man's Sky) -->
                     <div class="themeCategoryGroup" data-category="scifi">
                     <div class="themeCategoryHeader">
@@ -1957,6 +1974,11 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Custom Theme Studio Modal (Populated Lazily on Open) -->
+    <div class="modalBackdrop" id="customThemeStudioModal" role="dialog" aria-modal="true" aria-labelledby="customThemeStudioTitle" style="display: none;">
+        <div class="modalCard ctStudioCard" id="customThemeStudioCard"></div>
     </div>
 
     <!-- Modern Floating Toast Container -->

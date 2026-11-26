@@ -3,6 +3,7 @@ import { formatTime, safeStorage, setScanStatus, showToast } from './utils.js';
 import { store } from './state.js';
 import { THEMES, normalizeThemeId } from './theme-catalog.js';
 import { ultrasonicFilterStatus } from './ultrasonic-status.js';
+import { getActiveCustomTheme, runViewTransition } from './custom-theme-engine.js';
 
     // DOM Elements - Player & Audio (live reference stored on store.state.audio)
     const audioPlayerEl = store.state.audio || document.getElementById('audioPlayer');
@@ -416,8 +417,13 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         }
 
         const settingsTabCurrentThemeBadge = document.getElementById('settingsTabCurrentThemeBadge');
-        if (settingsTabCurrentThemeBadge && s.activeTheme) {
-            settingsTabCurrentThemeBadge.textContent = THEMES[normalizeThemeId(s.activeTheme)].name;
+        if (settingsTabCurrentThemeBadge) {
+            const custom = getActiveCustomTheme();
+            if (custom && document.documentElement?.dataset?.theme === 'custom') {
+                settingsTabCurrentThemeBadge.textContent = `${custom.name} (Custom)`;
+            } else if (s.activeTheme) {
+                settingsTabCurrentThemeBadge.textContent = THEMES[normalizeThemeId(s.activeTheme)].name;
+            }
         }
 
         const settingsTabSleepStatusBadge = document.getElementById('settingsTabSleepStatusBadge');
@@ -462,6 +468,7 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         // entry points should resolve to Settings rather than a blank workspace.
         if (viewName === 'download' && !downloadWorkspace) viewName = 'settings';
         const s = store.state;
+        const workspaceChanged = s.currentWorkspace !== viewName;
         s.currentWorkspace = viewName;
         const currentTrack = s.allTracks[s.currentTrackIndex];
 
@@ -472,6 +479,7 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         };
         const secondary = secondaryViews[viewName];
 
+        const applyWorkspaceDom = () => {
         document.body.classList.remove('view-player', 'view-soulseek', 'view-download', 'view-settings');
         [wsPlayerBtn, wsSoulseekBtn, wsDownloadBtn, wsSettingsBtn, topSettingsBtn, installAppBtn].forEach(b => b?.classList.remove('active'));
 
@@ -572,6 +580,13 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
             else button.removeAttribute('aria-current');
         }
         store.emit('workspace:change', { viewName, targetMobilePanel });
+        };
+
+        if (workspaceChanged) {
+            runViewTransition(applyWorkspaceDom);
+        } else {
+            applyWorkspaceDom();
+        }
     }
 
     // No sample placeholder tracks — user chooses music directory first
@@ -588,7 +603,8 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         const known = typeof progressPct === 'number' && Number.isFinite(progressPct);
         bar.classList.toggle('indeterminate', !known);
         const pct = known ? Math.max(0, Math.min(100, progressPct)) : null;
-        bar.style.width = known ? `${pct}%` : '40%';
+        const ratio = known ? (pct / 100) : 0.4;
+        bar.style.setProperty('--loading-ratio', String(ratio));
         if (known) track.setAttribute('aria-valuenow', String(Math.round(pct)));
         else track.removeAttribute('aria-valuenow');
     }

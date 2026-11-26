@@ -150,7 +150,10 @@ return function attachAudioListeners(targetAudio) {
                 if (!s.playQueue.length && (s.playlistPlayback ? playlistNeighbor(s)<0 : currentIdxInPool === pool.length - 1 && s.repeatMode === 'off')) {
                     pauseAudio();
                     try { recoveryAudio.currentTime = 0; } catch (_) {}
-                    if (progressBar) progressBar.style.width = '0%';
+                    if (progressBar) {
+                        const track = progressBar.parentElement;
+                        if (track?.style) track.style.setProperty('--progress-ratio', '0');
+                    }
                     if (currentTimeEl) currentTimeEl.textContent = '0:00';
                     try { safeStorage.removeItem('cachymusic_last_track_time'); } catch (_) {}
                 } else {

@@ -859,11 +859,21 @@ function bindTrackRow(item, track, idx, isCurrent, highPriority) {
 
 let isVirtualScrollBound = false;
 let isVirtualScrollPending = false;
+let cachedSpacerTop = null;
+let cachedSpacerBottom = null;
+let cachedTrackItemsContainer = null;
 const virtualTrackState = {
     startIndex: -1,
     endIndex: -1,
     rowHeight: MIN_TRACK_ROW_HEIGHT
 };
+
+function getVirtualListEls() {
+    if (!cachedSpacerTop || !cachedSpacerTop.isConnected) cachedSpacerTop = document.getElementById('trackSpacerTop');
+    if (!cachedSpacerBottom || !cachedSpacerBottom.isConnected) cachedSpacerBottom = document.getElementById('trackSpacerBottom');
+    if (!cachedTrackItemsContainer || !cachedTrackItemsContainer.isConnected) cachedTrackItemsContainer = document.getElementById('trackItemsContainer');
+    return { spacerTop: cachedSpacerTop, spacerBottom: cachedSpacerBottom, container: cachedTrackItemsContainer };
+}
 
 function renderVirtualTrackWindow(force = false) {
     const s = store.state;
@@ -891,9 +901,7 @@ function renderVirtualTrackWindow(force = false) {
     virtualTrackState.startIndex = startIndex;
     virtualTrackState.endIndex = endIndex;
 
-    const spacerTop = document.getElementById('trackSpacerTop');
-    const spacerBottom = document.getElementById('trackSpacerBottom');
-    const container = document.getElementById('trackItemsContainer');
+    const { spacerTop, spacerBottom, container } = getVirtualListEls();
 
     if (spacerTop) spacerTop.style.height = `${startIndex * rowHeight}px`;
     if (spacerBottom) spacerBottom.style.height = `${Math.max(0, (total - endIndex) * rowHeight)}px`;
@@ -939,26 +947,25 @@ function renderVirtualTrackWindow(force = false) {
         }
     }
 
+    let tailFrag = null;
     for (let idx = startIndex; idx < endIndex; idx++) {
-        if (existingRows.has(idx)) continue;
+        if (existingRows.has(idx)) {
+            if (tailFrag) {
+                container.insertBefore(tailFrag, existingRows.get(idx));
+                tailFrag = null;
+            }
+            continue;
+        }
         const track = s.displayedTracks[idx];
         if (!track) continue;
         const highPriority = idx >= rawStart && idx < rawStart + visibleCount;
         const newItem = bindTrackRow(acquireTrackRow(), track, idx, idx === currentDisplayedIndex, highPriority);
-
-        let inserted = false;
-        for (let nextIdx = idx + 1; nextIdx < endIndex; nextIdx++) {
-            const nextRow = existingRows.get(nextIdx);
-            if (nextRow && nextRow.parentNode === container) {
-                container.insertBefore(newItem, nextRow);
-                inserted = true;
-                break;
-            }
-        }
-        if (!inserted) {
-            container.appendChild(newItem);
-        }
+        if (!tailFrag) tailFrag = document.createDocumentFragment();
+        tailFrag.appendChild(newItem);
         existingRows.set(idx, newItem);
+    }
+    if (tailFrag) {
+        container.appendChild(tailFrag);
     }
     restoreTrackFocus(container, focusSnapshot);
 }

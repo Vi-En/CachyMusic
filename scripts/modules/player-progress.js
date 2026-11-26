@@ -1,10 +1,25 @@
-import {store} from './state.js';
-import {formatTime} from './utils.js';
-import {currentTimeEl, miniCurrentTime, progressBar, progressCon, miniProgressBar, miniProgressCon, persistentMiniPlayer, playerDeckEl} from './ui-elements.js';
-import {updateActiveLyric} from './lyrics.js';
+import { store } from './state.js';
+import { formatTime } from './utils.js';
+import { currentTimeEl, miniCurrentTime, progressBar, progressCon, miniProgressBar, miniProgressCon, persistentMiniPlayer, playerDeckEl } from './ui-elements.js';
+import { updateActiveLyric } from './lyrics.js';
 
 let lastProgressCur = 0;
 let lastProgressDur = 0;
+const lastFractionByTrack = new WeakMap();
+
+/**
+ * Update a compositor-driven progress bar via CSS --progress-ratio on its container.
+ * Avoids mutating width per frame so playback progress triggers zero layout reflow.
+ */
+export function setProgressFraction(barEl, fraction) {
+    if (!barEl) return;
+    const clamped = Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 0;
+    const quantized = Math.round(clamped * 10000) / 10000;
+    const track = barEl.parentElement || barEl;
+    if (lastFractionByTrack.get(track) === quantized) return;
+    lastFractionByTrack.set(track, quantized);
+    track.style?.setProperty('--progress-ratio', String(quantized));
+}
 
 function syncBarControl(control, valid, max, now) {
     if (!control) return;
@@ -50,10 +65,9 @@ export function updatePlaybackProgress(cur, dur) {
     if (showMain) syncBarControl(progressCon || document.getElementById('progressCon'), valid, max, now);
     if (showMini) syncBarControl(miniProgressCon || document.getElementById('miniProgressCon'), valid, max, now);
 
-    const pct = valid ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0;
-    const pctStr = `${pct}%`;
-    if (showMain && progressBar && progressBar.style.width !== pctStr) progressBar.style.width = pctStr;
-    if (showMini && miniProgressBar && miniProgressBar.style.width !== pctStr) miniProgressBar.style.width = pctStr;
+    const fraction = valid ? Math.min(1, Math.max(0, cur / dur)) : 0;
+    if (showMain && progressBar) setProgressFraction(progressBar, fraction);
+    if (showMini && miniProgressBar) setProgressFraction(miniProgressBar, fraction);
 
     if (cur > 1.0 && s.consecutiveSkipCount > 0) {
         s.consecutiveSkipCount = 0;
@@ -71,4 +85,3 @@ if (typeof store?.subscribe === 'function') {
         }
     });
 }
-

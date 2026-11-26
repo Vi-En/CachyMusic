@@ -1,4 +1,4 @@
-/* CachyMusic v2.0.0 — Perceptual OKLCH Themes (contrast requires per-control verification) */
+/* CachyMusic v3.0.0 — 3-Plane Perceptual OKLCH Themes (FG / MG / BG WCAG 2.2 AA+) */
 
 @layer themes {
     /* 1. Default Studio Hi-Fi (Noir Teal & Laser Cyan) */
@@ -6,30 +6,34 @@
     :is(:root, .themeCardPreview)[data-theme="default"],
     :is(:root, .themeCardPreview)[data-theme="studio-dark"] {
         color-scheme: dark;
-        --bg-canvas: oklch(0.14 0.015 245);
-        --bg-surface-1: oklch(0.18 0.020 242 / 0.94);
-        --bg-surface-2: oklch(0.23 0.026 240 / 0.94);
-        --bg-surface-3: oklch(0.28 0.032 238 / 0.96);
-        --bg-glass: oklch(0.14 0.015 245 / 0.88);
+        --bg-canvas: oklch(0.125 0.015 245);
+        --bg-surface-1: oklch(0.195 0.021 242);
+        --bg-surface-2: oklch(0.255 0.026 240);
+        --bg-surface-3: oklch(0.315 0.032 238);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.16 0.018 245 / 0.94);
 
-        --border-subtle: oklch(1 0 0 / 0.25);
-        --border-medium: oklch(0.84 0.14 205 / 0.56);
-        --border-bold: oklch(0.84 0.15 205 / 0.80);
-        --border-focus: oklch(0.84 0.16 205);
+        --border-divider: oklch(0.39 0.025 242);
+        --border-surface: oklch(0.44 0.035 240);
+        --border-subtle: oklch(0.39 0.025 242);
+        --border-control: oklch(0.68 0.08 215);
+        --border-medium: oklch(0.68 0.08 215);
+        --border-bold: oklch(0.84 0.15 205);
+        --border-focus: oklch(0.86 0.16 205);
 
         --text-primary: oklch(0.98 0.008 240);
-        --text-secondary: oklch(0.86 0.05 245);
-        --text-muted: oklch(0.80 0.04 245);
+        --text-secondary: oklch(0.87 0.045 242);
+        --text-muted: oklch(0.79 0.04 242);
         --text-disabled: oklch(0.67 0.03 245);
         --text-accent: oklch(0.86 0.15 205);
-        --text-on-accent: oklch(0.13 0.02 225);
+        --text-on-accent: oklch(0.12 0.02 225);
 
         --accent-color: oklch(0.84 0.15 205);
         --accent-primary: oklch(0.84 0.15 205);
         --accent-hover: oklch(0.89 0.13 205);
-        --accent-glow: oklch(0.84 0.15 205 / 0.42);
-        --accent-surface: oklch(0.84 0.15 205 / 0.14);
-        --ambient-aura-1: oklch(0.80 0.15 205 / 0.18);
+        --accent-glow: oklch(0.84 0.15 205 / 0.38);
+        --accent-surface: oklch(0.84 0.15 205 / 0.16);
+        --ambient-aura-1: oklch(0.80 0.15 205 / 0.16);
         --ambient-aura-2: oklch(0.72 0.12 220 / 0.05);
     }
 
@@ -37,30 +41,34 @@
     :is(:root, .themeCardPreview)[data-theme="nms"],
     :is(:root, .themeCardPreview)[data-theme="atlas"] {
         color-scheme: dark;
-        --bg-canvas: oklch(0.13 0.015 15);
-        --bg-surface-1: oklch(0.18 0.028 18 / 0.94);
-        --bg-surface-2: oklch(0.23 0.036 18 / 0.94);
-        --bg-surface-3: oklch(0.28 0.044 18 / 0.96);
-        --bg-glass: oklch(0.13 0.015 15 / 0.90);
+        --bg-canvas: oklch(0.12 0.016 15);
+        --bg-surface-1: oklch(0.19 0.030 18);
+        --bg-surface-2: oklch(0.25 0.038 18);
+        --bg-surface-3: oklch(0.31 0.046 18);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.15 0.020 16 / 0.94);
 
-        --border-subtle: oklch(0.72 0.18 18 / 0.36);
-        --border-medium: oklch(0.72 0.20 18 / 0.65);
-        --border-bold: oklch(0.76 0.22 18);
-        --border-focus: oklch(0.80 0.20 18);
+        --border-divider: oklch(0.41 0.07 18);
+        --border-surface: oklch(0.47 0.10 18);
+        --border-subtle: oklch(0.41 0.07 18);
+        --border-control: oklch(0.72 0.16 18);
+        --border-medium: oklch(0.72 0.16 18);
+        --border-bold: oklch(0.76 0.21 18);
+        --border-focus: oklch(0.82 0.20 18);
 
         --text-primary: oklch(0.98 0.01 12);
-        --text-secondary: oklch(0.88 0.07 18);
-        --text-muted: oklch(0.81 0.055 18);
+        --text-secondary: oklch(0.88 0.065 18);
+        --text-muted: oklch(0.80 0.055 18);
         --text-disabled: oklch(0.68 0.04 18);
-        --text-accent: oklch(0.79 0.19 20);
+        --text-accent: oklch(0.81 0.19 20);
         --text-on-accent: oklch(0.12 0.02 15);
 
-        --accent-color: oklch(0.72 0.19 20);
-        --accent-primary: oklch(0.72 0.19 20);
-        --accent-hover: oklch(0.78 0.18 20);
-        --accent-glow: oklch(0.68 0.22 20 / 0.48);
-        --accent-surface: oklch(0.63 0.25 18 / 0.16);
-        --ambient-aura-1: oklch(0.63 0.24 18 / 0.20);
+        --accent-color: oklch(0.73 0.19 20);
+        --accent-primary: oklch(0.73 0.19 20);
+        --accent-hover: oklch(0.79 0.18 20);
+        --accent-glow: oklch(0.68 0.22 20 / 0.44);
+        --accent-surface: oklch(0.66 0.22 18 / 0.18);
+        --ambient-aura-1: oklch(0.63 0.24 18 / 0.18);
         --ambient-aura-2: oklch(0.78 0.14 205 / 0.05);
     }
 
@@ -69,19 +77,23 @@
     :is(:root, .themeCardPreview)[data-theme="cyberpunk"],
     :is(:root, .themeCardPreview)[data-theme="neon-night"] {
         color-scheme: dark;
-        --bg-canvas: oklch(0.14 0.028 272);
-        --bg-surface-1: oklch(0.18 0.042 272 / 0.94);
-        --bg-surface-2: oklch(0.24 0.052 272 / 0.94);
-        --bg-surface-3: oklch(0.30 0.062 272 / 0.96);
-        --bg-glass: oklch(0.14 0.028 272 / 0.90);
+        --bg-canvas: oklch(0.13 0.028 272);
+        --bg-surface-1: oklch(0.20 0.044 272);
+        --bg-surface-2: oklch(0.26 0.054 272);
+        --bg-surface-3: oklch(0.32 0.064 272);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.16 0.032 272 / 0.94);
 
-        --border-subtle: oklch(0.85 0.14 202 / 0.30);
-        --border-medium: oklch(0.85 0.14 202 / 0.56);
+        --border-divider: oklch(0.41 0.06 270);
+        --border-surface: oklch(0.48 0.09 250);
+        --border-subtle: oklch(0.41 0.06 270);
+        --border-control: oklch(0.72 0.13 215);
+        --border-medium: oklch(0.72 0.13 215);
         --border-bold: oklch(0.86 0.15 202);
-        --border-focus: oklch(0.86 0.15 202);
+        --border-focus: oklch(0.88 0.15 202);
 
         --text-primary: oklch(0.98 0.01 245);
-        --text-secondary: oklch(0.87 0.075 250);
+        --text-secondary: oklch(0.88 0.07 250);
         --text-muted: oklch(0.81 0.05 255);
         --text-disabled: oklch(0.68 0.04 260);
         --text-accent: oklch(0.86 0.15 202);
@@ -90,25 +102,29 @@
         --accent-color: oklch(0.86 0.15 202);
         --accent-primary: oklch(0.86 0.15 202);
         --accent-hover: oklch(0.91 0.12 202);
-        --accent-glow: oklch(0.86 0.15 202 / 0.46);
-        --accent-surface: oklch(0.86 0.15 202 / 0.15);
-        --ambient-aura-1: oklch(0.86 0.15 202 / 0.18);
-        --ambient-aura-2: oklch(0.65 0.26 350 / 0.09);
+        --accent-glow: oklch(0.86 0.15 202 / 0.42);
+        --accent-surface: oklch(0.86 0.15 202 / 0.16);
+        --ambient-aura-1: oklch(0.86 0.15 202 / 0.17);
+        --ambient-aura-2: oklch(0.65 0.26 350 / 0.08);
     }
 
     /* 4. Space Station / Euclid Horizon (Amber Gold + Orbital Teal) */
     :is(:root, .themeCardPreview)[data-theme="euclid-horizon"] {
         color-scheme: dark;
-        --bg-canvas: oklch(0.14 0.014 70);
-        --bg-surface-1: oklch(0.19 0.024 68 / 0.94);
-        --bg-surface-2: oklch(0.24 0.032 68 / 0.94);
-        --bg-surface-3: oklch(0.30 0.040 68 / 0.96);
-        --bg-glass: oklch(0.14 0.014 70 / 0.90);
+        --bg-canvas: oklch(0.13 0.015 70);
+        --bg-surface-1: oklch(0.20 0.025 68);
+        --bg-surface-2: oklch(0.26 0.033 68);
+        --bg-surface-3: oklch(0.32 0.041 68);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.16 0.018 70 / 0.94);
 
-        --border-subtle: oklch(0.83 0.16 82 / 0.30);
-        --border-medium: oklch(0.83 0.16 82 / 0.56);
+        --border-divider: oklch(0.41 0.045 72);
+        --border-surface: oklch(0.48 0.07 78);
+        --border-subtle: oklch(0.41 0.045 72);
+        --border-control: oklch(0.71 0.13 80);
+        --border-medium: oklch(0.71 0.13 80);
         --border-bold: oklch(0.84 0.17 82);
-        --border-focus: oklch(0.84 0.17 82);
+        --border-focus: oklch(0.86 0.17 82);
 
         --text-primary: oklch(0.98 0.012 92);
         --text-secondary: oklch(0.90 0.075 88);
@@ -120,25 +136,29 @@
         --accent-color: oklch(0.84 0.16 82);
         --accent-primary: oklch(0.84 0.16 82);
         --accent-hover: oklch(0.89 0.14 85);
-        --accent-glow: oklch(0.84 0.16 82 / 0.44);
-        --accent-surface: oklch(0.84 0.16 82 / 0.16);
-        --ambient-aura-1: oklch(0.84 0.16 82 / 0.18);
+        --accent-glow: oklch(0.84 0.16 82 / 0.40);
+        --accent-surface: oklch(0.84 0.16 82 / 0.17);
+        --ambient-aura-1: oklch(0.84 0.16 82 / 0.17);
         --ambient-aura-2: oklch(0.73 0.13 185 / 0.06);
     }
 
     /* 5. Alien Paradise (Fuchsia Flora & Lagoon Turquoise) */
     :is(:root, .themeCardPreview)[data-theme="alien-paradise"] {
         color-scheme: dark;
-        --bg-canvas: oklch(0.14 0.025 335);
-        --bg-surface-1: oklch(0.19 0.038 332 / 0.94);
-        --bg-surface-2: oklch(0.24 0.048 332 / 0.94);
-        --bg-surface-3: oklch(0.30 0.056 332 / 0.96);
-        --bg-glass: oklch(0.14 0.025 335 / 0.90);
+        --bg-canvas: oklch(0.13 0.025 335);
+        --bg-surface-1: oklch(0.20 0.040 332);
+        --bg-surface-2: oklch(0.26 0.050 332);
+        --bg-surface-3: oklch(0.32 0.058 332);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.16 0.030 335 / 0.94);
 
-        --border-subtle: oklch(0.76 0.18 352 / 0.34);
-        --border-medium: oklch(0.76 0.20 352 / 0.62);
+        --border-divider: oklch(0.41 0.07 338);
+        --border-surface: oklch(0.48 0.11 345);
+        --border-subtle: oklch(0.41 0.07 338);
+        --border-control: oklch(0.70 0.15 348);
+        --border-medium: oklch(0.70 0.15 348);
         --border-bold: oklch(0.78 0.20 352);
-        --border-focus: oklch(0.82 0.18 352);
+        --border-focus: oklch(0.83 0.18 352);
 
         --text-primary: oklch(0.98 0.012 348);
         --text-secondary: oklch(0.88 0.08 342);
@@ -150,25 +170,29 @@
         --accent-color: oklch(0.74 0.18 350);
         --accent-primary: oklch(0.74 0.18 350);
         --accent-hover: oklch(0.80 0.16 350);
-        --accent-glow: oklch(0.70 0.20 350 / 0.48);
-        --accent-surface: oklch(0.67 0.24 352 / 0.16);
-        --ambient-aura-1: oklch(0.67 0.24 352 / 0.20);
+        --accent-glow: oklch(0.70 0.20 350 / 0.44);
+        --accent-surface: oklch(0.69 0.21 352 / 0.18);
+        --ambient-aura-1: oklch(0.67 0.24 352 / 0.18);
         --ambient-aura-2: oklch(0.85 0.15 170 / 0.06);
     }
 
     /* 6. Emeril Drive / Abyssal Void (Emerald Plasma) */
     :is(:root, .themeCardPreview)[data-theme="abyssal-void"] {
         color-scheme: dark;
-        --bg-canvas: oklch(0.14 0.018 168);
-        --bg-surface-1: oklch(0.18 0.032 168 / 0.94);
-        --bg-surface-2: oklch(0.23 0.042 168 / 0.94);
-        --bg-surface-3: oklch(0.28 0.052 168 / 0.96);
-        --bg-glass: oklch(0.14 0.018 168 / 0.90);
+        --bg-canvas: oklch(0.13 0.018 168);
+        --bg-surface-1: oklch(0.195 0.032 168);
+        --bg-surface-2: oklch(0.255 0.042 168);
+        --bg-surface-3: oklch(0.315 0.052 168);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.16 0.022 168 / 0.94);
 
-        --border-subtle: oklch(0.87 0.19 158 / 0.30);
-        --border-medium: oklch(0.87 0.19 158 / 0.56);
+        --border-divider: oklch(0.41 0.06 168);
+        --border-surface: oklch(0.48 0.10 162);
+        --border-subtle: oklch(0.41 0.06 168);
+        --border-control: oklch(0.72 0.14 160);
+        --border-medium: oklch(0.72 0.14 160);
         --border-bold: oklch(0.87 0.20 158);
-        --border-focus: oklch(0.87 0.20 158);
+        --border-focus: oklch(0.88 0.20 158);
 
         --text-primary: oklch(0.98 0.012 162);
         --text-secondary: oklch(0.88 0.095 162);
@@ -180,25 +204,29 @@
         --accent-color: oklch(0.87 0.19 158);
         --accent-primary: oklch(0.87 0.19 158);
         --accent-hover: oklch(0.91 0.16 158);
-        --accent-glow: oklch(0.87 0.19 158 / 0.44);
-        --accent-surface: oklch(0.87 0.19 158 / 0.16);
-        --ambient-aura-1: oklch(0.87 0.19 158 / 0.18);
+        --accent-glow: oklch(0.87 0.19 158 / 0.40);
+        --accent-surface: oklch(0.87 0.19 158 / 0.17);
+        --ambient-aura-1: oklch(0.87 0.19 158 / 0.17);
         --ambient-aura-2: oklch(0.80 0.14 175 / 0.05);
     }
 
     /* 7. Dissonance (Atlantideum Violet) */
     :is(:root, .themeCardPreview)[data-theme="dissonance"] {
         color-scheme: dark;
-        --bg-canvas: oklch(0.14 0.025 305);
-        --bg-surface-1: oklch(0.19 0.042 305 / 0.94);
-        --bg-surface-2: oklch(0.24 0.055 305 / 0.94);
-        --bg-surface-3: oklch(0.30 0.068 305 / 0.96);
-        --bg-glass: oklch(0.14 0.025 305 / 0.90);
+        --bg-canvas: oklch(0.13 0.025 305);
+        --bg-surface-1: oklch(0.20 0.042 305);
+        --bg-surface-2: oklch(0.26 0.054 305);
+        --bg-surface-3: oklch(0.32 0.066 305);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.16 0.030 305 / 0.94);
 
-        --border-subtle: oklch(0.78 0.19 322 / 0.34);
-        --border-medium: oklch(0.78 0.20 322 / 0.62);
+        --border-divider: oklch(0.41 0.075 308);
+        --border-surface: oklch(0.48 0.115 316);
+        --border-subtle: oklch(0.41 0.075 308);
+        --border-control: oklch(0.71 0.15 320);
+        --border-medium: oklch(0.71 0.15 320);
         --border-bold: oklch(0.78 0.22 322);
-        --border-focus: oklch(0.82 0.20 322);
+        --border-focus: oklch(0.84 0.20 322);
 
         --text-primary: oklch(0.98 0.012 310);
         --text-secondary: oklch(0.88 0.065 308);
@@ -207,28 +235,32 @@
         --text-accent: oklch(0.83 0.18 322);
         --text-on-accent: oklch(0.14 0.03 310);
 
-        --accent-color: oklch(0.72 0.24 322);
-        --accent-primary: oklch(0.72 0.24 322);
-        --accent-hover: oklch(0.79 0.20 322);
-        --accent-glow: oklch(0.72 0.24 322 / 0.45);
-        --accent-surface: oklch(0.72 0.24 322 / 0.16);
-        --ambient-aura-1: oklch(0.72 0.24 322 / 0.19);
+        --accent-color: oklch(0.74 0.22 322);
+        --accent-primary: oklch(0.74 0.22 322);
+        --accent-hover: oklch(0.80 0.19 322);
+        --accent-glow: oklch(0.72 0.24 322 / 0.42);
+        --accent-surface: oklch(0.72 0.24 322 / 0.17);
+        --ambient-aura-1: oklch(0.72 0.24 322 / 0.18);
         --ambient-aura-2: oklch(0.64 0.24 295 / 0.06);
     }
 
     /* 8. Sentinel (Planetary Defense Ice HUD) */
     :is(:root, .themeCardPreview)[data-theme="sentinel"] {
         color-scheme: dark;
-        --bg-canvas: oklch(0.14 0.02 238);
-        --bg-surface-1: oklch(0.19 0.032 238 / 0.94);
-        --bg-surface-2: oklch(0.24 0.042 238 / 0.94);
-        --bg-surface-3: oklch(0.30 0.052 238 / 0.96);
-        --bg-glass: oklch(0.14 0.02 238 / 0.90);
+        --bg-canvas: oklch(0.13 0.02 238);
+        --bg-surface-1: oklch(0.20 0.032 238);
+        --bg-surface-2: oklch(0.26 0.042 238);
+        --bg-surface-3: oklch(0.32 0.052 238);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.16 0.024 238 / 0.94);
 
-        --border-subtle: oklch(0.84 0.14 205 / 0.30);
-        --border-medium: oklch(0.84 0.14 205 / 0.56);
+        --border-divider: oklch(0.41 0.055 230);
+        --border-surface: oklch(0.49 0.085 218);
+        --border-subtle: oklch(0.41 0.055 230);
+        --border-control: oklch(0.72 0.12 208);
+        --border-medium: oklch(0.72 0.12 208);
         --border-bold: oklch(0.85 0.15 205);
-        --border-focus: oklch(0.85 0.15 205);
+        --border-focus: oklch(0.87 0.15 205);
 
         --text-primary: oklch(0.98 0.008 210);
         --text-secondary: oklch(0.87 0.08 228);
@@ -240,23 +272,27 @@
         --accent-color: oklch(0.85 0.15 205);
         --accent-primary: oklch(0.85 0.15 205);
         --accent-hover: oklch(0.90 0.13 205);
-        --accent-glow: oklch(0.85 0.15 205 / 0.46);
-        --accent-surface: oklch(0.85 0.15 205 / 0.16);
-        --ambient-aura-1: oklch(0.85 0.15 205 / 0.19);
+        --accent-glow: oklch(0.85 0.15 205 / 0.42);
+        --accent-surface: oklch(0.85 0.15 205 / 0.17);
+        --ambient-aura-1: oklch(0.85 0.15 205 / 0.18);
         --ambient-aura-2: oklch(0.65 0.22 32 / 0.07);
     }
 
     /* 9. Minimalist Light / Brutalist Light (High-Contrast Paper, AAA Ink) */
     :is(:root, .themeCardPreview):is([data-theme="minimalist-light"], [data-theme="brutalist-light"]) {
         color-scheme: light;
-        --bg-canvas: oklch(0.965 0.008 92);
+        --bg-canvas: oklch(0.955 0.008 92);
         --bg-surface-1: oklch(1 0 0);
-        --bg-surface-2: oklch(0.935 0.012 92);
-        --bg-surface-3: oklch(0.89 0.015 90);
-        --bg-glass: oklch(0.965 0.008 92 / 0.96);
+        --bg-surface-2: oklch(0.925 0.012 92);
+        --bg-surface-3: oklch(0.875 0.015 90);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.98 0.004 92 / 0.96);
 
-        --border-subtle: oklch(0.75 0.015 88);
-        --border-medium: oklch(0.15 0 0);
+        --border-divider: oklch(0.75 0.014 88);
+        --border-surface: oklch(0.70 0.016 88);
+        --border-subtle: oklch(0.75 0.014 88);
+        --border-control: oklch(0.49 0.012 88);
+        --border-medium: oklch(0.49 0.012 88);
         --border-bold: oklch(0 0 0);
         --border-focus: oklch(0 0 0);
 
@@ -271,8 +307,8 @@
         --accent-primary: oklch(0.14 0 0);
         --accent-hover: oklch(0.28 0 0);
         --accent-glow: oklch(0 0 0 / 0.14);
-        --accent-surface: oklch(0 0 0 / 0.07);
-        --ambient-aura-1: oklch(0 0 0 / 0.05);
+        --accent-surface: oklch(0 0 0 / 0.08);
+        --ambient-aura-1: oklch(0 0 0 / 0.04);
         --ambient-aura-2: oklch(0 0 0 / 0.02);
 
         --status-success: oklch(0.38 0.14 156);
@@ -287,13 +323,17 @@
     :is(:root, .themeCardPreview):is([data-theme="minimalist-dark"], [data-theme="brutalist-dark"]) {
         color-scheme: dark;
         --bg-canvas: oklch(0 0 0);
-        --bg-surface-1: oklch(0.13 0 0);
-        --bg-surface-2: oklch(0.19 0 0);
-        --bg-surface-3: oklch(0.26 0 0);
-        --bg-glass: oklch(0 0 0 / 0.94);
+        --bg-surface-1: oklch(0.165 0 0);
+        --bg-surface-2: oklch(0.225 0 0);
+        --bg-surface-3: oklch(0.29 0 0);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.12 0 0 / 0.94);
 
-        --border-subtle: oklch(0.41 0 0);
-        --border-medium: oklch(0.95 0 0 / 0.70);
+        --border-divider: oklch(0.40 0 0);
+        --border-surface: oklch(0.46 0 0);
+        --border-subtle: oklch(0.40 0 0);
+        --border-control: oklch(0.68 0 0);
+        --border-medium: oklch(0.68 0 0);
         --border-bold: oklch(1 0 0);
         --border-focus: oklch(1 0 0);
 
@@ -307,9 +347,9 @@
         --accent-color: oklch(1 0 0);
         --accent-primary: oklch(1 0 0);
         --accent-hover: oklch(0.90 0 0);
-        --accent-glow: oklch(1 0 0 / 0.25);
-        --accent-surface: oklch(1 0 0 / 0.13);
-        --ambient-aura-1: oklch(1 0 0 / 0.08);
+        --accent-glow: oklch(1 0 0 / 0.24);
+        --accent-surface: oklch(1 0 0 / 0.14);
+        --ambient-aura-1: oklch(1 0 0 / 0.07);
         --ambient-aura-2: oklch(1 0 0 / 0.02);
         --surface-radius: var(--radius-xs);
     }
@@ -317,16 +357,20 @@
     /* 11. Minimalist Warm Paper (Alabaster Ivory & Terracotta Amber) */
     :is(:root, .themeCardPreview)[data-theme="minimalist-warm"] {
         color-scheme: light;
-        --bg-canvas: oklch(0.98 0.008 84);
+        --bg-canvas: oklch(0.97 0.008 84);
         --bg-surface-1: oklch(1 0.004 84);
-        --bg-surface-2: oklch(0.955 0.012 82);
-        --bg-surface-3: oklch(0.92 0.016 80);
-        --bg-glass: oklch(0.98 0.008 84 / 0.96);
+        --bg-surface-2: oklch(0.935 0.014 82);
+        --bg-surface-3: oklch(0.89 0.018 80);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.99 0.006 84 / 0.96);
 
-        --border-subtle: oklch(0.74 0.02 78);
-        --border-medium: oklch(0.48 0.13 52);
+        --border-divider: oklch(0.74 0.022 78);
+        --border-surface: oklch(0.69 0.026 74);
+        --border-subtle: oklch(0.74 0.022 78);
+        --border-control: oklch(0.49 0.095 54);
+        --border-medium: oklch(0.49 0.095 54);
         --border-bold: oklch(0.38 0.14 48);
-        --border-focus: oklch(0.38 0.14 48);
+        --border-focus: oklch(0.36 0.14 48);
 
         --text-primary: oklch(0.16 0.01 60);
         --text-secondary: oklch(0.29 0.012 60);
@@ -338,9 +382,9 @@
         --accent-color: oklch(0.41 0.14 48);
         --accent-primary: oklch(0.41 0.14 48);
         --accent-hover: oklch(0.34 0.14 48);
-        --accent-glow: oklch(0.48 0.14 52 / 0.28);
-        --accent-surface: oklch(0.48 0.14 52 / 0.10);
-        --ambient-aura-1: oklch(0.55 0.14 55 / 0.10);
+        --accent-glow: oklch(0.48 0.14 52 / 0.24);
+        --accent-surface: oklch(0.48 0.14 52 / 0.11);
+        --ambient-aura-1: oklch(0.55 0.14 55 / 0.09);
         --ambient-aura-2: oklch(0.55 0.14 55 / 0.03);
 
         --status-success: oklch(0.39 0.14 156);
@@ -354,15 +398,19 @@
     :is(:root, .themeCardPreview):is([data-theme="minimalist-obsidian"], [data-theme="midnight-amoled"]) {
         color-scheme: dark;
         --bg-canvas: oklch(0 0 0);
-        --bg-surface-1: oklch(0.12 0.012 260);
-        --bg-surface-2: oklch(0.16 0.016 260);
-        --bg-surface-3: oklch(0.21 0.020 258);
-        --bg-glass: oklch(0 0 0 / 0.94);
+        --bg-surface-1: oklch(0.165 0.014 260);
+        --bg-surface-2: oklch(0.22 0.018 260);
+        --bg-surface-3: oklch(0.28 0.022 258);
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: oklch(0.08 0.01 260 / 0.94);
 
-        --border-subtle: oklch(0.38 0.03 258);
-        --border-medium: oklch(0.77 0.14 232 / 0.65);
+        --border-divider: oklch(0.40 0.03 256);
+        --border-surface: oklch(0.47 0.05 245);
+        --border-subtle: oklch(0.40 0.03 256);
+        --border-control: oklch(0.70 0.11 232);
+        --border-medium: oklch(0.70 0.11 232);
         --border-bold: oklch(0.78 0.15 232);
-        --border-focus: oklch(0.78 0.15 232);
+        --border-focus: oklch(0.84 0.15 232);
 
         --text-primary: oklch(1 0 0);
         --text-secondary: oklch(0.88 0.02 250);
@@ -374,21 +422,18 @@
         --accent-color: oklch(0.77 0.14 232);
         --accent-primary: oklch(0.77 0.14 232);
         --accent-hover: oklch(0.84 0.12 232);
-        --accent-glow: oklch(0.77 0.14 232 / 0.42);
-        --accent-surface: oklch(0.77 0.14 232 / 0.14);
-        --ambient-aura-1: oklch(0.77 0.14 232 / 0.17);
+        --accent-glow: oklch(0.77 0.14 232 / 0.40);
+        --accent-surface: oklch(0.77 0.14 232 / 0.15);
+        --ambient-aura-1: oklch(0.77 0.14 232 / 0.16);
         --ambient-aura-2: oklch(0.77 0.14 232 / 0.04);
     }
-
-    /* Inline SVGs inherit currentColor across dark and light palettes */
 
     /* Theme Selector Card Swatch Backgrounds */
     .themeCardPreview {
         background: var(--bg-canvas);
-        border-color: var(--border-subtle);
+        border-color: var(--border-control);
     }
     .themeCardPreview .previewDot:nth-child(1) { background: var(--accent-color); }
     .themeCardPreview .previewDot:nth-child(2) { background: var(--text-primary); }
-    .themeCardPreview .previewDot:nth-child(3) { background: var(--bg-surface-3); border: 1px solid var(--border-subtle); }
-
+    .themeCardPreview .previewDot:nth-child(3) { background: var(--bg-surface-3); border: 1px solid var(--border-control); }
 }

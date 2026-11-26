@@ -1,4 +1,5 @@
 /* Library window geometry and track control ownership. */
+@layer refinements {
 .trackList { gap: 0; overflow-x: clip; }
 .trackList > :is(.trackListSpacerTop, .trackListSpacerBottom, .trackListItemsContainer) { flex: none; min-width: 0; }
 .trackListItemsContainer .trackItem {
@@ -23,4 +24,5 @@
 :root[data-theme] button.trackDetails > span { display:block; }
 
 
-:root[data-theme] .trackList:focus-visible { outline:2px solid var(--accent-color); outline-offset:-2px; }
+:root[data-theme] .trackList:focus-visible { outline:2px solid var(--border-focus); outline-offset:-2px; }
+}

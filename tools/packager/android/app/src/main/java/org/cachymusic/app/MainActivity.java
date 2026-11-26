@@ -142,7 +142,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void openFolderPicker() {
-            new Handler(Looper.getMainLooper()).post(() -> {
+            webViewHandler.post(() -> {
                 try {
                     Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
@@ -175,12 +175,37 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String getSavedCustomTheme() {
+            return getSharedPreferences("cachymusic_prefs", MODE_PRIVATE).getString("appearance_custom_palette", "");
+        }
+
+        @JavascriptInterface
+        public void saveCustomTheme(String paletteJson) {
+            if (activityDestroyed || paletteJson == null || paletteJson.length() > 1024) return;
+            NotificationThemeArt.ThemeSpec parsed = NotificationThemeArt.parseCustomPaletteJson(paletteJson);
+            if (!"custom".equals(parsed.id)) return;
+            SharedPreferences preferences = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE);
+            preferences.edit()
+                    .putString("appearance_theme", "custom")
+                    .putString("appearance_custom_palette", paletteJson)
+                    .apply();
+            if (MediaPlaybackService.isRunning()) {
+                try {
+                    Intent svc = new Intent(MainActivity.this, MediaPlaybackService.class);
+                    svc.setAction(MediaPlaybackService.ACTION_THEME_UPDATE);
+                    svc.putExtra("theme", "custom");
+                    svc.putExtra("custom_palette", paletteJson);
+                    startService(svc);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        @JavascriptInterface
         public void saveTheme(String theme) {
             if (activityDestroyed || theme == null || !theme.matches("[a-z-]{1,32}")) return;
             SharedPreferences preferences = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE);
             if (!theme.equals(preferences.getString("appearance_theme", ""))) {
-                // Persist before returning from the WebView bridge so closing the app keeps the selection.
-                preferences.edit().putString("appearance_theme", theme).commit();
+                preferences.edit().putString("appearance_theme", theme).apply();
             }
             if (MediaPlaybackService.isRunning()) {
                 try {
@@ -193,6 +218,7 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        @SuppressWarnings("deprecation")
         public void setThemeChrome(String hex) {
             if (activityDestroyed || hex == null || !hex.matches("#[0-9a-fA-F]{6}")) return;
             int color = android.graphics.Color.parseColor(hex);
@@ -202,6 +228,15 @@ public class MainActivity extends Activity {
                 getWindow().setStatusBarColor(color);
                 getWindow().setNavigationBarColor(color);
                 View decor = getWindow().getDecorView();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    android.view.WindowInsetsController ctrl = decor.getWindowInsetsController();
+                    if (ctrl != null) {
+                        int mask = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                                | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                        ctrl.setSystemBarsAppearance(light ? mask : 0, mask);
+                        return;
+                    }
+                }
                 int flags = decor.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
                 if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
                 if (Build.VERSION.SDK_INT >= 26) {
@@ -740,7 +775,7 @@ public class MainActivity extends Activity {
                     notifyWebAudioDevicesChanged();
                 }
             };
-            audioManager.registerAudioDeviceCallback(audioDeviceCallback, new Handler(Looper.getMainLooper()));
+            audioManager.registerAudioDeviceCallback(audioDeviceCallback, webViewHandler);
         }
 
         // WebChromeClient with onShowFileChooser supporting multi-track file selection

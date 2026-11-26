@@ -1,4 +1,5 @@
 /* Circular mode only. Artwork-only retains its full original aspect ratio. */
+@layer refinements {
 :root[data-presentation="thematic"] .turntableCon { isolation: isolate; }
 :root[data-presentation="thematic"] .vinylTurntable { box-shadow: none; border: 1px solid var(--border-medium); animation: none; }
 :root[data-presentation="thematic"] .vinylTurntable.spinning,
@@ -35,9 +36,10 @@
 :root[data-theme="euclid-horizon"][data-presentation="artwork"] .turntableStage { background:var(--workspace-panel); border-block:1px solid var(--quiet-line); }
 :root[data-theme="sentinel"][data-presentation="artwork"] .turntableStage { background:var(--quiet-fill); border-block:2px solid var(--quiet-line); }
 :root[data-theme="minimalist-dark"][data-presentation="artwork"] .turntableStage { background:var(--quiet-fill); border-block:1px solid var(--quiet-line); }
-:root[data-theme="minimalist-obsidian"] .playerDeck { background:#000; }
+:root[data-theme="minimalist-obsidian"] .playerDeck { background: var(--workspace-canvas); }
 :root[data-theme="minimalist-obsidian"] .playerDeck .mediaCon { border:0; }
 :root[data-theme="minimalist-light"] .trackMeta { border-block-end:1px solid var(--quiet-line); }
 :root[data-theme="minimalist-warm"] .playerDeck .mediaCon { background:var(--quiet-fill); border-radius:var(--control-radius); }
 :root[data-theme="alien-paradise"] .playerDeck .mediaCon { background:var(--quiet-fill); border-radius:24px 8px; }
 :root[data-theme="dissonance"] .playerDeck .mediaCon { border-block-end:2px solid var(--quiet-line); }
+}

@@ -1,3 +1,4 @@
+@layer refinements {
 :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-left,:is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-right {display:none;}
 @supports (clip-path:polygon(0 0,100% 0,100% 100%,0 100%)) {
     :root :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) :is(.icon-play,.icon-pause) {display:none!important;}
@@ -109,3 +110,4 @@
 .listeningDialog .listeningPlay {grid-column:2 / -1;justify-self:end;min-height:44px;padding:4px 12px;}
 
 #audioDiagnosticResult:not([hidden]){display:block;width:100%;min-width:0;max-width:100%;min-height:90px;margin-top:8px;font:inherit;font-size:.8rem;resize:vertical;}
+}

@@ -187,7 +187,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             cachedCenterH = h;
         }
         if (w === 0 || h === 0) return null;
-        const maxDpr = window.innerWidth <= 768 ? 1.5 : 2.0;
+        const maxDpr = cachedMobileViewport ? 1.5 : 2.0;
         const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
 
         if (w !== lastCenterW || h !== lastCenterH || dpr !== lastCenterDpr) {
@@ -204,7 +204,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
     }
 
     function syncCanvasResolution(wOrRect, optH) {
-        const maxDpr = window.innerWidth <= 768 ? 1.5 : 2.0;
+        const maxDpr = cachedMobileViewport ? 1.5 : 2.0;
         const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
         const w = Math.round(typeof wOrRect === 'object' && wOrRect !== null ? wOrRect.width : wOrRect);
         const h = Math.round(typeof wOrRect === 'object' && wOrRect !== null ? wOrRect.height : optH);
@@ -463,7 +463,12 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
 
                 // The analyser is pre-DSP. Only report a sampled source peak, not
                 // track DR, a calibrated spectrum peak, or physical DAC headroom.
-                if (++drMeterFrameCounter >= 30 && statPeakLevel && statPeakLevel.getClientRects().length > 0) {
+                const isPeakMeterVisible = Boolean(
+                    statPeakLevel &&
+                    st.currentWorkspace === 'player' &&
+                    (!isMobileViewport ? !document.body.classList.contains('metadata-collapsed') : document.body.classList.contains('mobile-tab-info'))
+                );
+                if (++drMeterFrameCounter >= 30 && isPeakMeterVisible) {
                     drMeterFrameCounter = 0;
                     try {
                         if (timeSamples.length !== analyser.fftSize) timeSamples = new Float32Array(analyser.fftSize);
@@ -608,7 +613,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
 
             const currentDeckEl = playerDeckEl || document.querySelector('.playerDeck');
             const isTurntableVisible = showDeckVisuals && !st.isLyricsView &&
-                (window.innerWidth > 768 || (currentDeckEl && currentDeckEl.classList.contains('mobileActive')));
+                (!isMobileViewport || (currentDeckEl && currentDeckEl.classList.contains('mobileActive')));
 
             const currentCenterVis = turntableCenterVis || document.getElementById('turntableCenterVis');
             const currentCenterCanvas = turntableCenterCanvas || document.getElementById('turntableCenterCanvas');

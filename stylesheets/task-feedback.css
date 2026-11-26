@@ -1,4 +1,5 @@
 /* Functional feedback uses quiet conventional corners, not additional squircles. */
+@layer refinements {
 :root[data-theme] .cachyToast {
     --toast-accent: var(--accent-color);
     display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px;
@@ -43,4 +44,5 @@
 #cachyToastContainer[hidden]{display:none!important}
 
 .modalInlineNotice{margin:8px 0 0;padding:8px 10px;max-width:100%;overflow-wrap:anywhere;font-size:var(--font-sm);color:var(--text-primary);background:var(--accent-surface);border-inline-start:3px solid var(--accent-color);border-radius:min(var(--identity-radius, 6px), 8px);flex:0 0 auto;grid-column:1/-1;}
+}
 

@@ -41,9 +41,9 @@
     .metaEditorOnlineInput, .peqSelect, .sortSelect, .settingsSelect, .slskModeSelect,
     .peqAutoEqTextarea, #slskAccountForm input, #newPlaylistInput, #batchAddSearchInput {
         width: 100%; min-height: 38px; padding: 0.45rem 0.75rem;
-        background: var(--bg-surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+        background: var(--bg-surface-2); border: 1px solid var(--border-control); border-radius: var(--radius-sm);
         color: var(--text-primary); font-size: var(--font-sm);
-        transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        transition: border-color var(--transition-fast), background-color var(--transition-fast);
     }
     .searchContainer input { padding: 0.45rem 2.35rem 0.45rem 2.1rem; }
     .searchIcon { position: absolute; left: 0.65rem; color: var(--text-muted); pointer-events: none; z-index: 1; }
@@ -103,7 +103,7 @@
     .speedBtn:hover, .speedPresetBtn:hover { border-color: var(--border-medium); color: var(--text-primary); }
     .speedBtn.active, .speedPresetBtn.active { background: var(--accent-color); color: var(--text-on-accent); border-color: var(--accent-color); }
     .speedSlider { width: 100%; accent-color: var(--accent-color); }
-    .metaGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-sm); }
+    .metaGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-sm); content-visibility: auto; contain-intrinsic-size: auto 240px; }
     .metaItem { min-width: 0; padding: 0.42rem 0.15rem; border-bottom: 1px solid color-mix(in oklch, var(--border-subtle) 55%, transparent); display: flex; flex-direction: column; gap: 2px; }
     .metaItemFull { grid-column: 1 / -1; }
     .metaKey { font-size: var(--font-3xs); color: var(--text-muted); letter-spacing: 0.06em; font-weight: 700; }
@@ -175,11 +175,12 @@
     .timelineCon { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-xs); }
     .timeLabel { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-2xs); color: var(--text-muted); min-width: 2.8rem; text-align: center; }
     .progressBarCon { position: relative; height: var(--slider-scrub-zone); display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
-    .progressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 6px; border-radius: var(--radius-full); background: var(--bg-surface-3); transition: height 120ms ease-out; }
-    .progressBar { position: relative; height: 6px; width: 0%; border-radius: var(--radius-full); background: var(--accent-color); box-shadow: 0 0 10px var(--accent-glow); transition: height 120ms ease-out; }
-    .progressPlayhead { position: absolute; right: -6px; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--accent-color); transform: translateY(-50%); transition: transform 120ms ease-out; }
-    :is(.progressBarCon.dragging, .miniProgressBarCon.dragging)::before,
-    :is(.progressBarCon.dragging, .miniProgressBarCon.dragging) :is(.progressBar, .miniProgressBar) { height: 8px; }
+    .progressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 6px; border-radius: var(--radius-full); background: var(--border-control); opacity: 0.52; transition: transform 120ms ease-out; }
+    .progressBar { position: relative; height: 6px; width: 100%; transform-origin: left center; transform: scaleX(var(--progress-ratio, 0)); will-change: transform; border-radius: var(--radius-full); background: var(--accent-color); transition: transform 120ms ease-out; }
+    .progressPlayheadTrack { position: absolute; inset: 0; pointer-events: none; transform: translate3d(calc(var(--progress-ratio, 0) * 100%), 0, 0); will-change: transform; }
+    .progressPlayhead { position: absolute; left: -6px; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--accent-color); transform: translateY(-50%); transition: transform 120ms ease-out; }
+    :is(.progressBarCon.dragging, .miniProgressBarCon.dragging)::before { transform: scaleY(1.33); }
+    :is(.progressBarCon.dragging, .miniProgressBarCon.dragging) :is(.progressBar, .miniProgressBar) { transform: scaleX(var(--progress-ratio, 0)) scaleY(1.33); }
     :is(.progressBarCon.dragging, .miniProgressBarCon.dragging) .progressPlayhead { transform: translateY(-50%) scale(1.38); }
     .progressHover { position: absolute; top: 50%; height: 6px; transform: translateY(-50%); background: oklch(1 0 0 / 0.16); border-radius: var(--radius-full); pointer-events: none; opacity: 0; }
     .progressHoverTooltip { position: absolute; bottom: 100%; transform: translateX(-50%); padding: 0.18rem 0.45rem; border-radius: var(--radius-xs); background: var(--bg-surface-3); color: var(--text-primary); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); pointer-events: none; opacity: 0; transition: opacity 100ms ease-out; white-space: nowrap; }
@@ -235,6 +236,7 @@
     .trackItem, .queueItem, .upcomingItem, .richPlaylistCard {
         padding: var(--space-xs); border-radius: var(--radius-sm); border: 1px solid transparent; background: var(--bg-surface-2);
         display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;
+        contain: layout style;
         transition: border-color var(--transition-fast), background-color var(--transition-fast);
     }
     :is(.trackItem, .queueItem, .richPlaylistCard):hover { border-color: var(--border-medium); background: var(--bg-surface-3); }
@@ -276,19 +278,19 @@
     .miniPlayBtn .icon-pause, .miniPlayBtn.playing .icon-play { display: none; }
     .miniPlayBtn.playing .icon-pause { display: block; }
     .miniProgressBarCon { position: relative; flex: 1 1 auto; height: 34px; display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
-    .miniProgressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 5px; border-radius: var(--radius-full); background: var(--bg-surface-3); transition: height 120ms ease-out; }
-    .miniProgressBar { position: relative; z-index: 1; height: 5px; border-radius: var(--radius-full); width: 0%; background: var(--accent-color); transition: height 120ms ease-out; }
+    .miniProgressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 5px; border-radius: var(--radius-full); background: var(--border-control); opacity: 0.52; transition: transform 120ms ease-out; }
+    .miniProgressBar { position: relative; z-index: 1; height: 5px; border-radius: var(--radius-full); width: 100%; transform-origin: left center; transform: scaleX(var(--progress-ratio, 0)); will-change: transform; background: var(--accent-color); transition: transform 120ms ease-out; }
     .miniTime { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); color: var(--text-muted); }
 
     /* Modals & Backdrops */
     .modalBackdrop, .slskModalOverlay {
-        position: fixed; inset: 0; z-index: var(--z-modal); background: oklch(0 0 0 / 0.72); backdrop-filter: blur(8px);
+        position: fixed; inset: 0; z-index: var(--z-modal); background: oklch(0 0 0 / 0.72);
         display: none; align-items: center; justify-content: center; padding: var(--space-md); overflow-y: auto;
     }
     .modalCard, .slskModalCard {
         width: min(100%, 34rem); max-height: min(90dvh, 56rem); overflow-y: auto;
-        background: var(--bg-surface-1); border: 1px solid var(--border-medium); border-radius: var(--radius-lg);
-        padding: var(--space-md); box-shadow: var(--shadow-modal);
+        background: var(--bg-surface-1); border: 1px solid var(--border-surface); border-radius: var(--radius-lg);
+        padding: var(--space-md); box-shadow: var(--shadow-modal); contain: layout style;
         display: flex; flex-direction: column; gap: var(--space-sm); animation: modalPopIn var(--transition-fast);
     }
     .peqModalCard { width: min(100%, 60rem); }
@@ -355,10 +357,11 @@
     /* Theme Modal */
     .themeModalScrollArea { overflow-y: auto; max-height: 68dvh; }
     .themeColumnsContainer { display: flex; flex-direction: column; gap: var(--space-md); }
+    .themeCategoryGroup { content-visibility: auto; contain-intrinsic-size: auto 220px; }
     .themeCategoryHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); margin-bottom: 2px; }
     .themeCategoryLead, .themeModalSubtitle, .settingsSubtitle, .settingsRowDesc, .settingsSectionDesc { font-size: var(--font-xs); color: var(--text-muted); }
     .themeModalGrid { margin-top: var(--space-xs); display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-xs); }
-    .themeSelectCard { padding: var(--space-xs); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); background: var(--bg-surface-2); display: flex; align-items: center; gap: var(--space-xs); text-align: left; transition: border-color var(--transition-fast), background-color var(--transition-fast), transform 90ms ease-out; }
+    .themeSelectCard { padding: var(--space-xs); border-radius: var(--radius-sm); border: 1px solid var(--border-control); background: var(--bg-surface-2); contain: layout paint style; display: flex; align-items: center; gap: var(--space-xs); text-align: left; transition: border-color var(--transition-fast), background-color var(--transition-fast), transform 90ms ease-out; }
     .themeSelectCard:hover { border-color: var(--border-medium); background: var(--bg-surface-3); }
     .themeSelectCard.active { border-color: var(--border-bold); box-shadow: 0 0 0 1px var(--border-bold); }
     .themeCardPreview { width: 48px; height: 48px; border-radius: var(--radius-xs); flex: 0 0 48px; display: flex; align-items: center; justify-content: center; gap: 3px; border: 1px solid var(--border-subtle); }
@@ -513,7 +516,7 @@
     /* Track Action Sheet, Batch Add & Debug HUD */
     .trackMenuHeader, .trackMenuItemBtn, .batchAddRow, .modalPlaylistItem { display: flex; align-items: center; gap: var(--space-xs); width: 100%; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); text-align: left; }
     .trackMenuItemsList, .batchAddTracksList, .modalPlaylistList { display: flex; flex-direction: column; gap: var(--space-2xs); max-height: 46dvh; overflow-y: auto; }
-    .debugHudContainer { position: fixed; right: var(--space-md); bottom: var(--space-md); width: min(92vw, 28rem); z-index: var(--z-hud); background: var(--bg-glass); backdrop-filter: blur(16px); border: 1px solid var(--border-bold); border-radius: var(--radius-md); padding: var(--space-sm); box-shadow: var(--shadow-modal); }
+    .debugHudContainer { position: fixed; right: var(--space-md); bottom: var(--space-md); width: min(92vw, 28rem); z-index: var(--z-hud); background: var(--bg-surface-1); border: 1px solid var(--border-bold); border-radius: var(--radius-md); padding: var(--space-sm); box-shadow: var(--shadow-modal); }
     .debugHudHeader { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--space-2xs); border-bottom: 1px solid var(--border-subtle); }
     .debugHudLog { max-height: 9rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--font-3xs); color: var(--text-secondary); margin-top: var(--space-xs); }
 
@@ -524,7 +527,7 @@
     .cachyToast.warning { border-color: var(--status-warning); }
     .cachyToast.error { border-color: var(--status-danger); }
     .trackLoadingProgressTrack { width: 100%; height: 6px; border-radius: var(--radius-full); background: var(--bg-surface-3); overflow: hidden; }
-    .trackLoadingProgressBar { height: 100%; width: 25%; background: var(--accent-color); transition: width 0.18s linear; }
+    .trackLoadingProgressBar { height: 100%; width: 100%; transform-origin: left center; transform: scaleX(var(--loading-ratio, 0.25)); will-change: transform; background: var(--accent-color); transition: transform 0.18s linear; }
     .trackLoadingSpinner { width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--border-subtle); border-top-color: var(--accent-color); animation: vinylSpin 0.8s linear infinite; }
 }
 

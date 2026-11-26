@@ -56,7 +56,7 @@ export function createWorkletLoader({ current, isCurrent, install, failed, timeo
         const task = Promise.resolve().then(async () => {
             if (!isCurrent(ctx)) return;
             let timer;
-            try{await Promise.race([ctx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=3.0.0-dev.6.74'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('DSP module load timed out')),timeoutMs);})]);}
+            try{await Promise.race([ctx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=3.0.0-dev.7.0'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('DSP module load timed out')),timeoutMs);})]);}
             finally{clearTimeout(timer);}
             if (isCurrent(ctx)) install(ctx);
         }).catch(error => { if (isCurrent(ctx)) failed(error); });

@@ -202,6 +202,9 @@ export class WorkstationStore extends EventTarget {
             hwVolumeBackend: 'none',
 
             // Audiophile DSP Toggles & Parameters
+            continuousPcmEnabled: safeStorage.getItem('cachymusic_continuous_pcm') === 'true',
+            androidNativeEnabled: safeStorage.getItem('cachymusic_android_native') === 'true',
+            experimentalAndroidPcm: safeStorage.getItem('cachymusic_experimental_android_pcm') === 'true',
             isAmpBoost: safeStorage.getItem('cachymusic_amp_boost') === 'true',
             isBassBoost: safeStorage.getItem('cachymusic_bass_boost') === 'true',
             isVocalBoost: safeStorage.getItem('cachymusic_vocal_boost') === 'true',

@@ -1,4 +1,5 @@
 /* Functional grouping and restrained corners; theme colors remain inherited. */
+@layer refinements {
 .playlistsViewHeader {display:grid;gap:8px;padding-block:8px;min-width:0;}
 .playlistsStatsRow {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
 .playlistsSectionTitle {font-weight:650;color:var(--text-primary);}
@@ -32,3 +33,4 @@
 .playlistMissingActions button,#playlistEditRecovery button {flex-basis:min(8rem,100%);}
 .playlistDirectMove{flex-wrap:wrap;}.playlistDirectMove input{max-width:100%;}.playlistDirectMove button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;}
 .playlistOrderRow{grid-template-columns:minmax(0,1fr) auto auto;}.playlistOrderRow>button[data-move]{min-width:44px;min-height:44px;}
+}

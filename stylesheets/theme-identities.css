@@ -1,383 +1,550 @@
-/* Theme previews and shared player fit contract. */
-/* Miniatures reproduce each theme's geometry rather than showing only colors. */
-.themeCardPreview[data-theme="default"] { border-radius: 11px; }
-.themeCardPreview[data-theme="nms"] { border-radius: 1px; border-inline-start: 4px double var(--accent-color); }
-.themeCardPreview[data-theme="nms"] .previewDot { border-radius: 1px; }
-.themeCardPreview[data-theme="solar-eclipse"] { border-radius: 50%; outline: 1px solid var(--border-medium); outline-offset: 2px; }
-.themeCardPreview[data-theme="solar-eclipse"] .previewDot { border-radius: 50%; }
-.themeCardPreview[data-theme="euclid-horizon"] { border-radius: 0; background: linear-gradient(90deg, transparent 49%,var(--border-medium) 50%,transparent 51%),var(--bg-surface-2); }
-.themeCardPreview[data-theme="euclid-horizon"] .previewDot { border-radius: 0; }
-.themeCardPreview[data-theme="alien-paradise"] { border-radius: 45% 13% 41% 12%; }
-.themeCardPreview[data-theme="alien-paradise"] .previewDot { border-radius: 65% 5% 60% 15%; }
-.themeCardPreview[data-theme="abyssal-void"] { background: repeating-radial-gradient(circle,transparent 0 8px,var(--border-medium) 9px 10px),var(--bg-surface-2); border-radius: 50%; }
-.themeCardPreview[data-theme="dissonance"] { border-radius: 1px 19px 1px 19px; }
-.themeCardPreview[data-theme="dissonance"] .previewDot { transform: skew(-14deg); border-radius: 0; }
-.themeCardPreview[data-theme="sentinel"] { border-radius: 3px; border-width: 3px; }
-.themeCardPreview[data-theme="sentinel"] .previewDot { border-radius: 1px; border: 1px solid var(--border-bold); }
-.themeCardPreview[data-theme="minimalist-light"] { border-radius: 0; border-bottom: 3px solid var(--text-primary); }
-.themeCardPreview[data-theme="minimalist-light"] .previewDot { border-radius: 0; }
-.themeCardPreview[data-theme="minimalist-dark"] { border-radius: 0; border: 1px solid var(--text-primary); }
-.themeCardPreview[data-theme="minimalist-dark"] .previewDot { border-radius: 0; width: 3px; }
-.themeCardPreview[data-theme="minimalist-warm"] { border-radius: 15px; }
-.themeCardPreview[data-theme="minimalist-warm"] .previewDot { border-radius: 9px; }
-.themeCardPreview[data-theme="minimalist-obsidian"] { border-radius: 0; border: 1px solid var(--text-primary); background: #000; }
-.themeCardPreview[data-theme="minimalist-obsidian"] .previewDot { border-radius: 0; width: 2px; }
+/* Theme Identities, Previews & Art Direction Contract (Clean Unified @layer identities) */
 
+@layer identities {
+    /* Miniature Theme Card Swatches */
+    .themeCardPreview[data-theme="default"] { border-radius: 11px; }
+    .themeCardPreview[data-theme="nms"] { border-radius: 1px; border-inline-start: 4px double var(--accent-color); }
+    .themeCardPreview[data-theme="nms"] .previewDot { border-radius: 1px; }
+    .themeCardPreview[data-theme="solar-eclipse"] { border-radius: 50%; outline: 1px solid var(--border-medium); outline-offset: 2px; }
+    .themeCardPreview[data-theme="solar-eclipse"] .previewDot { border-radius: 50%; }
+    .themeCardPreview[data-theme="euclid-horizon"] { border-radius: 0; background: linear-gradient(90deg, transparent 49%, var(--border-medium) 50%, transparent 51%), var(--bg-surface-2); }
+    .themeCardPreview[data-theme="euclid-horizon"] .previewDot { border-radius: 0; }
+    .themeCardPreview[data-theme="alien-paradise"] { border-radius: 45% 13% 41% 12%; }
+    .themeCardPreview[data-theme="alien-paradise"] .previewDot { border-radius: 65% 5% 60% 15%; }
+    .themeCardPreview[data-theme="abyssal-void"] { background: repeating-radial-gradient(circle, transparent 0 8px, var(--border-medium) 9px 10px), var(--bg-surface-2); border-radius: 50%; }
+    .themeCardPreview[data-theme="dissonance"] { border-radius: 1px 19px 1px 19px; }
+    .themeCardPreview[data-theme="dissonance"] .previewDot { transform: skew(-14deg); border-radius: 0; }
+    .themeCardPreview[data-theme="sentinel"] { border-radius: 3px; border-width: 2px; }
+    .themeCardPreview[data-theme="sentinel"] .previewDot { border-radius: 1px; border: 1px solid var(--border-bold); }
+    .themeCardPreview[data-theme="minimalist-light"] { border-radius: 0; border-bottom: 3px solid var(--text-primary); }
+    .themeCardPreview[data-theme="minimalist-light"] .previewDot { border-radius: 0; }
+    .themeCardPreview[data-theme="minimalist-dark"] { border-radius: 0; border: 1px solid var(--text-primary); }
+    .themeCardPreview[data-theme="minimalist-dark"] .previewDot { border-radius: 0; width: 3px; }
+    .themeCardPreview[data-theme="minimalist-warm"] { border-radius: 15px; }
+    .themeCardPreview[data-theme="minimalist-warm"] .previewDot { border-radius: 9px; }
+    .themeCardPreview[data-theme="minimalist-obsidian"] { border-radius: 0; border: 1px solid var(--text-primary); background: #000; }
+    .themeCardPreview[data-theme="minimalist-obsidian"] .previewDot { border-radius: 0; width: 2px; }
 
-/* 6.9 shared geometry: reserve space for the controls before sizing the platter.
-   Album artwork is a full, unmasked image; only the animated record is round. */
-:root { --identity-radius: 14px; --identity-border: 1px; --identity-style: solid; --workspace-gap: 10px; }
-:root[data-theme="nms"] { --identity-radius: 2px; --identity-style: double; --identity-border: 3px; }
-:root[data-theme="solar-eclipse"] { --identity-radius: 22px; }
-:root[data-theme="euclid-horizon"] { --identity-radius: 0px; }
-:root[data-theme="alien-paradise"] { --identity-radius: 20px 8px 20px 8px; }
-:root[data-theme="abyssal-void"] { --identity-radius: 0px; }
-:root[data-theme="dissonance"] { --identity-radius: 3px 18px 3px 18px; }
-:root[data-theme="sentinel"] { --identity-radius: 5px; --identity-border: 2px; }
-:root:is([data-theme="minimalist-light"],[data-theme="minimalist-dark"],[data-theme="minimalist-obsidian"]) { --identity-radius: 0px; }
-:root[data-theme="minimalist-warm"] { --identity-radius: 18px; }
-:root[data-theme] .playerDeck { overflow-y: auto; overflow-x: hidden; justify-content: flex-start; gap: var(--workspace-gap); scrollbar-width: thin; }
-:root[data-theme] .playerDeck > :is(.trackMeta,.timelineCon,.mediaCon,.deckAudioControls) { flex: 0 0 auto; }
-:root[data-theme] .turntableStage { flex: 1 0 230px; min-height: 230px; max-height: none; padding: 10px; gap: 10px; justify-content: center; overflow: hidden; border-radius: var(--identity-radius); }
-:root[data-theme] .playerDeck.empty-deck .turntableStage { flex: 1 0 180px; min-height: 180px; }
-:root[data-theme] .turntableCon { flex: none; width: min(100cqw, max(0px, calc(100cqh - 64px)), 380px); height: auto; aspect-ratio: 1; max-width: 100%; outline: none; border-radius: 0; }
-:root[data-theme] .playerDeck.empty-deck .turntableCon { width: min(100cqw, 100cqh, 280px); }
-:root[data-theme][data-presentation="artwork"] :is(.vinylTurntable,.vinylLabel) { clip-path: none; border-radius: 0; background: transparent; box-shadow: none; }
-:root[data-theme][data-presentation="artwork"] .vinylLabel img { object-fit: contain; display: block; }
-:root[data-theme]:not([data-presentation="artwork"]) :is(.vinylTurntable,.turntableCenterVis,.turntableCenterCanvas) { border-radius: 50%; clip-path: circle(50%); }
-:root[data-theme] .deckTopControls { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); flex: none; gap: 4px; margin: 0; width: min(100%,380px); align-self: center; }
-:root[data-theme] .deckTopControls .deckActionBtn { min-height: 44px; min-width: 0; justify-content: center; padding: 4px; }
-:root[data-theme] .deckTopControls .deckBtnLabel { white-space: nowrap; }
-:root[data-theme] .lyricsCon { flex: 1 1 0; min-height: 0; height: auto; max-height: 100%; overflow: hidden; }
-:root[data-theme] .lyricsScrollArea { min-height: 0; overflow: auto; }
-:root[data-theme] .mediaCon { display: grid; grid-template-columns: repeat(2,minmax(44px,1fr)) minmax(52px,1.2fr) repeat(2,minmax(44px,1fr)); justify-items: center; gap: 3px; padding-inline: 6px; }
-:root[data-theme] .mediaCon .mediaBtn { min-width: 44px; min-height: 44px; max-width: 100%; }
-:root[data-theme] .mediaCon .playPauseBtn { width: 52px; height: 52px; box-shadow: none; }
-:root[data-theme] .timelineCon { grid-template-columns: auto minmax(0,1fr) auto; }
-:root[data-theme] .deckAudioControls { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; }
-:root[data-theme] .volumeDeck { grid-template-columns: 44px minmax(0,1fr) auto; }
-:root[data-theme] .volumeSlider { min-width: 0; }
-:root[data-theme] .miniTurntableThumb img { object-fit: contain; }
-:root[data-theme][data-presentation="artwork"] .miniTurntableThumb { border-radius: 0; }
-/* Shared tab surfaces and component geometry; keep theme-specific identity. */
-:root[data-theme] :is(.settingsSectionPanel,.slskSearchArea,.slskResultsCon,.slskTransfersDrawer,.persistentMiniPlayer,.trackListPanel,.modalCard,.slskModalCard,#infoPanel) { border-width: var(--identity-border); border-style: var(--identity-style); }
-:root[data-theme] :is(.settingsWorkspace,.soulseekWorkspace) { gap: var(--workspace-gap); min-width: 0; background: var(--workspace-canvas); }
-:root[data-theme] :is(.slskResultsCon,.slskTransfersDrawer,.slskSearchArea,.trackListPanel,#infoPanel) { background: var(--workspace-panel); min-width: 0; }
-:root[data-theme] :is(.settingsCatBtn,.libTab,.mobileTabBtn,.wsTabBtn) { min-width: 0; }
-:root[data-theme] :is(.slskSearchArea,.settingsSectionPanel,.slskTransfersDrawer) { max-width: 100%; }
-:root[data-theme="abyssal-void"] :is(.slskSearchArea,.slskResultsCon,.slskTransfersDrawer,.trackListPanel) { border-inline-start: 3px solid var(--accent-color); }
-:root[data-theme="minimalist-obsidian"] :is(.settingsWorkspace,.soulseekWorkspace,.slskSearchArea,.slskResultsCon,.slskTransfersDrawer,.trackListPanel,.persistentMiniPlayer) { background: #000; }
-@media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
-  :root { --workspace-gap: 8px; --mobile-gutter: 10px; }
-  :root[data-theme] .playerDeck.mobileActive { display: flex; container-type: normal; padding: 8px max(var(--mobile-gutter),var(--safe-right)) 10px max(var(--mobile-gutter),var(--safe-left)); overflow-y: auto; overflow-x: hidden; border-radius: 0; }
-  :root[data-theme] .playerDeck .turntableStage { flex: 1 0 220px; min-height: 220px; height: auto; align-self: stretch; padding: 8px; }
-  :root[data-theme] .playerDeck.empty-deck .turntableStage { flex: 1 0 180px; }
-  :root[data-theme] .playerDeck :is(.trackMeta,.timelineCon,.mediaCon,.deckAudioControls) { padding-block: 6px; }
-  :root[data-theme] .playerDeck .trackMeta { padding-inline: 10px; }
-  :root[data-theme] .trackMeta :is(#trackName,#artistName,.albumName) { max-width: 100%; }
-  :root[data-theme] .deckTopControls .deckBtnLabel { display: inline; }
-  :root[data-theme] .playerDeck .deckAudioControls { flex-wrap: nowrap; }
-  :root[data-theme] .settingsWorkspace, :root[data-theme] .soulseekWorkspace { padding-inline: max(var(--mobile-gutter),var(--safe-left)) max(var(--mobile-gutter),var(--safe-right)); }
-  :root[data-theme] .trackListPanel.mobileActive, :root[data-theme] #infoPanel.mobileActive { border-radius: 0; }
-  :root[data-theme] .mobileTabBtn { min-height: 48px; }
-  :root[data-theme] .mobileTabLabel { white-space: normal; text-align: center; }
-}
-@media (max-width: 360px) {
-  :root[data-theme] .playerDeck .mediaCon { padding-inline: 4px; gap: 2px; }
-  :root[data-theme] .deckTopControls .deckBtnLabel { font-size: .7rem; }
-  :root[data-theme] .deckTopControls .deckActionBtn { gap: 3px; }
-}
-:root[data-theme] .playerDeck.empty-deck :is(.deckTopControls,.metaBadgeRow,.timelineCon,.mediaCon,.deckAudioControls) { display: none; }
-:root[data-theme] .coverArtPreview { object-fit: contain; }
-/* Keep the inspector's artwork for thematic/lyrics presentations and on phones.
-   In desktop artwork mode the main cover already provides that information. */
-@media (min-width:769px) and (min-height:501px) {
-  :root[data-presentation="artwork"] body .gridContainer:has(.playerDeck:not(.empty-deck) #turntableCon:not(.lyricsActiveHidden)) #infoPanel .coverCardCon { display:none; }
-}
-:root[data-theme] .deckTopControls { grid-template-columns: repeat(auto-fit,minmax(85px,1fr)); }
-/* Subview visibility must outrank the unlayered responsive search styles. */
-.soulseekWorkspace[data-slsk-subview="transfers"] > :is(.slskControlsPanel,.slskResultsCon) { display: none; }
-.soulseekWorkspace[data-slsk-subview="results"] > .slskTransfersDrawer { display: none; }
-.soulseekWorkspace[data-slsk-subview="transfers"] > .slskTransfersDrawer { display: flex; }
+    /* Shared Semantic Plane & Ergonomic Identity Tokens */
+    :root {
+        --identity-radius: 12px;
+        --identity-border: 1px;
+        --identity-style: solid;
+        --workspace-gap: 8px;
+        --surface-radius: 6px;
+        --control-radius: 5px;
+        --chrome-radius: 12px;
+        --group-radius: 14px;
+        --nav-radius: var(--chrome-radius);
+        --group-inset: 12px;
+        --group-edge: 1px;
+        --player-title-font: var(--font-display, system-ui, sans-serif);
+        --player-title-weight: 650;
+        --player-title-spacing: -0.025em;
+        --player-art-limit: 420px;
+        --player-art-width: 100cqw;
+        --player-align: center;
+        --player-text-align: center;
+        --player-content-width: 480px;
+        --player-stage-bg: transparent;
+        --player-transport-bg: transparent;
+        --player-edge: 0;
+        --play-radius: 50%;
+        --quiet-line: var(--border-divider);
+        --quiet-fill: color-mix(in oklch, var(--text-primary) 7%, var(--bg-surface-1));
+        --group-fill: var(--bg-surface-1);
+        --nav-selected: var(--accent-surface);
+        --workspace-canvas: var(--bg-canvas);
+        --workspace-header: var(--bg-chrome, var(--bg-surface-1));
+        --workspace-panel: var(--bg-surface-1);
+        --play-ink: var(--accent-color);
+        --play-ground: var(--text-on-accent);
+    }
 
-/* Listening-first design system. One functional layout contract, twelve art
-   directions. No extra DOM, images, animation loops or backdrop filters. */
-:root {
-  --workspace-gap: 8px;
-  --surface-radius: 6px;
-  --control-radius: 5px;
-  --player-title-font: system-ui, sans-serif;
-  --player-title-weight: 650;
-  --player-title-spacing: -.035em;
-  --player-art-limit: 420px;
-  --player-art-width: 100cqw;
-  --player-align: center;
-  --player-text-align: center;
-  --player-content-width: 480px;
-  --player-stage-bg: transparent;
-  --player-transport-bg: transparent;
-  --player-edge: 0;
-  --play-radius: 50%;
-  --quiet-line: color-mix(in oklch, var(--text-primary) 14%, transparent);
-  --quiet-fill: color-mix(in oklch, var(--text-primary) 6%, var(--bg-canvas));
-  --workspace-canvas: var(--bg-canvas);
-  --workspace-header: var(--bg-canvas);
-  --workspace-panel: var(--bg-surface-1);
-  --border-medium: var(--quiet-line);
-  --border-subtle: var(--quiet-line);
-  --border-bold: color-mix(in oklch, var(--text-primary) 28%, transparent);
-  --accent-glow: transparent;
-}
-/* Remove native blue touch flash, not keyboard focus or text selection. */
-html { -webkit-tap-highlight-color: transparent; }
-:is(button,a,label,input,select,textarea,summary,[role="button"],[role="slider"],[tabindex],.trackItem,.queueItem) {
-  -webkit-tap-highlight-color: transparent;
-}
-button:not(:disabled):active, summary:active, .trackItem:active { opacity: .88; }
-:is(button,a,input,select,textarea,summary,[tabindex]):focus-visible {
-  outline: 2px solid var(--border-focus); outline-offset: -2px;
-}
-/* Shared chrome and information hierarchy: borders only where they separate. */
-:root[data-theme] :is(.topBar,.mobileTabBar,.persistentMiniPlayer,.workspaceSwitcher) { backdrop-filter: none; box-shadow: none; }
-:root[data-theme] .brandLogo { font-family: system-ui,sans-serif; color: var(--text-primary); font-weight: 750; letter-spacing: -.045em; font-size: 1.15rem; }
-:root[data-theme] .workspaceSwitcher { padding: 0; background: transparent; border: 0; border-radius: 0; }
-:root[data-theme] :is(.wsTabBtn,.settingsCatBtn,.libTab,.mobileTabBtn) { background: transparent; border-radius: 0; border: 0; color: var(--text-secondary); box-shadow: none; letter-spacing: 0; font-weight: 550; }
-:root[data-theme] :is(.wsTabBtn,.settingsCatBtn,.libTab,.mobileTabBtn).active { background: transparent; color: var(--text-primary); box-shadow: inset 0 -2px var(--accent-color); font-weight: 700; }
-:root[data-theme] :is(.panelHeader h2,.settingsSectionTitle,.slskPlaceholder h3) { color: var(--text-primary); font-size: 1rem; font-weight: 650; letter-spacing: -.015em; }
-:root[data-theme] :is(.panelSub,.settingsRowDesc,.trackArtist,.miniArtist,.slskResultPath) { color: var(--text-muted); }
-:root[data-theme] :is(.actionBtn,.topBtn,.folderBrowseBtn,.backBtn,.miniBtn,.slskChip,.formatFilterPill,.speedBtn,.settingsSearch input,.sortSelect) { letter-spacing: 0; box-shadow: none; }
-:root[data-theme] :is(.formatFilterPill,.slskChip):not(.active) { background: transparent; border-color: transparent; }
-:root[data-theme] :is(.formatFilterPill,.slskChip).active { background: var(--quiet-fill); color: var(--text-primary); border-color: var(--quiet-line); box-shadow: inset 0 -2px var(--accent-color); }
-:root[data-theme] :is(.formatBadge,.signalPathBadge,.counter,.activeListLabel,.settingsBadge,.settingsSectionBadge,.settingsEnginePill,.settingsSleepBadge,.slskBadge,.queueCountBadge,.playlistsCounterBadge) { border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--text-secondary); padding-inline: 0; letter-spacing: 0; }
-:root[data-theme] :is(.trackListPanel,#infoPanel,.settingsSectionPanel,.slskSearchArea,.slskResultsCon,.slskTransfersDrawer,.persistentMiniPlayer) { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-:root[data-theme] :is(.trackListPanel,#infoPanel) { background: var(--workspace-panel); }
-:root[data-theme] :is(.settingsSectionPanel,.settingsGroup) { border: 0; border-block-start: 1px solid var(--quiet-line); border-radius: 0; background: transparent; box-shadow: none; }
-:root[data-theme] .settingsGroup { padding-inline: 0; }
-:root[data-theme] .settingsSectionPanel { padding-inline: 0; }
-:root[data-theme] .settingsRowItem { border: 0; border-block-start: 1px solid var(--quiet-line); background: transparent; border-radius: 0; }
-:root[data-theme] :is(.trackItem,.queueItem,.richPlaylistCard) { border: 0; border-radius: 0; border-block-end: 1px solid var(--quiet-line); background: transparent; }
-:root[data-theme] :is(.trackItem,.queueItem,.richPlaylistCard).active { background: var(--quiet-fill); box-shadow: inset 3px 0 var(--accent-color); }
-:root[data-theme] .trackThumb { border-radius: 2px; }
-:root[data-theme] .persistentMiniPlayer { border-block-start: 1px solid var(--quiet-line); background: var(--workspace-panel); }
-:root[data-theme] .miniBtn:not(.miniPlayBtn) { border: 0; background: transparent; }
-:root[data-theme] .miniPlayBtn {  }
-:root[data-theme] .soulseekWorkspace :is(.slskSearchRow,.slskToolbar,.slskPanelToggleBar,.slskResultsFooter,.slskTransfersHeader) { background: transparent; border: 0; border-radius: 0; box-shadow: none; }
-:root[data-theme] .soulseekWorkspace :is(.slskSearchInput,#slskSearchInput,.slskModeSelect,.slskSubmitBtn,.slskFilterToggleBtn,.slskConnectionToggleBtn,.slskMiniTransfersBtn) { box-shadow: none; }
-:root[data-theme] .soulseekWorkspace .slskSearchArea { padding: 0; border-block-end: 1px solid var(--quiet-line); }
-:root[data-theme] .soulseekWorkspace .slskResultsFooter { border-block-start: 1px solid var(--quiet-line); }
-:root[data-theme] .soulseekWorkspace .slskPlaceholder { text-align: start; align-items: flex-start; padding: 24px 10px; }
-:root[data-theme] :is(.modalCard,.slskModalCard) { border: 1px solid var(--quiet-line); box-shadow: none; }
-/* Player: album first. Separate tools, text and transport through rhythm. */
-:root[data-theme] .playerDeck { background: var(--workspace-canvas); border: 0; border-radius: 0; box-shadow: none; align-items: center; gap: 6px; padding-inline: clamp(12px,2vw,24px); }
-:root[data-theme] .playerDeck > :is(.trackMeta,.timelineCon,.mediaCon,.deckAudioControls) { width: min(100%,var(--player-content-width)); min-width: 0; max-width: 100%; border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; overflow: visible; }
-:root[data-theme] .turntableStage { background: var(--player-stage-bg); border: 0; border-radius: 0; padding: 8px; align-items: center; gap: 8px; min-width: 0; }
-:root[data-theme] .turntableCon { width: min(var(--player-art-width), max(0px,calc(100cqh - 64px)),var(--player-art-limit)); }
-:root[data-theme] .playerDeck.empty-deck .turntableCon { width: min(var(--player-art-width),100cqh,280px); }
-:root[data-theme] .deckTopControls { width: min(100%,var(--player-art-limit)); align-self: var(--player-align); }
-:root[data-theme] .deckTopControls .deckActionBtn { border: 0; border-radius: var(--control-radius); background: transparent; color: var(--text-secondary); font-weight: 550; }
-:root[data-theme] .deckTopControls .deckActionBtn.active { background: var(--quiet-fill); color: var(--text-primary); box-shadow: inset 0 -2px var(--accent-color); }
-:root[data-theme] .trackMeta { align-items: center; text-align: var(--player-text-align); gap: 2px; padding-block: 4px; }
-:root[data-theme] .trackMeta #trackName { font-family: var(--player-title-font); font-weight: var(--player-title-weight); letter-spacing: var(--player-title-spacing); font-size: clamp(1.45rem,5.8vw,2rem); line-height: 1.18; text-transform: none; }
-:root[data-theme] .trackMeta #artistName { font-size: 1rem; font-weight: 500; }
-:root[data-theme] .trackMeta .albumName { font-size: .83rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:root[data-theme] .metaBadgeRow { align-self: stretch; justify-content: var(--player-align); order: 1; gap: 10px; }
-:root[data-theme] .metaBadgeRow .signalPathBadge { min-height: 32px; }
-:root[data-theme] .playerEmptyPrompt { width: 100%; border: 0; background: transparent; padding: 8px; }
-:root[data-theme] .playerDeck .mediaCon { background: var(--player-transport-bg); border-block: var(--player-edge); padding: 4px 0; }
-:root[data-theme] .playerDeck .mediaBtn:not(.playPauseBtn) { border: 0; border-radius: var(--control-radius); background: transparent; color: var(--text-primary); box-shadow: none; }
-:root[data-theme] .playerDeck .mediaBtn:is(.active,.repeat-one):not(.playPauseBtn) { background: var(--quiet-fill); color: var(--text-accent); }
-:root[data-theme] .playerDeck .playPauseBtn {  box-shadow: none; }
-:root[data-theme] .timelineCon { gap: 8px; }
-:root[data-theme] .progressBarCon::before { background: var(--quiet-line); height: 3px; }
-:root[data-theme] .progressBar { height: 3px; box-shadow: none; }
-:root[data-theme] .deckAudioControls { border-block-start: 1px solid var(--quiet-line); padding-top: 4px; }
+    html { -webkit-tap-highlight-color: transparent; }
+    :is(button, a, label, input, select, textarea, summary, [role="button"], [role="slider"], [tabindex], .trackItem, .queueItem) {
+        -webkit-tap-highlight-color: transparent;
+    }
+    button:not(:disabled):active, summary:active, .trackItem:active { opacity: 0.9; }
+    :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+        outline: 2px solid var(--border-focus);
+        outline-offset: -2px;
+    }
 
-/* Twelve designs: visual signatures persist without hue. No cover masks. */
-:root[data-theme="default"] { --player-align:flex-start; --player-text-align:left; --player-art-limit:420px; --play-radius:8px; }
-:root[data-theme="default"] .playerDeck .mediaCon { border-block:1px solid var(--quiet-line); }
-:root[data-theme="default"] .turntableStage { align-items:center; }
-:root[data-theme="default"] .deckTopControls { align-self:center; }
-:root[data-theme="nms"] { --player-align:flex-start; --player-text-align:left; --player-title-font:Futura,"Century Gothic",system-ui,sans-serif; --player-title-weight:400; --player-title-spacing:.025em; --player-art-width:88cqw; --control-radius:2px; --play-radius:2px; }
-:root[data-theme="nms"] .turntableStage { border-inline-start:3px double var(--accent-color); padding-inline-start:14px; }
-:root[data-theme="nms"] .brandLogo { font-family:Futura,"Century Gothic",system-ui,sans-serif; letter-spacing:.05em; }
-:root[data-theme="solar-eclipse"] { --player-art-width:86cqw; --player-art-limit:370px; --control-radius:24px; --play-radius:50%; --player-title-weight:500; }
-:root[data-theme="solar-eclipse"] .turntableStage { background:radial-gradient(ellipse at center,transparent 47%,var(--quiet-line) 47.4%,transparent 48%,transparent 59%,var(--quiet-line) 59.4%,transparent 60%); }
-:root[data-theme="solar-eclipse"] .playerDeck .mediaCon { background:var(--quiet-fill); border-radius:40px; }
-:root[data-theme="euclid-horizon"] { --player-align:flex-start; --player-text-align:left; --control-radius:0px; --play-radius:0px; --player-title-spacing:.04em; --player-art-width:91cqw; }
-:root[data-theme="euclid-horizon"] .turntableStage { border-inline-end:1px solid var(--quiet-line); border-block-end:1px solid var(--quiet-line); }
-:root[data-theme="euclid-horizon"] .playerDeck .mediaCon { border-block:1px solid var(--quiet-line); }
-:root[data-theme="euclid-horizon"] .mediaBtn:not(.playPauseBtn) { border-inline-end:1px solid var(--quiet-line); }
-:root[data-theme="alien-paradise"] { --player-align:flex-start; --player-text-align:left; --player-title-font:Georgia,serif; --player-title-weight:500; --player-art-width:86cqw; --control-radius:16px 5px; --play-radius:22px 7px; }
-:root[data-theme="alien-paradise"] .turntableStage { background:var(--quiet-fill); border-radius:48% 8% 34% 10% / 24% 8% 22% 10%; }
-:root[data-theme="alien-paradise"] .deckTopControls { align-self:center; }
-:root[data-theme="abyssal-void"] { --player-align:flex-start; --player-text-align:left; --player-title-font:ui-monospace,monospace; --player-title-weight:500; --player-title-spacing:-.055em; --player-art-width:80cqw; --control-radius:2px; --play-radius:8px; }
-:root[data-theme="abyssal-void"] .turntableStage { border-inline-start:2px solid var(--quiet-line); background:var(--quiet-fill); }
-:root[data-theme="abyssal-void"] .timelineCon { background:var(--quiet-fill); }
-:root[data-theme="dissonance"] { --player-align:flex-start; --player-text-align:left; --player-art-width:90cqw; --control-radius:3px 13px; --play-radius:4px 17px; --player-title-weight:750; }
-:root[data-theme="dissonance"] .turntableStage { background:linear-gradient(145deg,transparent 42%,var(--quiet-fill) 42%); border-block-end:2px solid var(--quiet-line); }
-:root[data-theme="dissonance"] .trackMeta #trackName { font-style:italic; }
-:root[data-theme="sentinel"] { --player-align:center; --player-text-align:center; --player-art-width:84cqw; --control-radius:3px; --play-radius:4px; --player-title-font:ui-monospace,monospace; --player-title-spacing:-.04em; }
-:root[data-theme="sentinel"] .turntableStage { border:2px solid var(--quiet-line); background:var(--quiet-fill); }
-:root[data-theme="sentinel"] .playerDeck .mediaCon { border-block:2px solid var(--quiet-line); }
-:root[data-theme="sentinel"] .playerDeck .mediaBtn:not(.playPauseBtn) { background:var(--quiet-fill); border:1px solid var(--quiet-line); }
-:root[data-theme="minimalist-light"] { --player-align:flex-start; --player-text-align:left; --player-title-font:Georgia,serif; --player-title-weight:500; --control-radius:0px; --play-radius:0px; --player-art-limit:390px; }
-:root[data-theme="minimalist-light"] .turntableStage { border-block-end:1px solid var(--text-primary); }
-:root[data-theme="minimalist-dark"] { --player-align:flex-start; --player-text-align:start; --player-title-font:ui-monospace,monospace; --player-title-weight:500; --player-title-spacing:-.035em; --player-art-width:86cqw; --control-radius:0px; --play-radius:0px; }
-:root[data-theme="minimalist-dark"] .deckAudioControls { border-block-start:1px solid var(--quiet-line); }
-:root[data-theme="minimalist-warm"] { --player-align:flex-start; --player-text-align:left; --player-title-font:Georgia,serif; --player-title-weight:500; --player-art-width:84cqw; --control-radius:9px; --play-radius:9px; }
-:root[data-theme="minimalist-warm"] .turntableStage { background:var(--quiet-fill); border:1px solid var(--quiet-line); padding:14px; }
-:root[data-theme="minimalist-warm"] .trackMeta { border-block-end:1px solid var(--quiet-line); padding-block-end:8px; }
-:root[data-theme="minimalist-obsidian"] { --player-align:center; --player-text-align:center; --player-art-limit:440px; --control-radius:0px; --play-radius:50%; --workspace-canvas:#000; --workspace-panel:#000; --workspace-header:#000; }
-:root[data-theme="minimalist-obsidian"] .deckAudioControls { border-block-start:0; }
-:root[data-theme="minimalist-obsidian"] .playPauseBtn { background:var(--text-primary); color:#000; border-color:transparent; }
-/* The desktop player is centered independently of the side rails. */
-@media (min-width:1200px) and (min-height:501px) {
-  :root[data-theme] .playerDeck { container-type:inline-size; }
-}
-@media (max-width:768px), (max-height:500px) and (orientation:landscape) {
-  :root[data-theme] .playerDeck.mobileActive { padding-inline:max(12px,var(--safe-left)) max(12px,var(--safe-right)); gap:4px; }
-  :root[data-theme] .playerDeck .turntableStage { padding:8px; }
-  :root[data-theme] .playerDeck .trackMeta { padding-inline:0; }
-  :root[data-theme] .settingsWorkspace, :root[data-theme] .soulseekWorkspace { padding-inline:max(14px,var(--safe-left)) max(14px,var(--safe-right)); }
-  :root[data-theme] :is(.settingsCatBtn,.mobileTabBtn,.libTab) { min-height:44px; }
-  :root[data-theme] .mobileTabLabel { font-size:.73rem; }
-}
-/* Keep all artwork unmasked and preserve the circular visualizer contract. */
-:root[data-theme][data-presentation="artwork"] :is(.vinylTurntable,.vinylLabel) { border-radius:0; clip-path:none; }
-:root[data-theme] .turntableStage .lyricsCon { align-self:stretch; }
-/* A size-contained flex item needs an explicit inline size when its parent
-   centers children. Otherwise intrinsic width can collapse to just padding. */
-:root[data-theme] .playerDeck .turntableStage { width:100%; align-self:stretch; }
-:root[data-theme] .quickFormatFilterBar { flex-wrap:wrap; overflow:visible; justify-content:space-between; }
-:root[data-theme] .formatFilterPillsGroup { flex:1 1 auto; min-width:0; flex-wrap:wrap; }
-:root[data-theme] .libraryToolsToggleBtn { flex:0 0 auto; }
+    /* Shared Chrome & Hierarchy (preserve WCAG 1.4.11 control boundaries) */
+    :root[data-theme] .workspaceSwitcher {
+        padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+    }
+    :root[data-theme] :is(.wsTabBtn, .settingsCatBtn, .libTab, .mobileTabBtn) {
+        min-height: 44px;
+        background: transparent;
+        border-radius: var(--shape-nav, var(--control-radius));
+        border: 0;
+        color: var(--text-secondary);
+        letter-spacing: 0;
+        font-weight: 550;
+    }
+    :root[data-theme] :is(.wsTabBtn, .settingsCatBtn, .libTab, .mobileTabBtn).active {
+        background: var(--nav-selected);
+        color: var(--text-primary);
+        box-shadow: inset 0 -2px var(--accent-color);
+        font-weight: 700;
+    }
+    :root[data-theme] .mobileTabBtn.active .mobileTabIcon { color: var(--text-accent); }
+    :root[data-theme] :is(.panelHeader h2, .settingsSectionTitle, .slskPlaceholder h3) {
+        font-family: var(--player-title-font);
+        color: var(--text-primary);
+        font-size: 1rem;
+        font-weight: 650;
+        letter-spacing: -0.015em;
+    }
+    :root[data-theme] :is(.settingsHubHeader h2, .panelHeader h2, .slskPlaceholder h3) {
+        font-size: clamp(1.35rem, 4.4vw, 1.85rem);
+        line-height: 1.2;
+    }
+    :root[data-theme] :is(.settingsRowDesc, .trackArtist, .miniArtist, .slskResultPath) { color: var(--text-muted); }
+    :root[data-theme] :is(.actionBtn, .topBtn, .folderBrowseBtn, .backBtn, .miniBtn, .slskChip, .formatFilterPill, .speedBtn, .settingsSearch input, .sortSelect) {
+        letter-spacing: 0;
+    }
+    :root[data-theme] :is(.formatFilterPill, .slskChip):not(.active) {
+        background: transparent;
+        border-color: var(--border-control);
+        color: var(--text-secondary);
+    }
+    :root[data-theme] :is(.formatFilterPill, .slskChip).active {
+        background: var(--accent-surface);
+        color: var(--text-accent);
+        border-color: var(--border-bold);
+        box-shadow: inset 0 -2px var(--accent-color);
+    }
+    :root[data-theme] :is(.settingsSearch input, #slskSearchInput) {
+        background: var(--bg-surface-2);
+        border: 1px solid var(--border-control);
+        min-height: 48px;
+        font-size: 1rem;
+    }
+    :root[data-theme] :is(.settingsSearch input, #slskSearchInput):focus-visible {
+        border-color: var(--border-focus);
+    }
 
-:root[data-theme] :is(.settingsHubHeader h2,.settingsSectionTitle,.panelHeader h2,.slskPlaceholder h3) { font-family:var(--player-title-font); }
-:root[data-theme] .settingsRowItem { padding-block:12px; }
+    /* Middleground Panel Planes & Borders */
+    :root[data-theme] :is(.trackListPanel, #infoPanel, .settingsSectionPanel, .slskSearchArea, .slskResultsCon, .slskTransfersDrawer, .persistentMiniPlayer) {
+        background: var(--workspace-panel);
+        border-width: var(--identity-border);
+        border-style: var(--identity-style);
+        border-color: var(--border-surface);
+        min-width: 0;
+        max-width: 100%;
+    }
+    :root[data-theme] :is(.settingsWorkspace, .soulseekWorkspace) {
+        gap: var(--workspace-gap);
+        min-width: 0;
+        background: var(--workspace-canvas);
+    }
+    :root[data-theme] .settingsSectionPanel {
+        gap: 8px;
+        padding-block: 10px 12px;
+        border-radius: var(--group-radius);
+    }
+    :root[data-theme] .settingsPanelContent {
+        gap: 0;
+        background: var(--group-fill);
+        border-top: 1px solid var(--border-divider);
+        padding-inline: var(--group-inset);
+        min-width: 0;
+    }
+    :root[data-theme] .settingsRowItem {
+        gap: 5px;
+        padding-block: 12px;
+        border: 0;
+        border-block-start: 1px solid var(--border-divider);
+        background: transparent;
+        border-radius: 0;
+        min-width: 0;
+    }
+    :root[data-theme] .settingsPanelContent > :first-child,
+    :root[data-theme] .settingsPanelContent > :nth-child(1 of :not([hidden])) {
+        border-block-start: 0;
+    }
+    :root[data-theme] .settingsRowTitle { font-size: 0.975rem; line-height: 1.35; font-weight: 600; overflow-wrap: anywhere; }
+    :root[data-theme] .settingsRowDesc { font-size: 0.875rem; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
+    :root[data-theme] .settingsAdvancedSummary { min-height: 54px; border-radius: var(--group-radius); padding-inline: 0; }
+    :root[data-theme] .settingsAdvancedSummaryText small { font-size: 0.82rem; }
+    :root[data-theme] :is(label.settingsRowTitle, .cachySwitchLabel) { min-height: 44px; cursor: pointer; }
+    :root[data-theme] label.settingsRowTitle { justify-content: space-between; gap: 12px; }
 
-/* 6.11: content-first hierarchy, a single functional chrome layer, and
-   intentional theme-specific groupings. No native glass imitation. */
-:root[data-theme] {
-  --chrome-radius: 12px; --group-radius: 14px; --group-fill: var(--quiet-fill);
-  --group-edge: 0px; --group-inset: 12px; --nav-radius: var(--chrome-radius);
-  --nav-selected: var(--quiet-fill); --play-ink: var(--text-primary); --play-ground: var(--bg-canvas);
-}
-/* A layered reset can be overridden by component display rules. */
-[hidden] { display: none !important; }
-:root[data-theme] :is(.wsTabBtn,.mobileTabBtn,.settingsCatBtn,.libTab) { min-height: 44px;  }
-:root[data-theme] :is(.wsTabBtn,.mobileTabBtn,.settingsCatBtn,.libTab).active { background: var(--nav-selected); box-shadow: none; color: var(--text-primary); }
-:root[data-theme] .mobileTabBtn.active .mobileTabIcon { color: var(--text-accent); }
-:root[data-theme] :is(.settingsSearch input,#slskSearchInput) { background: var(--quiet-fill); border: 1px solid transparent; min-height: 48px; font-size: 1rem; }
-:root[data-theme] :is(.settingsSearch input,#slskSearchInput):focus-visible { border-color: var(--border-focus); }
-:root[data-theme] :is(.settingsHubHeader h2,.panelHeader h2,.slskPlaceholder h3) { font-size: clamp(1.4rem, 4.8vw, 1.9rem); font-weight: 650; letter-spacing: -.035em; line-height: 1.2; }
-:root[data-theme] .settingsSectionTitle { font-size: 1rem; line-height: 1.35; }
-:root[data-theme] .settingsSectionPanel { border: 0; gap: 8px; padding-block: 8px 12px; }
-:root[data-theme] .settingsPanelContent { gap: 0; background: var(--group-fill); border: var(--group-edge) solid var(--quiet-line); padding-inline: var(--group-inset); min-width: 0; }
-:root[data-theme] .settingsPanelContent > :first-child { border-block-start: 0; }
-:root[data-theme] .settingsRowItem { gap: 5px; padding-block: 12px; min-width: 0; }
-:root[data-theme] .settingsRowTitle { font-size: .975rem; line-height: 1.35; font-weight: 600; overflow-wrap: anywhere; }
-:root[data-theme] .settingsRowDesc { font-size: .875rem; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
-:root[data-theme] .settingsAdvancedSummary { min-height: 54px; border-radius: var(--group-radius); padding-inline: 0; }
-:root[data-theme] .settingsAdvancedSummaryText small { font-size: .82rem; }
-:root[data-theme] :is(label.settingsRowTitle,.cachySwitchLabel) { min-height: 44px; cursor: pointer; }
-:root[data-theme] label.settingsRowTitle { justify-content: space-between; gap: 12px; }
-/* Real checkbox state; destructive-write consent retains its checkbox. */
-:root[data-theme] :is(#androidNativeMode,#continuousPcmMode,#settingsBgNotificationsToggle) {
-  appearance: none; -webkit-appearance: none; flex: 0 0 46px; width: 46px; height: 28px;
-  border: 1px solid var(--border-bold); border-radius: 20px; background: var(--bg-surface-3);
-  position: relative; cursor: pointer; margin: 0;
-}
-:root[data-theme] :is(#androidNativeMode,#continuousPcmMode,#settingsBgNotificationsToggle)::before { content: ''; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--text-primary); }
-:root[data-theme] :is(#androidNativeMode,#continuousPcmMode,#settingsBgNotificationsToggle):checked { background: var(--accent-color); border-color: var(--accent-color); }
-:root[data-theme] :is(#androidNativeMode,#continuousPcmMode,#settingsBgNotificationsToggle):checked::before { transform: translateX(18px); background: var(--text-on-accent); }
-:root[data-theme] :is(#androidNativeMode,#continuousPcmMode,#settingsBgNotificationsToggle):disabled { opacity: .55; cursor: not-allowed; }
-@media (forced-colors: active) {
-  :root[data-theme] :is(#androidNativeMode,#continuousPcmMode,#settingsBgNotificationsToggle) { appearance: auto; -webkit-appearance: auto; width: 24px; height: 24px; flex-basis: 24px; }
-  :root[data-theme] :is(#androidNativeMode,#continuousPcmMode,#settingsBgNotificationsToggle)::before { content: none; }
-}
-:root[data-theme] .trackMeta #trackName { font-size: clamp(1.5rem,5.6vw,2.125rem); line-height: 1.18; }
-:root[data-theme] .trackMeta #artistName { font-size: 1rem; color: var(--text-secondary); }
-:root[data-theme] .trackMeta .albumName { font-size: .875rem; }
-:root[data-theme] .metaBadgeRow { gap: 12px; }
-:root[data-theme] .metaBadgeRow :is(.formatBadge,.signalPathBadge) { font-size: .75rem; font-weight: 500; }
-:root[data-theme] .metaBadgeRow .signalPathBadge { min-height: 44px; }
-:root[data-theme] .deckTopControls .deckActionBtn { color: var(--text-secondary); font-size: .8125rem; }
-:root[data-theme] .deckTopControls .deckActionBtn.active { background: var(--quiet-fill); box-shadow: none; color: var(--text-primary); }
-:root[data-theme] .deckTopControls .deckActionBtn.active svg { color: var(--text-accent); }
-:root[data-theme] .mediaCon .playPauseBtn, :root[data-theme] .miniPlayBtn { background: var(--play-ink); color: var(--play-ground); border: 0; }
-:root[data-theme] .mediaCon .playPauseBtn { width: 60px; height: 60px; }
-:root[data-theme] .mediaCon .playPauseBtn svg { width: 30px; height: 30px; }
-:root[data-theme] .mediaCon .skipBtn svg { width: 26px; height: 26px; }
-:root[data-theme] .mediaCon .subBtn:not(.active):not(.repeat-one) { color: var(--text-secondary); }
-:root[data-theme] .mediaCon .subBtn:is(.active,.repeat-one) { box-shadow: inset 0 -2px var(--accent-color); }
-:root[data-theme] .timelineCon .timeLabel { font-family: inherit; font-size: .75rem; }
-:root[data-theme] .progressBarCon::before, :root[data-theme] .progressBar { height: 4px; }
-:root[data-theme] .deckAudioControls { border-block-start: 0; }
-:root[data-theme] .playPauseGlowRing { display: none; }
-:root[data-theme] .trackThumb { border-radius: 4px; }
-:root[data-theme] .trackTitle { font-size: .9375rem; font-weight: 600; }
-:root[data-theme] .trackArtist { font-size: .8125rem; }
-:root[data-theme] .soulseekWorkspace .slskPlaceholder { padding: 24px 4px; }
-:root[data-theme] .slskSearchingState { align-items:flex-start; text-align:start; padding:24px 4px; color:var(--text-secondary); overflow-wrap:anywhere; }
-:root[data-theme] .slskSearchingState h3 { color:var(--text-primary); font-size:1.1rem; font-weight:650; }
-:root[data-theme] .slskSearchingState p { font-size:.875rem; }
-:root[data-theme] .soulseekWorkspace :is(.slskSearchRow,.slskPanelToggleBar) { padding-inline: 0; }
-:root[data-theme] .soulseekWorkspace .slskSubmitBtn { min-height: 44px; }
-:root[data-theme] .soulseekWorkspace :is(.slskResultRow,.slskTransferRow) { border: 0; border-block-end: 1px solid var(--quiet-line); border-radius: 0; background: transparent; }
-:root[data-theme] .soulseekWorkspace :is(.slskFilterToggleBtn,.slskConnectionToggleBtn,.slskMiniTransfersBtn,.slskShowMoreBtn) { min-height: 44px; }
-/* Shared functional patterns, distinct art directions. */
-:root[data-theme="default"] { --chrome-radius: 10px; --group-radius: 12px; --player-title-weight: 650; }
-:root[data-theme="nms"] { --chrome-radius: 2px; --group-radius: 0px; --group-fill: transparent; --group-inset: 0px; --nav-radius: 0px; }
-:root[data-theme="solar-eclipse"] { --chrome-radius: 22px; --group-radius: 24px; --group-inset: 16px; --nav-radius: 24px; }
-:root[data-theme="euclid-horizon"] { --chrome-radius: 0px; --group-radius: 0px; --group-fill: transparent; --group-inset: 0px; --nav-radius: 0px; }
-:root[data-theme="alien-paradise"] { --chrome-radius: 18px 6px; --group-radius: 22px 8px; --group-inset: 14px; --nav-radius: 16px 5px; }
-:root[data-theme="abyssal-void"] { --chrome-radius: 3px; --group-radius: 0px; --group-fill: transparent; --group-inset: 0px; --nav-radius: 0px; }
-:root[data-theme="dissonance"] { --chrome-radius: 3px 14px; --group-radius: 4px 20px; --group-inset: 14px; --nav-radius: 3px 12px; }
-:root[data-theme="sentinel"] { --chrome-radius: 4px; --group-radius: 4px; --group-edge: 1px; --group-inset: 10px; --nav-radius: 4px; }
-:root[data-theme="minimalist-light"] { --chrome-radius: 0px; --group-radius: 0px; --group-fill: transparent; --group-inset: 0px; --nav-radius: 0px; }
-:root[data-theme="minimalist-dark"] { --chrome-radius: 0px; --group-radius: 0px; --group-fill: transparent; --group-inset: 0px; --nav-radius: 0px; }
-:root[data-theme="minimalist-warm"] { --chrome-radius: 10px; --group-radius: 14px; --group-inset: 16px; --nav-radius: 10px; }
-:root[data-theme="minimalist-obsidian"] { --chrome-radius: 0px; --group-radius: 0px; --group-fill: transparent; --group-inset: 0px; --nav-radius: 0px; --nav-selected: transparent; }
-:root:is([data-theme="nms"],[data-theme="euclid-horizon"],[data-theme="abyssal-void"],[data-theme="minimalist-light"],[data-theme="minimalist-dark"],[data-theme="minimalist-obsidian"]) :is(.wsTabBtn,.mobileTabBtn,.settingsCatBtn,.libTab).active { box-shadow: inset 0 -2px var(--text-primary); }
-:root:is([data-theme="nms"],[data-theme="abyssal-void"]) :is(.settingsSectionHeader,.slskTransfersHeader,.libraryTabs) { border-block-end: 1px solid var(--quiet-line); }
-:root[data-theme="euclid-horizon"] :is(.settingsSectionHeader,.slskTransfersHeader) { border-block-end: 2px solid var(--quiet-line); }
-:root[data-theme="sentinel"] :is(.slskSearchArea,.libraryTabs) { border-block-end: 2px solid var(--quiet-line); }
-:root[data-theme="minimalist-warm"] :is(.settingsSectionHeader,.slskTransfersHeader,.panelHeader) { font-family: Georgia,serif; }
-:root[data-theme="minimalist-light"] .trackMeta #trackName { font-size: clamp(1.6rem,6vw,2.2rem); }
-:root[data-theme="minimalist-dark"] .mediaCon .playPauseBtn { background:var(--quiet-fill); color:var(--text-primary); border:1px solid var(--quiet-line); }
-:root[data-theme="minimalist-dark"] .playerDeck .mediaCon { border-block:1px solid var(--quiet-line); }
-:root[data-theme="minimalist-obsidian"] .mediaCon .playPauseBtn { background: transparent; color: var(--text-primary); }
-:root[data-theme="minimalist-obsidian"] .mediaCon .playPauseBtn svg { width: 36px; height: 36px; }
-@media (max-width:768px), (max-height:500px) and (orientation:landscape) {
-  :root[data-theme] .playerDeck.mobileActive { padding-inline: max(16px,var(--safe-left)) max(16px,var(--safe-right)); gap: 4px; }
-  :root[data-theme] .mobileTabBar { padding-inline: max(6px,var(--safe-left)) max(6px,var(--safe-right)); gap: 4px; }
-  :root[data-theme] .mobileTabBtn { min-height: 50px; }
-  :root[data-theme] .mobileTabLabel { font-size: .75rem; line-height: 1.2; overflow-wrap: anywhere; }
-  :root[data-theme] .settingsWorkspace .settingsSectionPanel { padding-inline: 0; }
-  :root[data-theme] .timelineCon { grid-template-columns: minmax(0,auto) minmax(0,1fr) minmax(0,auto); }
-  :root[data-theme] .timelineCon .timeLabel { min-width: 0; white-space: nowrap; }
-  :root[data-theme] .deckAudioControls .volumeDeck .muteBtn { min-width: 44px; min-height: 44px; }
-}
-@media (max-width:360px) {
-  :root[data-theme] .playerDeck.mobileActive { padding-inline: max(10px,var(--safe-left)) max(10px,var(--safe-right)); }
-  :root[data-theme] .mediaCon .playPauseBtn { width: 52px; height: 52px; }
-  :root[data-theme] .mobileTabLabel { font-size: .6875rem; }
-}
-:root[data-theme] .settingsPanelContent > :nth-child(1 of :not([hidden])) { border-block-start:0; }
+    /* Native Switch Styling with High-Contrast Controls */
+    :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle) {
+        appearance: none;
+        -webkit-appearance: none;
+        flex: 0 0 46px;
+        width: 46px;
+        height: 28px;
+        border: 1.5px solid var(--border-control);
+        border-radius: 20px;
+        background: var(--bg-surface-3);
+        position: relative;
+        cursor: pointer;
+        margin: 0;
+    }
+    :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle)::before {
+        content: '';
+        position: absolute;
+        left: 3px;
+        top: 3px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--text-primary);
+    }
+    :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):checked {
+        background: var(--accent-color);
+        border-color: var(--accent-color);
+    }
+    :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):checked::before {
+        transform: translateX(18px);
+        background: var(--text-on-accent);
+    }
+    :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
 
-/* Theme-specific album presentation. Shared control positions are invariant;
-   only material, typography, and selected-state treatments vary. */
-:root[data-theme="default"] { --album-frame: 0 0 0 1px #b7c6d426, 0 8px 24px #0004; --album-radius: 5px; }
-:root[data-theme="nms"] { --album-frame: 0 0 0 1px #ce56504d, 0 0 0 5px #b8423820; --album-radius: 1px; }
-:root[data-theme="solar-eclipse"] { --album-frame: 0 0 0 1px #93b3ff40, 0 10px 30px #08082099; --album-radius: 18px; }
-:root[data-theme="euclid-horizon"] { --album-frame: 0 0 0 2px #aa85494d, 0 0 0 6px #aa854916; --album-radius: 0; }
-:root[data-theme="alien-paradise"] { --album-frame: 0 0 0 1px #eab8d044, 0 8px 20px #0005; --album-radius: 18px 4px; }
-:root[data-theme="abyssal-void"] { --album-frame: 0 0 0 1px #6fbd9655, 0 6px 0 #244f3c40; --album-radius: 2px; }
-:root[data-theme="dissonance"] { --album-frame: 0 0 0 1px #bb8cde66, 0 8px 20px #0005; --album-radius: 3px 16px; }
-:root[data-theme="sentinel"] { --album-frame: 0 0 0 2px #a7b7c84d, 0 0 0 5px #66758126; --album-radius: 2px; }
-:root[data-theme="minimalist-light"] { --album-frame: 0 0 0 1px #17171724; --album-radius: 0; }
-:root[data-theme="minimalist-dark"] { --album-frame: 0 0 0 1px #ffffff26; --album-radius: 0; }
-:root[data-theme="minimalist-warm"] { --album-frame: 0 0 0 1px #795b3b30, 0 6px 18px #4f39231a; --album-radius: 4px; }
-:root[data-theme="minimalist-obsidian"] { --album-frame: none; --album-radius: 0; }
-:root[data-theme][data-presentation="artwork"] .vinylLabel img { border-radius: var(--album-radius); box-shadow: var(--album-frame); }
-:root[data-theme="minimalist-warm"] .audioChangeDialog h2 { font-family: Georgia,serif; }
+    /* Track Rows, Queue, Modals & Soulseek Rows */
+    :root[data-theme] :is(.trackItem, .queueItem, .richPlaylistCard) {
+        border: 0;
+        border-radius: 0;
+        border-block-end: 1px solid var(--border-divider);
+        background: transparent;
+    }
+    :root[data-theme] :is(.trackItem, .queueItem, .richPlaylistCard).active {
+        background: var(--accent-surface);
+        box-shadow: inset 3px 0 var(--accent-color);
+    }
+    :root[data-theme] .trackTitle { font-size: 0.9375rem; font-weight: 600; }
+    :root[data-theme] .trackArtist { font-size: 0.8125rem; }
+    :root[data-theme] .persistentMiniPlayer {
+        border-block-start: 1px solid var(--border-surface);
+        background: var(--workspace-header);
+    }
+    :root[data-theme] .miniBtn:not(.miniPlayBtn) {
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-2);
+    }
+    :root[data-theme] :is(.modalCard, .slskModalCard) {
+        border: 1px solid var(--border-surface);
+        box-shadow: var(--shadow-modal);
+    }
+    :root[data-theme] .soulseekWorkspace :is(.slskResultRow, .slskTransferRow) {
+        border: 0;
+        border-block-end: 1px solid var(--border-divider);
+        border-radius: 0;
+        background: transparent;
+    }
+    :root[data-theme] .soulseekWorkspace .slskPlaceholder { text-align: start; align-items: flex-start; padding: 24px 6px; }
+    :root[data-theme] .slskSearchingState { align-items: flex-start; text-align: start; padding: 24px 6px; color: var(--text-secondary); overflow-wrap: anywhere; }
+
+    /* Player Deck Shared Geometry */
+    :root[data-theme] .playerDeck {
+        background: var(--workspace-canvas);
+        border: 0;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 6px;
+        padding-inline: clamp(12px, 2vw, 24px);
+    }
+    :root[data-theme] .playerDeck > :is(.trackMeta, .timelineCon, .mediaCon, .deckAudioControls) {
+        flex: 0 0 auto;
+        width: min(100%, var(--player-content-width));
+        min-width: 0;
+        max-width: 100%;
+    }
+    :root[data-theme] .turntableStage {
+        flex: 1 0 210px;
+        width: 100%;
+        min-height: 210px;
+        max-height: none;
+        padding: 10px;
+        gap: 10px;
+        justify-content: center;
+        align-items: center;
+        align-self: stretch;
+        overflow: hidden;
+        background: var(--player-stage-bg);
+        border-radius: var(--identity-radius);
+    }
+    :root[data-theme] .playerDeck.empty-deck .turntableStage { flex: 1 0 180px; min-height: 180px; }
+    :root[data-theme] .turntableCon {
+        flex: none;
+        width: min(var(--player-art-width), max(0px, calc(100cqh - 64px)), var(--player-art-limit));
+        aspect-ratio: 1;
+        max-width: 100%;
+    }
+    :root[data-theme] .playerDeck.empty-deck .turntableCon { width: min(var(--player-art-width), 100cqh, 280px); }
+    :root[data-theme][data-presentation="artwork"] :is(.vinylTurntable, .vinylLabel) {
+        clip-path: none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+    :root[data-theme][data-presentation="artwork"] .vinylLabel img { object-fit: contain; display: block; }
+    :root[data-theme]:not([data-presentation="artwork"]) :is(.vinylTurntable, .turntableCenterVis, .turntableCenterCanvas) {
+        border-radius: 50%;
+        clip-path: circle(50%);
+    }
+    :root[data-theme] .deckTopControls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(85px, 1fr));
+        flex: none;
+        gap: 4px;
+        margin: 0;
+        width: min(100%, var(--player-art-limit));
+        align-self: var(--player-align);
+    }
+    :root[data-theme] .deckTopControls .deckActionBtn {
+        min-height: 44px;
+        min-width: 0;
+        justify-content: center;
+        padding: 4px;
+        border: 1px solid transparent;
+        border-radius: var(--control-radius);
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 0.8125rem;
+        font-weight: 550;
+    }
+    :root[data-theme] .deckTopControls .deckActionBtn.active {
+        background: var(--accent-surface);
+        border-color: var(--border-control);
+        color: var(--text-primary);
+    }
+    :root[data-theme] .deckTopControls .deckActionBtn.active svg { color: var(--text-accent); }
+    :root[data-theme] .trackMeta { align-items: center; text-align: var(--player-text-align); gap: 2px; padding-block: 4px; }
+    :root[data-theme] .trackMeta #trackName {
+        font-family: var(--player-title-font);
+        font-weight: var(--player-title-weight);
+        letter-spacing: var(--player-title-spacing);
+        font-size: clamp(1.5rem, 5.6vw, 2.125rem);
+        line-height: 1.18;
+        text-transform: none;
+    }
+    :root[data-theme] .trackMeta #artistName { font-size: 1rem; font-weight: 500; color: var(--text-secondary); }
+    :root[data-theme] .trackMeta .albumName { font-size: 0.875rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :root[data-theme] .metaBadgeRow { align-self: stretch; justify-content: var(--player-align); order: 1; gap: 12px; }
+    :root[data-theme] .metaBadgeRow .signalPathBadge { min-height: 44px; }
+    :root[data-theme] .mediaCon {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(44px, 1fr)) minmax(52px, 1.2fr) repeat(2, minmax(44px, 1fr));
+        justify-items: center;
+        gap: 3px;
+        padding: 4px 6px;
+        background: var(--player-transport-bg);
+        border-block: var(--player-edge);
+    }
+    :root[data-theme] .mediaCon .mediaBtn:not(.playPauseBtn) {
+        border: 1px solid transparent;
+        border-radius: var(--control-radius);
+        background: transparent;
+        color: var(--text-primary);
+    }
+    :root[data-theme] .mediaCon .mediaBtn:is(.active, .repeat-one):not(.playPauseBtn) {
+        background: var(--accent-surface);
+        border-color: var(--border-control);
+        color: var(--text-accent);
+        box-shadow: inset 0 -2px var(--accent-color);
+    }
+    :root[data-theme] .mediaCon .playPauseBtn,
+    :root[data-theme] .miniPlayBtn {
+        background: var(--play-ink);
+        color: var(--play-ground);
+        border: 0;
+    }
+    :root[data-theme] .mediaCon .playPauseBtn { width: 60px; height: 60px; }
+    :root[data-theme] .mediaCon .playPauseBtn svg { width: 30px; height: 30px; }
+    :root[data-theme] .mediaCon .skipBtn svg { width: 26px; height: 26px; }
+    :root[data-theme] .timelineCon { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
+    :root[data-theme] .timelineCon .timeLabel { font-size: 0.75rem; }
+    :root[data-theme] .progressBarCon::before { background: var(--border-control); opacity: 0.55; height: 4px; }
+    :root[data-theme] .progressBar { height: 4px; }
+    :root[data-theme] .deckAudioControls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+    :root[data-theme] .volumeDeck { grid-template-columns: 44px minmax(0, 1fr) auto; }
+    :root[data-theme] .playPauseGlowRing { display: none; }
+    :root[data-theme] .coverArtPreview { object-fit: contain; }
+    :root[data-theme] .lyricsCon { flex: 1 1 0; min-height: 0; height: auto; max-height: 100%; overflow: hidden; }
+    :root[data-theme] .lyricsScrollArea { min-height: 0; overflow: auto; }
+    :root[data-theme] .turntableStage .lyricsCon { align-self: stretch; }
+    :root[data-theme] .quickFormatFilterBar { flex-wrap: wrap; overflow: visible; justify-content: space-between; }
+    :root[data-theme] .formatFilterPillsGroup { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+    :root[data-theme] .libraryToolsToggleBtn { flex: 0 0 auto; }
+    :root[data-theme] .playerEmptyPrompt { width: 100%; border: 0; background: transparent; padding: 8px; }
+    :root[data-theme] .playerDeck.empty-deck :is(.deckTopControls, .metaBadgeRow, .timelineCon, .mediaCon, .deckAudioControls) { display: none; }
+
+    /* Subview visibility */
+    .soulseekWorkspace[data-slsk-subview="transfers"] > :is(.slskControlsPanel, .slskResultsCon) { display: none; }
+    .soulseekWorkspace[data-slsk-subview="results"] > .slskTransfersDrawer { display: none; }
+    .soulseekWorkspace[data-slsk-subview="transfers"] > .slskTransfersDrawer { display: flex; }
+
+    /* Twelve Distinct Built-In Art Directions (strictly scoped) */
+    :root[data-theme="default"] {
+        --player-align: flex-start; --player-text-align: left; --player-art-limit: 420px;
+        --play-radius: 10px; --chrome-radius: 10px; --group-radius: 12px;
+        --album-frame: 0 0 0 1px var(--border-surface), 0 8px 24px #0004; --album-radius: 5px;
+    }
+    :root[data-theme="default"] .playerDeck .mediaCon { border-block: 1px solid var(--border-divider); }
+
+    :root[data-theme="nms"] {
+        --identity-radius: 2px; --identity-style: double; --identity-border: 2px;
+        --player-align: flex-start; --player-text-align: left;
+        --player-title-font: Futura, "Century Gothic", system-ui, sans-serif;
+        --player-title-weight: 450; --player-title-spacing: 0.025em; --player-art-width: 88cqw;
+        --control-radius: 2px; --play-radius: 2px; --chrome-radius: 2px; --group-radius: 0px; --nav-radius: 0px;
+        --album-frame: 0 0 0 1px var(--border-control), 0 0 0 4px var(--accent-surface); --album-radius: 1px;
+    }
+    :root[data-theme="nms"] .turntableStage { border-inline-start: 3px double var(--accent-color); padding-inline-start: 14px; }
+
+    :root[data-theme="solar-eclipse"] {
+        --identity-radius: 22px; --chrome-radius: 22px; --group-radius: 24px; --group-inset: 16px; --nav-radius: 24px;
+        --player-art-width: 86cqw; --player-art-limit: 370px; --control-radius: 24px; --play-radius: 50%; --player-title-weight: 500;
+        --album-frame: 0 0 0 1px var(--border-control), 0 10px 30px #08082099; --album-radius: 18px;
+    }
+    :root[data-theme="solar-eclipse"] .turntableStage {
+        background: radial-gradient(ellipse at center, transparent 47%, var(--border-divider) 47.4%, transparent 48%, transparent 59%, var(--border-divider) 59.4%, transparent 60%);
+    }
+    :root[data-theme="solar-eclipse"] .playerDeck .mediaCon { background: var(--quiet-fill); border-radius: 40px; }
+
+    :root[data-theme="euclid-horizon"] {
+        --identity-radius: 0px; --chrome-radius: 0px; --group-radius: 0px; --nav-radius: 0px;
+        --player-align: flex-start; --player-text-align: left; --control-radius: 0px; --play-radius: 0px;
+        --player-title-spacing: 0.04em; --player-art-width: 91cqw;
+        --album-frame: 0 0 0 2px var(--border-control), 0 0 0 5px var(--accent-surface); --album-radius: 0;
+    }
+    :root[data-theme="euclid-horizon"] .turntableStage { border-inline-end: 1px solid var(--border-surface); border-block-end: 1px solid var(--border-surface); }
+    :root[data-theme="euclid-horizon"] .playerDeck .mediaCon { border-block: 1px solid var(--border-divider); }
+
+    :root[data-theme="alien-paradise"] {
+        --identity-radius: 20px 8px 20px 8px; --chrome-radius: 18px 6px; --group-radius: 22px 8px; --group-inset: 14px; --nav-radius: 16px 5px;
+        --player-align: flex-start; --player-text-align: left; --player-title-font: Georgia, serif; --player-title-weight: 500;
+        --player-art-width: 86cqw; --control-radius: 16px 5px; --play-radius: 22px 7px;
+        --album-frame: 0 0 0 1px var(--border-control), 0 8px 20px #0005; --album-radius: 18px 4px;
+    }
+    :root[data-theme="alien-paradise"] .turntableStage { background: var(--quiet-fill); border-radius: 48% 8% 34% 10% / 24% 8% 22% 10%; }
+
+    :root[data-theme="abyssal-void"] {
+        --identity-radius: 0px; --chrome-radius: 3px; --group-radius: 0px; --nav-radius: 0px;
+        --player-align: flex-start; --player-text-align: left; --player-title-font: ui-monospace, monospace; --player-title-weight: 500;
+        --player-title-spacing: -0.05em; --player-art-width: 80cqw; --control-radius: 2px; --play-radius: 8px;
+        --album-frame: 0 0 0 1px var(--border-control), 0 6px 0 var(--accent-surface); --album-radius: 2px;
+    }
+    :root[data-theme="abyssal-void"] :is(.slskSearchArea, .slskResultsCon, .slskTransfersDrawer, .trackListPanel) { border-inline-start: 3px solid var(--accent-color); }
+    :root[data-theme="abyssal-void"] .turntableStage { border-inline-start: 2px solid var(--border-control); background: var(--quiet-fill); }
+
+    :root[data-theme="dissonance"] {
+        --identity-radius: 3px 18px 3px 18px; --chrome-radius: 3px 14px; --group-radius: 4px 20px; --group-inset: 14px; --nav-radius: 3px 12px;
+        --player-align: flex-start; --player-text-align: left; --player-art-width: 90cqw;
+        --control-radius: 3px 13px; --play-radius: 4px 17px; --player-title-weight: 750;
+        --album-frame: 0 0 0 1px var(--border-control), 0 8px 20px #0005; --album-radius: 3px 16px;
+    }
+    :root[data-theme="dissonance"] .turntableStage { background: linear-gradient(145deg, transparent 42%, var(--quiet-fill) 42%); border-block-end: 2px solid var(--border-surface); }
+    :root[data-theme="dissonance"] .trackMeta #trackName { font-style: italic; }
+
+    :root[data-theme="sentinel"] {
+        --identity-radius: 5px; --identity-border: 2px; --chrome-radius: 4px; --group-radius: 4px; --group-inset: 10px; --nav-radius: 4px;
+        --player-align: center; --player-text-align: center; --player-art-width: 84cqw;
+        --control-radius: 3px; --play-radius: 4px; --player-title-font: ui-monospace, monospace; --player-title-spacing: -0.04em;
+        --album-frame: 0 0 0 2px var(--border-control), 0 0 0 5px var(--accent-surface); --album-radius: 2px;
+    }
+    :root[data-theme="sentinel"] .turntableStage { border: 2px solid var(--border-surface); background: var(--quiet-fill); }
+    :root[data-theme="sentinel"] .playerDeck .mediaCon { border-block: 2px solid var(--border-divider); }
+    :root[data-theme="sentinel"] .playerDeck .mediaBtn:not(.playPauseBtn) { background: var(--quiet-fill); border: 1px solid var(--border-control); }
+
+    :root[data-theme="minimalist-light"] {
+        --identity-radius: 0px; --chrome-radius: 0px; --group-radius: 0px; --nav-radius: 0px;
+        --player-align: flex-start; --player-text-align: left; --player-title-font: Georgia, serif; --player-title-weight: 500;
+        --control-radius: 0px; --play-radius: 0px; --player-art-limit: 390px;
+        --album-frame: 0 0 0 1px var(--border-control); --album-radius: 0;
+    }
+    :root[data-theme="minimalist-light"] .turntableStage { border-block-end: 1px solid var(--text-primary); }
+
+    :root[data-theme="minimalist-dark"] {
+        --identity-radius: 0px; --chrome-radius: 0px; --group-radius: 0px; --nav-radius: 0px;
+        --player-align: flex-start; --player-text-align: start; --player-title-font: ui-monospace, monospace; --player-title-weight: 500;
+        --player-title-spacing: -0.035em; --player-art-width: 86cqw; --control-radius: 0px; --play-radius: 0px;
+        --album-frame: 0 0 0 1px var(--border-control); --album-radius: 0;
+    }
+    :root[data-theme="minimalist-dark"] .mediaCon .playPauseBtn { background: var(--bg-surface-2); color: var(--text-primary); border: 1px solid var(--border-control); }
+
+    :root[data-theme="minimalist-warm"] {
+        --identity-radius: 18px; --chrome-radius: 10px; --group-radius: 14px; --group-inset: 16px; --nav-radius: 10px;
+        --player-align: flex-start; --player-text-align: left; --player-title-font: Georgia, serif; --player-title-weight: 500;
+        --player-art-width: 84cqw; --control-radius: 9px; --play-radius: 9px;
+        --album-frame: 0 0 0 1px var(--border-control), 0 6px 18px #4f39231a; --album-radius: 4px;
+    }
+    :root[data-theme="minimalist-warm"] .turntableStage { background: var(--quiet-fill); border: 1px solid var(--border-surface); padding: 14px; }
+    :root[data-theme="minimalist-warm"] :is(.settingsSectionHeader, .slskTransfersHeader, .panelHeader) { font-family: Georgia, serif; }
+
+    :root[data-theme="minimalist-obsidian"] {
+        --identity-radius: 0px; --chrome-radius: 0px; --group-radius: 0px; --nav-radius: 0px;
+        --player-align: center; --player-text-align: center; --player-art-limit: 440px;
+        --control-radius: 0px; --play-radius: 50%;
+        --album-frame: 0 0 0 1px var(--border-surface); --album-radius: 0;
+    }
+    :root[data-theme="minimalist-obsidian"] .playPauseBtn { background: var(--text-primary); color: #000; border-color: transparent; }
+
+    :root[data-theme][data-presentation="artwork"] .vinylLabel img {
+        border-radius: var(--album-radius);
+        box-shadow: var(--album-frame);
+    }
+
+    @media (min-width: 1200px) and (min-height: 501px) {
+        :root[data-theme] .playerDeck { container-type: inline-size; }
+    }
+    @media (min-width: 769px) and (min-height: 501px) {
+        :root[data-presentation="artwork"] body .gridContainer:has(.playerDeck:not(.empty-deck) #turntableCon:not(.lyricsActiveHidden)) #infoPanel .coverCardCon { display: none; }
+    }
+    @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
+        :root { --workspace-gap: 8px; --mobile-gutter: 12px; }
+        :root[data-theme] .playerDeck.mobileActive {
+            display: flex;
+            container-type: normal;
+            padding: 8px max(var(--mobile-gutter), var(--safe-left)) 10px max(var(--mobile-gutter), var(--safe-right));
+            gap: 4px;
+            border-radius: 0;
+        }
+        :root[data-theme] .playerDeck .turntableStage { flex: 1 0 210px; min-height: 210px; padding: 8px; }
+        :root[data-theme] .playerDeck.empty-deck .turntableStage { flex: 1 0 180px; }
+        :root[data-theme] .settingsWorkspace,
+        :root[data-theme] .soulseekWorkspace { padding-inline: max(14px, var(--safe-left)) max(14px, var(--safe-right)); }
+        :root[data-theme] :is(.settingsCatBtn, .mobileTabBtn, .libTab) { min-height: 44px; }
+        :root[data-theme] .mobileTabBar { padding-inline: max(6px, var(--safe-left)) max(6px, var(--safe-right)); gap: 4px; }
+        :root[data-theme] .mobileTabBtn { min-height: 50px; }
+        :root[data-theme] .mobileTabLabel { white-space: normal; text-align: center; font-size: 0.75rem; line-height: 1.2; overflow-wrap: anywhere; }
+        :root[data-theme] .timelineCon { grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto); }
+        :root[data-theme] .timelineCon .timeLabel { min-width: 0; white-space: nowrap; }
+        :root[data-theme] .deckAudioControls .volumeDeck .muteBtn { min-width: 44px; min-height: 44px; }
+    }
+    @media (max-width: 360px) {
+        :root[data-theme] .playerDeck.mobileActive { padding-inline: max(10px, var(--safe-left)) max(10px, var(--safe-right)); }
+        :root[data-theme] .mediaCon .playPauseBtn { width: 52px; height: 52px; }
+        :root[data-theme] .deckTopControls .deckBtnLabel { font-size: 0.7rem; }
+        :root[data-theme] .mobileTabLabel { font-size: 0.6875rem; }
+    }
+}
+
+@layer utilities {
+    [hidden] { display: none !important; }
+    @media (forced-colors: active) {
+        :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle) {
+            appearance: auto;
+            -webkit-appearance: auto;
+            width: 24px;
+            height: 24px;
+            flex-basis: 24px;
+        }
+        :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle)::before {
+            content: none;
+        }
+    }
+}

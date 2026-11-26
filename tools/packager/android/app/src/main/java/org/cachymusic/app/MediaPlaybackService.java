@@ -332,9 +332,10 @@ public class MediaPlaybackService extends Service {
             new ArrayBlockingQueue<>(1),new ThreadPoolExecutor.DiscardOldestPolicy());
     private Bitmap cachedCoverBitmap = null;
     private Bitmap cachedFallbackBitmap = null;
-    private String cachedFallbackTheme = "";
+    private String cachedFallbackThemeKey = "";
     private boolean usingFallbackCover = false;
     private String currentTheme = "default";
+    private String currentCustomPaletteJson = "";
     private boolean currentIsPlaying = false;
     private float webPlaybackSpeed=1.0f;
     private long currentDurationMs = 0L;
@@ -344,9 +345,9 @@ public class MediaPlaybackService extends Service {
     public void onCreate() {
         super.onCreate();
         serviceRunning = true;
-        currentTheme = NotificationThemeArt.specFor(
-                getSharedPreferences("cachymusic_prefs", MODE_PRIVATE).getString("appearance_theme", "default")
-        ).id;
+        String savedTheme = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE).getString("appearance_theme", "default");
+        currentCustomPaletteJson = getSharedPreferences("cachymusic_prefs", MODE_PRIVATE).getString("appearance_custom_palette", "");
+        currentTheme = "custom".equals(savedTheme) ? "custom" : NotificationThemeArt.specFor(savedTheme).id;
         createNotificationChannel();
 
         PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -464,7 +465,12 @@ public class MediaPlaybackService extends Service {
         }
 
         if (ACTION_THEME_UPDATE.equals(action)) {
-            currentTheme = NotificationThemeArt.specFor(intent.getStringExtra("theme")).id;
+            String nextTheme = intent.getStringExtra("theme");
+            if (intent.hasExtra("custom_palette")) {
+                String pal = intent.getStringExtra("custom_palette");
+                currentCustomPaletteJson = pal != null ? pal : "";
+            }
+            currentTheme = "custom".equals(nextTheme) ? "custom" : NotificationThemeArt.specFor(nextTheme).id;
             if (usingFallbackCover || cachedCoverBitmap == null) {
                 cachedCoverBitmap = getFallbackCoverBitmap();
                 usingFallbackCover = true;
@@ -580,7 +586,7 @@ public class MediaPlaybackService extends Service {
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
 
-        NotificationThemeArt.ThemeSpec themeSpec = NotificationThemeArt.specFor(currentTheme);
+        NotificationThemeArt.ThemeSpec themeSpec = NotificationThemeArt.resolveSpec(currentTheme, currentCustomPaletteJson);
         builder.setSmallIcon(R.drawable.ic_stat_cachymusic)
                 .setColor(themeSpec.surfaceColor)
                 .setContentTitle(currentTitle)
@@ -647,14 +653,16 @@ public class MediaPlaybackService extends Service {
     }
 
     private Bitmap getFallbackCoverBitmap() {
-        if (cachedFallbackBitmap != null && !cachedFallbackBitmap.isRecycled() && currentTheme.equals(cachedFallbackTheme)) {
+        String cacheKey = "custom".equals(currentTheme) ? ("custom:" + currentCustomPaletteJson) : currentTheme;
+        if (cachedFallbackBitmap != null && !cachedFallbackBitmap.isRecycled() && cacheKey.equals(cachedFallbackThemeKey)) {
             return cachedFallbackBitmap;
         }
         try {
-            Bitmap rendered = NotificationThemeArt.renderFallbackCover(currentTheme, 256);
+            NotificationThemeArt.ThemeSpec spec = NotificationThemeArt.resolveSpec(currentTheme, currentCustomPaletteJson);
+            Bitmap rendered = NotificationThemeArt.renderFallbackCover(spec, 256);
             if (rendered != null) {
                 cachedFallbackBitmap = rendered;
-                cachedFallbackTheme = currentTheme;
+                cachedFallbackThemeKey = cacheKey;
                 return rendered;
             }
         } catch (Exception ignored) {}
@@ -663,7 +671,7 @@ public class MediaPlaybackService extends Service {
             Bitmap scaled = scaleBitmap(fallback, 256);
             if (scaled != fallback && fallback != null) fallback.recycle();
             cachedFallbackBitmap = scaled;
-            cachedFallbackTheme = currentTheme;
+            cachedFallbackThemeKey = cacheKey;
             return scaled;
         } catch (Exception innerIgnored) {
             return null;

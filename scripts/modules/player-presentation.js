@@ -1,8 +1,9 @@
-// Render track metadata and artwork, independently of transport.
-import {store} from './state.js';
-import {formatFileSize} from './utils.js';
-import {normalizeGenre} from './tag-parser.js';
-import {infoPanelEl, statTitle, statArtist, statAlbum, statGenre, statYear, statTrack, statBitrate, statSampleRate, statBitDepth, statChannels, statFormat, statSize, statPath, deckArtworkBackdrop, vinylArt, coverArtPreview} from './ui-elements.js';
+// Render track metadata and artwork, independently of transport (batched via frame-scheduler).
+import { store } from './state.js';
+import { formatFileSize } from './utils.js';
+import { normalizeGenre } from './tag-parser.js';
+import { scheduleRead, scheduleWrite } from './frame-scheduler.js';
+import { infoPanelEl, statTitle, statArtist, statAlbum, statGenre, statYear, statTrack, statBitrate, statSampleRate, statBitDepth, statChannels, statFormat, statSize, statPath, deckArtworkBackdrop, vinylArt, coverArtPreview } from './ui-elements.js';
 
 const DEFAULT_COVER = 'resources/images/default.svg';
 let lastDeckCover = { src: DEFAULT_COVER, hasCustom: false };
@@ -11,8 +12,11 @@ let pendingCoverCardApply = false;
 let pendingMetadata = null;
 let pendingDacCallback = null;
 
-function isElementVisible(el) {
-    return Boolean(el && el.getClientRects().length > 0);
+function isPanelLikelyVisible() {
+    if (typeof document === 'undefined' || !infoPanelEl) return false;
+    if (document.body.classList.contains('view-soulseek') || document.body.classList.contains('view-settings')) return false;
+    if (infoPanelEl.classList.contains('mobileActive')) return true;
+    return !document.body.classList.contains('metadata-collapsed');
 }
 
 function assignImageSrc(img, src, onErrorFallback) {
@@ -58,7 +62,7 @@ function writeMetadataToDom(track, isStandalone, updateDacStatusUi) {
 export function renderTrackMetadata(track, isStandalone, updateDacStatusUi) {
     const s = store.state;
     s.currentInspectedTrack = track;
-    if (infoPanelEl && !isElementVisible(infoPanelEl)) {
+    if (infoPanelEl && !isPanelLikelyVisible()) {
         pendingMetadata = { track, isStandalone };
         pendingDacCallback = updateDacStatusUi;
         if (typeof updateDacStatusUi === 'function') updateDacStatusUi();
@@ -79,52 +83,56 @@ export function applyArtworkToDeck(coverSrc, hasCustomCover) {
     }
 
     const presentation = typeof document !== 'undefined' ? document.documentElement?.dataset?.presentation : 'artwork';
-    if (deckArtworkBackdrop) {
-        if (presentation !== 'artwork' && isElementVisible(deckArtworkBackdrop)) {
-            assignImageSrc(deckArtworkBackdrop, src, () => { deckArtworkBackdrop.style.opacity = '0'; });
-            deckArtworkBackdrop.style.opacity = custom ? 'var(--artwork-backdrop-opacity, .24)' : '0';
-            pendingBackdropApply = false;
-        } else {
-            pendingBackdropApply = true;
-        }
-    }
+    pendingBackdropApply = Boolean(deckArtworkBackdrop);
+    pendingCoverCardApply = Boolean(coverArtPreview);
 
-    if (coverArtPreview) {
-        if (isElementVisible(coverArtPreview)) {
-            assignImageSrc(coverArtPreview, src);
-            pendingCoverCardApply = false;
-        } else {
-            pendingCoverCardApply = true;
-        }
-    }
+    scheduleRead('presentation:artwork', () => {
+        const backdropVisible = Boolean(deckArtworkBackdrop && presentation !== 'artwork' && deckArtworkBackdrop.getClientRects().length > 0);
+        const cardVisible = Boolean(coverArtPreview && coverArtPreview.getClientRects().length > 0);
+        scheduleWrite('presentation:artwork', () => {
+            if (backdropVisible && deckArtworkBackdrop) {
+                assignImageSrc(deckArtworkBackdrop, src, () => { deckArtworkBackdrop.style.opacity = '0'; });
+                deckArtworkBackdrop.style.opacity = custom ? 'var(--artwork-backdrop-opacity, .24)' : '0';
+                pendingBackdropApply = false;
+            }
+            if (cardVisible && coverArtPreview) {
+                assignImageSrc(coverArtPreview, src);
+                pendingCoverCardApply = false;
+            }
+        });
+    });
 }
 
 export function hydrateVisibleArtwork() {
     const presentation = typeof document !== 'undefined' ? document.documentElement?.dataset?.presentation : 'artwork';
-    if (pendingBackdropApply && deckArtworkBackdrop && presentation !== 'artwork' && isElementVisible(deckArtworkBackdrop)) {
-        assignImageSrc(deckArtworkBackdrop, lastDeckCover.src, () => { deckArtworkBackdrop.style.opacity = '0'; });
-        deckArtworkBackdrop.style.opacity = lastDeckCover.hasCustom ? 'var(--artwork-backdrop-opacity, .24)' : '0';
-        pendingBackdropApply = false;
-    }
-    if (pendingCoverCardApply && coverArtPreview && isElementVisible(coverArtPreview)) {
-        assignImageSrc(coverArtPreview, lastDeckCover.src);
-        pendingCoverCardApply = false;
-    }
-    if (pendingMetadata && (!infoPanelEl || isElementVisible(infoPanelEl))) {
-        const meta = pendingMetadata;
-        const cb = pendingDacCallback;
-        pendingMetadata = null;
-        pendingDacCallback = null;
-        writeMetadataToDom(meta.track, meta.isStandalone, cb);
-    }
+    scheduleRead('presentation:hydrate', () => {
+        const needBackdrop = Boolean(pendingBackdropApply && deckArtworkBackdrop && presentation !== 'artwork' && deckArtworkBackdrop.getClientRects().length > 0);
+        const needCoverCard = Boolean(pendingCoverCardApply && coverArtPreview && coverArtPreview.getClientRects().length > 0);
+        const needMeta = Boolean(pendingMetadata && (!infoPanelEl || infoPanelEl.getClientRects().length > 0));
+        if (!needBackdrop && !needCoverCard && !needMeta) return;
+        scheduleWrite('presentation:hydrate', () => {
+            if (needBackdrop && deckArtworkBackdrop) {
+                assignImageSrc(deckArtworkBackdrop, lastDeckCover.src, () => { deckArtworkBackdrop.style.opacity = '0'; });
+                deckArtworkBackdrop.style.opacity = lastDeckCover.hasCustom ? 'var(--artwork-backdrop-opacity, .24)' : '0';
+                pendingBackdropApply = false;
+            }
+            if (needCoverCard && coverArtPreview) {
+                assignImageSrc(coverArtPreview, lastDeckCover.src);
+                pendingCoverCardApply = false;
+            }
+            if (needMeta && pendingMetadata) {
+                const meta = pendingMetadata;
+                const cb = pendingDacCallback;
+                pendingMetadata = null;
+                pendingDacCallback = null;
+                writeMetadataToDom(meta.track, meta.isStandalone, cb);
+            }
+        });
+    });
 }
 
 if (typeof store?.subscribe === 'function') {
     for (const ev of ['workspace:change', 'visualizer:change', 'ui:hydrate-artwork']) {
-        store.subscribe(ev, () => {
-            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(hydrateVisibleArtwork);
-            else hydrateVisibleArtwork();
-        });
+        store.subscribe(ev, hydrateVisibleArtwork);
     }
 }
-

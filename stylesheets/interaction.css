@@ -1,14 +1,15 @@
 /* Shared interaction feedback. Never animate continuous control values. */
+@layer refinements {
 :root { --motion-feedback:cubic-bezier(.22,.7,.25,1); --motion-short:140ms; --motion-standard:220ms; }
 :root :is(button,summary,[role="button"],input[type="checkbox"],select,label.actionBtn) {
- transition:background-color var(--motion-short) var(--motion-feedback),border-color var(--motion-short) var(--motion-feedback),color var(--motion-short) var(--motion-feedback),opacity var(--motion-short) var(--motion-feedback),box-shadow var(--motion-short) var(--motion-feedback);
+ transition:background-color var(--motion-short) var(--motion-feedback),border-color var(--motion-short) var(--motion-feedback),color var(--motion-short) var(--motion-feedback),opacity var(--motion-short) var(--motion-feedback);
 }
 :root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn) {transition:background-color var(--motion-short) var(--motion-feedback),color var(--motion-short) var(--motion-feedback),border-color var(--motion-short) var(--motion-feedback),opacity var(--motion-short) var(--motion-feedback),scale 180ms var(--motion-feedback);}
 :root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn):not(:disabled):not([aria-disabled="true"]):active {scale:.975;opacity:.94;transition-duration:80ms;}
 :root :is(input[type="checkbox"],.toolsChevron,.settingsAdvancedChevron) { transition: background-color var(--motion-standard) var(--motion-feedback), border-color var(--motion-standard) var(--motion-feedback), transform var(--motion-standard) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback); }
 :root input[type="checkbox"]::before { transition: transform var(--motion-standard) var(--motion-feedback), background-color var(--motion-short) var(--motion-feedback); }
-:root input[type="range"]::-webkit-slider-thumb { transition: background-color var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback); }
-:root input[type="range"]::-moz-range-thumb { transition: background-color var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback); }
+:root input[type="range"]::-webkit-slider-thumb { transition: background-color var(--motion-short) var(--motion-feedback); }
+:root input[type="range"]::-moz-range-thumb { transition: background-color var(--motion-short) var(--motion-feedback); }
 :root[data-theme] .queueItem { display:grid; grid-template-columns:40px minmax(0,1fr) max-content; gap:8px; }
 :root[data-theme] .queueItem .queueItemActions { grid-column:2 / -1; justify-content:flex-end; flex-wrap:wrap; }
 :root[data-theme] .queueItem .queueDuration { justify-self:end; }
@@ -260,6 +261,8 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
  contain-intrinsic-size: auto 72px;
 }
 
+}
+@layer utilities {
 @media (prefers-reduced-motion:reduce) {
  :root :is(button,summary,[role="button"],input,select,.trackItem,.toolsChevron,.settingsAdvancedChevron,.slskToggleChevron,.slskDisclosureChevron),
  :root input[type="checkbox"]::before,
@@ -286,6 +289,8 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
   transform: none!important;
  }
 }
+}
+@layer refinements {
 
 /* Native modal: focus and Escape are owned by the browser. Shared geometry,
    theme-specific material and color; no ornamental warning graphics. */
@@ -313,3 +318,4 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
 :root[data-theme] #metaTurntableSpeedGroup[open] summary::before { content:"▾"; }
 :root[data-theme] .settingsRowDesc { max-inline-size:54ch; }
 :root[data-theme] [data-effect-state="unsupported"] .dspDot,:root[data-theme] [data-effect-state="pending"] .dspDot { opacity:.35; }
+}

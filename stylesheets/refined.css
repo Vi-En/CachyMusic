@@ -20,6 +20,7 @@
 }
 
 /* Use installed geometric fonts when available; no bundled or remote font. */
+@layer refinements {
 #trackName { font-family: Futura, "Century Gothic", system-ui, sans-serif; }
 /* 3.x listening-first layout. The original animated deck is an explicit option. */
 :root[data-presentation="artwork"] .turntableCon { width:min(100%, 360px, max(0px, calc(100cqh - 64px))); max-width:100%; }
@@ -425,11 +426,11 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
   .themeSelectCard { min-block-size: 68px; }
 }
 
-/* Apply the selected palette to the workspaces and app chrome. */
+/* Apply the selected palette to the workspaces and app chrome cleanly without collapsing BG/MG contrast. */
 :root {
-  --workspace-canvas: color-mix(in oklch, var(--bg-canvas) 94%, var(--accent-color));
-  --workspace-header: color-mix(in oklch, var(--bg-surface-1) 88%, var(--accent-color));
-  --workspace-panel: color-mix(in oklch, var(--bg-surface-1) 95%, var(--accent-color));
+  --workspace-canvas: var(--bg-canvas);
+  --workspace-header: var(--bg-chrome, var(--bg-surface-1));
+  --workspace-panel: var(--bg-surface-1);
 }
 body, .playerDeck, .settingsWorkspace, .soulseekWorkspace { background: var(--workspace-canvas); }
 .topBar { background: var(--workspace-canvas); border-bottom: 0; }
@@ -450,4 +451,5 @@ body, .playerDeck, .settingsWorkspace, .soulseekWorkspace { background: var(--wo
   clip-path: circle(50%);
 }
 .turntableCenterVis { overflow: hidden; }
+}
 
