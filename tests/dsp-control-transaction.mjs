@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {createDspControlTransaction,createLatestControlQueue,CONTROL_KEYS} from '../scripts/modules/dsp-control-transaction.js';
+import {createAudioEditGuard} from '../scripts/modules/audio-change-policy.js';
+const state={isAmpBoost:false,peqGains:[0,0],isCrossfeed:true,isAmbiophonics:false};
+const saved=new Map();let fail=false,restoreCount=0,refreshCount=0;
+const tx=createDspControlTransaction({state,storage:{setItem:(k,v)=>saved.set(k,v)},acknowledge:async()=>{if(fail){fail=false;throw Error('simulated DSP acknowledgement failure');}},restore:()=>{restoreCount++;},refresh:()=>refreshCount++});
+await tx.run(()=>{state.isAmpBoost=true;tx.write(CONTROL_KEYS.isAmpBoost,'true');assert.equal(saved.size,0);});
+assert.equal(saved.get(CONTROL_KEYS.isAmpBoost),'true');
+fail=true;
+await assert.rejects(tx.run(()=>{state.isAmpBoost=false;state.peqGains[0]=12;state.isCrossfeed=false;state.isAmbiophonics=true;tx.write(CONTROL_KEYS.isAmpBoost,'false');}),/acknowledgement/);
+assert.equal(state.isAmpBoost,true);assert.deepEqual(state.peqGains,[0,0]);assert.equal(state.isCrossfeed,true);assert.equal(state.isAmbiophonics,false);assert.equal(saved.get(CONTROL_KEYS.isAmpBoost),'true');assert.equal(saved.has(CONTROL_KEYS.peqGains),false);assert.equal(restoreCount,1);
+let epoch=0,unblock,entered;const started=new Promise(r=>entered=r);const blocked=new Promise(r=>unblock=r);
+const running=tx.run(async()=>{state.peqGains[1]=9;entered();await blocked;},()=>{if(epoch)throw Error('stale');});await started;epoch++;unblock();await assert.rejects(running,/stale/);assert.deepEqual(state.peqGains,[0,0]);assert.equal(refreshCount,3);
+let gate,first;const blockedQueue=new Promise(r=>gate=r);let values=[];const submit=createLatestControlQueue(async change=>{change();if(values.length===1)await blockedQueue;},()=>epoch);
+first=submit('band',()=>values.push(1));for(let i=2;i<=1000;i++)submit('band',()=>values.push(i));gate();await first;assert.deepEqual(values,[1,1000]);
+let release,ready;const waiting=new Promise(r=>release=r),begin=new Promise(r=>ready=r);let oldRan=false;const guard=createAudioEditGuard({isPlaying:()=>false,identity:()=>epoch,pause(){},resume(){},settle:0,delay:1});
+const one=guard(async check=>{ready();await waiting;check();});await begin;const two=guard(()=>{oldRan=true;});epoch++;release();await Promise.all([assert.rejects(one,/Playback changed/),assert.rejects(two,/Playback changed/)]);assert.equal(oldRan,false);
+console.log('PASS deferred persistence, array and spatial state rollback, stale commit rejection, bounded latest fader queue, queued stale edit rejection');

@@ -144,7 +144,7 @@ import {
             lyricsToggleBtn.classList.add('active');
             lyricsToggleBtn.setAttribute('title', 'Return to Turntable View (L)');
             const textSpan = lyricsToggleBtn.querySelector('span');
-            if (textSpan) textSpan.textContent = 'TURNTABLE';
+            if (textSpan) textSpan.textContent = 'Turntable';
             turntableCon.style.display = 'none';
             turntableCon.classList.add('lyricsActiveHidden');
             lyricsCon.classList.remove('lyricsActiveHidden');
@@ -154,7 +154,7 @@ import {
             lyricsToggleBtn.classList.remove('active');
             lyricsToggleBtn.setAttribute('title', 'Toggle Lyrics View (L)');
             const textSpan = lyricsToggleBtn.querySelector('span');
-            if (textSpan) textSpan.textContent = 'LYRICS';
+            if (textSpan) textSpan.textContent = 'Lyrics';
             turntableCon.classList.remove('lyricsActiveHidden');
             turntableCon.style.display = '';
             lyricsCon.classList.add('lyricsActiveHidden');

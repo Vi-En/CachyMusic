@@ -208,10 +208,12 @@
 
     body.view-soulseek .soulseekWorkspace {
         display: flex;
+        animation: viewEnter var(--transition-base);
     }
 
     body.view-settings .settingsWorkspace {
         display: flex;
+        animation: viewEnter var(--transition-base);
     }
 
     /* Soulseek Subview Switching */
@@ -338,6 +340,7 @@
 
         .panel.mobileActive {
             display: flex;
+            animation: viewEnter var(--transition-base);
         }
 
         .persistentMiniPlayer {
@@ -389,7 +392,6 @@
             font-weight: 700;
             letter-spacing: 0.04em;
             border-radius: var(--radius-sm);
-            transition: color var(--transition-fast), background-color var(--transition-fast);
         }
 
         .mobileTabBtn.active {
@@ -399,17 +401,12 @@
     }
 
     @media (max-width: 520px) {
-        .brandLiveMeter,
         .searchKbdShortcut,
         #topSettingsBtn span {
             display: none;
         }
         .searchContainer input {
             padding-right: 0.55rem;
-        }
-        .brandLogo {
-            font-size: var(--font-xs);
-            letter-spacing: 0.04em;
         }
         .topBtn {
             padding: 0.35rem 0.55rem;

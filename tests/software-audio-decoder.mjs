@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {stripId3ToFlacMagic,decodeBufferWithAudioContext} from '../scripts/modules/software-audio-decoder.js';
+const raw=Uint8Array.from([73,68,51,3,0,0,0,0,0,4,1,2,3,4,102,76,97,67,1,2,3]);
+assert.deepEqual([...new Uint8Array(stripId3ToFlacMagic(raw.buffer))],[102,76,97,67,1,2,3]);
+assert.equal(stripId3ToFlacMagic(new ArrayBuffer(3)),null);
+let calls=0, notifications=0;
+const ctx={decodeAudioData(buf,ok){calls++;ok([...new Uint8Array(buf)]);}};
+assert.deepEqual(await decodeBufferWithAudioContext(ctx,raw.buffer,()=>notifications++),[102,76,97,67,1,2,3]);
+const ordinary=new Uint8Array([82,73,70,70]).buffer;
+assert.deepEqual(await decodeBufferWithAudioContext(ctx,ordinary),[82,73,70,70]);
+assert.equal(calls,2);assert.equal(notifications,1);
+await assert.rejects(decodeBufferWithAudioContext({decodeAudioData(buf,ok,fail){fail(new Error('invalid'));}},ordinary),/invalid/);
+console.log('PASS software decoder boundary: ID3-stripped FLAC, unchanged ordinary audio, callback rejection');
+
+const {createBoundedDecoder,validateDecodedAudioBuffer}=await import('../scripts/modules/software-audio-decoder.js');
+let resolveDecode,allocations=0;const owned=createBoundedDecoder({timeoutMs:8,decode:()=>{allocations++;return new Promise(r=>resolveDecode=r);}});
+const timed=owned({},ordinary);await assert.rejects(timed,/timed out/);await assert.rejects(owned({},ordinary),/still finishing/);assert.equal(allocations,1);resolveDecode('late');await new Promise(r=>setImmediate(r));const retry=owned({},ordinary);await Promise.resolve();resolveDecode('retry');assert.equal(await retry,'retry');assert.equal(allocations,2);
+const data=new Float32Array(48000);const valid={length:data.length,numberOfChannels:1,sampleRate:48000,duration:1,getChannelData:()=>data};
+assert.equal(await validateDecodedAudioBuffer(valid),valid);data[47999]=NaN;await assert.rejects(validateDecodedAudioBuffer(valid),/Nonfinite/);data[47999]=0;await assert.rejects(validateDecodedAudioBuffer({...valid,numberOfChannels:3}),/geometry/);await assert.rejects(validateDecodedAudioBuffer(valid,{maxBytes:100}),/memory limit/);await assert.rejects(validateDecodedAudioBuffer(valid,{current:()=>false}),{name:'AbortError'});
+let stillCurrent=true,yields=0;const large=new Float32Array(300000);await assert.rejects(validateDecodedAudioBuffer({length:large.length,numberOfChannels:1,sampleRate:48000,duration:large.length/48000,getChannelData:()=>large},{current:()=>stillCurrent,yieldTurn:async()=>{yields++;stillCurrent=false;}}),{name:'AbortError'});assert.equal(yields,1);
+console.log('PASS compatibility decoder deadline, single allocation ownership, nonfinite/geometry/budget validation and cooperative stale cancellation');

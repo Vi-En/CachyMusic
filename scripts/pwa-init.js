@@ -35,7 +35,7 @@
                 });
             });
             window.addEventListener('load', function () {
-                navigator.serviceWorker.register('./sw.js?v=3.0.0-dev.7.0').catch(function (err) {
+                navigator.serviceWorker.register('./sw.js?v=3.0.0-dev.7.1').catch(function (err) {
                     console.warn('[PWA] ServiceWorker registration failed:', err);
                 });
             });

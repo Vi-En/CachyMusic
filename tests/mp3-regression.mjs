@@ -1,0 +1,12 @@
+import fs from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import {rewriteMp3} from '../scripts/modules/mp3-tag-writer.js';
+const [source,output,version]=process.argv.slice(2);
+const original=new Blob([await fs.readFile(source)]);
+const result=await rewriteMp3(original,{title:'Revised title',artist:'改 Artist',album:'New album',year:'2026',comment:'Local edit',lyrics:'[00:01.00] example'},null);
+assert.equal((await new Uint8Array(await result.blob.slice(0,10).arrayBuffer()))[3],Number(version));
+assert.deepEqual(new Uint8Array(await original.slice(result.originalAudioOffset).arrayBuffer()),new Uint8Array(await result.blob.slice(result.newAudioOffset).arrayBuffer()));
+await fs.writeFile(output,Buffer.from(await result.blob.arrayBuffer()));
+await assert.rejects(()=>rewriteMp3(new Blob(['garbage input']),{}));
+const b=new Uint8Array(await original.arrayBuffer());b[5]=128;await assert.rejects(()=>rewriteMp3(new Blob([b]),{}));
+console.log(`PASS: ID3v2.${version} frame writing, identical payload, malformed and unsupported tag rejection`);

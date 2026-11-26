@@ -1,8 +1,7 @@
 /* Local-first refinement: original visual identity, restrained surfaces, adaptive controls. */
-@layer utilities {
+@layer base-refinements {
   .topBar, .mobileTabBar, .persistentMiniPlayer { backdrop-filter: none; }
-  .brandLogo, .mobileTabBtn, .settingsCatBtn, .settingsSectionTitle, .panelHeader h2, .settingsBadge, .settingsSubtitle { letter-spacing: normal; text-transform: none; }
-  .brandLogo { font-weight: 700; }
+  .mobileTabBtn, .settingsCatBtn, .settingsSectionTitle, .panelHeader h2, .settingsBadge, .settingsSubtitle { letter-spacing: normal; text-transform: none; }
   .settingsHubHeader h2 { font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.025em; }
   .settingsSectionPanel { min-width: 0; }
   .settingsLayoutGrid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); }
@@ -14,13 +13,15 @@
   .playPauseBtn { box-shadow: none; }
   .deckArtworkAmbient { display: none; }
   .settingsCatBtn.active, .mobileTabBtn.active { font-weight: 700; }
+}
+@layer utilities {
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
   }
 }
 
 /* Use installed geometric fonts when available; no bundled or remote font. */
-@layer refinements {
+@layer base-refinements {
 #trackName { font-family: Futura, "Century Gothic", system-ui, sans-serif; }
 /* 3.x listening-first layout. The original animated deck is an explicit option. */
 :root[data-presentation="artwork"] .turntableCon { width:min(100%, 360px, max(0px, calc(100cqh - 64px))); max-width:100%; }
@@ -46,7 +47,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
 /* Larger accessible seek surfaces without increasing visual track thickness. */
 #progressCon,#miniProgressCon{min-height:44px;}
 #settingsRowContinuousPcm label{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;cursor:pointer;}
-#continuousPcmMode{width:24px;height:24px;accent-color:var(--accent-primary);flex:none;}
 
 /* Compact workspaces share the viewport with the Android keyboard and system bars. */
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
@@ -62,8 +62,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
     background: transparent;
     border-bottom: 0;
   }
-  .brandLogo { font-size: 1.125rem; }
-  .brandLiveMeter, #topSettingsBtn, #searchKbdShortcut { display: none; }
+  #topSettingsBtn, #searchKbdShortcut { display: none; }
   .topActions { grid-column: 2; grid-row: 1; }
   .topBtn { min-height: 44px; padding: 0 12px; font-size: .81rem; letter-spacing: 0; }
   body:not(.view-player) .topActions { display: none; }
@@ -218,7 +217,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
     min-height: 44px;
     cursor: pointer;
   }
-  #androidNativeMode { width: 24px; height: 24px; accent-color: var(--accent-primary); flex: none; }
 
   .slskPanelToggleBar { flex-wrap: wrap; }
 
@@ -255,7 +253,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
     align-self: start;
     height: 100cqh;
   }
-  .playerDeck :is(.trackMeta, .timelineCon, .mediaCon, .volumeDeck, .audioProcessingBar) { grid-column: 2; min-width: 0; }
+  .playerDeck > :is(.trackMeta, .timelineCon, .mediaCon, .deckAudioControls) { grid-column: 2; min-width: 0; }
   .playerDeck.mobileActive.empty-deck { grid-template-rows: minmax(175px, 1fr); }
   .playerDeck.empty-deck .turntableStage { grid-row: 1; }
   .trackMeta #trackName { font-size: 1.35rem; }
@@ -266,13 +264,6 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
 }
 
 /* Shared controls use each theme's surfaces and accent. */
-:root {
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-}
-
 .uiIcon, .libraryToolsToggleBtn svg { display: block; flex: none; }
 :is(.closeModalBtn, .closeBtn, .searchClearBtn, .folderTrayCloseBtn, .slskClearBtn, .slskInFilterClearBtn, .slskIconOnlyBtn) {
   display: inline-grid;
@@ -345,28 +336,27 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
 .eqDeckBtn :is(.eqDeckBadge, .eqDeckDspBadge) { display: none !important; }
 .playerDeck.empty-deck .deckAudioControls { display: none; }
 .turntableStage { background: transparent; border-radius: 0; }
-
 .turntableCon { contain: layout; }
-
-
-
-
-
 :root[data-presentation="artwork"] :is(.vinylTurntable, .vinylLabel) { border-radius: var(--radius-sm); }
 
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
-  .playerDeck.mobileActive { overflow: hidden; padding-block: 8px; gap: clamp(4px, 1dvh, 9px); }
-  .playerDeck:not(.empty-deck) .turntableStage { flex: 1 1 0; min-height: 0; }
-  .deckTopControls { margin: 0; gap: 6px; }
-  .deckActionBtn { min-width: 44px; min-height: 40px; justify-content: center; padding: 0; }
-  .deckTopControls .deckBtnLabel, .deckAudioControls .eqDeckTitle { display: none; }
+  .playerDeck.mobileActive { overflow-y: auto; scrollbar-width: none; padding-block: clamp(6px, 1dvh, 10px); gap: clamp(4px, 0.9dvh, 9px); }
+  .playerDeck.mobileActive::-webkit-scrollbar { display: none; }
+  .playerDeck:not(.empty-deck) .turntableStage { flex: 1 1 clamp(148px, 34dvh, 320px); min-height: clamp(136px, 23dvh, 210px); }
+  .deckTopControls { margin: 0; gap: 4px; }
+  .deckActionBtn { min-width: 44px; min-height: 38px; justify-content: center; padding: 0 12px; }
+  .deckAudioControls .eqDeckTitle { display: none; }
+  @media (max-width: 339px) {
+    .deckTopControls .deckBtnLabel { display: none; }
+    .deckActionBtn { padding: 0; }
+  }
   .trackMeta { gap: 1px; }
   .metaBadgeRow { margin: 0; }
   .metaBadgeRow .signalPathBadge { min-height: 26px; padding-block: 0; }
   .timelineCon { min-height: 36px; }
   #progressCon { min-height: 36px; }
   .mediaCon { flex: none; }
-  .playPauseBtn { width: 52px; height: 52px; }
+  .playPauseBtn { width: clamp(50px, 13.5vw, 58px); height: clamp(50px, 13.5vw, 58px); }
   .deckAudioControls .volumeDeck { grid-template-columns: 40px minmax(0, 1fr) auto; }
   .deckAudioControls .volumeDeck .muteBtn { min-width: 40px; }
   .mobileTabBtn { border-radius: var(--radius-sm); }

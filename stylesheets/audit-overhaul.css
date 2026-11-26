@@ -1,5 +1,5 @@
 /* CachyMusic: targeted ergonomics and visual hierarchy (no animation loops or assets). */
-@layer refinements {
+@layer base-refinements {
 .slskResultPagination {
   display: flex; align-items: center; justify-content: center;
   flex-wrap: wrap; gap: 12px; padding: 17px 12px 22px;
@@ -57,7 +57,7 @@
 .settingsAdvancedSummaryText { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .settingsAdvancedSummaryText strong { font-size: .9rem; }
 .settingsAdvancedSummaryText small { font-size: .78rem; line-height: 1.4; color: var(--text-secondary); }
-.settingsAdvancedChevron { color: var(--text-secondary); font-size: 1.35rem; transition: transform .15s ease; }
+.settingsAdvancedChevron { color: var(--text-secondary); font-size: 1.35rem; }
 .settingsAdvancedDetails[open] .settingsAdvancedChevron { transform: rotate(180deg); }
 .settingsAdvancedContent { display: grid; grid-template-columns: minmax(0, 1fr); }
 .settingsAdvancedContent .settingsRowItem { min-width: 0; }
@@ -65,7 +65,6 @@
     .settingsAdvancedSummary { padding-inline: 10px; }
     .settingsAdvancedContent .settingsDspMetricsGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
-@media (prefers-reduced-motion: reduce) { .settingsAdvancedChevron { transition: none; } }
 
 /* Results show primary data first; metadata collapses into one scannable strip on phones. */
 .soulseekWorkspace .slskResultRow .col { min-width: 0; overflow-wrap: anywhere; }
@@ -105,4 +104,7 @@
   .soulseekWorkspace .slskResultRow .slskCompactMeta { gap: 3px 8px; }
   .soulseekWorkspace .slskResultRow .slskCompactMeta .col { font-size: .68rem; }
 }
+}
+@layer utilities {
+@media (prefers-reduced-motion: reduce) { .settingsAdvancedChevron { transition: none; } }
 }

@@ -1,0 +1,41 @@
+name: Transactional playlist SQL acceptance
+on:
+  workflow_dispatch:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  mysql-fixture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}
+          MYSQL_ROOT_HOST: "%"
+          MYSQL_DATABASE: MusicPlayer_fixture
+        ports:
+          - 127.0.0.1:3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y php-cli php-mysql default-mysql-client
+      - name: Load disposable schema and run SQL acceptance
+        env:
+          MYSQL_PWD: ${{ github.run_id }}-${{ github.run_attempt }}
+          DB_HOST: 127.0.0.1
+          DB_USER: fixture
+          DB_NAME: MusicPlayer_fixture
+          CACHYMUSIC_PLAYLIST_SQL: '1'
+          CACHYMUSIC_SQL_FIXTURE: '1'
+        run: |
+          set -euo pipefail
+          export DB_PASS="$(openssl rand -hex 24)"
+          mysql -h 127.0.0.1 -u root -e "CREATE USER 'fixture'@'%' IDENTIFIED BY '$DB_PASS'; GRANT ALL ON MusicPlayer_fixture.* TO 'fixture'@'%';"
+          sed 's/`MusicPlayer`/`MusicPlayer_fixture`/g' schema.sql | mysql -h 127.0.0.1 -u root
+          data=$(mktemp -d); trap 'rm -rf "$data"' EXIT
+          CACHYMUSIC_DATA_DIR="$data" php tests/playlist-mysql.php
+          CACHYMUSIC_DATA_DIR="$data" python3 tests/playlist-mysql-concurrency.py

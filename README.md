@@ -1,6 +1,6 @@
 # CachyMusic
 
-**Source revision: 3.0.0-dev.7.0 — initial user-test release.** Runnable source/build kit, not a device-certified public release.
+**Source revision: 3.0.0-dev.7.1 — initial user-test release.** Runnable source/build kit, not a device-certified public release.
 
 A private, local-first, cross-platform music player with integrated audio processing, local library management, online metadata lookup and optional Soulseek. Shared PWA interface; Android and desktop packaging provide native functionality beyond browser capabilities.
 

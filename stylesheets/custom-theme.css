@@ -9,7 +9,8 @@
         overflow: hidden;
         pointer-events: none;
         contain: strict;
-        background: var(--ct-canvas-bg, var(--bg-canvas));
+        background-color: var(--ct-canvas-bg, var(--bg-canvas));
+        background-image: var(--ct-canvas-bg-image, none);
     }
 
     :root[data-theme="custom"] .customCanvasBackdrop {
@@ -59,13 +60,13 @@
         text-transform: var(--ct-heading-case, none);
     }
 
-    :root[data-theme="custom"][data-has-custom-panel-media="1"] :is(.trackListPanel, #infoPanel, .settingsSectionPanel, .slskSearchArea, .slskResultsCon, .slskTransfersDrawer, .modalCard, .slskModalCard) {
-        background-color: var(--bg-surface-1);
+    :root[data-theme="custom"][data-has-custom-panel-media="1"] :is(.trackListPanel, #infoPanel, .settingsSectionPanel, .slskSearchArea, .slskResultsCon, .slskTransfersDrawer, .modalCard:not(.ctStudioCard), .slskModalCard) {
+        background-color: var(--ct-panel-bg, var(--bg-surface-1));
         background-image:
             linear-gradient(var(--ct-panel-scrim, transparent), var(--ct-panel-scrim, transparent)),
             var(--ct-panel-texture, none),
             var(--ct-panel-image, none),
-            linear-gradient(var(--ct-panel-bg, var(--bg-surface-1)), var(--ct-panel-bg, var(--bg-surface-1)));
+            var(--ct-panel-bg-image, none);
         background-size: auto, var(--ct-panel-texture-size, 32px), var(--ct-panel-image-size, cover), auto;
         background-repeat: repeat, repeat, var(--ct-panel-image-repeat, no-repeat), no-repeat;
         background-position: center, center, var(--ct-panel-image-pos, 50% 50%), center;
@@ -78,14 +79,15 @@
     }
 
     :root[data-theme="custom"] :is(.topBar, .mobileTabBar, .persistentMiniPlayer) {
-        background-color: var(--bg-chrome, var(--bg-surface-1));
+        background-color: var(--ct-chrome-bg, var(--bg-chrome, var(--bg-surface-1)));
         background-image:
             linear-gradient(var(--ct-chrome-scrim, transparent), var(--ct-chrome-scrim, transparent)),
             var(--ct-chrome-texture, none),
-            var(--ct-chrome-image, none);
-        background-size: auto, var(--ct-chrome-texture-size, 32px), var(--ct-chrome-image-size, cover);
-        background-repeat: repeat, repeat, var(--ct-chrome-image-repeat, no-repeat);
-        background-position: center, center, var(--ct-chrome-image-pos, 50% 50%);
+            var(--ct-chrome-image, none),
+            var(--ct-chrome-bg-image, none);
+        background-size: auto, var(--ct-chrome-texture-size, 32px), var(--ct-chrome-image-size, cover), auto;
+        background-repeat: repeat, repeat, var(--ct-chrome-image-repeat, no-repeat), no-repeat;
+        background-position: center, center, var(--ct-chrome-image-pos, 50% 50%), center;
         backdrop-filter: blur(var(--ct-glass-blur, 0px));
     }
 
@@ -95,7 +97,7 @@
             linear-gradient(var(--ct-stage-scrim, transparent), var(--ct-stage-scrim, transparent)),
             var(--ct-stage-texture, none),
             var(--ct-stage-image, none),
-            var(--ct-stage-bg, transparent);
+            var(--ct-stage-bg-image, none);
         background-size: auto, var(--ct-stage-texture-size, 32px), var(--ct-stage-image-size, cover), auto;
         background-repeat: repeat, repeat, var(--ct-stage-image-repeat, no-repeat), no-repeat;
         background-position: center, center, var(--ct-stage-image-pos, 50% 50%), center;
@@ -116,13 +118,14 @@
 
     /* Motion Profiles, Micro-Interactions, Morphs & Ambient GPU Motion */
     :root[data-theme="custom"][data-motion-btn="pop"] :is(.mediaBtn, .actionBtn, .deckActionBtn, .topBtn):not(:disabled):active {
-        transform: scale(0.92);
+        scale: 0.945;
     }
     :root[data-theme="custom"][data-motion-btn="crisp"] :is(.mediaBtn, .actionBtn, .deckActionBtn, .topBtn):not(:disabled):active {
-        transform: translateY(1px);
+        scale: 0.975;
     }
     :root[data-theme="custom"][data-motion-btn="none"] :is(.mediaBtn, .actionBtn, .deckActionBtn, .topBtn):not(:disabled):active {
-        transform: none;
+        scale: 1;
+        opacity: 1;
     }
 
     @media (hover: hover) {
@@ -212,6 +215,11 @@
     }
 
     /* Custom Theme Studio Modal & Peek Mode */
+    @keyframes ctTabFadeIn {
+        from { opacity: 0; transform: translate3d(0, 6px, 0); }
+        to { opacity: 1; transform: translate3d(0, 0, 0); }
+    }
+
     .ctStudioCard {
         width: min(100%, 66rem);
         max-height: min(92dvh, 60rem);
@@ -219,6 +227,7 @@
         overflow: hidden;
         display: flex;
         flex-direction: column;
+        background: var(--ct-studio-surface, var(--bg-surface-1));
     }
 
     .modalBackdrop.ct-peek-mode {
@@ -244,26 +253,31 @@
     .ctStudioHeader {
         flex: 0 0 auto;
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-xs);
-        padding: var(--space-sm) var(--space-md);
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px var(--space-md) 8px;
         border-bottom: 1px solid var(--border-divider);
-        background: var(--bg-surface-1);
+        background: var(--ct-studio-surface, var(--bg-surface-1));
+    }
+
+    .ctStudioTopRow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
     }
 
     .ctStudioNameWrap {
         display: flex;
         align-items: center;
-        gap: var(--space-xs);
-        flex: 1 1 220px;
+        gap: 8px;
+        flex: 1 1 auto;
         min-width: 0;
     }
 
     .ctStudioNameInput {
-        min-height: 44px;
-        padding: 6px 12px;
+        min-height: 40px;
+        padding: 4px 10px;
         border-radius: var(--shape-field, 6px);
         border: 1px solid var(--border-control);
         background: var(--bg-surface-2);
@@ -274,33 +288,91 @@
     }
 
     .ctStudioHeaderActions {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 6px;
+        width: 100%;
     }
 
     .ctStudioHeaderActions .actionBtn {
-        min-height: 44px;
+        min-height: 38px;
+        padding: 4px 6px;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .ctContrastBar {
         flex: 0 0 auto;
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 6px 10px;
-        padding: 8px var(--space-md);
+        flex-direction: column;
+        gap: 6px;
+        padding: 6px var(--space-md);
         background: var(--bg-surface-2);
         border-bottom: 1px solid var(--border-divider);
+    }
+
+    .ctContrastSummaryRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .ctContrastActions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .ctContrastActions .actionBtn {
+        min-height: 32px;
+        padding: 3px 9px;
+        font-size: var(--font-2xs);
     }
 
     .ctContrastMeters {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        flex: 1 1 auto;
+        gap: 5px;
+    }
+
+    .ctContrastMeters[hidden] {
+        display: none;
+    }
+
+    .ctMotionPreviewChip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: var(--shape-action, 8px);
+        border: 1px solid var(--border-control);
+        background: var(--bg-surface-1);
+        color: var(--text-primary);
+        font-size: var(--font-xs);
+        font-weight: 700;
+        transition: transform var(--transition-base), background-color var(--transition-fast), border-color var(--transition-fast);
+    }
+    .ctMotionPreviewChip.is-morphed {
+        transform: translate3d(0, -2px, 0) scale(1.012);
+        background: var(--accent-surface);
+        border-color: var(--accent-color);
+        color: var(--text-accent);
+    }
+
+    .ctSliderRow input[type="range"] {
+        width: 100%;
+        min-height: 32px;
+        accent-color: var(--accent-color);
+        cursor: pointer;
+    }
+
+    .ctStudioBody > * {
+        animation: ctTabFadeIn 190ms var(--ease-silky, cubic-bezier(0.22, 1, 0.36, 1));
     }
 
     .ctContrastPill {
@@ -546,6 +618,8 @@
         :root[data-theme="custom"] .customCanvasBackdrop,
         :root[data-theme="custom"] .customCanvasImage,
         :root[data-theme="custom"] .ambientAuraGlow,
+        :root[data-theme="custom"] .ctMotionPreviewChip,
+        :root[data-theme="custom"] .ctStudioBody > *,
         :root[data-theme="custom"]::view-transition-old(root),
         :root[data-theme="custom"]::view-transition-new(root) {
             animation: none !important;

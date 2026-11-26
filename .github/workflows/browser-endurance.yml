@@ -1,0 +1,34 @@
+name: Playback and playlist endurance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  saturation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        viewport: [mobile, desktop]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright==1.57.0 beautifulsoup4==4.14.3 pillow==12.3.0
+      - run: python -m playwright install --with-deps chromium
+      - name: Run history saturation and post-cap mixed workload
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser=$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')
+          python tests/mixed-workload-browser.py --chromium "$browser" --viewport '${{ matrix.viewport }}' --cycle-targets 520,80,80 --require-saturation | tee endurance.log
+      - name: Publish synthetic fixture metrics only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: endurance-${{ matrix.viewport }}
+          path: endurance.log
+          if-no-files-found: warn
+          retention-days: 14

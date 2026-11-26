@@ -1,15 +1,62 @@
 /* Shared interaction feedback. Never animate continuous control values. */
 @layer refinements {
-:root { --motion-feedback:cubic-bezier(.22,.7,.25,1); --motion-short:140ms; --motion-standard:220ms; }
-:root :is(button,summary,[role="button"],input[type="checkbox"],select,label.actionBtn) {
- transition:background-color var(--motion-short) var(--motion-feedback),border-color var(--motion-short) var(--motion-feedback),color var(--motion-short) var(--motion-feedback),opacity var(--motion-short) var(--motion-feedback);
+:root { --motion-feedback: var(--ease-silky, cubic-bezier(.22,1,.36,1)); --motion-short: var(--dur-hover, 220ms); --motion-standard: var(--dur-release, 320ms); }
+:root :is(
+ button, summary, [role="button"], select, label.actionBtn,
+ .trackItem, .queueItem, .upcomingItem, .richPlaylistCard,
+ .slskResultRow, .slskTransferRow, .settingsThemePickerBtn,
+ .themeSelectCard, .ctLibraryCard, .ctTextureTileBtn,
+ .trackMenuItemBtn, .signalPathBadge, .slskPanelToggleControl,
+ .slskFilterToggleBtn, .slskConnectionToggleBtn, .settingsAdvancedSummary
+) {
+ transition-property: background-color, border-color, color, box-shadow, opacity, outline-offset, transform, scale;
+ transition-duration: var(--dur-hover, 220ms), var(--dur-hover, 220ms), var(--dur-hover, 220ms), var(--dur-hover, 220ms), 180ms, 180ms, var(--dur-release, 320ms), var(--dur-release, 320ms);
+ transition-timing-function: var(--ease-silky), var(--ease-silky), var(--ease-silky), var(--ease-silky), var(--ease-silky), var(--ease-silky), var(--ease-spring-subtle, cubic-bezier(0.32, 1.18, 0.64, 1)), var(--ease-spring-subtle, cubic-bezier(0.32, 1.18, 0.64, 1));
 }
-:root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn) {transition:background-color var(--motion-short) var(--motion-feedback),color var(--motion-short) var(--motion-feedback),border-color var(--motion-short) var(--motion-feedback),opacity var(--motion-short) var(--motion-feedback),scale 180ms var(--motion-feedback);}
-:root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn):not(:disabled):not([aria-disabled="true"]):active {scale:.975;opacity:.94;transition-duration:80ms;}
-:root :is(input[type="checkbox"],.toolsChevron,.settingsAdvancedChevron) { transition: background-color var(--motion-standard) var(--motion-feedback), border-color var(--motion-standard) var(--motion-feedback), transform var(--motion-standard) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback); }
-:root input[type="checkbox"]::before { transition: transform var(--motion-standard) var(--motion-feedback), background-color var(--motion-short) var(--motion-feedback); }
-:root input[type="range"]::-webkit-slider-thumb { transition: background-color var(--motion-short) var(--motion-feedback); }
-:root input[type="range"]::-moz-range-thumb { transition: background-color var(--motion-short) var(--motion-feedback); }
+:root :is(
+ button, summary, [role="button"], .mobileTabBtn, .wsTabBtn,
+ .deckActionBtn, .mediaBtn, .closeModalBtn, .signalPathBadge, .settingsThemePickerCurrent
+) :is(svg, .mobileTabIcon, .toolsChevron, .settingsAdvancedChevron, .slskToggleChevron, .slskDisclosureChevron, .signalDot),
+:root .settingsThemePickerCurrent::before {
+ transition-property: color, fill, stroke, opacity, transform, scale;
+ transition-duration: var(--dur-hover, 220ms), var(--dur-hover, 220ms), var(--dur-hover, 220ms), 180ms, var(--dur-release, 320ms), var(--dur-release, 320ms);
+ transition-timing-function: var(--ease-silky), var(--ease-silky), var(--ease-silky), var(--ease-silky), var(--ease-spring-subtle, cubic-bezier(0.32, 1.18, 0.64, 1)), var(--ease-spring-subtle, cubic-bezier(0.32, 1.18, 0.64, 1));
+}
+:root :is(
+ button, summary, [role="button"], label.actionBtn,
+ .mediaBtn, .miniPlayBtn, .actionBtn, .deckActionBtn,
+ .themeSelectCard, .settingsThemePickerBtn, .ctTextureTileBtn,
+ .ctPillBtn, .ctMotionPreviewChip, .trackMenuItemBtn,
+ .mobileTabBtn, .wsTabBtn, .settingsCatBtn, .libTab,
+ .formatFilterPill, .slskChip, .visModeBtn, .peqDspBtn,
+ .sleepOptBtn, .speedBtn, .speedPresetBtn, .trackItem, .queueItem
+):not(:disabled):not([aria-disabled="true"]):active {
+ scale:.975;
+ opacity:0.93;
+ transition-duration: var(--dur-hover, 220ms), var(--dur-hover, 220ms), var(--dur-hover, 220ms), var(--dur-hover, 220ms), var(--dur-press, 130ms), 180ms, var(--dur-release, 320ms), var(--dur-press, 130ms);
+ transition-timing-function: var(--ease-silky), var(--ease-silky), var(--ease-silky), var(--ease-silky), var(--ease-press, cubic-bezier(0.2, 0.8, 0.2, 1)), var(--ease-silky), var(--ease-spring-subtle, cubic-bezier(0.32, 1.18, 0.64, 1)), var(--ease-press, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+:root :is(.mediaBtn, .miniPlayBtn, .actionBtn, .deckActionBtn, .topBtn, .mobileTabBtn):not(:disabled):not([aria-disabled="true"]):active :is(svg, .mobileTabIcon) {
+ scale: 0.94;
+ transition-duration: var(--dur-hover, 220ms), var(--dur-hover, 220ms), var(--dur-hover, 220ms), var(--dur-press, 130ms), var(--dur-press, 130ms), var(--dur-press, 130ms);
+}
+@media (hover: hover) and (pointer: fine) {
+ :root :is(
+  .actionBtn, .topBtn, .deckActionBtn, .mediaBtn, .miniBtn, .miniDeckReturnBtn,
+  .themeSelectCard, .settingsThemePickerBtn, .ctPillBtn, .ctTextureTileBtn,
+  .ctMotionPreviewChip, .peqDspBtn, .sleepOptBtn, .visModeBtn,
+  .settingsCatBtn, .wsTabBtn, .mobileTabBtn, .formatFilterPill, .slskChip,
+  .slskShowMoreBtn, .signalPathBadge
+ ):not(:disabled):not([aria-disabled="true"]):hover {
+  transform: translate3d(0, -1px, 0);
+ }
+ :root :is(.mediaBtn.playPauseBtn, .miniPlayBtn):not(:disabled):not([aria-disabled="true"]):hover {
+  transform: translate3d(0, -1.5px, 0);
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--accent-color) 36%, transparent);
+ }
+}
+:root input[type="range"]::-webkit-slider-thumb { transition: transform 220ms var(--ease-spring-subtle, cubic-bezier(0.32, 1.18, 0.64, 1)), background-color var(--motion-short) var(--motion-feedback); }
+:root input[type="range"]::-moz-range-thumb { transition: transform 220ms var(--ease-spring-subtle, cubic-bezier(0.32, 1.18, 0.64, 1)), background-color var(--motion-short) var(--motion-feedback); }
 :root[data-theme] .queueItem { display:grid; grid-template-columns:40px minmax(0,1fr) max-content; gap:8px; }
 :root[data-theme] .queueItem .queueItemActions { grid-column:2 / -1; justify-content:flex-end; flex-wrap:wrap; }
 :root[data-theme] .queueItem .queueDuration { justify-self:end; }
@@ -64,11 +111,15 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
 }
 
 /* Library Sort & Tools highlight and subtle responsive dropdown interpolation. */
+:root[data-theme] .formatFilterPill {
+ min-width: 44px;
+ padding-inline: 11px;
+}
 :root[data-theme] .formatFilterPill.active {
- background: var(--accent-surface);
- color: var(--text-accent);
- border-color: color-mix(in oklch, var(--accent-color) 52%, transparent);
- box-shadow: inset 0 -2px var(--accent-color);
+ background: var(--accent-color);
+ color: var(--text-on-accent);
+ border-color: var(--accent-color);
+ box-shadow: none;
 }
 :root[data-theme] .libraryToolsToggleBtn {
  border: 1px solid var(--quiet-line);
@@ -107,17 +158,20 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
  color: var(--text-accent);
 }
 @keyframes cachyDropdownIn {
- from { opacity: 0; transform: translateY(-5px) scaleY(.975); }
- to   { opacity: 1; transform: translateY(0) scaleY(1); }
+ from { opacity: 0; transform: translate3d(0, -6px, 0); }
+ to   { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 :root[data-theme] #libraryControls:not([hidden]),
 :root[data-theme] .settingsHelpText:not([hidden]),
 :root[data-theme] .slskTextFiltersCon.open,
 :root[data-theme] .slskToolbar.is-open,
-:root[data-theme] .slskControlsPanel:not(.is-collapsed) .slskPanelCollapsible,
-:root[data-theme] details[open] > :not(summary) {
- transform-origin: top center;
- animation: cachyDropdownIn 180ms cubic-bezier(.2,.85,.3,1);
+:root[data-theme] .slskControlsPanel:not(.is-collapsed) .slskPanelCollapsible {
+ animation: cachyDropdownIn 220ms var(--ease-silky, cubic-bezier(0.22, 1, 0.36, 1));
+}
+@supports not (interpolate-size: allow-keywords) {
+ :root[data-theme] details[open] > :not(summary) {
+  animation: cachyDropdownIn 220ms var(--ease-silky, cubic-bezier(0.22, 1, 0.36, 1));
+ }
 }
 @supports (interpolate-size: allow-keywords) {
  :root { interpolate-size: allow-keywords; }
@@ -125,24 +179,17 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
   block-size: 0;
   opacity: 0;
   overflow: clip;
-  transition: block-size 200ms cubic-bezier(.2,.85,.3,1), opacity 160ms ease, content-visibility 200ms allow-discrete;
+  transition: block-size 260ms var(--ease-silky, cubic-bezier(0.22, 1, 0.36, 1)), opacity 200ms var(--ease-silky, ease), content-visibility 260ms allow-discrete;
  }
  :root[data-theme] details[open]::details-content {
   block-size: auto;
   opacity: 1;
  }
 }
-:root[data-theme] select {
- transition: border-color var(--motion-short) var(--motion-feedback), background-color var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback);
-}
-:root[data-theme] select:is(:hover,:focus-visible) {
- border-color: color-mix(in oklch, var(--accent-color) 55%, transparent);
-}
 :root[data-theme] .slskToggleChevron,
 :root[data-theme] .slskDisclosureChevron {
  display: inline-flex;
  align-items: center;
- transition: transform var(--motion-standard) var(--motion-feedback);
 }
 :root[data-theme] .slskControlsPanel:not(.is-collapsed) .slskToggleChevron {
  transform: rotate(180deg);
@@ -212,7 +259,7 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
 }
 :root[data-theme] .settingsInlineControls {
  display: grid;
- grid-template-columns: minmax(0, 1fr) auto;
+ grid-template-columns: minmax(0, 1fr) minmax(98px, auto);
  gap: 8px;
  align-items: stretch;
 }
@@ -264,12 +311,13 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
 }
 @layer utilities {
 @media (prefers-reduced-motion:reduce) {
- :root :is(button,summary,[role="button"],input,select,.trackItem,.toolsChevron,.settingsAdvancedChevron,.slskToggleChevron,.slskDisclosureChevron),
+ :root :is(button,summary,[role="button"],input,select,.trackItem,.queueItem,.richPlaylistCard,.themeSelectCard,.settingsThemePickerBtn,.ctLibraryCard,.ctTextureTileBtn,.ctMotionPreviewChip,.trackMenuItemBtn,.signalPathBadge,.slskPanelToggleControl,.slskFilterToggleBtn,.slskConnectionToggleBtn,.settingsAdvancedSummary,.toolsChevron,.settingsAdvancedChevron,.slskToggleChevron,.slskDisclosureChevron),
+ :root :is(button,summary,[role="button"],.mobileTabBtn,.wsTabBtn,.deckActionBtn,.mediaBtn,.closeModalBtn,.signalPathBadge,.settingsThemePickerCurrent) :is(svg,.mobileTabIcon,.toolsChevron,.settingsAdvancedChevron,.slskToggleChevron,.slskDisclosureChevron,.signalDot),
+ :root .settingsThemePickerCurrent::before,
  :root input[type="checkbox"]::before,
  :root[data-theme] details::details-content {
   transition: none!important;
  }
- :root :is(button,summary,[role="button"]).is-popping,
  :root[data-theme] #libraryControls:not([hidden]),
  :root[data-theme] .settingsHelpText:not([hidden]),
  :root[data-theme] .slskTextFiltersCon.open,

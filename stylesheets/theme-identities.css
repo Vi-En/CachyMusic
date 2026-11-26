@@ -65,7 +65,6 @@
     :is(button, a, label, input, select, textarea, summary, [role="button"], [role="slider"], [tabindex], .trackItem, .queueItem) {
         -webkit-tap-highlight-color: transparent;
     }
-    button:not(:disabled):active, summary:active, .trackItem:active { opacity: 0.9; }
     :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
         outline: 2px solid var(--border-focus);
         outline-offset: -2px;
@@ -115,10 +114,10 @@
         color: var(--text-secondary);
     }
     :root[data-theme] :is(.formatFilterPill, .slskChip).active {
-        background: var(--accent-surface);
-        color: var(--text-accent);
-        border-color: var(--border-bold);
-        box-shadow: inset 0 -2px var(--accent-color);
+        background: var(--accent-color);
+        color: var(--text-on-accent);
+        border-color: var(--accent-color);
+        box-shadow: none;
     }
     :root[data-theme] :is(.settingsSearch input, #slskSearchInput) {
         background: var(--bg-surface-2);
@@ -152,7 +151,7 @@
     :root[data-theme] .settingsPanelContent {
         gap: 0;
         background: var(--group-fill);
-        border-top: 1px solid var(--border-divider);
+        border-top: 0;
         padding-inline: var(--group-inset);
         min-width: 0;
     }
@@ -176,37 +175,67 @@
     :root[data-theme] :is(label.settingsRowTitle, .cachySwitchLabel) { min-height: 44px; cursor: pointer; }
     :root[data-theme] label.settingsRowTitle { justify-content: space-between; gap: 12px; }
 
-    /* Native Switch Styling with High-Contrast Controls */
+    /* Native Switch Styling with Expressive Spring Feedback */
     :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle) {
         appearance: none;
         -webkit-appearance: none;
-        flex: 0 0 46px;
-        width: 46px;
+        flex: 0 0 48px;
+        width: 48px;
         height: 28px;
         border: 1.5px solid var(--border-control);
-        border-radius: 20px;
+        border-radius: 999px;
         background: var(--bg-surface-3);
         position: relative;
         cursor: pointer;
         margin: 0;
+        transition:
+            background-color 280ms var(--ease-silky),
+            border-color 280ms var(--ease-silky),
+            box-shadow 260ms var(--ease-silky),
+            opacity 220ms var(--ease-silky),
+            scale var(--dur-release, 320ms) var(--ease-spring-subtle);
     }
     :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle)::before {
         content: '';
         position: absolute;
-        left: 3px;
-        top: 3px;
+        left: 2.5px;
+        top: 50%;
         width: 20px;
         height: 20px;
         border-radius: 50%;
         background: var(--text-primary);
+        box-shadow: 0 1px 4px oklch(0 0 0 / 0.28);
+        transform: translate3d(0, -50%, 0);
+        transition:
+            transform var(--dur-toggle, 380ms) var(--ease-spring-toggle, cubic-bezier(0.32, 1.28, 0.62, 1)),
+            width 220ms var(--ease-silky),
+            background-color 220ms var(--ease-silky),
+            box-shadow 220ms var(--ease-silky);
+        will-change: transform;
     }
     :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):checked {
         background: var(--accent-color);
         border-color: var(--accent-color);
     }
     :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):checked::before {
-        transform: translateX(18px);
+        transform: translate3d(20px, -50%, 0);
         background: var(--text-on-accent);
+    }
+    :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):active:not(:disabled) {
+        scale: 0.96;
+        transition-duration: 280ms, 280ms, 260ms, 130ms, var(--dur-press, 130ms);
+    }
+    :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):active:not(:disabled)::before {
+        width: 24px;
+        transition-duration: 220ms, 130ms, 220ms, 220ms;
+    }
+    :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):checked:active:not(:disabled)::before {
+        transform: translate3d(16px, -50%, 0);
+    }
+    @media (hover: hover) and (pointer: fine) {
+        :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):not(:disabled):hover {
+            box-shadow: 0 0 0 4px var(--accent-surface);
+        }
     }
     :root[data-theme] :is(#androidNativeMode, #continuousPcmMode, #settingsBgNotificationsToggle):disabled {
         opacity: 0.55;
@@ -333,8 +362,14 @@
     }
     :root[data-theme] .trackMeta #artistName { font-size: 1rem; font-weight: 500; color: var(--text-secondary); }
     :root[data-theme] .trackMeta .albumName { font-size: 0.875rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    :root[data-theme] .metaBadgeRow { align-self: stretch; justify-content: var(--player-align); order: 1; gap: 12px; }
-    :root[data-theme] .metaBadgeRow .signalPathBadge { min-height: 44px; }
+    :root[data-theme] .metaBadgeRow { align-self: stretch; justify-content: var(--player-align); order: 1; gap: 6px 8px; margin-top: 2px; }
+    :root[data-theme] .metaBadgeRow .signalPathBadge {
+        min-height: 36px;
+        padding: 4px 10px;
+        border-radius: var(--radius-full);
+        border: 1px solid var(--border-divider);
+        background: var(--bg-surface-2);
+    }
     :root[data-theme] .mediaCon {
         display: grid;
         grid-template-columns: repeat(2, minmax(44px, 1fr)) minmax(52px, 1.2fr) repeat(2, minmax(44px, 1fr));
@@ -352,9 +387,9 @@
     }
     :root[data-theme] .mediaCon .mediaBtn:is(.active, .repeat-one):not(.playPauseBtn) {
         background: var(--accent-surface);
-        border-color: var(--border-control);
+        border-color: var(--accent-color);
         color: var(--text-accent);
-        box-shadow: inset 0 -2px var(--accent-color);
+        box-shadow: none;
     }
     :root[data-theme] .mediaCon .playPauseBtn,
     :root[data-theme] .miniPlayBtn {
@@ -509,14 +544,35 @@
         :root[data-theme] .playerDeck.mobileActive {
             display: flex;
             container-type: normal;
-            padding: 8px max(var(--mobile-gutter), var(--safe-left)) 10px max(var(--mobile-gutter), var(--safe-right));
-            gap: 4px;
+            padding: clamp(6px, 1dvh, 10px) max(var(--mobile-gutter), var(--safe-left)) clamp(8px, 1.1dvh, 12px) max(var(--mobile-gutter), var(--safe-right));
+            gap: clamp(3px, 0.8dvh, 6px);
             border-radius: 0;
         }
-        :root[data-theme] .playerDeck .turntableStage { flex: 1 0 210px; min-height: 210px; padding: 8px; }
-        :root[data-theme] .playerDeck.empty-deck .turntableStage { flex: 1 0 180px; }
+        :root[data-theme] .playerDeck .turntableStage { flex: 1 1 clamp(148px, 34dvh, 320px); min-height: clamp(136px, 23dvh, 210px); padding: 6px; }
+        :root[data-theme] .playerDeck.empty-deck .turntableStage { flex: 1 0 clamp(140px, 26dvh, 210px); }
+        :root[data-theme] .deckTopControls {
+            display: inline-flex;
+            width: auto;
+            max-width: 100%;
+            align-self: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 3px;
+            border-radius: var(--radius-full);
+            background: color-mix(in oklch, var(--bg-surface-2) 72%, transparent);
+            border: 1px solid var(--border-divider);
+        }
+        :root[data-theme] .deckTopControls .deckActionBtn {
+            min-height: 38px;
+            padding: 0 14px;
+            gap: 6px;
+            border-radius: var(--radius-full);
+        }
         :root[data-theme] .settingsWorkspace,
-        :root[data-theme] .soulseekWorkspace { padding-inline: max(14px, var(--safe-left)) max(14px, var(--safe-right)); }
+        :root[data-theme] .soulseekWorkspace {
+            padding-inline: max(14px, var(--safe-left)) max(14px, var(--safe-right));
+            padding-block-end: max(20px, var(--safe-bottom));
+        }
         :root[data-theme] :is(.settingsCatBtn, .mobileTabBtn, .libTab) { min-height: 44px; }
         :root[data-theme] .mobileTabBar { padding-inline: max(6px, var(--safe-left)) max(6px, var(--safe-right)); gap: 4px; }
         :root[data-theme] .mobileTabBtn { min-height: 50px; }

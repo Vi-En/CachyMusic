@@ -1,5 +1,5 @@
 /* CachyMusic v3.0.0 — Layered Stylesheet Architecture Entry */
-@layer reset, tokens, themes, layout, components, identities, refinements, custom-theme, utilities;
+@layer reset, tokens, themes, layout, components, base-refinements, identities, refinements, custom-theme, utilities;
 
 @import url('./tokens.css');
 @import url('./themes.css');

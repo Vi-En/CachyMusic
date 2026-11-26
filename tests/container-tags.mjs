@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {parseAudioFileMetadata} from '../scripts/modules/tag-parser.js';
+import {rewritePcmContainer} from '../scripts/modules/container-tag-writer.js';
+const original=new Blob([readFileSync(process.argv[2])]);const picture={mime:'image/png',bytes:new Uint8Array(readFileSync(process.argv[4]))};
+const {blob}=await rewritePcmContainer(original,{title:'新曲',artist:'Test Artist',lyrics:'[00:01.00] A line'},picture);
+const named=Object.assign(blob,{name:process.argv[3]});const metadata=await parseAudioFileMetadata(named);assert.equal(metadata.title,'新曲');assert.equal(metadata.artist,'Test Artist');assert.match(metadata.lyrics,/A line/);assert.ok(metadata.cover.startsWith('data:image/png'));
+const bytes=new Uint8Array(await blob.arrayBuffer());writeFileSync(process.argv[3],bytes);
+const again=await rewritePcmContainer(blob,{title:'New title'});assert.ok(again.blob.size>0);
+await assert.rejects(rewritePcmContainer(original.slice(0,20),{}));
+console.log('PASS JS PCM container tag copy and re-edit; truncated-container rejection');

@@ -1,12 +1,12 @@
 @layer refinements {
-:is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-left,:is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-right {display:none;}
+:is(#playPauseImg,#miniPlayImg) .morph-left,:is(#playPauseImg,#miniPlayImg) .morph-right {display:none;}
 @supports (clip-path:polygon(0 0,100% 0,100% 100%,0 100%)) {
-    :root :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) :is(.icon-play,.icon-pause) {display:none!important;}
-    :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) :is(.morph-left,.morph-right) {display:block;transition:clip-path 230ms cubic-bezier(.22,.7,.25,1);}
-    :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-left {clip-path:polygon(29.1667% 20.8333%,50% 33.3333%,50% 66.6667%,29.1667% 79.1667%);}
-    :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-right {clip-path:polygon(50% 33.3333%,79.1667% 50%,79.1667% 50%,50% 66.6667%);}
-    :is(.playPauseBtn,.miniPlayBtn).playing :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-left {clip-path:polygon(25% 20.8333%,41.6667% 20.8333%,41.6667% 79.1667%,25% 79.1667%);}
-    :is(.playPauseBtn,.miniPlayBtn).playing :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-right {clip-path:polygon(58.3333% 20.8333%,75% 20.8333%,75% 79.1667%,58.3333% 79.1667%);}
+    :root :is(#playPauseImg,#miniPlayImg) :is(.icon-play,.icon-pause) {display:none!important;}
+    :is(#playPauseImg,#miniPlayImg) :is(.morph-left,.morph-right) {display:block;transition:clip-path 230ms cubic-bezier(.22,.7,.25,1);}
+    :is(#playPauseImg,#miniPlayImg) .morph-left {clip-path:polygon(29.1667% 20.8333%,50% 33.3333%,50% 66.6667%,29.1667% 79.1667%);}
+    :is(#playPauseImg,#miniPlayImg) .morph-right {clip-path:polygon(50% 33.3333%,79.1667% 50%,79.1667% 50%,50% 66.6667%);}
+    :is(.playPauseBtn,.miniPlayBtn).playing :is(#playPauseImg,#miniPlayImg) .morph-left {clip-path:polygon(25% 20.8333%,41.6667% 20.8333%,41.6667% 79.1667%,25% 79.1667%);}
+    :is(.playPauseBtn,.miniPlayBtn).playing :is(#playPauseImg,#miniPlayImg) .morph-right {clip-path:polygon(58.3333% 20.8333%,75% 20.8333%,75% 79.1667%,58.3333% 79.1667%);}
 }
 /* Capped negative space: preserve scrolling area on short devices. */
 :root[data-theme] .trackListPanel {padding-block-start:clamp(12px, 5vh, 44px);}
@@ -51,7 +51,7 @@
 .listeningDialog li strong,.listeningDialog li small {display:block;overflow-wrap:anywhere;}
 .listeningDialog footer {border-top:1px solid var(--quiet-line);padding-top:12px;}
 .listeningDialog footer label {min-height:44px;display:flex;align-items:center;gap:8px;}
-@media(prefers-reduced-motion:reduce){:root :is(button,summary,[role="button"],label.actionBtn,#playPauseImg rect,#miniPlayImg rect,#compactMediaPlayImg rect){transition:none!important;animation:none!important;}}
+@media(prefers-reduced-motion:reduce){:root :is(button,summary,[role="button"],label.actionBtn,#playPauseImg rect,#miniPlayImg rect){transition:none!important;animation:none!important;}}
 
 .slskMobileSort {display:none;}
 @media(max-width:768px){
@@ -60,22 +60,6 @@
  .slskMobileSort select,.slskMobileSort button {min-height:44px;min-width:0;max-width:100%;}
  .slskMobileSort select {flex:1 1 100px;}
 }
-:root[data-theme] .compactMediaTrigger {font-size:.75rem;min-height:44px;align-self:center;background:transparent;border-color:var(--quiet-line);box-shadow:none;}
-:root[data-theme] .compactMediaDialog {position:fixed;isolation:isolate;width:min(430px,calc(100% - 28px));padding:0;max-height:85dvh;overflow:auto;background:var(--bg-surface-1);color:var(--text-primary);}
-.compactMediaDialog:not([open]),.listeningDialog:not([open]) {display:none!important;}
-#compactMediaArt {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.12;z-index:-1;pointer-events:none;}
-#compactMediaArt:not([src]){display:none;}
-.compactMediaBody {padding:clamp(16px,4vw,26px);display:flex;flex-direction:column;gap:8px;}
-.compactMediaBody header,.compactMediaTimes {display:flex;justify-content:space-between;align-items:center;gap:8px;}
-.compactMediaBody header {font-size:.8rem;color:var(--text-secondary);}
-.compactMediaBody h3 {font-size:1.2rem;line-height:1.25;margin:0;overflow-wrap:anywhere;}
-.compactMediaBody p {margin:0;color:var(--text-secondary);overflow-wrap:anywhere;}
-#compactMediaWave {width:100%;height:34px;color:var(--accent-color);}
-.compactMediaStatus,.compactMediaTimes {font-size:.75rem;color:var(--text-secondary);font-variant-numeric:tabular-nums;}
-#compactMediaSeek {width:100%;min-height:44px;accent-color:var(--accent-color);margin:0;}
-.compactMediaTransport {display:flex;align-items:center;justify-content:center;gap:clamp(14px,6vw,28px);}
-.compactMediaTransport button {min-width:44px;min-height:44px;display:grid;place-items:center;}
-.compactMediaTransport .playPauseBtn {width:56px;height:56px;}
 
 :root[data-theme] .slskMobileSort select {background:var(--bg-surface-2);color:var(--text-primary);border:1px solid var(--border-medium);border-radius:var(--shape-field,6px);padding-inline:8px;}
 :root[data-theme] .slskMiniStatus.actionBtn {display:inline-flex;align-items:center;gap:5px;width:auto;min-width:0;min-height:44px;padding:4px 6px;border:0;background:transparent;font-size:.7rem;color:var(--text-secondary);white-space:normal;}
@@ -93,11 +77,10 @@
 :root[data-theme] .soulseekWorkspace .slskTransferRow .slskTransferActions {display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px;}
 :root[data-theme] .soulseekWorkspace .slskTransferRow .slskTransferBarCon {width:100%;min-width:0;}}
 
-:root[data-theme] .deckTopControls .compactMediaTrigger {border:0;background:transparent;padding:4px;}
 /* Native dialog top layer needs its own centering, independently of reset.css. */
-:root[data-theme] :is(.compactMediaDialog,.listeningDialog) {position:fixed;inset:0;margin:auto;max-width:calc(100% - 24px);height:fit-content;max-height:85dvh;}
-:is(.compactMediaDialog,.listeningDialog)::backdrop {background:rgb(0 0 0 / .48);}
-#compactMediaArt:not([src]),#compactMediaArt[hidden] {display:none!important;}
+:root[data-theme] .listeningDialog {position:fixed;inset:0;margin:auto;max-width:calc(100% - 24px);height:fit-content;max-height:85dvh;}
+.listeningDialog:not([open]) {display:none!important;}
+.listeningDialog::backdrop {background:rgb(0 0 0 / .48);}
 
 :root[data-theme] .libraryWorkspaceHeading {font-size:1.25rem;font-weight:650;line-height:1.3;margin:0 0 12px;padding-inline:4px;color:var(--text-primary);letter-spacing:-.015em;}
 @media(max-height:560px){:root[data-theme] .libraryWorkspaceHeading{margin-bottom:4px;font-size:1rem;}}
@@ -105,7 +88,9 @@
 :root[data-theme] .soulseekWorkspace .slskResultRow .colAction button{flex:0 1 auto;min-width:44px;min-height:44px;padding-inline:12px;}
 :root[data-theme] .soulseekWorkspace .slskResultRow .slskGetBtn{background:var(--quiet-fill);color:var(--text-primary);}
 :root[data-theme] .soulseekWorkspace .slskResultRow .slskPlayBtn{background:transparent;border-color:transparent;color:var(--text-secondary);}}
-@media(prefers-reduced-motion:reduce){:root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn):active{scale:1;}}
+@layer utilities {
+@media(prefers-reduced-motion:reduce){:root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn):active{scale:1;transform:none!important;}}
+}
 
 .listeningDialog .listeningPlay {grid-column:2 / -1;justify-self:end;min-height:44px;padding:4px 12px;}
 

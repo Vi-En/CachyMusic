@@ -47,10 +47,13 @@ function resolveInitialVisMode() {
 }
 
 function resolveInitialTheme() {
-    const theme = safeStorage.getItem('cachymusic_active_theme')
-        || (typeof document !== 'undefined' && document.documentElement ? document.documentElement.getAttribute('data-theme') : null)
-        || 'default';
-    return normalizeThemeId(theme);
+    const stored = safeStorage.getItem('cachymusic_active_theme') || '';
+    if (stored.startsWith('custom:')) return stored;
+    const doc = typeof document !== 'undefined' ? document.documentElement : null;
+    const docCustomId = doc?.dataset?.customThemeId || '';
+    if (stored === 'custom' && docCustomId.startsWith('custom:')) return docCustomId;
+    const theme = stored || (doc ? doc.getAttribute('data-theme') : null) || 'default';
+    return theme === 'custom' && docCustomId.startsWith('custom:') ? docCustomId : normalizeThemeId(theme);
 }
 
 function createInitialPeq() {

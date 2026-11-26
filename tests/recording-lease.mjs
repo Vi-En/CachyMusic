@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {createRecordingLease,serverRecording} from '../scripts/modules/recording-lease.js';
+const track={tid:4,fullPath:'/music/a.wav',src:'php/api/stream.php?tid=4'};
+const active={currentTrack:track,isPlaying:true};
+assert.deepEqual(serverRecording(active),{tid:'4',path:track.fullPath});
+assert.equal(serverRecording({...active,userExplicitlyPaused:true}),null);
+assert.equal(serverRecording({...active,isStandalonePlayback:true}),null);
+assert.equal(serverRecording({...active,currentTrack:{...track,src:'https://other.test/php/api/stream.php?tid=4'}}),null);
+assert.equal(serverRecording({...active,currentTrack:{...track,src:'php/api/stream.php?tid=5'}}),null);
+let target=serverRecording(active),clock=0,requests=[],pending=null,warnings=0,seq=0;
+const lease=createRecordingLease({read:()=>target,now:()=>clock,makeOwner:()=>String(++seq).padStart(32,'0'),warn:()=>warnings++,fetcher:async(_url,options)=>{requests.push(JSON.parse(options.body));return pending?await pending:{ok:true,json:async()=>({success:true})};}});
+await lease.refresh();assert.equal(requests.length,1);assert.equal(requests[0].action,'renew');
+await lease.refresh();assert.equal(requests.length,1);clock=21000;await lease.refresh();assert.equal(requests.length,2);
+let resolve;pending=new Promise(r=>resolve=r);clock=42000;const running=lease.refresh();target={tid:'5',path:'/music/b.wav'};await lease.refresh();pending=null;resolve({ok:true,json:async()=>({success:true})});await running;await new Promise(r=>setImmediate(r));assert.equal(requests.at(-1).tid,'5');
+target=null;await lease.refresh();assert.equal(requests.at(-1).action,'release');
+target=serverRecording(active);pending=Promise.resolve({ok:false});await lease.refresh();assert.equal(warnings,1);const retired=requests.at(-1).owner;pending=null;await lease.refresh();assert.notEqual(requests.at(-1).owner,retired);assert.equal(requests.at(-1).action,'renew');
+lease.close();const count=requests.length;clock+=30000;await lease.refresh();assert.equal(requests.length,count);
+console.log('PASS lease client selection, renewal coalescing, serialized transition, release, failed-owner retirement and disposal');

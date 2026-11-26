@@ -8,24 +8,33 @@ export function createNotificationCenter({doc = document, schedule = setTimeout,
     let modalNotice=null;
     function inlineModalMessage(message){const modal=activeModal();if(!modal)return;const target=modal.querySelector('.modalCard')||modal;if(!modalNotice||!target.contains(modalNotice)){modalNotice?.remove();modalNotice=doc.createElement('p');modalNotice.className='modalInlineNotice';modalNotice.setAttribute('role','status');target.append(modalNotice);}modalNotice.textContent=message;}
     function syncModal(){const hidden=modalOpen();if(modalNotice&&(!hidden||!activeModal().contains(modalNotice))){modalNotice.remove();modalNotice=null;}if(!entries.length&&!modalNotice)stopPosition();const container=doc.getElementById('cachyToastContainer');if(container)container.hidden=hidden;for(const e of entries){if(hidden)pause(e);else arm(e);}}
+    const hudEl=()=>doc.getElementById('debugHudContainer');
+    function dockTop(el){const r=el.getBoundingClientRect().top;return el.offsetParent===null?Math.min(r,el.offsetTop):r;}
     function position() {
         const container = doc.getElementById('cachyToastContainer');
         if (!container || !view) return;
-        const docks = [doc.getElementById('persistentMiniPlayer'),doc.querySelector('.mobileTabBar')];
-        const top = Math.min(view.innerHeight, ...docks.filter(el=>el?.getClientRects().length).map(el=>el.getBoundingClientRect().top));
+        const docks = [doc.getElementById('persistentMiniPlayer'), doc.querySelector('.mobileTabBar'), hudEl()];
+        const top = Math.min(view.innerHeight, ...docks.filter(el=>el?.getClientRects().length).map(dockTop));
         container.style.setProperty('--toast-bottom', `${Math.max(12,view.innerHeight-top+8)}px`);
     }
     function watchPosition() {
         if ((!entries.length&&!modalNotice) || !view || modalObserver || observer) return;
         position();
-        if(view.MutationObserver){modalObserver=new view.MutationObserver(syncModal);for(const el of doc.querySelectorAll('[role="dialog"][aria-modal="true"], dialog'))modalObserver.observe(el,{attributes:true,attributeFilter:['style','class','hidden','open']});}
+        const hud=hudEl();
+        if(view.MutationObserver){
+            modalObserver=new view.MutationObserver(()=>{syncModal();position();});
+            for(const el of [...doc.querySelectorAll('[role="dialog"][aria-modal="true"], dialog'), hud].filter(Boolean))
+                modalObserver.observe(el,{attributes:true,attributeFilter:['style','class','hidden','open']});
+        }
+        hud?.addEventListener('animationend',position);
         view.addEventListener('resize',position);
         if (view.ResizeObserver) {
             observer = new view.ResizeObserver(position);
-            for (const el of [doc.getElementById('persistentMiniPlayer'),doc.querySelector('.mobileTabBar')]) if(el) observer.observe(el);
+            for (const el of [doc.getElementById('persistentMiniPlayer'),doc.querySelector('.mobileTabBar'),hud]) if(el) observer.observe(el);
         }
     }
     function stopPosition() {
+        hudEl()?.removeEventListener('animationend',position);
         observer?.disconnect();observer=null;modalObserver?.disconnect();modalObserver=null;
         view?.removeEventListener('resize',position);
     }

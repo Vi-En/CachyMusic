@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {audioSettingsStatus} from '../scripts/modules/audio-settings-status.js';
+const s={mathPrecision:'64',ditherMode:'shaped',isAmbiophonics:true,isUltrasonic:true,ultrasonicCutoff:32000,audioContext:{sampleRate:48000}};
+assert.match(audioSettingsStatus(s,'worklet'),/frequency range/);
+assert.match(audioSettingsStatus(s,'fallback'),/AudioWorklet/);
+assert.match(audioSettingsStatus(s,null),/initializes/);
+assert.match(audioSettingsStatus(s,'worklet',{nativeActive:true}),/bypasses/);
+assert.match(audioSettingsStatus(s,'worklet',{bufferPending:true}),/pending/);
+assert.match(audioSettingsStatus({...s,isUltrasonic:false,isCrossfeed:true},'worklet'),/priority/);
+assert.match(audioSettingsStatus({...s,isUltrasonic:false},'worklet'),/Automatic peak protection/);
+assert.match(audioSettingsStatus({...s,isUltrasonic:false,isAmbiophonics:false},'worklet'),/applied/);
+console.log('PASS audio settings status: pending, native, fallback, unsupported cutoff and conflicting spatial modes');

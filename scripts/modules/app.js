@@ -1,6 +1,5 @@
 import {installRecordingLease} from './recording-lease.js';
 import {requestServerBrowse} from './server-scan.js';
-import {initCompactMedia} from './compact-media.js';
 import {initListeningHistory} from './listening-history.js';
 import {playlistNavigationToken} from './library.js';
 import {bindSettingsNavigation} from './settings-navigation.js';
@@ -487,12 +486,15 @@ store.subscribe('workspace:change', ({ detail }) => {
         } catch (_) {}
 
         initMprisBridge();
-        void hydrateActiveCustomThemeOnBoot().then(applied => {
-            if (applied) {
-                store.emit('visualizer:ensure-themes');
-                store.emit('peq:redraw');
-            }
-        });
+        const urlThemeOverride = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('theme') : null;
+        if (!urlThemeOverride) {
+            void hydrateActiveCustomThemeOnBoot().then(applied => {
+                if (applied) {
+                    store.emit('visualizer:ensure-themes');
+                    store.emit('peq:redraw');
+                }
+            });
+        }
     }
 
 
@@ -500,7 +502,6 @@ store.subscribe('workspace:change', ({ detail }) => {
     function setupEventListeners() {
         installModalFocus();
         initListeningHistory({playTrack:index=>loadTrack(index,true,0,null,false,false,null)});
-        initCompactMedia();
         if (visPillBtns && visPillBtns.length > 0) {
             visPillBtns.forEach(btn => {
                 btn.addEventListener('click', () => {

@@ -26,6 +26,8 @@ let androidSyncTimer = null;
 let pendingAndroidPayload = null;
 let assetWorker = null;
 let workerJobSeq = 0;
+let applyGeneration = 0;
+let redrawRafId = 0;
 const workerJobs = new Map();
 
 function ensureWorker() {
@@ -92,9 +94,9 @@ function hexAlpha(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-function compileGradient(grad, fallbackHex) {
+function compileGradient(grad) {
     if (!grad || grad.type === 'none' || !Array.isArray(grad.stops) || grad.stops.length < 2) {
-        return fallbackHex;
+        return 'none';
     }
     const stopsCss = grad.stops.map(s => `${s.color} ${s.pos}%`).join(', ');
     if (grad.type === 'radial') {
@@ -186,15 +188,15 @@ export function buildCssVariableMap(theme, resolvedUrls = {}) {
         const textureUrl = scopeObj.mode === 'texture' && scopeObj.textureId !== 'none'
             ? buildProceduralTextureUrl(scopeObj.textureId, scopeObj.textureColor, scopeObj.textureOpacity, scopeObj.textureScale)
             : 'none';
-        const baseFill = scopeObj.mode === 'gradient'
-            ? compileGradient(scopeObj.gradient, fallbackHex)
-            : (applySurfaceAlpha ? hexAlpha(scopeObj.color || fallbackHex, g.surfaceOpacity) : (scopeObj.color || fallbackHex));
+        const bgColor = applySurfaceAlpha ? hexAlpha(scopeObj.color || fallbackHex, g.surfaceOpacity) : (scopeObj.color || fallbackHex);
+        const bgImage = scopeObj.mode === 'gradient' ? compileGradient(scopeObj.gradient) : 'none';
         const fitCss = resolveFitCss(scopeObj.fit, scopeObj.scale);
         const scrim = scopeObj.scrimOpacity > 0
             ? hexAlpha(scopeObj.scrimColor || c.bgCanvas, scopeObj.scrimOpacity)
             : 'transparent';
         return {
-            [`--ct-${prefix}-bg`]: baseFill,
+            [`--ct-${prefix}-bg`]: bgColor,
+            [`--ct-${prefix}-bg-image`]: bgImage,
             [`--ct-${prefix}-image`]: assetUrl,
             [`--ct-${prefix}-image-size`]: fitCss.size,
             [`--ct-${prefix}-image-repeat`]: fitCss.repeat,
@@ -224,6 +226,7 @@ export function buildCssVariableMap(theme, resolvedUrls = {}) {
         'color-scheme': t.mode,
         '--bg-canvas': c.bgCanvas,
         '--workspace-canvas': 'transparent',
+        '--ct-studio-surface': c.surface1,
         '--bg-surface-1': hexAlpha(c.surface1, g.surfaceOpacity),
         '--workspace-panel': hexAlpha(c.surface1, g.surfaceOpacity),
         '--bg-surface-2': hexAlpha(c.surface2, Math.min(1, g.surfaceOpacity + 0.04)),
@@ -390,10 +393,11 @@ function queueAndroidCustomSync(theme, immediate = false) {
  * Apply a CustomThemeV1 cleanly to the DOM and optionally persist snapshot/Android state.
  */
 export async function applyCustomTheme(rawTheme, { persist = true, previewOnly = false } = {}) {
+    const myGen = ++applyGeneration;
     const theme = validateAndNormalizeCustomTheme(rawTheme);
     activeCustomTheme = theme;
 
-    // Resolve any uploaded local background assets concurrently
+    // Resolve any uploaded local background assets concurrently (skip async await when none needed)
     const neededAssetIds = new Set();
     const resolvedUrls = {};
     for (const scope of ['canvas', 'panels', 'stage', 'chrome']) {
@@ -402,10 +406,13 @@ export async function applyCustomTheme(rawTheme, { persist = true, previewOnly =
             neededAssetIds.add(aid);
         }
     }
-    await Promise.all(Array.from(neededAssetIds).map(async (aid) => {
-        const url = await acquireAssetObjectUrl(aid);
-        if (url) resolvedUrls[aid] = url;
-    }));
+    if (neededAssetIds.size > 0) {
+        await Promise.all(Array.from(neededAssetIds).map(async (aid) => {
+            const url = await acquireAssetObjectUrl(aid);
+            if (url) resolvedUrls[aid] = url;
+        }));
+        if (myGen !== applyGeneration) return activeCustomTheme;
+    }
     revokeUnusedAssetUrls(neededAssetIds);
 
     const varMap = buildCssVariableMap(theme, resolvedUrls);
@@ -423,8 +430,14 @@ export async function applyCustomTheme(rawTheme, { persist = true, previewOnly =
         queueAndroidCustomSync(theme, true);
     } else if (previewOnly) {
         queueAndroidCustomSync(theme, false);
-        store.emit('visualizer:ensure-themes');
-        store.emit('peq:redraw');
+        if (!redrawRafId) {
+            const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 16);
+            redrawRafId = raf(() => {
+                redrawRafId = 0;
+                store.emit('visualizer:ensure-themes');
+                store.emit('peq:redraw');
+            });
+        }
     }
     return theme;
 }

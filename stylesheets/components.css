@@ -14,23 +14,11 @@
     .bgWatermark { display: flex; align-items: center; justify-content: center; opacity: 0.04; }
     .bgWatermark img { width: min(46vw, 420px); height: auto; }
 
-    /* Brand Header & Live Meter */
-    .brandLogo { font-weight: 800; font-size: var(--font-sm); letter-spacing: 0.08em; color: var(--text-accent); white-space: nowrap; flex-shrink: 0; }
-    .brandText { font-weight: 800; font-size: var(--font-sm); letter-spacing: 0.08em; color: var(--text-primary); white-space: nowrap; }
-    .brandLiveMeter { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; padding: 0 4px; contain: layout paint; }
-    .brandLiveMeter .meterBar { width: 3px; height: 100%; border-radius: 2px; background: var(--text-disabled); transform-origin: bottom; transform: scaleY(0.24) translateZ(0); }
-    body.is-playing .brandLiveMeter .meterBar { background: var(--accent-color); }
-    body.is-playing .brandLiveMeter .b1 { animation: brandEq1 0.55s ease-in-out infinite alternate; }
-    body.is-playing .brandLiveMeter .b2 { animation: brandEq2 0.42s ease-in-out infinite alternate; }
-    body.is-playing .brandLiveMeter .b3 { animation: brandEq3 0.48s ease-in-out infinite alternate; }
-    body.is-playing .brandLiveMeter .b4 { animation: brandEq4 0.62s ease-in-out infinite alternate; }
-
     /* Workspace Switcher & Header Inputs */
     .wsTabBtn {
         min-height: 36px; padding: 0.35rem 0.78rem; border-radius: var(--radius-full);
         display: inline-flex; align-items: center; gap: 0.4rem;
         font-size: var(--font-xs); font-weight: 700; letter-spacing: 0.06em; color: var(--text-muted);
-        transition: background-color var(--transition-fast), color var(--transition-fast);
     }
     .wsTabBtn:hover { color: var(--text-primary); background: var(--accent-surface); }
     .wsTabBtn.active { background: var(--accent-color); color: var(--text-on-accent); }
@@ -51,7 +39,7 @@
         position: absolute; right: 2.1rem; width: 26px; height: 26px; border-radius: 50%;
         display: inline-flex; align-items: center; justify-content: center;
         font-size: var(--font-3xs); font-weight: 700; color: var(--text-muted);
-        background: var(--bg-surface-3); transition: color var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast);
+        background: var(--bg-surface-3);
     }
     .searchClearBtn:hover { color: var(--text-primary); }
     :is(.searchContainer input, .settingsInput, .slskDirInput, .metaEditorInput, .metaEditorOnlineInput, #newPlaylistInput):focus {
@@ -69,12 +57,9 @@
         display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
         font-size: var(--font-xs); font-weight: 700; letter-spacing: 0.05em;
         border: 1px solid var(--border-subtle); background: var(--bg-surface-2); color: var(--text-primary);
-        transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform 90ms cubic-bezier(0.2, 0, 0, 1);
     }
-    :is(.topBtn, .actionBtn, .folderBrowseBtn, .backBtn, .uploadBtn):hover { background: var(--bg-surface-3); border-color: var(--border-medium); }
-    :is(.mediaBtn, .topBtn, .actionBtn, .deckActionBtn, .speedBtn, .speedPresetBtn, .formatFilterPill, .miniBtn, .miniDeckReturnBtn, .mobileTabBtn, .wsTabBtn, .eqDeckBtn, .peqDspBtn, .themeSelectCard, .trackMenuItemBtn, .settingsCatBtn, .visModeBtn, .trackMenuTriggerBtn, .closeModalBtn, .searchClearBtn):active {
-        transform: scale(0.96);
-        transition-duration: 80ms;
+    @media (hover: hover) and (pointer: fine) {
+        :is(.topBtn, .actionBtn, .folderBrowseBtn, .backBtn, .uploadBtn):hover { background: var(--bg-surface-3); border-color: var(--border-medium); }
     }
     .actionBtn.primaryBtn, .scanFolderActionBtn { background: var(--accent-color); border-color: var(--accent-color); color: var(--text-on-accent); }
     .actionBtn.primaryBtn:hover, .scanFolderActionBtn:hover { background: var(--accent-hover); }
@@ -98,7 +83,7 @@
         min-height: 36px; padding: 0.32rem 0.55rem; border-radius: var(--radius-xs);
         border: 1px solid var(--border-subtle); background: var(--bg-surface-1);
         font-size: var(--font-2xs); font-weight: 700; color: var(--text-secondary);
-        text-align: center; transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+        text-align: center;
     }
     .speedBtn:hover, .speedPresetBtn:hover { border-color: var(--border-medium); color: var(--text-primary); }
     .speedBtn.active, .speedPresetBtn.active { background: var(--accent-color); color: var(--text-on-accent); border-color: var(--accent-color); }
@@ -175,10 +160,10 @@
     .timelineCon { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-xs); }
     .timeLabel { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-2xs); color: var(--text-muted); min-width: 2.8rem; text-align: center; }
     .progressBarCon { position: relative; height: var(--slider-scrub-zone); display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
-    .progressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 6px; border-radius: var(--radius-full); background: var(--border-control); opacity: 0.52; transition: transform 120ms ease-out; }
-    .progressBar { position: relative; height: 6px; width: 100%; transform-origin: left center; transform: scaleX(var(--progress-ratio, 0)); will-change: transform; border-radius: var(--radius-full); background: var(--accent-color); transition: transform 120ms ease-out; }
+    .progressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 6px; border-radius: var(--radius-full); background: var(--border-control); opacity: 0.52; transition: transform 180ms var(--ease-silky); }
+    .progressBar { position: relative; height: 6px; width: 100%; transform-origin: left center; transform: scaleX(var(--progress-ratio, 0)); will-change: transform; border-radius: var(--radius-full); background: var(--accent-color); }
     .progressPlayheadTrack { position: absolute; inset: 0; pointer-events: none; transform: translate3d(calc(var(--progress-ratio, 0) * 100%), 0, 0); will-change: transform; }
-    .progressPlayhead { position: absolute; left: -6px; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--accent-color); transform: translateY(-50%); transition: transform 120ms ease-out; }
+    .progressPlayhead { position: absolute; left: -6px; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: var(--text-primary); border: 2px solid var(--accent-color); transform: translateY(-50%); transition: transform 180ms var(--ease-silky); }
     :is(.progressBarCon.dragging, .miniProgressBarCon.dragging)::before { transform: scaleY(1.33); }
     :is(.progressBarCon.dragging, .miniProgressBarCon.dragging) :is(.progressBar, .miniProgressBar) { transform: scaleX(var(--progress-ratio, 0)) scaleY(1.33); }
     :is(.progressBarCon.dragging, .miniProgressBarCon.dragging) .progressPlayhead { transform: translateY(-50%) scale(1.38); }
@@ -187,11 +172,10 @@
     .progressBarCon:hover :is(.progressHoverTooltip, .progressHover),
     .progressBarCon.dragging .progressHoverTooltip { opacity: 1; }
     .mediaCon { display: flex; align-items: center; justify-content: center; gap: var(--space-sm); }
-    .mediaBtn { min-width: var(--touch-min); min-height: var(--touch-min); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); transition: transform 90ms cubic-bezier(0.2, 0, 0, 1), border-color var(--transition-fast), color var(--transition-fast), background-color var(--transition-fast); }
-    .mediaBtn:hover { color: var(--text-primary); border-color: var(--border-medium); transform: translateY(-1px); }
+    .mediaBtn { min-width: var(--touch-min); min-height: var(--touch-min); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--text-secondary); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); }
+    .mediaBtn:hover { color: var(--text-primary); border-color: var(--border-medium); }
     .mediaBtn.active, .mediaBtn.repeat-one { color: var(--text-accent); border-color: var(--border-bold); background: var(--accent-surface); }
     .playPauseBtn { width: clamp(3.15rem, 6dvh, 3.65rem); height: clamp(3.15rem, 6dvh, 3.65rem); background: var(--accent-color); border-color: var(--accent-color); color: var(--text-on-accent); box-shadow: 0 0 22px var(--accent-glow); }
-    .playPauseBtn:active { transform: scale(0.92); }
     .playPauseBtn .icon-pause, .playPauseBtn.playing .icon-play { display: none; }
     .playPauseBtn.playing .icon-pause { display: block; }
     .volumeDeck { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-xs); }
@@ -237,7 +221,6 @@
         padding: var(--space-xs); border-radius: var(--radius-sm); border: 1px solid transparent; background: var(--bg-surface-2);
         display: flex; align-items: center; gap: var(--space-xs); cursor: pointer;
         contain: layout style;
-        transition: border-color var(--transition-fast), background-color var(--transition-fast);
     }
     :is(.trackItem, .queueItem, .richPlaylistCard):hover { border-color: var(--border-medium); background: var(--bg-surface-3); }
     .trackItem.active, .queueItem.active, .richPlaylistCard.active { border-color: var(--border-bold); background: var(--accent-surface); }
@@ -252,7 +235,7 @@
         .trackItem .trackItemActions { opacity: 0; transition: opacity var(--transition-fast); }
         .trackItem:is(:hover, :focus-within, .active) .trackItemActions { opacity: 1; }
     }
-    .trackMenuTriggerBtn { min-width: 32px; min-height: 32px; border-radius: var(--radius-xs); display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); transition: color var(--transition-fast), background-color var(--transition-fast); }
+    .trackMenuTriggerBtn { min-width: 32px; min-height: 32px; border-radius: var(--radius-xs); display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); }
     .trackMenuTriggerBtn:hover { color: var(--text-primary); background: var(--bg-surface-2); }
     .trackActionIconBtn, .queuePlayNowBtn, .queueMoveBtn, .queueRemoveBtn, .actionPillBtn, .playlistCardDeleteBtn {
         min-width: 28px; min-height: 28px; padding: 0 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border-subtle);
@@ -278,20 +261,32 @@
     .miniPlayBtn .icon-pause, .miniPlayBtn.playing .icon-play { display: none; }
     .miniPlayBtn.playing .icon-pause { display: block; }
     .miniProgressBarCon { position: relative; flex: 1 1 auto; height: 34px; display: flex; align-items: center; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
-    .miniProgressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 5px; border-radius: var(--radius-full); background: var(--border-control); opacity: 0.52; transition: transform 120ms ease-out; }
-    .miniProgressBar { position: relative; z-index: 1; height: 5px; border-radius: var(--radius-full); width: 100%; transform-origin: left center; transform: scaleX(var(--progress-ratio, 0)); will-change: transform; background: var(--accent-color); transition: transform 120ms ease-out; }
+    .miniProgressBarCon::before { content: ''; position: absolute; left: 0; right: 0; height: 5px; border-radius: var(--radius-full); background: var(--border-control); opacity: 0.52; transition: transform 180ms var(--ease-silky); }
+    .miniProgressBar { position: relative; z-index: 1; height: 5px; border-radius: var(--radius-full); width: 100%; transform-origin: left center; transform: scaleX(var(--progress-ratio, 0)); will-change: transform; background: var(--accent-color); }
     .miniTime { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); color: var(--text-muted); }
+
+    /* Queue & Up Next Layout */
+    .queueControlsBar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 6px 4px 10px; border-bottom: 1px solid var(--border-divider); }
+    .queueSummary { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .queueBadge { padding: 2px 7px; border-radius: var(--radius-xs); background: var(--accent-surface); border: 1px solid var(--border-control); font-family: var(--font-mono); font-size: var(--font-3xs); font-weight: 800; color: var(--text-accent); }
+    .queueCountText { font-size: var(--font-xs); font-weight: 600; color: var(--text-secondary); }
+    .queueSectionLabel { font-size: var(--font-3xs); font-weight: 800; letter-spacing: 0.06em; color: var(--text-muted); padding: 10px 4px 4px; }
+    .queueList, .upcomingLibraryList { display: flex; flex-direction: column; gap: 2px; }
+    .upcomingItem { display: grid; grid-template-columns: 40px minmax(0, 1fr) max-content auto; align-items: center; gap: 8px; padding: 8px 6px; border-block-end: 1px solid var(--border-divider); }
+    .upcomingItem .queueDuration { justify-self: end; }
+    .upcomingItem .queueItemActions { display: flex; align-items: center; gap: 4px; }
 
     /* Modals & Backdrops */
     .modalBackdrop, .slskModalOverlay {
-        position: fixed; inset: 0; z-index: var(--z-modal); background: oklch(0 0 0 / 0.72);
+        position: fixed; inset: 0; z-index: var(--z-modal); background: oklch(0 0 0 / 0.74);
         display: none; align-items: center; justify-content: center; padding: var(--space-md); overflow-y: auto;
+        animation: backdropFadeIn 190ms var(--ease-silky);
     }
     .modalCard, .slskModalCard {
         width: min(100%, 34rem); max-height: min(90dvh, 56rem); overflow-y: auto;
         background: var(--bg-surface-1); border: 1px solid var(--border-surface); border-radius: var(--radius-lg);
         padding: var(--space-md); box-shadow: var(--shadow-modal); contain: layout style;
-        display: flex; flex-direction: column; gap: var(--space-sm); animation: modalPopIn var(--transition-fast);
+        display: flex; flex-direction: column; gap: var(--space-sm); animation: modalPopIn var(--transition-base);
     }
     .peqModalCard { width: min(100%, 60rem); }
     .themeModalCard { width: min(100%, 56rem); }
@@ -300,13 +295,63 @@
     .modalHeader, .slskModalHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding-bottom: var(--space-xs); border-bottom: 1px solid var(--border-subtle); }
     .modalHeader h3, .slskModalHeader h3 { font-size: var(--font-md); font-weight: 800; letter-spacing: -0.012em; line-height: 1.2; color: var(--text-primary); }
 
+    .infoPanelHeaderTitle, .peqHeaderTitle, .signalPathHeaderTitle, .sleepTimerHeaderTitle,
+    .batchAddHeaderTitle, .themeModalHeaderTitle, .metaEditorHeaderLeft {
+        display: flex; align-items: center; gap: 8px; min-width: 0;
+    }
+    .batchAddHeaderIcon, .metaEditorIcon, .sleepTimerMoon {
+        display: inline-flex; align-items: center; justify-content: center; color: var(--accent-color); flex: 0 0 auto;
+    }
+    .batchAddSubtitle, .metaEditorSubtitle { font-size: var(--font-xs); color: var(--text-secondary); line-height: 1.45; }
+    .modalTrackTitle { font-size: var(--font-sm); font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+    .modalCreateNew { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; padding-top: 6px; border-top: 1px solid var(--border-divider); }
+    .peqDspSummaryPill { padding: 2px 7px; border-radius: var(--radius-xs); font-family: var(--font-mono); font-size: var(--font-3xs); font-weight: 700; background: var(--bg-surface-2); border: 1px solid var(--border-control); color: var(--text-secondary); }
+    .peqToolbarLabel, .peqSpatialLabel { font-size: var(--font-xs); font-weight: 700; color: var(--text-secondary); }
+    .peqSpatialValue { font-family: var(--font-mono); font-size: var(--font-xs); color: var(--text-primary); min-width: 3.5rem; text-align: center; }
+    .peqAutoEqHint { font-size: var(--font-2xs); color: var(--text-muted); flex: 1 1 100%; }
+    .themeCategoryHeading { font-size: var(--font-sm); font-weight: 800; color: var(--text-primary); }
+    .themeCategoryCount { font-size: var(--font-3xs); font-family: var(--font-mono); font-weight: 700; color: var(--text-muted); }
+    .slskTransfersTitle { font-size: var(--font-sm); font-weight: 800; color: var(--text-primary); }
+    .slskTransfersHeaderActions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .slskEmptyTransfers { padding: var(--space-lg); text-align: center; font-size: var(--font-xs); color: var(--text-muted); }
+    .slskSuggestedHeader { font-size: var(--font-3xs); font-weight: 800; color: var(--text-muted); letter-spacing: 0.04em; }
+    .slskSuggestedChips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .slskModalDivider { height: 1px; background: var(--border-divider); margin-block: 6px; }
+
+    /* Signal Path Modal & Sleep Timer Modal */
+    .signalPathSummary { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+    .signalPathSummary > p { font-size: var(--font-xs); line-height: 1.5; color: var(--text-secondary); }
+    .signalMetricsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px; }
+    .metricCardHeader { display: flex; flex-direction: column; gap: 3px; }
+    .metricLabel { font-size: var(--font-3xs); font-weight: 800; letter-spacing: 0.05em; color: var(--text-muted); }
+    .metricVal { font-size: var(--font-sm); font-weight: 700; font-family: var(--font-mono); color: var(--text-primary); overflow-wrap: anywhere; }
+    .metricExplanation { font-size: var(--font-2xs); line-height: 1.45; color: var(--text-secondary); }
+
+    .sleepTimerDesc { font-size: var(--font-xs); line-height: 1.5; color: var(--text-secondary); }
+    .sleepStatusCard { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--accent-surface); border: 1px solid var(--border-control); }
+    .sleepStatusLabel { font-size: var(--font-3xs); font-weight: 800; letter-spacing: 0.04em; color: var(--text-accent); }
+    .sleepTimerOptions { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 6px; }
+    .sleepOptBtn {
+        min-height: 44px; padding: 8px 10px; border-radius: var(--shape-action, var(--radius-sm));
+        border: 1px solid var(--border-control); background: var(--bg-surface-2); color: var(--text-primary);
+        font-size: var(--font-xs); font-weight: 700; display: inline-flex; align-items: center; justify-content: center; text-align: center;
+    }
+    .sleepOptBtn:hover { background: var(--bg-surface-3); border-color: var(--border-bold); }
+    .sleepOptBtn.active { background: var(--accent-color); border-color: var(--accent-color); color: var(--text-on-accent); }
+    .customSleepRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
+    #customSleepInput {
+        min-width: 0; width: 100%; min-height: 44px; padding: 8px 12px;
+        border-radius: var(--shape-field, var(--radius-sm)); border: 1px solid var(--border-control);
+        background: var(--bg-surface-2); color: var(--text-primary); font-size: var(--font-sm);
+    }
+
     /* PEQ Studio Modal */
     .peqCanvasContainer { position: relative; width: 100%; height: 170px; border-radius: var(--radius-sm); background: var(--bg-canvas); border: 1px solid var(--border-subtle); overflow: hidden; }
     .peqCurveCanvas { width: 100%; height: 100%; }
     .peqCanvasOverlay { position: absolute; inset: 6px 8px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
     .peqDbLabel { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--font-3xs); color: var(--text-muted); }
     .peqDspGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: var(--space-2xs); }
-    .peqDspBtn { padding: 0.45rem 0.5rem; border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; transition: border-color var(--transition-fast), background-color var(--transition-fast), transform 90ms ease-out; }
+    .peqDspBtn { padding: 0.45rem 0.5rem; border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
     .peqDspBtn.active { background: var(--accent-surface); border-color: var(--border-bold); }
     .peqDspName { font-size: var(--font-2xs); font-weight: 800; }
     .peqDspSpec { font-size: var(--font-3xs); color: var(--text-muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -361,7 +406,7 @@
     .themeCategoryHeader { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); margin-bottom: 2px; }
     .themeCategoryLead, .themeModalSubtitle, .settingsSubtitle, .settingsRowDesc, .settingsSectionDesc { font-size: var(--font-xs); color: var(--text-muted); }
     .themeModalGrid { margin-top: var(--space-xs); display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-xs); }
-    .themeSelectCard { padding: var(--space-xs); border-radius: var(--radius-sm); border: 1px solid var(--border-control); background: var(--bg-surface-2); contain: layout paint style; display: flex; align-items: center; gap: var(--space-xs); text-align: left; transition: border-color var(--transition-fast), background-color var(--transition-fast), transform 90ms ease-out; }
+    .themeSelectCard { padding: var(--space-xs); border-radius: var(--radius-sm); border: 1px solid var(--border-control); background: var(--bg-surface-2); contain: layout paint style; display: flex; align-items: center; gap: var(--space-xs); text-align: left; }
     .themeSelectCard:hover { border-color: var(--border-medium); background: var(--bg-surface-3); }
     .themeSelectCard.active { border-color: var(--border-bold); box-shadow: 0 0 0 1px var(--border-bold); }
     .themeCardPreview { width: 48px; height: 48px; border-radius: var(--radius-xs); flex: 0 0 48px; display: flex; align-items: center; justify-content: center; gap: 3px; border: 1px solid var(--border-subtle); }
@@ -407,7 +452,6 @@
         width: 100%; min-height: 54px; padding: var(--space-sm); border-radius: var(--radius-sm);
         border: 1px solid var(--border-medium); background: var(--bg-surface-1);
         display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); text-align: left;
-        transition: border-color var(--transition-fast), background-color var(--transition-fast);
     }
     .settingsThemePickerBtn:hover { border-color: var(--border-bold); background: var(--bg-surface-3); }
     .settingsThemePickerInfo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -506,19 +550,58 @@
         .slskResultRow .colTrack { grid-column: 1; min-width: 0; }
         .slskResultRow :is(.colFormat, .colBitrate, .colSize, .colPeer, .colQueue) { grid-column: 1; display: inline-flex; align-items: center; gap: var(--space-2xs); font-size: var(--font-3xs); color: var(--text-muted); }
         .slskResultRow .colAction { grid-column: 2; grid-row: 1 / span 6; display: flex; flex-direction: column; gap: var(--space-2xs); }
-        .toastContainer, .debugHudContainer {
-            left: var(--space-xs); right: var(--space-xs);
-            bottom: calc(var(--mobile-tabbar-height) + var(--safe-bottom) + var(--space-xs));
-            align-items: center;
-        }
     }
 
     /* Track Action Sheet, Batch Add & Debug HUD */
     .trackMenuHeader, .trackMenuItemBtn, .batchAddRow, .modalPlaylistItem { display: flex; align-items: center; gap: var(--space-xs); width: 100%; padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); background: var(--bg-surface-2); border: 1px solid var(--border-subtle); text-align: left; }
-    .trackMenuItemsList, .batchAddTracksList, .modalPlaylistList { display: flex; flex-direction: column; gap: var(--space-2xs); max-height: 46dvh; overflow-y: auto; }
-    .debugHudContainer { position: fixed; right: var(--space-md); bottom: var(--space-md); width: min(92vw, 28rem); z-index: var(--z-hud); background: var(--bg-surface-1); border: 1px solid var(--border-bold); border-radius: var(--radius-md); padding: var(--space-sm); box-shadow: var(--shadow-modal); }
-    .debugHudHeader { display: flex; align-items: center; justify-content: space-between; padding-bottom: var(--space-2xs); border-bottom: 1px solid var(--border-subtle); }
-    .debugHudLog { max-height: 9rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--font-3xs); color: var(--text-secondary); margin-top: var(--space-xs); }
+    .trackMenuHeader { gap: var(--space-sm); align-items: center; }
+    .trackMenuMeta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .trackMenuTitle { font-size: var(--font-sm); font-weight: 800; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .trackMenuArtist { font-size: var(--font-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .trackMenuPills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+    .trackMenuFormatPill, .trackMenuDurationPill {
+        padding: 2px 6px; border-radius: var(--radius-xs); background: var(--bg-surface-3);
+        border: 1px solid var(--border-divider); font-family: var(--font-mono); font-size: var(--font-3xs); font-weight: 700; color: var(--text-secondary);
+    }
+    .trackMenuItemBtn { min-height: 48px; gap: 10px; align-items: center; }
+    .trackMenuIcon {
+        display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: 0 0 30px;
+        border-radius: var(--radius-xs); background: var(--bg-surface-1); color: var(--text-accent);
+    }
+    .trackMenuItemText { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+    .trackMenuItemLabel { font-size: var(--font-sm); font-weight: 700; color: var(--text-primary); line-height: 1.25; }
+    .trackMenuItemSub { font-size: var(--font-2xs); color: var(--text-muted); line-height: 1.35; }
+    #trackMenuDeleteBtn .trackMenuIcon, #trackMenuDeleteBtn .trackMenuItemLabel { color: var(--status-danger); }
+    .trackMenuItemsList, .batchAddTracksList, .modalPlaylistList { display: flex; flex-direction: column; gap: var(--space-2xs); max-height: 48dvh; overflow-y: auto; }
+    .debugHudContainer {
+        position: fixed; right: var(--space-md); bottom: var(--space-md); width: min(94vw, 28rem); z-index: var(--z-hud);
+        background: var(--bg-surface-1); border: 1px solid var(--border-bold); border-radius: var(--radius-md);
+        padding: var(--space-sm); box-shadow: var(--shadow-modal);
+        flex-direction: column; gap: 8px; max-height: min(70dvh, 29rem); overflow: hidden;
+        animation: modalSheetIn var(--transition-base);
+    }
+    .debugHudHeader {
+        flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+        padding-bottom: 6px; border-bottom: 1px solid var(--border-divider); cursor: grab;
+    }
+    .debugHudTitleGroup { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .debugHudDot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; background: var(--status-success); box-shadow: 0 0 8px var(--status-success); }
+    .debugHudTitle { font-size: var(--font-3xs); font-weight: 800; letter-spacing: 0.04em; color: var(--text-accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .debugHudActions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+    .debugHudActionBtn {
+        min-height: 30px; min-width: 30px; padding: 3px 8px; border-radius: var(--radius-xs);
+        border: 1px solid var(--border-control); background: var(--bg-surface-2); color: var(--text-primary);
+        font-size: var(--font-3xs); font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .debugHudActionBtn.danger { padding: 3px 6px; color: var(--status-danger); border-color: color-mix(in oklch, var(--status-danger) 48%, transparent); }
+    .debugHudBody { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+    .debugHudLogTitle { font-size: var(--font-3xs); font-weight: 800; letter-spacing: 0.05em; color: var(--text-muted); margin-top: 2px; }
+    .debugHudLog {
+        max-height: 7.5rem; overflow-y: auto; font-family: var(--font-mono); font-size: var(--font-3xs);
+        color: var(--text-secondary); padding: 6px 8px; border-radius: var(--radius-xs);
+        background: var(--bg-canvas); border: 1px solid var(--border-divider); display: flex; flex-direction: column; gap: 3px;
+    }
+    .debugHudLogEntry { line-height: 1.4; overflow-wrap: anywhere; }
 
     /* Toasts & Progress Loaders */
     .toastContainer { position: fixed; right: var(--space-md); bottom: var(--space-md); z-index: var(--z-toast); display: flex; flex-direction: column; gap: var(--space-xs); pointer-events: none; }
@@ -529,25 +612,31 @@
     .trackLoadingProgressTrack { width: 100%; height: 6px; border-radius: var(--radius-full); background: var(--bg-surface-3); overflow: hidden; }
     .trackLoadingProgressBar { height: 100%; width: 100%; transform-origin: left center; transform: scaleX(var(--loading-ratio, 0.25)); will-change: transform; background: var(--accent-color); transition: transform 0.18s linear; }
     .trackLoadingSpinner { width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--border-subtle); border-top-color: var(--accent-color); animation: vinylSpin 0.8s linear infinite; }
+    @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
+        .debugHudContainer {
+            left: var(--space-xs); right: var(--space-xs); width: auto;
+            bottom: calc(var(--mobile-tabbar-height) + var(--safe-bottom) + var(--space-xs));
+            max-height: calc(100dvh - var(--mobile-tabbar-height) - var(--safe-bottom) - var(--safe-top) - 4.25rem);
+            align-items: stretch;
+        }
+    }
 }
 
 @layer utilities {
     .fullWidth { grid-column: 1 / -1; }
     @keyframes vinylSpin { from { transform: rotate(0deg) translateZ(0); } to { transform: rotate(360deg) translateZ(0); } }
     @keyframes ambientAuraBreathe { 0% { transform: scale(1) translateZ(0); opacity: 0.7; } 100% { transform: scale(1.06) translateZ(0); opacity: 1; } }
-    @keyframes brandEq1 { 0% { transform: scaleY(0.22) translateZ(0); } 100% { transform: scaleY(0.93) translateZ(0); } }
-    @keyframes brandEq2 { 0% { transform: scaleY(0.28) translateZ(0); } 100% { transform: scaleY(0.78) translateZ(0); } }
-    @keyframes brandEq3 { 0% { transform: scaleY(0.18) translateZ(0); } 100% { transform: scaleY(1.00) translateZ(0); } }
-    @keyframes brandEq4 { 0% { transform: scaleY(0.35) translateZ(0); } 100% { transform: scaleY(0.72) translateZ(0); } }
     @keyframes marqueeScroll {
         0%, 12% { transform: translateX(0); }
         44%, 56% { transform: translateX(calc(-1 * var(--marquee-overflow, 0px))); }
         88%, 100% { transform: translateX(0); }
     }
-    @keyframes modalPopIn { from { opacity: 0; transform: scale(0.97) translateY(6px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-    @keyframes modalSheetIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes lyricsReveal { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes toastSlideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes backdropFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes viewEnter { from { opacity: 0; transform: translate3d(0, 6px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+    @keyframes modalPopIn { from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.97); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+    @keyframes modalSheetIn { from { opacity: 0; transform: translate3d(0, 22px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+    @keyframes lyricsReveal { from { opacity: 0; transform: translate3d(0, 4px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
+    @keyframes toastSlideUp { from { opacity: 0; transform: translate3d(0, 10px, 0); } to { opacity: 1; transform: translate3d(0, 0, 0); } }
     @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { animation-duration: 0.01ms; animation-iteration-count: 1; transition-duration: 0.01ms; }
     }

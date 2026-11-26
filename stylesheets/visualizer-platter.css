@@ -24,6 +24,105 @@
 @media (max-width:768px), (max-height:500px) and (orientation:landscape) {
  :root[data-theme] .playerDeck.mobileActive { --player-inline-inset:max(12px,var(--safe-left),var(--safe-right)); padding-inline:var(--player-inline-inset); }
 }
+@media (max-height: 500px) and (orientation: landscape) and (min-width: 540px) {
+ :root[data-theme] .mobileTabBar {
+  min-height: 46px;
+  padding-block: 2px max(2px, var(--safe-bottom));
+ }
+ :root[data-theme] .mobileTabBtn {
+  min-height: 44px;
+  flex-direction: row;
+  gap: 6px;
+  padding: 4px 8px;
+ }
+ :root[data-theme] .playerDeck.mobileActive {
+  display: grid;
+  container-type: size;
+  grid-template-columns: minmax(170px, 38%) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto auto;
+  align-content: stretch;
+  align-items: center;
+  gap: 4px 18px;
+  padding: 6px max(16px, var(--safe-right)) 6px max(16px, var(--safe-left));
+  overflow-y: auto;
+ }
+ :root[data-theme] .playerDeck.mobileActive.empty-deck {
+  grid-template-rows: minmax(140px, 1fr);
+ }
+ :root[data-theme] .playerDeck.mobileActive .turntableStage {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  min-height: 0;
+  height: 100%;
+  align-self: stretch;
+  justify-content: center;
+  padding: 4px;
+  flex: none;
+  width: 100%;
+ }
+ :root[data-theme] .playerDeck.mobileActive .turntableCon {
+  width: min(210px, 100cqw, max(110px, calc(100cqh - 50px)));
+ }
+ :root[data-theme] .playerDeck.mobileActive .deckTopControls {
+  margin-top: 4px;
+  padding: 2px;
+ }
+ :root[data-theme] .playerDeck.mobileActive .deckTopControls .deckActionBtn {
+  min-height: 36px;
+  padding: 0 11px;
+ }
+ :root[data-theme][data-presentation] .playerDeck.mobileActive:not(.empty-deck) > :is(.trackMeta, .timelineCon, .mediaCon, .deckAudioControls) {
+  grid-column: 2;
+  min-width: 0;
+  width: 100%;
+  max-width: none;
+ }
+ :root[data-theme] .playerDeck.mobileActive:not(.empty-deck) .trackMeta {
+  align-self: center;
+  align-items: flex-start;
+  text-align: left;
+  gap: 2px;
+  padding-block: 0;
+ }
+ :root[data-theme] .playerDeck.mobileActive .trackMeta #trackName {
+  font-size: clamp(1.1rem, 2.8vw, 1.45rem);
+ }
+ :root[data-theme] .playerDeck.mobileActive .trackMeta :is(.albumName, .signalPathBadge) {
+  display: none;
+ }
+ :root[data-theme] .playerDeck.mobileActive :is(.timelineCon, #progressCon) {
+  min-height: 32px;
+ }
+ :root[data-theme] .playerDeck.mobileActive .mediaCon {
+  padding-block: 0;
+  width: 100%;
+ }
+ :root[data-theme] .playerDeck.mobileActive .mediaCon .mediaBtn {
+  min-width: 40px;
+  min-height: 40px;
+ }
+ :root[data-theme] .playerDeck.mobileActive .mediaCon .playPauseBtn {
+  width: 46px;
+  height: 46px;
+ }
+ :root[data-theme] .playerDeck.mobileActive .deckAudioControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+ }
+ :root[data-theme] .playerDeck.mobileActive .deckAudioControls > .volumeDeck {
+  grid-column: 1;
+  min-width: 0;
+ }
+ :root[data-theme] .playerDeck.mobileActive .deckAudioControls > .audioProcessingBar {
+  grid-column: 2;
+ }
+ :root[data-theme] .playerDeck.mobileActive .deckAudioControls .volumeDeck :is(.muteBtn, .volumeSlider),
+ :root[data-theme] .playerDeck.mobileActive .deckAudioControls .eqDeckBtn {
+  min-height: 38px;
+ }
+}
 
 /* Theme materials, with consistent control placement. */
 :root[data-theme] { --artwork-backdrop-opacity:.22; }

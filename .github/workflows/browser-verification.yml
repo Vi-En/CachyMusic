@@ -1,0 +1,69 @@
+name: Browser fixtures
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  chromium-fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright==1.57.0 beautifulsoup4==4.14.3 pillow==12.3.0
+      - run: python -m playwright install --with-deps chromium
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Run browser fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser=$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')
+          python tests/player-browser.py --chromium "$browser"
+          python tests/audio-output-browser.py --chromium "$browser"
+          python tests/default-audio-browser.py --chromium "$browser"
+          python tests/default-audio-browser.py --chromium "$browser" --suspend-probe
+          python tests/default-audio-browser.py --chromium "$browser" --load-workers 4 --main-thread-busy-ms 25
+          python tests/indexing-import-browser.py --chromium "$browser"
+          python tests/audio-transport-browser.py --chromium "$browser"
+          python tests/media-recovery-browser.py --chromium "$browser"
+          python tests/audio-comparison-browser.py --chromium "$browser"
+          python tests/modal-browser.py --chromium "$browser"
+          python tests/visualizer-browser.py --chromium "$browser"
+          python tests/visualizer-loop-browser.py --chromium "$browser"
+          python tests/eq-spectrum-browser.py --chromium "$browser"
+          python tests/design-browser.py --chromium "$browser"
+          python tests/interaction-refinement-browser.py --chromium "$browser"
+          python tests/settings-interaction-browser.py --chromium "$browser"
+          python tests/settings-navigation-browser.py --chromium "$browser"
+          python tests/playlist-browser.py --chromium "$browser"
+          python tests/playlist-repair-browser.py --chromium "$browser"
+          python tests/playlist-editor-profile.py --chromium "$browser"
+          python tests/notification-modal-browser.py --chromium "$browser"
+          python tests/metadata-editor-browser.py --chromium "$browser"
+          python tests/library-render-profile.py --chromium "$browser"
+          python tests/mixed-workload-browser.py --chromium "$browser"
+          python tests/workspace-accessibility-browser.py --chromium "$browser"
+          python tests/ux-task-feedback-browser.py --chromium "$browser"
+          python tests/ux-shapes-static-browser.py --chromium "$browser"
+          python tests/ux-shapes-browser.py --chromium "$browser"
+          python tests/preview-layouts.py --chromium "$browser"
+      - name: Production audio routes on secure origin
+        if: always()
+        run: python tests/audio-production-origin.py --chromium "$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+      - name: Secure-origin AudioWorklet acceptance
+        if: always()
+        run: python tests/audio-worklet-acceptance.py --chromium "$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+      - name: Secure-origin PWA acceptance
+        if: always()
+        run: python tests/pwa-offline-acceptance.py --chromium "$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+      - name: Real cross-tab IndexedDB acceptance
+        if: always()
+        run: python tests/playlist-real-idb.py --chromium "$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+      - name: Real listening history IndexedDB acceptance
+        if: always()
+        run: python tests/listening-history-real-idb.py --chromium "$(python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"

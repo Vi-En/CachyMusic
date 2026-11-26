@@ -1,6 +1,6 @@
 /* Soulseek search: mobile-first information hierarchy with desktop layout preserved.
    A single search form and set of IDs serve every viewport; no duplicate controls. */
-@layer utilities {
+@layer base-refinements {
   .soulseekWorkspace .slskControlsPanel,
   .soulseekWorkspace .slskSearchArea,
   .soulseekWorkspace .slskSearchRow,
@@ -140,7 +140,7 @@
     letter-spacing: 0;
   }
   .soulseekWorkspace .slskFilterToggleBtn.active { color: var(--text-primary); border-color: var(--border-medium); }
-  .soulseekWorkspace .slskDisclosureChevron { font-size: 18px; line-height: 1; transition: transform 160ms ease; }
+  .soulseekWorkspace .slskDisclosureChevron { font-size: 18px; line-height: 1; }
   .soulseekWorkspace :is(.slskFilterToggleBtn, .slskConnectionToggleBtn)[aria-expanded="true"] .slskDisclosureChevron { transform: rotate(180deg); }
   .soulseekWorkspace .slskTextFiltersCon:not(.open) { display: none; }
   .soulseekWorkspace .slskTextFiltersCon.open {
@@ -282,7 +282,6 @@
       line-height: 1;
       color: var(--text-muted);
       transform: rotate(0);
-      transition: transform 160ms ease;
     }
     .soulseekWorkspace .slskPanelToggleControl[aria-expanded="true"] .slskToggleChevron { transform: rotate(180deg); }
     .soulseekWorkspace .slskPanelQuickActions { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding-right: 5px; }
@@ -377,6 +376,8 @@
     .soulseekWorkspace .slskPanelToggleControl { padding-inline: 7px; gap: 3px; }
     .soulseekWorkspace .slskMiniTransfersBtn { padding-inline: 7px; }
   }
+}
+@layer utilities {
   @media (prefers-reduced-motion: reduce) {
     .soulseekWorkspace .slskDisclosureChevron,
     .soulseekWorkspace .slskToggleChevron { transition: none; }

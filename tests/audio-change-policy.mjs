@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {audioChangeWarning,createAudioEditGuard} from '../scripts/modules/audio-change-policy.js';
+for(const [key,value] of [['mathPrecision','64'],['ditherMode','shaped'],['isUltrasonic',true],['isAmbiophonics',true],['isHardwareGain',false],['bufferLatencyTarget','playback'],['androidNative',true],['continuousPcm',true]]) assert(audioChangeWarning(key,value),key);
+for(const [key,value] of [['mathPrecision','32'],['ditherMode','off'],['isUltrasonic',false],['isAmbiophonics',false],['continuousPcm',false],['amp',true],['debugModeActive',true]]) assert.equal(audioChangeWarning(key,value),null,key);
+let playing=true,version=0,events=[];
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const run=createAudioEditGuard({isPlaying:()=>playing,pause:()=>{events.push('pause');playing=false;version++},resume:()=>{events.push('resume');playing=true;version++},identity:()=>version,settle:5,delay:12});
+await Promise.all([run(()=>events.push('amp')),run(()=>events.push('bass'))]);
+assert.deepEqual(events,['pause','amp','bass']);await wait(30);assert.deepEqual(events,['pause','amp','bass','resume']);
+await run(()=>events.push('eq'));version++;await wait(30);assert.equal(events.at(-1),'eq');assert.equal(playing,false);
+await run(()=>events.push('idle'));await wait(30);assert.equal(events.at(-1),'idle');
+playing=true;await assert.rejects(run(()=>{throw Error('route failed')}));await wait(30);assert.equal(events.at(-1),'pause');
+playing=true;const stale=run(()=>events.push('stale'));version++;await assert.rejects(stale);await wait(30);assert(!events.includes('stale'));
+console.log('PASS permission classification, coalesced pause/edit/resume, paused-state preservation, stale intent, failed edit');

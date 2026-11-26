@@ -1,0 +1,60 @@
+name: Desktop platform compatibility
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl, sqlite3, mbstring
+          coverage: none
+      - name: Windows runtime integration
+        run: python tests/desktop-compatibility.py
+      - name: Router regression
+        run: python tests/router-regression.py
+      - name: Shared graph and control policies
+        run: |
+          node tests/audio-graph-lifecycle.mjs
+          node tests/control-ui.mjs
+          node tests/runtime-platforms.mjs
+          python tests/static-checks.py
+  arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:base
+    timeout-minutes: 20
+    steps:
+      - name: Prepare Arch system dependencies
+        run: pacman -Syu --noconfirm --needed base-devel git php php-sqlite python nodejs ffmpeg flac jdk17-openjdk
+      - uses: actions/checkout@v4
+      - name: Arch runtime integration
+        run: |
+          python tests/desktop-compatibility.py
+          node tests/runtime-platforms.mjs
+          python tests/router-regression.py
+      - name: Build local Arch package without root
+        run: |
+          bash packaging/aur/prepare-source.sh /tmp/cachy-arch-package
+          useradd -m builder
+          chown -R builder:builder /tmp/cachy-arch-package
+          runuser -u builder -- bash -c 'cd /tmp/cachy-arch-package && makepkg --noconfirm --cleanbuild'
+          pacman -Qip /tmp/cachy-arch-package/*.pkg.tar.zst
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CachyMusic-Arch-package
+          path: /tmp/cachy-arch-package/*.pkg.tar.zst
+          if-no-files-found: error

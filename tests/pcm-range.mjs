@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {PcmRangeSource,validatePcmRangeUrl} from '../scripts/modules/pcm-range.js';
+globalThis.location={href:'http://127.0.0.1:18478/index.html'};
+const endpoint='php/api/stream.php?tid=22';
+const audio=new Uint8Array(128).map((_,i)=>i);let malicious=false, version='a'.repeat(64);
+globalThis.fetch=async(url,opt)=>{assert.equal(opt.redirect,'error');assert.equal(new URL(url).origin,'http://127.0.0.1:18478');const [,a,b]=/^bytes=(\d+)-(\d+)$/.exec(opt.headers.Range);return new Response(malicious?audio:audio.slice(+a,+b+1),{status:206,headers:{'Content-Range':`bytes ${a}-${b}/128`,'X-Cachy-Media-Version':version}});};
+const source=await PcmRangeSource.open(endpoint);assert.equal(source.size,128);assert.deepEqual(new Uint8Array(await source.slice(12,22).arrayBuffer()),audio.slice(12,22));
+assert.throws(()=>validatePcmRangeUrl('https://outside.example/php/api/stream.php?tid=22'));assert.throws(()=>validatePcmRangeUrl('php/api/stream.php?path=private'));malicious=true;await assert.rejects(source.slice(12,22).arrayBuffer(),/Oversized/);
+malicious=false;const prior=version;version='b'.repeat(64);await assert.rejects(source.slice(12,22).arrayBuffer(),/source changed/);version=prior;
+assert.equal(source.descriptor().version,prior);
+globalThis.location={href:'https://appassets.androidplatform.net/index.html'};
+let androidReads=0; let androidVersion='c'.repeat(64); const androidAudio=new Uint8Array(70000).map((_,i)=>i%256);
+globalThis.fetch=async(url,opt)=>{
+    const request=new URL(url);
+    assert.equal(request.pathname,'/android-media');
+    assert.equal(request.searchParams.get('uri'),'content://media/external/audio/media/42');
+    assert.equal(opt.headers.Range,undefined);
+    const start=Number(request.searchParams.get('pcmStart'));
+    const end=Math.min(androidAudio.length-1,Number(request.searchParams.get('pcmEnd')));
+    if(start>0)assert.equal(request.searchParams.get('pcmVersion'),'c'.repeat(64));
+    androidReads++;
+    return new Response(androidAudio.slice(start,end+1),{status:206,headers:{'Content-Range':`bytes ${start}-${end}/${androidAudio.length}`,'X-Cachy-Media-Version':androidVersion}});
+};
+const android=await PcmRangeSource.open('/android-media?uri=content%3A%2F%2Fmedia%2Fexternal%2Faudio%2Fmedia%2F42');
+assert.deepEqual(new Uint8Array(await android.slice(12,22).arrayBuffer()),audio.slice(12,22));
+const descriptor=android.descriptor();
+const workerSource=new PcmRangeSource(descriptor.url,descriptor.size,descriptor.prefix,descriptor.version);
+assert.deepEqual(new Uint8Array(await workerSource.slice(20,30).arrayBuffer()),audio.slice(20,30));
+assert.equal(androidReads,1,'the first Android fetch covers metadata and early worker reads');
+assert.deepEqual(new Uint8Array(await workerSource.slice(66000,66020).arrayBuffer()),androidAudio.slice(66000,66020));
+androidVersion='d'.repeat(64);await assert.rejects(workerSource.slice(66000,66020).arrayBuffer(),/source changed/);
+assert.throws(()=>new PcmRangeSource(descriptor.url,descriptor.size,descriptor.prefix),/version unavailable/);
+androidVersion='';await assert.rejects(PcmRangeSource.open(descriptor.url),/version unavailable/);
+console.log('PASS local range origin, indexed URL, exact byte counts and hostile response rejection');
+
+assert.throws(()=>validatePcmRangeUrl('/android-media?uri=content://media/a&uri=content://media/b'),/indexed/);assert.throws(()=>validatePcmRangeUrl('/android-media?uri=content://media/a&pcmVersion=old'),/indexed/);assert.throws(()=>validatePcmRangeUrl('/android-media?uri=file:///private'),/indexed/);console.log('PASS ambiguous or pre-versioned Android range URL rejected');
