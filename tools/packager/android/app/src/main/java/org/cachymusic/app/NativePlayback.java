@@ -18,13 +18,14 @@ final class NativePlayback {
     private final AudioManager manager;
     private final Listener listener;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private Runnable loadDeadline;
+    private Runnable loadDeadline, seekDeadline;
     private final AudioAttributes attributes = new AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build();
     private MediaPlayer player;
     private AudioFocusRequest focusRequest;
     private AudioManager.OnAudioFocusChangeListener focusListener;
     private boolean focused, wanted, prepared;
+    private long focusGeneration;
     private long pendingSeek;
     private boolean seeking;
     private long issuedSeek;
@@ -50,10 +51,11 @@ final class NativePlayback {
             p.setVolume(volume,volume);
             p.setOnPreparedListener(mp->{
                 if(player!=mp)return;
-                clearDeadline();prepared=true; duration=Math.max(0,mp.getDuration());
-                if(pendingSeek>0) seek(pendingSeek); else startIfWanted();
+                try { clearDeadline();prepared=true; duration=Math.max(0,mp.getDuration());
+                    if(pendingSeek>0) seek(pendingSeek); else startIfWanted();
+                } catch (RuntimeException error) { fail(); }
             });
-            p.setOnSeekCompleteListener(mp->{if(player==mp){seeking=false;position=Math.max(0,mp.getCurrentPosition());if(pendingSeek!=issuedSeek)seek(pendingSeek);else startIfWanted();}});
+            p.setOnSeekCompleteListener(mp->{if(player==mp&&seeking){try{clearSeekDeadline();seeking=false;position=Math.max(0,mp.getCurrentPosition());if(pendingSeek!=issuedSeek)seek(pendingSeek);else startIfWanted();}catch(RuntimeException error){fail();}}});
             p.setOnCompletionListener(mp->{if(player==mp&&wanted&&"playing".equals(state)){wanted=false;position=duration;state="ended";abandonFocus();listener.changed();}});
             p.setOnErrorListener((mp,what,extra)->{if(player==mp) fail();return true;});
             loadDeadline=()->{if(player==p&&!prepared)fail();};handler.postDelayed(loadDeadline,20000);
@@ -62,18 +64,26 @@ final class NativePlayback {
     }
     private static float clamp(float gain){return Float.isFinite(gain)?Math.max(0f,Math.min(1f,gain)):0f;}
     float gain(){return volume;}
-    void gain(float v){volume=clamp(v);if(player!=null)try{player.setVolume(volume,volume);}catch(Exception ignored){}}
+    void gain(float v){volume=clamp(v);if(player!=null)try{player.setVolume(volume,volume);}catch(Exception error){fail();}}
     void play(){if(player==null||"error".equals(state))return;wanted=true;if("ended".equals(state)){seek(0);return;}startIfWanted();}
     private boolean requestFocus(){
         if(focused)return true;if(manager==null)return false;
         final MediaPlayer owner=player;
-        focusListener=change->{if(player!=owner||!focused)return;if(change==AudioManager.AUDIOFOCUS_LOSS||change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT||change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)pause();};
+        final long attempt=++focusGeneration;
+        focusListener=change->{if(player!=owner||attempt!=focusGeneration||!focused)return;if(change==AudioManager.AUDIOFOCUS_LOSS||change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT||change==AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)pause();};
         int result;
         if(Build.VERSION.SDK_INT>=26){focusRequest=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attributes).setWillPauseWhenDucked(true).setOnAudioFocusChangeListener(focusListener,new Handler(Looper.getMainLooper())).build();result=manager.requestAudioFocus(focusRequest);}
         else result=manager.requestAudioFocus(focusListener,AudioManager.STREAM_MUSIC,AudioManager.AUDIOFOCUS_GAIN);
         focused=result==AudioManager.AUDIOFOCUS_REQUEST_GRANTED;if(!focused)abandonFocus();return focused;
     }
-    private void abandonFocus(){if(manager!=null&&focusListener!=null){if(Build.VERSION.SDK_INT>=26&&focusRequest!=null)manager.abandonAudioFocusRequest(focusRequest);else manager.abandonAudioFocus(focusListener);}focused=false;focusRequest=null;focusListener=null;}
+    private void abandonFocus(){
+        ++focusGeneration;
+        AudioFocusRequest request=focusRequest;AudioManager.OnAudioFocusChangeListener listener=focusListener;
+        focused=false;focusRequest=null;focusListener=null;
+        // Local ownership is invalidated even if the system service rejects the
+        // abandon call. A binder error must not prevent releasing the decoder.
+        if(manager!=null&&listener!=null)try{if(Build.VERSION.SDK_INT>=26&&request!=null)manager.abandonAudioFocusRequest(request);else manager.abandonAudioFocus(listener);}catch(RuntimeException ignored){}
+    }
     private void startIfWanted(){
         if(!prepared||seeking||player==null)return;
         try{if(wanted&&requestFocus()){player.start();state="playing";}else{wanted=false;state="paused";}listener.changed();}catch(Exception ex){fail();}
@@ -83,6 +93,8 @@ final class NativePlayback {
         pendingSeek=Math.max(0,Math.min(Integer.MAX_VALUE,ms));
         if(!prepared||player==null)return;
         try{pendingSeek=Math.min(pendingSeek,duration);if(seeking)return;issuedSeek=pendingSeek;seeking=true;position=pendingSeek;state="seeking";if(player.isPlaying())player.pause();
+            final MediaPlayer owner=player;
+            clearSeekDeadline();seekDeadline=()->{if(player==owner&&seeking)fail();};handler.postDelayed(seekDeadline,10000);
             if(Build.VERSION.SDK_INT>=26)player.seekTo(pendingSeek,MediaPlayer.SEEK_CLOSEST);else player.seekTo((int)pendingSeek);listener.changed();
         }catch(Exception ex){fail();}
     }
@@ -90,5 +102,6 @@ final class NativePlayback {
     void stop(){release();state="stopped";listener.changed();}
     private void fail(){release();state="error";listener.changed();}
     private void clearDeadline(){if(loadDeadline!=null){handler.removeCallbacks(loadDeadline);loadDeadline=null;}}
-    private void release(){clearDeadline();MediaPlayer p=player;player=null;prepared=false;wanted=false;seeking=false;abandonFocus();if(p!=null)try{p.release();}catch(Exception ignored){}}
+    private void clearSeekDeadline(){if(seekDeadline!=null){handler.removeCallbacks(seekDeadline);seekDeadline=null;}}
+    private void release(){clearDeadline();clearSeekDeadline();MediaPlayer p=player;player=null;prepared=false;wanted=false;seeking=false;abandonFocus();if(p!=null)try{p.release();}catch(Exception ignored){}}
 }

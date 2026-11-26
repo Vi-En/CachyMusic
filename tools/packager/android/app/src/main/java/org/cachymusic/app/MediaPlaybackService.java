@@ -129,9 +129,32 @@ public class MediaPlaybackService extends Service {
     private int acknowledgedRevision;
     private final LinkedHashMap<String, Integer> consumedQueue = new LinkedHashMap<>();
     private boolean destroying;
+    private final NativeListeningCounter listeningCounter = new NativeListeningCounter();
+    private String listeningVisit = "", listeningGeneration = null;
+    private long listeningRetryAt;
+    private void beginNativeListening(boolean continuation) {
+        listeningVisit = "native-" + UUID.randomUUID();
+        listeningGeneration = NativeListeningJournal.generation(this);
+        listeningRetryAt = 0;
+        listeningCounter.begin();
+        // A mid-track handoff may already have qualified in the WebView.
+        // Conservatively avoid a second count until the next native visit.
+        if (continuation) listeningCounter.committed();
+    }
+    private void observeNativeListening() {
+        if (nativePlayer == null) return;
+        String generation = NativeListeningJournal.generation(this);
+        if (generation == null || !generation.equals(listeningGeneration)) { listeningCounter.interrupt(); return; }
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (listeningCounter.sample(now, nativePlayer.position, nativePlayer.duration, "playing".equals(nativePlayer.state)) && now >= listeningRetryAt) {
+            if (NativeListeningJournal.append(this, generation, listeningVisit, nativePlayer.uri,
+                    currentTitle, currentArtist, currentAlbum, nativePlayer.duration, currentNativeTrack == null ? "" : currentNativeTrack.historyKey)) listeningCounter.committed();
+            else listeningRetryAt = now + 5000;
+        }
+    }
     private BroadcastReceiver noisyReceiver;
     private final Runnable nativeTick = new Runnable(){public void run(){
-        if(nativePlayer!=null && nativePlayer.owns()&&"playing".equals(nativePlayer.state)){nativePlayer.refresh();publishNativeSnapshot();mainHandler.postDelayed(this,250);}
+        if(nativePlayer!=null && nativePlayer.owns()&&"playing".equals(nativePlayer.state)){nativePlayer.refresh();observeNativeListening();publishNativeSnapshot();mainHandler.postDelayed(this,250);}
     }};
     private void publishNativeSnapshot(){
         if(nativePlayer==null)return;
@@ -145,8 +168,10 @@ public class MediaPlaybackService extends Service {
             .put("state",nativePlayer.state).put("position",nativePlayer.position).put("duration",nativePlayer.duration).toString();}catch(Exception ignored){}
     }
     private void nativeChanged(){
+        listeningCounter.interrupt();
         if (!destroying && "ended".equals(nativePlayer.state) && nativeOrder != null) {
             if (nativeOrder.repeatOne) {
+                beginNativeListening(false);
                 nativePlayer.play();
                 return;
             }
@@ -168,7 +193,7 @@ public class MediaPlaybackService extends Service {
     private boolean nativeCommand(String cmd,long ms){
         if(nativePlayer==null||!nativePlayer.owns())return false;
         switch (cmd) {
-            case "play": nativePlayer.play(); return true;
+            case "play": if ("ended".equals(nativePlayer.state)) beginNativeListening(false); nativePlayer.play(); return true;
             case "pause": nativePlayer.pause(); return true;
             case "seek": nativePlayer.seek(ms); return true;
             case "stop": nativePlayer.stop(); return true;
@@ -248,7 +273,7 @@ public class MediaPlaybackService extends Service {
                 String queueId = row.getString("queueId", "");
                 if (consumedQueue.containsKey(queueId)) continue;
                 tracks.add(new NativePlaybackOrder.Track(row.getString("uri"), row.getString("title"),
-                        row.getString("artist"), row.getString("album"), row.getString("cover"), queueId));
+                        row.getString("artist"), row.getString("album"), row.getString("cover"), queueId, row.getString("historyKey", "")));
             }
         }
         return tracks;
@@ -291,6 +316,7 @@ public class MediaPlaybackService extends Service {
         currentArtist = nonEmpty(track.artist, "Unknown Artist");
         currentAlbum = nonEmpty(track.album, "");
         updateCover(track.cover);
+        beginNativeListening(false);
         nativePlayer.load(nativePlayer.token, track.uri, 0, nativePlayer.gain());
         return true;
     }
@@ -310,6 +336,7 @@ public class MediaPlaybackService extends Service {
     private boolean usingFallbackCover = false;
     private String currentTheme = "default";
     private boolean currentIsPlaying = false;
+    private float webPlaybackSpeed=1.0f;
     private long currentDurationMs = 0L;
     private long currentPositionMs = 0L;
 
@@ -390,9 +417,10 @@ public class MediaPlaybackService extends Service {
             nativeShuffle.clear();
             playbackCatalogs.clear();
             currentNativeTrack = new NativePlaybackOrder.Track(raw, currentTitle, currentArtist,
-                    currentAlbum, intent.getStringExtra("cover"), "");
+                    currentAlbum, intent.getStringExtra("cover"), "", intent.getStringExtra("historyKey"));
             setNativeOrder(intent.getBundleExtra("order"), id, raw, false);
             updateSessionAndNotification(intent.getStringExtra("cover")); // satisfy foreground-service deadline before opening media
+            beginNativeListening(intent.getLongExtra("position",0)>0);
             nativePlayer.load(id,raw,intent.getLongExtra("position",0),intent.getFloatExtra("gain",1f));return START_NOT_STICKY;
         }
         if (ACTION_NATIVE_ORDER.equals(action)) {
@@ -455,6 +483,8 @@ public class MediaPlaybackService extends Service {
             currentAlbum = intent.getStringExtra("album") != null ? intent.getStringExtra("album") : "";
             String cover = intent.getStringExtra("cover") != null ? intent.getStringExtra("cover") : "";
             currentIsPlaying = intent.getBooleanExtra("isPlaying", false);
+            float speed=intent.getFloatExtra("speed",1.0f);
+            webPlaybackSpeed=Float.isFinite(speed)&&speed>0&&speed<=8?speed:1.0f;
             currentDurationMs = Math.max(0L, intent.getLongExtra("durationMs", 0L));
             currentPositionMs = Math.max(0L, intent.getLongExtra("positionMs", 0L));
 
@@ -519,7 +549,7 @@ public class MediaPlaybackService extends Service {
                 .setState(
                         nativeOwned&&"loading".equals(nativePlayer.state)?PlaybackState.STATE_BUFFERING:(currentIsPlaying ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED),
                         currentPositionMs,
-                        currentIsPlaying ? 1.0f : 0.0f
+                        currentIsPlaying ? (nativeOwned?1.0f:webPlaybackSpeed) : 0.0f
                 )
                 .build();
         mediaSession.setPlaybackState(state);
@@ -539,6 +569,7 @@ public class MediaPlaybackService extends Service {
         openIntent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         int piFlags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
         PendingIntent contentIntent = PendingIntent.getActivity(this, 0, openIntent, piFlags);
+        mediaSession.setSessionActivity(contentIntent);
 
         PendingIntent prevPi = serviceActionIntent(ACTION_CMD_PREV, 1, piFlags);
         PendingIntent togglePi = serviceActionIntent(currentIsPlaying ? ACTION_CMD_PAUSE : ACTION_CMD_PLAY, 2, piFlags);

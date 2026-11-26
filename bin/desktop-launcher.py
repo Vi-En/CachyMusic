@@ -78,6 +78,10 @@ def choose_port():
 
 def require_free(port):
     with socket.socket() as sock:
+        # Match the POSIX PHP server's reuse policy: an orderly shutdown can
+        # leave TCP TIME_WAIT entries even though no listener owns the port.
+        # Do not enable SO_REUSEPORT or loosen Windows exclusive binding.
+        if not WINDOWS: sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(('127.0.0.1', port))
 
 
@@ -145,6 +149,7 @@ def serve(port):
             raise RuntimeError('PHP 8.1+ is required; no unrestricted static server will be started.')
         env = dict(os.environ, CACHYMUSIC_LAUNCH_INSTANCE=instance, CACHYMUSIC_MANAGED_SERVICES='1', CACHYMUSIC_SOULSEEK_DISABLED='1')
         env.pop('PHP_CLI_SERVER_WORKERS', None)
+        env.pop('CACHYMUSIC_LOOKUP_KEY', None)
         if not WINDOWS: env['PHP_CLI_SERVER_WORKERS'] = '4'  # Managed process group.
         env.pop('CACHYMUSIC_MPRIS_ACTIVE', None)
         use_mpris = not WINDOWS and env.get('CACHYMUSIC_MPRIS') == '1' and subprocess.run([sys.executable, '-c', 'import dbus; from gi.repository import GLib; dbus.SessionBus()'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
@@ -153,18 +158,11 @@ def serve(port):
         subprocess.run([php, '-r', 'if (PHP_VERSION_ID < 80100) { fwrite(STDERR, "PHP 8.1+ required\\n"); exit(1); }'], cwd=ROOT, env=env, check=True, timeout=10)
         for key, function in [('CACHYMUSIC_DATA_DIR', 'cachy_data_dir'), ('CACHYMUSIC_CACHE_DIR', 'cachy_cache_dir')]:
             env[key] = subprocess.check_output([php, '-r', f'require "php/platform.php"; echo {function}();'], cwd=ROOT, env=env, timeout=10).decode('utf-8').strip()
-        library = Path(env['CACHYMUSIC_DATA_DIR']) / 'library.json'
-        if library.exists() or library.is_symlink():
-            try:
-                with library.open(encoding='utf-8') as handle:
-                    data = json.load(handle)
-                if not isinstance(data, dict) or not isinstance(data.get('playlists'), list) or not isinstance(data.get('tracks'), (list, dict)):
-                    raise ValueError('Invalid library structure')
-            except (OSError, ValueError, UnicodeError) as exc:
-                raise RuntimeError('Existing library.json could not be read or validated. Back it up and recover it before starting; it has not been changed.') from exc
-            finally:
-                # Do not keep a parsed copy of a potentially large library in the supervisor.
-                data = None
+        # Use PHP's authoritative bounded descriptor reader, not an independent
+        # unbounded JSON decode in the supervisor. Never repair existing bytes.
+        preflight = subprocess.run([php, '-r', 'require "php/storage.php"; exit(Storage::preflightLibrary()?0:1);'], cwd=ROOT, env=env, timeout=15, capture_output=True)
+        if preflight.returncode != 0:
+            raise RuntimeError('Existing library.json is unsafe, invalid or exceeds its configured limit. Back up the profile and inspect it before starting; it has not been changed.')
         node = shutil.which('node')
         # Optional service: do not start if dependencies are missing or the port is occupied.
         if node and (ROOT / 'server/soulseek-service.js').is_file() and subprocess.run([node, '-e', "require.resolve('slsk-client')"], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
@@ -184,6 +182,30 @@ def serve(port):
                     except (OSError, ValueError): pass
                     time.sleep(.1)
             except (OSError, ValueError): pass
+        # Enable the bounded Windows helper only after a real Job Object probe.
+        # No implicit runtime download or assumption about nested-job support.
+        env.pop('CACHYMUSIC_WINDOWS_PYTHON', None)
+        env.pop('CACHYMUSIC_WINDOWS_PROCESS_HELPER', None)
+        env.pop('CACHYMUSIC_WINDOWS_REQUIRE_SUPERVISOR', None)
+        if WINDOWS:
+            env['CACHYMUSIC_WINDOWS_REQUIRE_SUPERVISOR']='1'
+            helper=ROOT/'bin/cachymusic-process.py'
+            try:
+                probe=subprocess.run([sys.executable,str(helper),'--probe'],cwd=ROOT,env=env,capture_output=True,timeout=5)
+                if probe.returncode!=0 or probe.stdout.strip()!=b'CMP1':
+                    raise RuntimeError('Windows Job Object unavailable')
+                env['CACHYMUSIC_WINDOWS_PYTHON']=sys.executable
+                env['CACHYMUSIC_WINDOWS_PROCESS_HELPER']=str(helper)
+            except (OSError,RuntimeError,subprocess.TimeoutExpired):
+                print('Warning: Windows subprocess supervisor unavailable; external PHP tools are disabled for this launch. Core playback and supported PHP-only metadata remain available.',file=sys.stderr,flush=True)
+        if WINDOWS: env['CACHYMUSIC_LOOKUP_KEY'] = secrets.token_hex(32)
+        # The scan worker is a separate owned process, not a request-spawned daemon.
+        if env.get('CACHYMUSIC_DB_ENABLED') != '1' and env.get('CACHYMUSIC_PLAYLIST_SQL') != '1':
+            env['CACHYMUSIC_SCAN_SESSION'] = instance
+            scan_worker = launch([php, str(ROOT/'php/scan_worker.php')], env, 'scan-worker')
+        else:
+            env.pop('CACHYMUSIC_SCAN_SESSION', None)
+            scan_worker = None
         php_child = launch([php, '-S', f'127.0.0.1:{port}', 'index.php'], env, 'php-server')
         for _ in range(50):
             if php_child.poll() is not None: raise RuntimeError('PHP exited; inspect php-server.log')
@@ -197,6 +219,8 @@ def serve(port):
         tmp.replace(SESSION)
         (STATE / 'port').write_text(str(port))
         while not stopping and php_child.poll() is None:
+            # Do not tear down playback if optional indexing has failed.
+            # Its endpoint reports unavailable/uncertain until an explicit restart.
             try:
                 if STOP.read_text() == instance: break
             except OSError: pass

@@ -11,6 +11,7 @@ import json
 import argparse
 import urllib.request
 import urllib.error
+import uuid
 
 # Ensure D-Bus and GLib are present
 try:
@@ -56,7 +57,7 @@ class MprisPlayer(dbus.service.Object):
         return "None"
 
     def send_player_command(self, cmd, extra=None):
-        payload = {"command": cmd}
+        payload = {"command": cmd, "id": uuid.uuid4().hex}
         if extra:
             payload.update(extra)
         try:
@@ -66,9 +67,13 @@ class MprisPlayer(dbus.service.Object):
                 headers={"Content-Type": "application/json"}
             )
             with urllib.request.urlopen(req, timeout=0.8) as resp:
-                pass
-        except Exception:
-            pass
+                result = json.loads(resp.read(8192))
+                if not result.get("success") or result.get("id") != payload["id"]:
+                    raise ValueError("Invalid command receipt")
+        except Exception as exc:
+            # Timeout may mean the server accepted the command. Never retry a
+            # non-idempotent command with a new ID or report definite success.
+            raise dbus.exceptions.DBusException("Command delivery not confirmed", name="org.mpris.MediaPlayer2.Error.Failed") from exc
 
     def poll_web_state(self):
         try:
@@ -243,16 +248,15 @@ class MprisPlayer(dbus.service.Object):
     def Set(self, interface, prop, value):
         if interface == "org.mpris.MediaPlayer2.Player":
             if prop == "Volume":
-                self.volume_level = float(value)
-                self.send_player_command("SetVolume", {"volume": self.volume_level})
+                self.send_player_command("SetVolume", {"volume": float(value)})
             elif prop == "Shuffle":
-                self.is_shuffle = bool(value)
-                self.send_player_command("SetShuffle", {"shuffle": self.is_shuffle})
+                self.send_player_command("SetShuffle", {"shuffle": bool(value)})
             elif prop == "LoopStatus":
                 loop_str = str(value)
                 if loop_str in ("None", "Track", "Playlist"):
-                    self.loop_status = loop_str
                     self.send_player_command("SetLoopStatus", {"loopStatus": loop_str})
+                else:
+                    raise dbus.exceptions.DBusException("Invalid loop status", name="org.freedesktop.DBus.Error.InvalidArgs")
 
     @dbus.service.signal(dbus.PROPERTIES_IFACE, signature="sa{sv}as")
     def PropertiesChanged(self, interface, changed_properties, invalidated_properties):

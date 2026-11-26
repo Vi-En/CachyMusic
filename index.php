@@ -14,6 +14,21 @@ function cachy_deny(int $code, string $msg): void {
     exit;
 }
 
+// Resolve the exact requested path. An allowlisted public alias must never
+// resolve through a symlink/junction into a private file inside the same tree.
+function cachy_public_file(string $uri): ?string {
+    $root=realpath(__DIR__);
+    $real=realpath(__DIR__.$uri);
+    if ($root===false || $real===false || !is_file($real)) return null;
+    // realpath cannot distinguish a hard link to a private inode.
+    clearstatcache(true,$real); $stat=@lstat($real);
+    if (!$stat || ($stat['mode']&0170000)!==0100000 || $stat['nlink']!==1) return null;
+    $expected=rtrim(str_replace('\\','/',$root),'/').$uri;
+    $actual=str_replace('\\','/',$real);
+    if(cachy_is_windows()){ $expected=strtolower($expected); $actual=strtolower($actual); }
+    return $actual===$expected?$real:null;
+}
+
 // This local-only distribution must not expose music, metadata or credentials over LAN.
 if (PHP_SAPI === 'cli-server' && !in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true)) {
     cachy_deny(403, 'CachyMusic is local-only');
@@ -48,20 +63,21 @@ if (preg_match('#^/redirect(?:/index\.html)?/?$#i', $uri) || $uri === '/index.ph
 
 // 1b. Favicon router fallback (serves SVG app icon if favicon.ico not explicitly present)
 if ($uri === '/favicon.ico') {
-    if (file_exists(__DIR__ . '/favicon.ico')) {
+    if (cachy_public_file('/favicon.ico')!==null) {
         header('Content-Type: image/x-icon');
         readfile(__DIR__ . '/favicon.ico');
         exit;
     }
     header('Content-Type: image/svg+xml; charset=UTF-8');
     header('Cache-Control: public, max-age=604800, stale-while-revalidate=2592000');
+    if(cachy_public_file('/resources/images/app-icon.svg')===null)cachy_deny(404,'Icon unavailable');
     readfile(__DIR__ . '/resources/images/app-icon.svg');
     exit;
 }
 
 // 2. PHP endpoints: only php/api/* and php/auth/* may be executed directly
 if (preg_match('#\.php$#i', $uri)) {
-    if (preg_match('#^/php/(?:api|auth)/[A-Za-z0-9_\-]+\.php$#', $uri) && is_file(__DIR__ . $uri)) {
+    if (preg_match('#^/php/(?:api|auth)/[A-Za-z0-9_\-]+\.php$#', $uri) && cachy_public_file($uri)!==null) {
         return false; // let the built-in server execute it
     }
     cachy_deny(404, '404 Not Found');
@@ -75,7 +91,7 @@ $publicFiles = [
     '/tools/packager/package-mobile.sh',
     '/downloads/CachyMusic.mobileconfig',
 ];
-$publicPrefixes = ['/stylesheets/', '/scripts/', '/resources/images/', '/resources/fonts/', '/data/covers/'];
+$publicPrefixes = ['/stylesheets/', '/scripts/', '/resources/images/', '/resources/fonts/'];
 $publicExts = ['js', 'css', 'html', 'json', 'svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico',
                'woff', 'woff2', 'ttf', 'mobileconfig', 'sh', 'bat', 'command'];
 
@@ -89,10 +105,10 @@ if (!$isPublic) {
 
 if ($uri !== '/' && $ext !== '') {
     $file = __DIR__ . $uri;
-    $real = realpath($file);
+    $real = cachy_public_file($uri);
     $root = realpath(__DIR__);
     // Must be an allowlisted, existing regular file that lives inside the project (blocks symlink escapes)
-    if (!$isPublic || !in_array($ext, $publicExts, true) || $real === false || !is_file($real)
+    if (!$isPublic || !in_array($ext, $publicExts, true) || $real === null || !is_file($real)
         || $root === false || !cachy_path_within($real, $root)) {
         cachy_deny(404, '404 Not Found: Asset does not exist');
     }
@@ -125,5 +141,6 @@ header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 header('Pragma: no-cache');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
+if(cachy_public_file('/index.html')===null)cachy_deny(404,'Application unavailable');
 readfile(__DIR__ . '/index.html');
 exit;

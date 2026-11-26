@@ -11,7 +11,7 @@ name="cachymusic-$version"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/$name/packaging/aur"
-for item in index.html index.php manifest.json sw.js schema.sql LICENSE package.json resources scripts stylesheets php bin server; do
+for item in index.html index.php manifest.json sw.js schema.sql LICENSE THIRD-PARTY-NOTICES.md package.json resources scripts stylesheets php bin server; do
     cp -r "$root/$item" "$work/$name/"
 done
 rm -rf "$work/$name/resources/audio" "$work/$name/bin/__pycache__"

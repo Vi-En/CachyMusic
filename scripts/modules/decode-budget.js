@@ -19,13 +19,30 @@ export function validateDecodeBudget(track, rate) {
     if (bytes > MAX_PCM_BYTES) throw new DecodeBudgetError(Number.isFinite(bytes) ? 'decoded' : 'unknown');
 }
 export async function readBoundedAudio(response, limit=MAX_COMPRESSED_BYTES) {
-    if (!response.ok) throw new Error(`Audio fetch failed (${response.status})`);
+    if (!response.ok) {void response.body?.cancel().catch(()=>{});throw new Error(`Audio fetch failed (${response.status})`);}
     const length=Number(response.headers.get('content-length'));
-    if (length>limit) throw new DecodeBudgetError('compressed');
+    if (length>limit) {void response.body?.cancel().catch(()=>{});throw new DecodeBudgetError('compressed');}
     if (!response.body) throw new Error('Streaming response unavailable.');
     const reader=response.body.getReader(), chunks=[]; let total=0;
     try { for (;;) { const {value,done}=await reader.read(); if(done)break; total+=value.byteLength;
         if(total>limit)throw new DecodeBudgetError('compressed'); chunks.push(value); }
-    } catch(err) {await reader.cancel().catch(()=>{});throw err;} finally {reader.releaseLock();}
+    } catch(err) {void reader.cancel().catch(()=>{});throw err;} finally {reader.releaseLock();}
     const result=new Uint8Array(total);let offset=0;for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}return result.buffer;
+}
+
+// One deadline covers headers and body, without forgetting cancellation by the
+// track owner. A deadline is a recoverable error, not a silent track abort.
+export async function fetchBoundedAudio(url,{signal,timeoutMs=15000,fetcher=fetch,limit=MAX_COMPRESSED_BYTES}={}){
+    const ctrl=new AbortController();let expired=false,timer;
+    const cancel=()=>ctrl.abort();
+    if(signal?.aborted)cancel();else signal?.addEventListener('abort',cancel,{once:true});
+    try{
+        if(ctrl.signal.aborted)throw new DOMException('Obsolete audio fetch','AbortError');
+        timer=setTimeout(()=>{expired=true;ctrl.abort();},timeoutMs);
+        const response=await fetcher(url,{signal:ctrl.signal});
+        const bytes=await readBoundedAudio(response,limit);
+        if(ctrl.signal.aborted)throw new DOMException('Obsolete audio fetch','AbortError');
+        return bytes;
+    }catch(error){if(expired)throw Error('Compatibility audio fetch timed out. Press Play to retry.');throw error;}
+    finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
 }

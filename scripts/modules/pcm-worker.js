@@ -14,7 +14,7 @@ function releaseReader() {
     reader = null;
 }
 
-self.onmessage = async ({ data }) => {
+async function handleMessage(data) {
     const activeEpoch = readerEpoch;
     try {
         if (data.type === 'close') {
@@ -28,7 +28,7 @@ self.onmessage = async ({ data }) => {
                 reader = new AndroidDirectPcmReader(data.format, data.rate);
             } else {
                 const file = data.file?.kind === 'local-range'
-                    ? new PcmRangeSource(data.file.url, data.file.size, data.file.prefix)
+                    ? new PcmRangeSource(data.file.url, data.file.size, data.file.prefix, data.file.version)
                     : data.file;
                 reader = new (data.format.codec === 'flac' ? FlacReader : PcmReader)(file, data.format, data.rate);
             }
@@ -39,9 +39,19 @@ self.onmessage = async ({ data }) => {
         const myEpoch = readerEpoch;
         const channels = await reader.readFrames(data.first, data.count);
         if (myEpoch !== readerEpoch) return;
+        for(const channel of channels)for(const value of channel)if(!Number.isFinite(value))throw Error('Nonfinite decoded PCM sample');
         self.postMessage({ id: data.id, channels }, channels.map(a => a.buffer));
     } catch (e) {
         if (data?.type === 'read' && activeEpoch !== readerEpoch) return;
         self.postMessage({ id: data.id, error: e.message });
     }
+}
+
+// FLAC and MediaCodec readers mutate their cursor and ring during async I/O.
+// Never let seek/read/init operations enter the same reader concurrently.
+let pending = Promise.resolve();
+self.onmessage = ({data}) => {
+    pending = pending.then(() => handleMessage(data)).catch(error => {
+        self.postMessage({id: data?.id, error: error?.message || 'PCM worker failure'});
+    });
 };

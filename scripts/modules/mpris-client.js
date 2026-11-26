@@ -2,6 +2,23 @@
 export function createMprisClient({state: s, actions, fetchRequest = globalThis.fetch, host = window, page = document}) {
     let running = false, generation = 0, timer = null, commandAbort = null, reportAbort = null;
     let pending = null, sending = false, idle = 0, lastKey = null, lastPosition = -Infinity;
+    const clientId = Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2,'0')).join('');
+    let acknowledgement = null;
+    const jsonPost = body => ({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    async function acknowledge(controller) {
+        const receipt=acknowledgement;
+        if (!receipt) return true;
+        const data=await request('ack_command',jsonPost(receipt),controller,async response=>{
+            if (response.status===409) return {terminal:true};
+            if (!response.ok) throw Error('MPRIS acknowledgement failed');
+            return response.json();
+        });
+        if (data?.terminal || (data?.success && data.id===receipt.id && ['dispatched','failed','uncertain'].includes(data.outcome))) {
+            if (acknowledgement===receipt) acknowledgement=null;
+            return true;
+        }
+        return false;
+    }
     const endpoint = 'php/api/mpris_state.php?action=';
     function getCurrentPlaybackTiming() {
         const track = (s.isStandalonePlayback && s.standaloneTrackList.length > 0)
@@ -59,7 +76,7 @@ export function createMprisClient({state: s, actions, fetchRequest = globalThis.
             title:track ? (track.title || track.filename || 'Unknown') : 'CachyMusic',
             artist:track ? (track.artist || 'Unknown Artist') : '', album:track?.album || '',
             artUrl:cover && (/^(https?:|data:|blob:)/.test(cover) ? cover : host.location.origin + '/' + cover),
-            coverPath:cover, volume:info.volume, shuffle:s.isShuffle, repeat:s.repeatMode};
+            coverPath:cover.startsWith('data:') ? '' : cover, volume:info.volume, shuffle:s.isShuffle, repeat:s.repeatMode};
         const key = [status, payload.title, payload.artist, payload.album, cover, payload.duration, payload.volume, payload.shuffle, payload.repeat];
         if (!force && lastKey && key.every((value, i) => value === lastKey[i]) && Math.abs(info.position - lastPosition) < 2) return;
         lastKey = key; lastPosition = info.position;
@@ -69,28 +86,34 @@ export function createMprisClient({state: s, actions, fetchRequest = globalThis.
         if (!running || commandAbort) return;
         const current = generation, controller = new AbortController(); commandAbort = controller;
         try {
-            const data = await request('get_command', {}, controller, async response => {
+            if (acknowledgement && !await acknowledge(controller)) return;
+            if (!running || current!==generation) return;
+            const started=performance.now();
+            const data = await request('get_command', jsonPost({client:clientId}), controller, async response => {
                 if (!response.ok) throw Error('MPRIS request failed');
                 return response.json();
             });
             if (!running || current !== generation) return;
             if (data?.command) {
+                if (!/^[a-f0-9]{32}$/.test(data.id || '') || !Number.isFinite(data.lease_ms) || data.lease_ms <= performance.now()-started+100) return;
                 idle = 0;
+                // Record before dispatch: no repeated non-idempotent action if ACK fails.
+                acknowledgement={id:data.id,client:clientId,outcome:'failed'};
                 const cmd = data.command, info = getCurrentPlaybackTiming();
                 if (cmd === 'PlayPause') {
                     if (info.isPlaying) actions.pauseAudio();
-                    else actions.playAudio(true);
+                    else Promise.resolve(actions.playAudio(true)).catch(()=>{});
                 } else if (cmd === 'Play') {
-                    actions.playAudio(true);
+                    Promise.resolve(actions.playAudio(true)).catch(()=>{});
                 } else if (cmd === 'Pause') {
                     actions.pauseAudio();
                 } else if (cmd === 'Stop') {
                     actions.pauseAudio();
                     actions.seekAudio(0);
                 } else if (cmd === 'Next') {
-                    actions.nextTrack();
+                    Promise.resolve(actions.nextTrack()).catch(()=>{});
                 } else if (cmd === 'Previous') {
-                    actions.prevTrack();
+                    Promise.resolve(actions.prevTrack()).catch(()=>{});
                 } else if (cmd === 'Seek' && Number.isFinite(data.offset)) {
                     actions.seekAudio(Math.max(0, info.position + data.offset));
                 } else if (cmd === 'SeekTo' && Number.isFinite(data.position)) {
@@ -99,20 +122,23 @@ export function createMprisClient({state: s, actions, fetchRequest = globalThis.
                     actions.setVolume(Math.max(0, Math.min(1.5, data.volume)), true);
                 } else if (cmd === 'ToggleShuffle') {
                     s.isShuffle = !s.isShuffle;
-                    actions.updateShuffleButton();
-                    actions.refreshNativeOrder();
+                    actions.orderChanged();
                 } else if (cmd === 'SetShuffle' && typeof data.shuffle === 'boolean') {
                     s.isShuffle = data.shuffle;
-                    actions.updateShuffleButton();
-                    actions.refreshNativeOrder();
+                    actions.orderChanged();
                 } else if (cmd === 'SetLoopStatus' && typeof data.loopStatus === 'string') {
                     const ls = data.loopStatus.toLowerCase();
                     if (ls === 'track') s.repeatMode = 'one';
                     else if (ls === 'playlist') s.repeatMode = 'all';
                     else s.repeatMode = 'off';
                     actions.updateRepeatUI();
+                    actions.orderChanged();
+                } else {
+                    throw Error('Invalid or unsupported MPRIS command');
                 }
+                acknowledgement.outcome='dispatched';
                 reportState(true);
+                await acknowledge(controller);
             } else idle++;
         } catch (_) { if (current === generation) idle += 2; }
         finally {

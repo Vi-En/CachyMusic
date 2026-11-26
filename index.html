@@ -7,7 +7,7 @@
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: https://musicbrainz.org https://coverartarchive.org https://archive.org https://*.archive.org https://lrclib.net; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
     <meta name="theme-color" content="#090e14">
-    <script src="scripts/theme-preload.js?v=3.0.0-dev.6.44-integrity-ux"></script>
+    <script src="scripts/theme-preload.js?v=3.0.0-dev.6.74-resource-isolation"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,7 +26,7 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.6.44-integrity-ux">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.6.74-resource-isolation">
     <script src="scripts/pwa-init.js" defer></script>
 </head>
 <body class="view-player mobile-tab-player">
@@ -49,7 +49,7 @@
         </div>
 
         <div class="searchContainer" id="headerSearchContainer">
-            <svg class="searchIcon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <svg class="searchIcon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.66" y2="16.66"></line></svg>
             <input type="text" id="trackSearch" placeholder="Search library" autocomplete="off" aria-label="Search track library">
             <button type="button" class="searchClearBtn" id="trackSearchClearBtn" title="Clear search" aria-label="Clear search" style="display: none;"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
             <kbd class="searchKbdShortcut" id="searchKbdShortcut" title="Press / to search library">/</kbd>
@@ -250,6 +250,7 @@
                         </svg>
                         <span class="deckBtnLabel">Lyrics</span>
                     </button>
+                    <button type="button" class="deckActionBtn compactMediaTrigger" id="compactMediaBtn" title="Open compact playback controls" aria-label="Open media card"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6 12h2l2-4 3 8 2-4h3"/></svg><span class="deckBtnLabel">Media card</span></button>
                     <button type="button" id="tracklistToggleBtn" class="deckActionBtn tracklistToggleBtn active" title="Toggle Tracklist Panel (T)" aria-label="Toggle Tracklist Panel" aria-pressed="true">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <line x1="8" y1="6" x2="21" y2="6"></line>
@@ -270,7 +271,7 @@
                     <span class="formatBadge" id="trackBadge" style="display: none;"></span>
                     <button type="button" id="signalPathBadgeBtn" class="signalPathBadge" title="Signal Path &amp; Audit">
                         <span class="signalDot" id="deckSignalDot" aria-hidden="true"></span>
-                        <span id="signalPathLabel">Not measured</span>
+                        <span id="signalPathLabel">Signal path</span>
                     </button>
                 </div>
                 <h1 id="trackName" dir="auto" style="display: none;"></h1>
@@ -321,6 +322,7 @@
                     <svg id="playPauseImg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
                         <path class="icon-play" d="M8 5v14l11-7z"/>
                         <path class="icon-pause" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                        <rect class="morph-left" width="24" height="24"/><rect class="morph-right" width="24" height="24"/>
                     </svg>
                 </button>
 
@@ -366,6 +368,7 @@
 
         <!-- Right Panel: Track Library & Playlists -->
         <section class="panel trackListPanel">
+            <h2 class="libraryWorkspaceHeading">Library</h2>
             <!-- Library / Playlist / Up Next Navigation Tabs -->
             <div class="libraryTabs">
                 <button type="button" class="libTab active" id="tabLibrary" aria-current="page">Library</button>
@@ -410,6 +413,7 @@
                     <button type="button" id="restoreTracksBtn" class="actionBtn restoreBtn" title="Restore removed tracks" style="display: none;">
                         RESTORE (0)
                     </button>
+                    <button type="button" id="listeningHistoryBtn" class="actionBtn">Listening history</button>
                     <button type="button" id="quickNewPlaylistBtn" class="actionBtn" title="Create a New Playlist">
                         New playlist
                     </button>
@@ -517,6 +521,24 @@
         </section>
     </main>
 
+    <dialog id="compactMediaDialog" class="modalCard compactMediaDialog" aria-labelledby="compactMediaTitle">
+        <img id="compactMediaArt" hidden alt="" aria-hidden="true" decoding="async">
+        <div class="compactMediaBody">
+            <header><span>Now playing</span><form method="dialog"><button class="actionBtn" aria-label="Close media card">Close</button></form></header>
+            <h3 id="compactMediaTitle" dir="auto">No track loaded</h3><p id="compactMediaArtist" dir="auto"></p>
+            <canvas id="compactMediaWave" width="320" height="34" aria-hidden="true"></canvas><span id="compactMediaWaveStatus" class="compactMediaStatus"></span>
+            <input id="compactMediaSeek" type="range" min="0" max="0" value="0" step="0.1" aria-label="Playback position" disabled>
+            <div class="compactMediaTimes"><span id="compactMediaPosition">0:00</span><span id="compactMediaDuration">0:00</span></div>
+            <div class="compactMediaTransport"><button class="actionBtn" id="compactMediaPrev" type="button" aria-label="Previous track"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button><button class="mediaBtn playPauseBtn" id="compactMediaPlay" type="button" aria-label="Play"><svg id="compactMediaPlayImg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true"><path class="icon-play" d="M8 5v14l11-7z"/><path class="icon-pause" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/><rect class="morph-left" width="24" height="24"/><rect class="morph-right" width="24" height="24"/></svg></button><button class="actionBtn" type="button" id="compactMediaNext" aria-label="Next track"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button></div>
+        </div>
+    </dialog>
+    <dialog id="listeningHistoryDialog" class="modalCard listeningDialog" aria-labelledby="listeningTitle">
+        <header><h3 id="listeningTitle">Listening history</h3><form method="dialog"><button class="actionBtn" aria-label="Close listening history">Close</button></form></header>
+        <p>Most played in this app profile. A play counts after 30 seconds of observed listening, or half of a shorter track.</p>
+        <label for="listeningPeriod">Period</label><select id="listeningPeriod"><option value="week">This week (Monday–Sunday)</option><option value="month">This month</option><option value="year">This year</option><option value="all">All time</option></select>
+        <p id="listeningStatus" role="status"></p><ol id="listeningRows"></ol>
+        <footer><label><input type="checkbox" id="listeningEnabled"> Record plays locally</label><button type="button" class="actionBtn" id="listeningClear">Clear history</button></footer>
+    </dialog>
     <!-- Soulseek Account & Settings Modal (Direct child of body to guarantee topmost stacking context) -->
     <div class="slskModalOverlay" id="slskAccountModal" role="dialog" aria-modal="true" aria-label="Soulseek settings" style="display: none;">
         <div class="slskModalCard">
@@ -529,50 +551,50 @@
                     Passwords are retained for this session only. Soulseek starts disconnected. Only authorize folders you have permission to share. Upload serving is not available in the current Android client.
                 </p>
                 <div class="slskFormGroup" id="slskModalHostGroup">
-                    <label for="slskModalHost">REMOTE WORKSTATION HOST (MOBILE / LAN)</label>
+                    <label for="slskModalHost">Desktop host (mobile / LAN)</label>
                     <div class="slskDirInputRow">
                         <input type="text" id="slskModalHost" placeholder="e.g. http://192.168.1.50:8000" class="slskDirInput" autocomplete="off">
                         <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalAutoDetectHostBtn" title="Auto-detect desktop host URL">
-                            AUTO-DETECT
+                            Auto-detect
                         </button>
                     </div>
                 </div>
                 <div class="slskFormGroup">
-                    <label for="slskModalUsername">USERNAME</label>
+                    <label for="slskModalUsername">Username</label>
                     <input type="text" id="slskModalUsername" placeholder="e.g. musiclover123" autocomplete="username">
                 </div>
                 <div class="slskFormGroup">
-                    <label for="slskModalPassword">PASSWORD</label>
+                    <label for="slskModalPassword">Password</label>
                     <input type="password" id="slskModalPassword" placeholder="Enter password" autocomplete="current-password">
                 </div>
 
                 <hr class="slskModalDivider">
 
                 <div class="slskFormGroup">
-                    <label for="slskModalDownloadDir">DOWNLOAD DIRECTORY</label>
+                    <label for="slskModalDownloadDir">Download folder</label>
                     <div class="slskDirInputRow">
                         <input type="text" id="slskModalDownloadDir" placeholder="/path/to/music/folder" class="slskDirInput">
                         <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalSyncPlayerDirBtn" title="Use Current Music Library Folder">
-                            USE PLAYER DIR
+                            Use music folder
                         </button>
                     </div>
                 </div>
 
                 <div class="slskFormGroup">
-                    <label for="slskModalSharedDir">SHAREABLE FOLDER (OTHERS CAN DOWNLOAD FROM YOU)</label>
+                    <label for="slskModalSharedDir">Shared folder (visible to peers)</label>
                     <div class="slskDirInputRow">
                         <input type="text" id="slskModalSharedDir" placeholder="/path/to/share/folder" class="slskDirInput">
                         <button type="button" class="actionBtn slskModalSyncBtn" id="slskModalSyncSharePlayerDirBtn" title="Share Current Music Library Folder">
-                            USE PLAYER DIR
+                            Use music folder
                         </button>
                     </div>
                 </div>
 
                 <div class="slskModalAlert" id="slskAccountAlert" style="display: none;"></div>
                 <div class="slskModalActions">
-                    <button type="button" class="actionBtn slskModalPowerBtn" id="slskModalPowerBtn">CONNECT</button>
-                    <button type="button" class="actionBtn" id="slskLogoutBtn">LOGOUT / CLEAR</button>
-                    <button type="submit" class="actionBtn primaryBtn" id="slskSaveAccountBtn">SAVE &amp; CONNECT</button>
+                    <button type="button" class="actionBtn slskModalPowerBtn" id="slskModalPowerBtn">Connect</button>
+                    <button type="button" class="actionBtn" id="slskLogoutBtn">Clear account</button>
+                    <button type="submit" class="actionBtn primaryBtn" id="slskSaveAccountBtn">Save &amp; connect</button>
                 </div>
             </form>
         </div>
@@ -593,8 +615,8 @@
                 </div>
             </div>
             <div class="slskNoticeActions">
-                <button type="button" class="actionBtn primaryBtn slskNoticeConnectBtn" id="slskNoticeConnectBtn">CONNECT</button>
-                <button type="button" class="actionBtn slskNoticeActionBtn" id="slskNoticeActionBtn">SETTINGS</button>
+                <button type="button" class="actionBtn primaryBtn slskNoticeConnectBtn" id="slskNoticeConnectBtn">Connect</button>
+                <button type="button" class="actionBtn slskNoticeActionBtn" id="slskNoticeActionBtn">Settings</button>
             </div>
         </div>
 
@@ -610,7 +632,7 @@
 <option value="buddies">Buddies</option>
 </select>
 <button class="actionBtn primaryBtn slskSubmitBtn" id="slskSearchSubmitBtn" type="submit">Search</button>
-</form><div class="slskPanelToggleBar"><button aria-controls="slskPanelCollapsible" aria-expanded="false" class="slskPanelToggleControl" id="slskPanelToggleBar" title="Expand or collapse search filters" type="button"><span class="slskToggleBarLeft"><span aria-hidden="true" class="slskToggleIcon">⚙</span><span class="slskToggleTitle">Filters</span><span class="slskToggleActiveFilter" id="slskMobileActiveFilter">All</span></span><span aria-hidden="true" class="slskToggleChevron" id="slskPanelToggleChevron">⌄</span></button><div class="slskPanelQuickActions"><span aria-label="Soulseek connection status" class="slskMiniStatus" id="slskMobileStatusDot" title="Soulseek network status"><span class="slskStatusDot"></span></span><button class="slskMiniTransfersBtn" id="slskMobileTransfersBtn" title="View transfers" type="button">Transfers (<span id="slskMobileTransferCount">0</span>)</button></div></div><div class="slskPanelCollapsible" id="slskPanelCollapsible"><div class="slskFilterRow">
+</form><div class="slskPanelToggleBar"><button aria-controls="slskPanelCollapsible" aria-expanded="false" class="slskPanelToggleControl" id="slskPanelToggleBar" title="Expand or collapse search filters" type="button"><span class="slskToggleBarLeft"><span class="slskToggleTitle">Filters</span><span class="slskToggleActiveFilter" id="slskMobileActiveFilter">All</span></span><span aria-hidden="true" class="slskToggleChevron" id="slskPanelToggleChevron">⌄</span></button><div class="slskPanelQuickActions"><button type="button" class="slskMiniStatus actionBtn" id="slskMobileStatusDot" aria-label="Connection settings" title="Connection settings"><span class="slskStatusDot" aria-hidden="true"></span><span id="slskMobileStatusLabel">Connection</span></button><button class="slskMiniTransfersBtn" id="slskMobileTransfersBtn" title="View transfers" type="button">Transfers (<span id="slskMobileTransferCount">0</span>)</button></div></div><div class="slskPanelCollapsible" id="slskPanelCollapsible"><div class="slskFilterRow">
 <div class="slskFilterGroup" id="slskFilterChips" role="group" aria-label="File format filters">
 <button aria-pressed="true" class="slskChip active" data-filter="all" type="button">All formats</button>
 <button aria-pressed="false" class="slskChip" data-filter="flac" type="button">Lossless</button>
@@ -636,7 +658,7 @@
 </div>
 </div><div class="slskSuggestedRow" id="slskSuggestedRow" style="display: none;">
 <div class="slskSuggestedHeader">
-<span class="slskSuggestedLabel">SUGGESTIONS:</span>
+<span class="slskSuggestedLabel">Suggestions</span>
 <div class="slskSuggestedChips" id="slskSuggestedChips"></div>
 <button class="slskClearSubBtn" id="slskClearSubFilterBtn" style="display: none;" title="Clear Sub-filter" type="button"><svg aria-hidden="true" class="uiIcon" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18"></path></svg> RESET</button>
 </div>
@@ -644,10 +666,10 @@
 <div class="slskBrand">
 <button aria-label="Toggle Soulseek Network Connection" class="actionBtn slskPowerBtn" id="slskPowerBtn" title="Connect / Disconnect Soulseek Network (Disconnects and stops sharing files)" type="button">
 <svg aria-hidden="true" class="powerIcon" fill="none" height="14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewbox="0 0 24 24" width="14"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" x2="12" y1="2" y2="12"></line></svg>
-<span id="slskPowerBtnText">CONNECT</span>
+<span id="slskPowerBtnText">Connect</span>
 </button>
-<span class="slskLogo">SOULSEEK</span>
-<span class="slskBadge" id="slskBadge">NICOTINE+</span>
+<span class="slskLogo">Soulseek</span>
+<span class="slskBadge" id="slskBadge">Peer network</span>
 <div class="slskStatusPill" id="slskStatusPill" title="Soulseek Network Status">
 <span class="slskStatusDot" id="slskStatusDot"></span>
 <span class="slskStatusText" id="slskStatusText" role="status">Checking connection…</span>
@@ -659,10 +681,10 @@
 <span id="slskDownloadsPathText">./downloads</span>
 </button>
 <button class="slskDirPill" id="slskChangeSharedDirBtn" title="Click to Change Shareable Folder (Available for peers to download)" type="button">
-                            SHARE: <span id="slskSharedPathText">./shared</span>
+                            Share: <span id="slskSharedPathText">./shared</span>
 </button>
 <button class="actionBtn slskSyncDirBtn" id="slskSyncCurrentDirBtn" title="Set Soulseek Downloads to Match Your Current Music Player Folder" type="button">
-                            SYNC WITH PLAYER DIR
+                            Use music folder
                         </button>
 </div>
 <div class="slskToolbarActions">
@@ -674,41 +696,42 @@
                             REFRESH
                         </button>
 <button class="actionBtn primaryBtn" id="slskToggleTransfersBtn" title="View Active &amp; Completed Transfers" type="button">
-                            TRANSFERS (<span id="slskTransferCount">0</span>)
+                            Transfers (<span id="slskTransferCount">0</span>)
                         </button>
 </div>
 </div></div></div></div>
 
         <!-- Soulseek Main Results Container -->
         <div class="slskResultsCon">
+            <div class="slskMobileSort"><label for="slskMobileSortField">Sort results</label><select id="slskMobileSortField" aria-label="Sort results"><option value="speed">Peer speed</option><option value="filename">Track name</option><option value="format">Format</option><option value="bitrate">Bitrate</option><option value="size">File size</option><option value="slots">Free slots</option></select><button type="button" class="actionBtn" id="slskMobileSortDir" aria-label="Descending order">Descending</button></div>
             <!-- Results Header / Clickable Sortable Columns -->
             <div class="slskResultsHeader" id="slskResultsHeader">
-                <div class="col colTrack sortable" data-sort="filename" title="Sort by Filename (A-Z)">
-                    <span>FILE &amp; PATH</span>
+                <div class="col colTrack sortable" role="button" tabindex="0" data-sort="filename" title="Sort by Filename (A-Z)">
+                    <span>Track &amp; path</span>
                     <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
-                <div class="col colFormat sortable" data-sort="format" title="Sort by Format">
-                    <span>FORMAT</span>
+                <div class="col colFormat sortable" role="button" tabindex="0" data-sort="format" title="Sort by Format">
+                    <span>Format</span>
                     <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
-                <div class="col colBitrate sortable" data-sort="bitrate" title="Sort by Bitrate">
-                    <span>BITRATE</span>
+                <div class="col colBitrate sortable" role="button" tabindex="0" data-sort="bitrate" title="Sort by Bitrate">
+                    <span>Bitrate</span>
                     <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
-                <div class="col colSize sortable" data-sort="size" title="Sort by File Size">
-                    <span>SIZE</span>
+                <div class="col colSize sortable" role="button" tabindex="0" data-sort="size" title="Sort by File Size">
+                    <span>Size</span>
                     <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
-                <div class="col colPeer sortable active desc" data-sort="speed" title="Sort by Peer Upload Speed">
-                    <span>PEER / SPEED</span>
+                <div class="col colPeer sortable active desc" role="button" tabindex="0" data-sort="speed" title="Sort by Peer Upload Speed">
+                    <span>Peer / speed</span>
                     <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
                 </div>
-                <div class="col colQueue sortable" data-sort="slots" title="Sort by Queue / Free Slots">
-                    <span>QUEUE</span>
+                <div class="col colQueue sortable" role="button" tabindex="0" data-sort="slots" title="Sort by Queue / Free Slots">
+                    <span>Queue</span>
                     <span class="sortIndicator"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/></svg></span>
                 </div>
                 <div class="col colAction">
-                    <span>ACTION</span>
+                    <span>Action</span>
                 </div>
             </div>
 
@@ -740,19 +763,19 @@
             <div class="slskTransfersHeader" id="slskTransfersHeader">
                 <div class="slskTransfersTitle">
                     <button type="button" id="slskBackToResultsBtn" class="actionBtn slskBackToResultsBtn" title="Return to Soulseek Search Results">
-                        ← RESULTS
+                        ← Results
                     </button>
                     <span class="drawerArrow" id="slskDrawerArrow" style="display: none;" aria-hidden="true"><svg class="uiIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></span>
-                    <strong class="slskDrawerTitleText"><span class="desktopOnly">SOULSEEK </span>TRANSFERS</strong>
+                    <strong class="slskDrawerTitleText"><span class="desktopOnly">Soulseek </span>Transfers</strong>
                     <span class="counter" id="slskTransfersSummary">0 Active</span>
                 </div>
                 <div class="slskTransfersHeaderActions">
                     <button type="button" id="slskResumeAllBtn" class="actionBtn" title="Resume All Paused Downloads" style="display: none;">
-                        RESUME ALL
+                        Resume all
                     </button>
                     <button type="button" id="slskScanDownloadsBtn" class="actionBtn" title="Scan and Load All Downloaded Songs into CachyMusic Library">
-                        <span class="desktopOnly">SYNC ALL TO LIBRARY</span>
-                        <span class="mobileOnly">SYNC ALL</span>
+                        <span class="desktopOnly">Add downloads to library</span>
+                        <span class="mobileOnly">Sync library</span>
                     </button>
                     <button type="button" id="slskCloseDrawerBtn" class="closeBtn" title="Return to Results" aria-label="Return to Results" style="display: none;"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                 </div>
@@ -800,7 +823,7 @@
                     <div class="settingsSectionHeader"><h3 class="settingsSectionTitle">Privacy &amp; network</h3></div>
                     <div class="settingsPanelContent privacyNotice">
                         <h4>Local by design</h4><p>Your library, settings and playback remain on this device. No analytics, advertising or remote crash reports. Online metadata, artwork and lyrics searches are deliberate exceptions; only the selected query is sent to the provider.</p>
-                        <h4>Soulseek is optional</h4><p>Connecting to Soulseek discloses your IP address, account, search requests and selected shared files to the network. Share and download only material you have permission to distribute or obtain. Disconnect when finished.</p>
+                        <h4>Listening history</h4><p>Qualified listening is recorded locally in this app profile. Background native playback may not be counted. Manage recording preferences or clear your history.</p><button type="button" id="privacyListeningBtn" class="actionBtn">Manage listening history</button><h4>Soulseek is optional</h4><p>Connecting to Soulseek discloses your IP address, account, search requests and selected shared files to the network. Share and download only material you have permission to distribute or obtain. Disconnect when finished.</p>
                         <h4>Hosted PWA</h4><p>Installation and browser-managed application updates may contact the host for application files. Local music and settings are not sent to that host. Use the packaged app or a local server for device-only operation.</p>
                     </div>
                 </section>
@@ -819,8 +842,8 @@
                             <p class="settingsRowDesc">Plays in the background using Android audio. Web Audio effects are unavailable.</p>
                         </div>
                         <div class="settingsRowItem" id="settingsRowContinuousPcm">
-                            <label class="settingsRowTitle" for="continuousPcmMode">Continuous lossless playback <input type="checkbox" role="switch" id="continuousPcmMode"></label>
-                            <p class="settingsRowDesc">Prebuffer the next compatible track. Uses additional memory.</p>
+                            <label class="settingsRowTitle" for="continuousPcmMode">Continuous PCM playback <input type="checkbox" role="switch" id="continuousPcmMode"></label>
+                            <p class="settingsRowDesc">Prebuffer compatible lossless tracks. Uses additional memory; output may be resampled.</p>
                         </div>
                         <details class="settingsAdvancedDetails" id="settingsAdvancedAudio">
                             <summary class="settingsAdvancedSummary"><span class="settingsAdvancedSummaryText"><strong>Advanced signal processing</strong><small>Precision, dithering and buffer profile</small></span><span class="settingsAdvancedChevron" aria-hidden="true">⌄</span></summary>
@@ -1170,6 +1193,7 @@
                     <svg id="miniPlayImg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
                         <path class="icon-play" d="M8 5v14l11-7z"/>
                         <path class="icon-pause" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                        <rect class="morph-left" width="24" height="24"/><rect class="morph-right" width="24" height="24"/>
                     </svg>
                 </button>
                 <button type="button" class="miniBtn" id="miniNextBtn" title="Next Track" aria-label="Next Track">
@@ -1199,11 +1223,8 @@
                 <input type="range" id="miniVolumeSlider" min="0" max="1.5" step="0.01" value="0.8" class="volumeSlider" title="Volume" aria-label="Mini Player Volume">
             </div>
             <button type="button" class="miniDeckReturnBtn" id="miniDeckReturnBtn" title="Return to Player (Alt+P)">
-                OPEN PLAYER
+                Open player
             </button>
-        </div>
-        <div class="miniVisStrip" id="miniVisStrip" aria-hidden="true">
-            <canvas id="miniVisCanvas" class="miniVisCanvas"></canvas>
         </div>
     </aside>
 
@@ -1218,7 +1239,7 @@
             <span class="mobileTabLabel">Library</span>
         </button>
         <button type="button" class="mobileTabBtn" data-target="soulseekWorkspace" id="mobileSoulseekTabBtn">
-            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <svg class="mobileTabIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.66" y2="16.66"></line></svg>
             <span class="mobileTabLabel">Soulseek</span>
         </button>
         <button type="button" class="mobileTabBtn" data-target="settingsWorkspace" id="mobileSettingsTabBtn">
@@ -1408,7 +1429,7 @@
                         </div>
                         <div class="metaEditorField">
                             <label for="metaEditTrackNum" class="metaEditorLabel">TRACK NUMBER</label>
-                            <input type="number" id="metaEditTrackNum" class="metaEditorInput" placeholder="e.g. 1" min="1" max="999">
+                            <input type="text" id="metaEditTrackNum" class="metaEditorInput" placeholder="e.g. 1 or 1/12" maxlength="50">
                         </div>
                         <div class="metaEditorField">
                             <label for="metaEditComment" class="metaEditorLabel">COMMENT / NOTES</label>
@@ -1559,22 +1580,22 @@
                     <span class="peqDspSummaryPill" id="peqDspActiveSummary">ALL BYPASSED</span>
                 </div>
                 <div class="peqDspGrid">
-                    <button type="button" class="dspBtn peqDspBtn" id="playerAmpBoostBtn" data-target="amp" title="Toggle Clean Amplification (+3.6 dB Broadcast Loudness &amp; Headroom)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerAmpBoostBtn" data-target="amp" title="Amplification (+3.6 dB)">
                         <span class="dspDot"></span>
                         <span class="peqDspName">AMP</span>
                         <span class="peqDspSpec">+3.6 dB</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerBassBoostBtn" data-target="bass" title="Toggle Analog Sub-Bass Boost (+3.8 dB Harman Sub-Bass &amp; 808s at 95 Hz)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerBassBoostBtn" data-target="bass" title="Bass boost (+3.8 dB at 95 Hz)">
                         <span class="dspDot"></span>
                         <span class="peqDspName">BASS</span>
                         <span class="peqDspSpec">+3.8 dB</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerVocalBoostBtn" data-target="vocal" title="Toggle Vocal Boost (+2.8 dB Pinna Ear-Gain &amp; Speech Clarity at 3.0 kHz)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerVocalBoostBtn" data-target="vocal" title="Vocal boost (+2.8 dB at 3 kHz)">
                         <span class="dspDot"></span>
                         <span class="peqDspName">VOCAL</span>
                         <span class="peqDspSpec">+2.8 dB</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerTrebleBoostBtn" data-target="treble" title="Toggle Air Band &amp; Treble Sparkle (+3.0 dB High Shimmer at 10.0 kHz)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerTrebleBoostBtn" data-target="treble" title="Treble boost (+3 dB at 10 kHz)">
                         <span class="dspDot"></span>
                         <span class="peqDspName">TREBLE</span>
                         <span class="peqDspSpec">+3.0 dB</span>
@@ -1584,27 +1605,27 @@
                         <span class="peqDspName">LIMITER</span>
                         <span class="peqDspSpec">-0.6 dBFS</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerXfeedBtn" data-target="xfeed" title="Toggle Bauer Headphone Crossfeed (Acoustic Spatial Staging &amp; Ear Fatigue Reduction)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerXfeedBtn" data-target="xfeed" title="Headphone crossfeed">
                         <span class="dspDot"></span>
                         <span class="peqDspName">CROSSFEED</span>
                         <span class="peqDspSpec" id="peqXfeedStatus">OFF</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn active" id="playerAgpBtn" data-target="agp" title="Toggle Neutron Automatic Gain Protection (Prevents EQ/DSP Clipping via 64-Bit Envelope Attenuator)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerAgpBtn" data-target="agp" title="Automatic gain protection">
                         <span class="dspDot"></span>
                         <span class="peqDspName">AUTO GAIN (AGP)</span>
-                        <span class="peqDspSpec" id="peqAgpStatus">GUARD ON</span>
+                        <span class="peqDspSpec" id="peqAgpStatus">OFF</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerSurroundBtn" data-target="surround" title="Toggle Mid/Side Holographic Soundstage Widener (135% Spatial Expansion)">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerSurroundBtn" data-target="surround" title="Mid/side stereo width">
                         <span class="dspDot"></span>
                         <span class="peqDspName">SURROUND M/S</span>
                         <span class="peqDspSpec" id="peqSurroundStatus">100%</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerPhaseBtn" data-target="phase" title="Toggle 180° Absolute Acoustic Phase Polarity Inversion">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerPhaseBtn" data-target="phase" title="Invert signal polarity">
                         <span class="dspDot"></span>
                         <span class="peqDspName">PHASE 180°</span>
                         <span class="peqDspSpec" id="peqPhaseStatus">0° NORM</span>
                     </button>
-                    <button type="button" class="dspBtn peqDspBtn" id="playerMonoBtn" data-target="mono" title="Toggle Phase-Coherent L+R Mono Summing">
+                    <button type="button" class="dspBtn peqDspBtn" id="playerMonoBtn" data-target="mono" title="Mix left and right to mono">
                         <span class="dspDot"></span>
                         <span class="peqDspName">MONO SUM</span>
                         <span class="peqDspSpec" id="peqMonoStatus">STEREO</span>
@@ -1642,6 +1663,8 @@
             <div class="signalPathSummary">
                 <div class="signalQualityBadge" id="auditQualityBadge">Graph not confirmed</div>
                 <p id="auditQualityDesc">Select a track to inspect confirmed graph routing and configured effects. Physical output is not verified.</p>
+                <button type="button" id="audioDiagnosticBtn" class="actionBtn">Export audio diagnostics</button>
+                <p id="audioDiagnosticStatus" role="status" class="metricExplanation">Optional local report. No music, filenames, URLs or device identifiers are included.</p><textarea id="audioDiagnosticResult" aria-label="Audio diagnostic report" rows="5" readonly hidden></textarea>
             </div>
 
             <div class="auditStageChain" id="auditStageChain">

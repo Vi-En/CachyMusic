@@ -268,8 +268,6 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
     const miniNextBtn = document.getElementById('miniNextBtn');
     const miniCurrentTime = document.getElementById('miniCurrentTime');
     const miniTotalDuration = document.getElementById('miniTotalDuration');
-    const miniVisStrip = document.getElementById('miniVisStrip');
-    const miniVisCanvas = document.getElementById('miniVisCanvas');
     const miniProgressCon = document.getElementById('miniProgressCon');
     const miniProgressBar = document.getElementById('miniProgressBar');
     const miniVolumeSlider = document.getElementById('miniVolumeSlider');
@@ -391,6 +389,7 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         // Icon toggled via CSS .playing class (instant, no image load)
         if (miniPlayBtn) {
             miniPlayBtn.classList.toggle('playing', playing);
+            miniPlayBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
         }
         if (miniTurntableThumb) {
             miniTurntableThumb.classList.toggle('spinning', playing);
@@ -618,6 +617,7 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
     }
 
     function cancelActiveTrackLoading() {
+        const serverScan=store.state.activeScanAbortController?.serverScan===true;
         store.state.isTrackLoadingCancelled = true;
         if (store.state.activeScanAbortController) {
             try { store.state.activeScanAbortController.abort(); } catch (_) {}
@@ -627,8 +627,8 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
             try { window.AndroidBridge.cancelScan(); } catch (_) {}
         }
         hideTrackLoadingOverlay();
-        setScanStatus('Track loading cancelled by user.', false);
-        showToast('Track loading cancelled');
+        setScanStatus(serverScan?'Scan cancellation requested. If publication already started, refresh to see committed results.':'Track loading cancelled by user.', false);
+        showToast(serverScan?'Scan cancellation requested':'Track loading cancelled');
     }
 
     // Update Player Empty Prompt when no music directory is loaded
@@ -755,8 +755,6 @@ import { ultrasonicFilterStatus } from './ultrasonic-status.js';
         miniTotalDuration,
         miniTurntableThumb,
         miniVolumeSlider,
-        miniVisCanvas,
-        miniVisStrip,
         modalCreateAndAddBtn,
         modalNewPlaylistName,
         modalPlaylistList,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Worker-side client for Android MediaCodec direct-to-Web-Audio PCM streaming.
 import { getResampleKernel, resamplePlanarChannels } from './pcm-reader.js';
+import {readBoundedAudio} from './decode-budget.js';
 
 const ANDROID_ORIGIN = 'https://appassets.androidplatform.net';
 const TAPS = 32;
@@ -9,6 +10,7 @@ function extractAndroidMediaUri(trackSrc, base = globalThis.location?.href) {
     if (!trackSrc || !base) return '';
     const u = new URL(trackSrc, base);
     if (u.origin !== ANDROID_ORIGIN || u.pathname !== '/android-media' || u.username || u.password) return '';
+    if(u.searchParams.getAll('uri').length!==1)return '';
     const raw = u.searchParams.get('uri') || '';
     return raw.startsWith('content://') && raw.length <= 8192 ? raw : '';
 }
@@ -33,12 +35,13 @@ export async function openAndroidDirectPcm(trackSrc, knownDuration = 0) {
             signal: ctrl.signal
         });
         if (!res.ok) throw Error(`Direct PCM open rejected (${res.status})`);
-        const data = await res.json();
-        if (!data?.ok || !data.sessionId || !Number.isInteger(data.sampleRate) || !Number.isInteger(data.channels)) {
+        const data = JSON.parse(new TextDecoder().decode(await readBoundedAudio(res,16384)));
+        if (!data?.ok || typeof data.sessionId !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(data.sessionId) || !Number.isInteger(data.sampleRate) || data.sampleRate < 8000 || data.sampleRate > 384000 || ![1,2].includes(data.channels)) {
+            if (typeof data?.sessionId === 'string') void closeAndroidDirectPcm(data.sessionId);
             throw Error('Malformed direct PCM descriptor');
         }
         const rawDuration = Number(data.durationUs) > 0 ? Number(data.durationUs) / 1e6 : Number(knownDuration || 0);
-        if (!Number.isFinite(rawDuration) || rawDuration <= 0) {
+        if (!Number.isFinite(rawDuration) || rawDuration <= 0 || !Number.isSafeInteger(Math.round(rawDuration * data.sampleRate))) {
             try { await closeAndroidDirectPcm(data.sessionId); } catch (_) {}
             throw Error('Unknown track duration for direct PCM');
         }
@@ -64,12 +67,14 @@ export async function openAndroidDirectPcm(trackSrc, knownDuration = 0) {
 }
 
 export async function closeAndroidDirectPcm(sessionId) {
-    if (!sessionId) return;
+    if (typeof sessionId !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(sessionId)) return;
     const url = new URL('/android-pcm-close', ANDROID_ORIGIN);
     url.searchParams.set('session', sessionId);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
-        await fetch(url.href, { redirect: 'error', credentials: 'same-origin', cache: 'no-store' });
-    } catch (_) {}
+        await fetch(url.href, { redirect: 'error', credentials: 'same-origin', cache: 'no-store', signal: ctrl.signal });
+    } catch (_) {} finally { clearTimeout(timer); }
 }
 
 /**
@@ -94,8 +99,8 @@ export function parseCpcmPacket(arrayBuffer) {
     }
     const bytesPerSample = isFloat ? 4 : 2;
     const expectedBytes = 16 + frameCount * channels * bytesPerSample;
-    if (arrayBuffer.byteLength < expectedBytes) {
-        throw Error('Incomplete CPCM frame payload');
+    if ((flags & ~3) || frameCount > 65536 || arrayBuffer.byteLength !== expectedBytes) {
+        throw Error('Invalid CPCM frame payload');
     }
 
     const planar = Array.from({ length: channels }, () => new Float32Array(frameCount));
@@ -106,13 +111,15 @@ export function parseCpcmPacket(arrayBuffer) {
             for (let i = 0, off = 16; i < frameCount; i++, off += 8) {
                 const l = v.getFloat32(off, true);
                 const r = v.getFloat32(off + 4, true);
-                ch0[i] = Number.isFinite(l) ? l : 0;
-                ch1[i] = Number.isFinite(r) ? r : 0;
+                if (!Number.isFinite(l) || !Number.isFinite(r)) throw Error('Nonfinite CPCM sample');
+                ch0[i] = l;
+                ch1[i] = r;
             }
         } else {
             for (let i = 0, off = 16; i < frameCount; i++, off += 4) {
                 const l = v.getFloat32(off, true);
-                ch0[i] = Number.isFinite(l) ? l : 0;
+                if (!Number.isFinite(l)) throw Error('Nonfinite CPCM sample');
+                ch0[i] = l;
             }
         }
     } else if (channels === 2) {
@@ -173,7 +180,11 @@ export class AndroidDirectPcmReader {
             // Call without binding `this` to the reader instance (WorkerGlobalScope WebIDL check).
             const res = await (fn ? fn.call(globalThis, url.href, init) : fetch(url.href, init));
             if (!res.ok) throw Error(`Direct PCM read failed (${res.status})`);
-            return parseCpcmPacket(await res.arrayBuffer());
+            // Bound allocation before parsing; a malformed response must not fill
+            // the worker heap. Allow either 16-bit or float packet geometry
+            // here, then verify actual negotiated format in readNativeWindow.
+            const bytes=await readBoundedAudio(res,16+maxFrames*2*4);
+            return parseCpcmPacket(bytes);
         } finally {
             clearTimeout(timer);
             if (this.activeAbort === ctrl) this.activeAbort = null;
@@ -213,10 +224,17 @@ export class AndroidDirectPcmReader {
             const remainingNeeded = neededTotal - totalLen;
             const fetchFrames = Math.min(65536, Math.max(256, remainingNeeded));
             const packet = await this.fetchChunk(seekArg, fetchFrames);
+            if (packet.sampleRate !== this.format.sampleRate || packet.channels !== chCount || packet.isFloat !== this.format.isFloat) {
+                throw Error('Android PCM output format changed; use regular playback');
+            }
+            if (packet.frameCount > fetchFrames) throw Error('Android PCM response exceeds request');
+            if (!packet.frameCount && !packet.eof) throw Error('Android PCM decoder returned no data');
             if (packet.frameCount > 0) chunks.push(packet.channelsData);
             totalLen += packet.frameCount;
             eof = packet.eof || packet.frameCount === 0;
         }
+        if (totalLen < neededTotal && !eof) throw Error('Incomplete Android PCM window');
+        if (totalLen < neededTotal && winEnd < this.format.frames) throw Error('Unexpected Android PCM end of stream');
         this.nativeCursor = winStart + totalLen;
 
         let channels;
@@ -250,7 +268,7 @@ export class AndroidDirectPcmReader {
 
     async readFrames(first, count) {
         if (this.closed) throw Error('Direct PCM reader closed');
-        if (!Number.isSafeInteger(first) || first < 0 || !Number.isSafeInteger(count) || count < 1) {
+        if (!Number.isSafeInteger(first) || first < 0 || !Number.isSafeInteger(count) || count < 1 || count > Math.ceil(this.outputRate / 2)) {
             throw Error('Invalid PCM read window');
         }
         count = Math.max(0, Math.min(count, this.outputFrames - first));

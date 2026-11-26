@@ -249,7 +249,8 @@ export class MediaSessionController {
                 const posMs = Math.round((this.handlers?.getPosition?.() || 0) * 1000);
                 const resolved = latest.track?._resolvedNotificationCover || resolveRasterCover(latest.track?.cover) || '';
                 const coverArg = resolved.length <= 256 * 1024 ? resolved : '';
-                window.AndroidBridge.updateMediaNotification(
+                const rate=Number(this.handlers?.getPlaybackRate?.()||1);
+                const args=[
                     latest.track?.title || latest.track?.filename || 'CachyMusic',
                     latest.track?.artist || 'Unknown Artist',
                     latest.track?.album || 'CachyMusic Workstation',
@@ -257,7 +258,9 @@ export class MediaSessionController {
                     latest.playing,
                     durMs,
                     posMs
-                );
+                ];
+                if(typeof window.AndroidBridge.updateMediaNotificationV2==='function')window.AndroidBridge.updateMediaNotificationV2(...args,Number.isFinite(rate)&&rate>0?rate:1);
+                else window.AndroidBridge.updateMediaNotification(...args);
             } catch (_) {}
         };
         if (typeof queueMicrotask === 'function') queueMicrotask(flush);

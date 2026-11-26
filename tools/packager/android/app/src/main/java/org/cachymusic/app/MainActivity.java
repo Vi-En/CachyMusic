@@ -324,6 +324,16 @@ public class MainActivity extends Activity {
             if (activityDestroyed || artworkEngine == null || !isIndexedMedia(uri)) return;
             artworkEngine.invalidate(uri);
         }
+        @JavascriptInterface public boolean nativeListeningConfigure(boolean enabled, String generation, boolean erase) {
+            return !activityDestroyed && NativeListeningJournal.configure(MainActivity.this, enabled, generation, erase);
+        }
+        @JavascriptInterface public String nativeListeningWarning() { return NativeListeningJournal.warning(); }
+        @JavascriptInterface public String nativeListeningPending() {
+            return activityDestroyed ? "[]" : NativeListeningJournal.pending(MainActivity.this);
+        }
+        @JavascriptInterface public boolean nativeListeningAcknowledge(String id, String generation) {
+            return !activityDestroyed && NativeListeningJournal.acknowledge(MainActivity.this, id, generation);
+        }
         @JavascriptInterface public String nativePlaybackStatus(){return MediaPlaybackService.nativeStatus();}
         @JavascriptInterface public boolean nativePlaybackSupportsQueue() { return true; }
         @JavascriptInterface public boolean nativePlaybackSupportsShuffle() { return true; }
@@ -357,7 +367,7 @@ public class MainActivity extends Activity {
                     if (uri.length() <= 8192 && indexSnapshot.containsKey(uri) && seen.add(queued ? queueId : uri)) {
                         tracks.add(new NativePlaybackOrder.Track(uri, boundedText(item.optString("title"), "CachyMusic"),
                                 boundedText(item.optString("artist"), "Unknown Artist"), boundedText(item.optString("album"), ""),
-                                safeNotificationCover(item.optString("cover")), queueId));
+                                safeNotificationCover(item.optString("cover")), queueId, approvedHistoryKey(item.optString("historyKey"),uri)));
                     } else if (!shuffle) return "";
                 }
                 if (activityDestroyed) return "";
@@ -371,10 +381,14 @@ public class MainActivity extends Activity {
             return nativePlaybackLoadWithOrder(token,raw,title,artist,album,cover,position,gain,"");
         }
         @JavascriptInterface public boolean nativePlaybackLoadWithOrder(String token,String raw,String title,String artist,String album,String cover,long position,double gain,String order){
+            return nativePlaybackLoadWithHistory(token,raw,title,artist,album,cover,position,gain,order,"");
+        }
+        @JavascriptInterface public boolean nativePlaybackLoadWithHistory(String token,String raw,String title,String artist,String album,String cover,long position,double gain,String order,String historyKey){
             if(activityDestroyed||token==null||!token.matches("[A-Za-z0-9-]{1,64}")||raw==null||raw.length()>8192||!isIndexedMedia(raw)||!Double.isFinite(gain))return false;
             Intent i=new Intent(MainActivity.this,MediaPlaybackService.class).setAction(MediaPlaybackService.ACTION_NATIVE_LOAD);
             i.putExtra("token",token).putExtra("uri",raw).putExtra("title",boundedText(title,"CachyMusic")).putExtra("artist",boundedText(artist,"Unknown Artist")).putExtra("album",boundedText(album,"")).putExtra("cover",safeNotificationCover(cover)).putExtra("position",Math.max(0,position)).putExtra("gain",(float)Math.max(0,Math.min(1,gain)));
             i.putExtra("order", approvedPlaybackOrder(order));
+            i.putExtra("historyKey", approvedHistoryKey(historyKey,raw));
             try{if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);return true;}catch(Exception ex){return false;}
         }
         @JavascriptInterface public boolean nativePlaybackSetOrder(String token, int revision, String order) {
@@ -394,6 +408,11 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void updateMediaNotification(String title, String artist, String album, String coverUrl, boolean isPlaying, long durationMs, long positionMs) {
+            updateMediaNotificationV2(title,artist,album,coverUrl,isPlaying,durationMs,positionMs,1.0);
+        }
+
+        @JavascriptInterface
+        public void updateMediaNotificationV2(String title,String artist,String album,String coverUrl,boolean isPlaying,long durationMs,long positionMs,double speed) {
             if(MediaPlaybackService.ownsNative())return;
             Intent svc = new Intent(MainActivity.this, MediaPlaybackService.class);
             svc.setAction(MediaPlaybackService.ACTION_UPDATE);
@@ -404,6 +423,7 @@ public class MainActivity extends Activity {
             svc.putExtra("isPlaying", isPlaying);
             svc.putExtra("durationMs", durationMs);
             svc.putExtra("positionMs", positionMs);
+            svc.putExtra("speed", Double.isFinite(speed)&&speed>0&&speed<=8?(float)speed:1.0f);
             svc.putExtra("theme", getSharedPreferences("cachymusic_prefs", MODE_PRIVATE).getString("appearance_theme", "default"));
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -505,7 +525,16 @@ public class MainActivity extends Activity {
         track.putString("album", boundedText(item.optString("album"), ""));
         track.putString("cover", safeNotificationCover(item.optString("cover")));
         track.putString("queueId", queueId);
+        track.putString("historyKey",approvedHistoryKey(item.optString("historyKey"),uri));
         return track;
+    }
+    private String approvedHistoryKey(String key, String uri) {
+        if (key == null || key.length() > 12000 || !key.startsWith("recording:")) return "";
+        try {
+            JSONArray fields = new JSONArray(key.substring("recording:".length()));
+            if (fields.length() == 3 && "source".equals(fields.getString(0)) && uri.equals(fields.getString(1)) && fields.getJSONArray(2).length() > 0) return key;
+        } catch (Exception ignored) {}
+        return "";
     }
     private String safeNotificationCover(String raw){
         if(raw==null||raw.length()>256*1024)return "";
@@ -1275,54 +1304,25 @@ public class MainActivity extends Activity {
         return info;
     }
 
-    private Map<Long, Byte> getFlacPatches(Uri uri) {
-        if (uri == null) return java.util.Collections.emptyMap();
-        String key = uri.toString();
-        Map<Long, Byte> cached = flacPatchesCache.get(key);
-        if (cached != null) return cached;
-
-        Map<Long, Byte> patches = new HashMap<>();
-        try (InputStream is = getContentResolver().openInputStream(uri)) {
-            if (is != null) {
-                byte[] magic = new byte[4];
-                int r = is.read(magic);
-                if (r == 4 && magic[0] == 'f' && magic[1] == 'L' && magic[2] == 'a' && magic[3] == 'C') {
-                    long offset = 4;
-                    byte[] hdr = new byte[4];
-                    byte[] scratch = new byte[16384];
-                    for (int blocks = 0; blocks < 4096 && offset < 16 * 1024 * 1024; blocks++) {
-                        int hr = is.read(hdr);
-                        if (hr < 4) break;
-                        boolean isLast = (hdr[0] & 0x80) != 0;
-                        int btype = hdr[0] & 0x7F;
-                        long len = ((long)(hdr[1] & 0xFF) << 16) | ((long)(hdr[2] & 0xFF) << 8) | (hdr[3] & 0xFF);
-                        if (btype == 6) { // PICTURE block: convert to PADDING so Chromium media demuxer does not choke on embedded mjpeg video stream
-                            byte patched = (byte) ((isLast ? 0x80 : 0x00) | 0x01);
-                            patches.put(offset, patched);
-                        }
-                        // Skip block data
-                        long skipped = 0;
-                        while (skipped < len) {
-                            long s = is.skip(len - skipped);
-                            if (s <= 0) {
-                                int toRead = (int) Math.min(len - skipped, scratch.length);
-                                int bRead = is.read(scratch, 0, toRead);
-                                if (bRead <= 0) break;
-                                s = bRead;
-                            }
-                            skipped += s;
-                        }
-                        offset += 4 + len;
-                        if (isLast) break;
-                    }
-                }
+    private Map<Long, Byte> getFlacPatches(Uri uri, ParcelFileDescriptor descriptor) {
+        if (uri == null || descriptor == null) return java.util.Collections.emptyMap();
+        try {
+            android.system.StructStat stat = android.system.Os.fstat(descriptor.getFileDescriptor());
+            if (!android.system.OsConstants.S_ISREG(stat.st_mode) || stat.st_size<=0) return java.util.Collections.emptyMap();
+            String key=MediaRangeContract.version(uri.toString(),stat.st_dev,stat.st_ino,stat.st_size,stat.st_mtime,stat.st_ctime);
+            Map<Long,Byte> cached=flacPatchesCache.get(key);
+            if(cached!=null)return cached;
+            Map<Long,Byte> patches;
+            // dup shares the open-file position. Restore it even on malformed metadata.
+            android.system.Os.lseek(descriptor.getFileDescriptor(),0,android.system.OsConstants.SEEK_SET);
+            try(InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.dup(descriptor.getFileDescriptor()))) {
+                patches=FlacPictureMask.scan(input);
+            } finally {
+                try { android.system.Os.lseek(descriptor.getFileDescriptor(),0,android.system.OsConstants.SEEK_SET); }
+                catch (Exception rewindFailure) { try {descriptor.close();} catch(Exception ignored) {} throw rewindFailure; }
             }
-        } catch (Exception e) {
-            Log.w(TAG, "FLAC patch scan error for " + uri + ": " + e.getMessage());
-        }
-
-        flacPatchesCache.put(key, patches);
-        return patches;
+            flacPatchesCache.put(key,patches);return patches;
+        } catch (Exception error) { return java.util.Collections.emptyMap(); }
     }
 
     private static class LimitedInputStream extends FilterInputStream {
@@ -1471,13 +1471,52 @@ public class MainActivity extends Activity {
                         }
                         skipped += s;
                     }
+                    if(skipped!=start){is.close();return null;}
                 }
-                return new LimitedInputStream(new BufferedInputStream(is, 65536), length, null, null, start, patches);
+                return new LimitedInputStream(new BufferedInputStream(is, 65536), length, null, null, start, java.util.Collections.emptyMap());
             }
         } catch (Exception e) {
             Log.e(TAG, "InputStream fallback failed: " + e.getMessage());
         }
         return null;
+    }
+
+    // PCM ranges must be bound to the same seekable provider descriptor used to
+    // compute the version. Never reopen a different provider stream after validation.
+    private WebResourceResponse handleVersionedPcmRange(Uri requestUri, Uri mediaUri, WebResourceRequest request, String startRaw, String endRaw) {
+        ParcelFileDescriptor descriptor = null;
+        try {
+            if (request == null || !"GET".equalsIgnoreCase(request.getMethod()) || startRaw == null || endRaw == null) return forbiddenMedia();
+            for (String name : request.getRequestHeaders().keySet()) if ("Range".equalsIgnoreCase(name)) return forbiddenMedia();
+            if (requestUri.getQueryParameters("pcmStart").size()!=1 || requestUri.getQueryParameters("pcmEnd").size()!=1 || requestUri.getQueryParameters("pcmVersion").size()>1) return forbiddenMedia();
+            long start = MediaRangeContract.offset(startRaw), end = MediaRangeContract.offset(endRaw);
+            if (!MediaRangeContract.valid(start,end)) return forbiddenMedia();
+            descriptor = getContentResolver().openFileDescriptor(mediaUri,"r");
+            if (descriptor == null) return forbiddenMedia();
+            android.system.StructStat stat = android.system.Os.fstat(descriptor.getFileDescriptor());
+            if (!android.system.OsConstants.S_ISREG(stat.st_mode) || stat.st_size <= 0) return forbiddenMedia();
+            long size = stat.st_size;
+            String version = MediaRangeContract.version(mediaUri.toString(),stat.st_dev,stat.st_ino,size,stat.st_mtime,stat.st_ctime);
+            String expected = requestUri.getQueryParameter("pcmVersion");
+            if (expected != null && !version.equals(expected)) return new WebResourceResponse("text/plain","UTF-8",412,"Precondition Failed",java.util.Collections.singletonMap("Cache-Control","no-store"),new ByteArrayInputStream(new byte[0]));
+            if (start >= size) return new WebResourceResponse("application/octet-stream",null,416,"Range Not Satisfiable",java.util.Collections.singletonMap("Content-Range","bytes */"+size),new ByteArrayInputStream(new byte[0]));
+            end=Math.min(end,size-1);
+            long length=end-start+1;
+            if (android.system.Os.lseek(descriptor.getFileDescriptor(),start,android.system.OsConstants.SEEK_SET)!=start) return forbiddenMedia();
+            InputStream input = new LimitedInputStream(new BufferedInputStream(new ParcelFileDescriptor.AutoCloseInputStream(descriptor),65536),length,null,null,start,java.util.Collections.emptyMap());
+            Map<String,String> headers=new HashMap<>();
+            headers.put("Content-Range","bytes "+start+"-"+end+"/"+size);
+            headers.put("Content-Length",String.valueOf(length));
+            headers.put("X-Cachy-Media-Version",version);
+            headers.put("Cache-Control","no-store");
+            headers.put("Access-Control-Allow-Origin","https://appassets.androidplatform.net");
+            headers.put("Access-Control-Expose-Headers","Content-Range, Content-Length, X-Cachy-Media-Version");
+            String mime=indexedMedia.get(mediaUri.toString());
+            WebResourceResponse response=new WebResourceResponse(mime!=null&&mime.startsWith("audio/")?normalizeMimeType(mime):"application/octet-stream",null,206,"Partial Content",headers,input);
+            descriptor=null; // response stream owns the descriptor
+            return response;
+        } catch (Exception error) { return forbiddenMedia(); }
+        finally { if (descriptor!=null) try { descriptor.close(); } catch(Exception ignored) {} }
     }
 
     private WebResourceResponse handleAndroidMediaStream(Uri requestUri, Uri mediaUri, WebResourceRequest request) {
@@ -1509,22 +1548,15 @@ public class MainActivity extends Activity {
             }
             String pcmStart = requestUri.getQueryParameter("pcmStart");
             String pcmEnd = requestUri.getQueryParameter("pcmEnd");
-            boolean pcmRead = pcmStart != null || pcmEnd != null;
-            if (pcmRead) {
-                if (rangeHeader != null || pcmStart == null || pcmEnd == null
-                        || !pcmStart.matches("[0-9]{1,15}") || !pcmEnd.matches("[0-9]{1,15}")) {
-                    return forbiddenMedia();
-                }
-                long bytes = Long.parseLong(pcmEnd) - Long.parseLong(pcmStart) + 1;
-                if (bytes <= 0 || bytes > 4L * 1024 * 1024) return forbiddenMedia();
-                rangeHeader = "bytes=" + pcmStart + "-" + pcmEnd;
-            }
+            if (pcmStart != null || pcmEnd != null || requestUri.getQueryParameter("pcmVersion") != null) return handleVersionedPcmRange(requestUri,mediaUri,request,pcmStart,pcmEnd);
+            boolean pcmRead = false; // ordinary WebView media route only below
             boolean isHead = request != null && "HEAD".equalsIgnoreCase(request.getMethod());
 
             ParcelFileDescriptor pfd = null;
             AssetFileDescriptor afd = null;
 
             if (!isHead || totalSize <= 0) {
+                totalSize = -1;
                 try {
                     pfd = getContentResolver().openFileDescriptor(mediaUri, "r");
                 } catch (Exception e) {
@@ -1575,6 +1607,11 @@ public class MainActivity extends Activity {
             }
 
             if (rangeHeader != null) rangeHeader = rangeHeader.trim();
+            if (rangeHeader != null && (!rangeHeader.matches("(?i)bytes=[0-9]*-[0-9]*") || rangeHeader.equalsIgnoreCase("bytes=-") || totalSize<=0)) {
+                if (pfd!=null) try {pfd.close();} catch(Exception ignored) {}
+                if (afd!=null) try {afd.close();} catch(Exception ignored) {}
+                return new WebResourceResponse(mime,null,416,"Range Not Satisfiable",java.util.Collections.singletonMap("Cache-Control","no-store"),new ByteArrayInputStream(new byte[0]));
+            }
             if (totalSize > 0 && rangeHeader != null && rangeHeader.matches("(?i)bytes=[0-9]*-[0-9]*") && !rangeHeader.equalsIgnoreCase("bytes=-")) {
                 String byteRange = rangeHeader.substring(rangeHeader.indexOf('=') + 1).trim();
                 long start = 0;
@@ -1626,7 +1663,7 @@ public class MainActivity extends Activity {
                 }
 
                 Map<Long, Byte> patches = (!pcmRead && mime != null && mime.contains("flac"))
-                        ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
+                        ? getFlacPatches(mediaUri,pfd) : java.util.Collections.emptyMap();
                 // WebView skips to the requested offset for an HTTP Range header.
                 // Decoder reads carry offsets in the URL and need an explicit seek.
                 InputStream is = createSeekableStream(pfd, afd, mediaUri,
@@ -1658,7 +1695,7 @@ public class MainActivity extends Activity {
             }
 
             long streamLength = totalSize > 0 ? totalSize : Long.MAX_VALUE;
-            Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri) : java.util.Collections.emptyMap();
+            Map<Long, Byte> patches = (mime != null && mime.contains("flac")) ? getFlacPatches(mediaUri,pfd) : java.util.Collections.emptyMap();
             InputStream is = createSeekableStream(pfd, afd, mediaUri, 0, streamLength, patches);
             if (is == null) {
                 Log.e(TAG, "Failed to create full stream for: " + mediaUri);
@@ -1694,6 +1731,8 @@ public class MainActivity extends Activity {
         obj.put("id", trackId);
         obj.put("filename", filename);
         obj.put("fullPath", (rawPath != null && !rawPath.isEmpty()) ? rawPath : filename);
+        obj.put("contentUri",uri.toString());
+        obj.put("fileSize",size);
         obj.put("title", title);
         obj.put("artist", artist);
         obj.put("album", album);

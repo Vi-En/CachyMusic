@@ -1,0 +1,111 @@
+:is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-left,:is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-right {display:none;}
+@supports (clip-path:polygon(0 0,100% 0,100% 100%,0 100%)) {
+    :root :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) :is(.icon-play,.icon-pause) {display:none!important;}
+    :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) :is(.morph-left,.morph-right) {display:block;transition:clip-path 230ms cubic-bezier(.22,.7,.25,1);}
+    :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-left {clip-path:polygon(29.1667% 20.8333%,50% 33.3333%,50% 66.6667%,29.1667% 79.1667%);}
+    :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-right {clip-path:polygon(50% 33.3333%,79.1667% 50%,79.1667% 50%,50% 66.6667%);}
+    :is(.playPauseBtn,.miniPlayBtn).playing :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-left {clip-path:polygon(25% 20.8333%,41.6667% 20.8333%,41.6667% 79.1667%,25% 79.1667%);}
+    :is(.playPauseBtn,.miniPlayBtn).playing :is(#playPauseImg,#miniPlayImg,#compactMediaPlayImg) .morph-right {clip-path:polygon(58.3333% 20.8333%,75% 20.8333%,75% 79.1667%,58.3333% 79.1667%);}
+}
+/* Capped negative space: preserve scrolling area on short devices. */
+:root[data-theme] .trackListPanel {padding-block-start:clamp(12px, 5vh, 44px);}
+@media(max-width:768px){:root[data-theme] .trackListPanel {padding-block-start:clamp(8px, 4vh, 32px);}}
+@media(max-height:560px){:root[data-theme] .trackListPanel {padding-block-start:12px;}}
+:root[data-theme] .libraryToolsToggleBtn:is(.active,[aria-expanded="true"]) {box-shadow:none;background:var(--quiet-fill);border-color:var(--quiet-line);color:var(--text-primary);}
+:root[data-theme] .libraryControls {background:transparent;box-shadow:none;gap:10px;padding-block:10px;}
+:root[data-theme] .libraryControls .sortSelect[data-sort-active="true"] {background:var(--bg-surface-2);color:var(--text-primary);border-color:var(--border-medium);}
+:root[data-theme] .libraryControls .panelActions {display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;}
+:root[data-theme] .libraryControls .panelActions .actionBtn {text-transform:none;letter-spacing:0;box-shadow:none;background:transparent;border-color:transparent;min-height:44px;font-weight:500;}
+:root[data-theme] .libraryControls .panelActions .actionBtn:hover {background:var(--quiet-fill);border-color:var(--quiet-line);}
+/* Soulseek: consistent hierarchy across connection, search, results, transfers and settings. */
+:root[data-theme] .soulseekWorkspace :is(.slskSearchArea,.slskToolbar,.slskFilterRow,.slskPanelToggleBar,.slskResultsFooter,.slskTransfersHeader) {box-shadow:none;background:transparent;}
+:root[data-theme] .soulseekWorkspace .slskSearchArea {gap:12px;padding:12px 0;border:0;}
+:root[data-theme] .soulseekWorkspace .slskToolbar {border-block-end:1px solid var(--quiet-line);padding-block:8px 12px;gap:10px;}
+:root[data-theme] .soulseekWorkspace :is(.slskLogo,.slskBadge,.slskSuggestedLabel,.slskDrawerTitleText,.slskResultsHeader,.slskTransferBtn,.slskStatusText,.slskFilterLabel,.slskPanelToggleControl,.slskMiniTransfersBtn,.slskToolbarActions .actionBtn) {text-transform:none;letter-spacing:0;}
+:root[data-theme] .soulseekWorkspace .slskLogo {font-size:1rem;font-weight:650;}
+:root[data-theme] .soulseekWorkspace .slskBadge {background:transparent;border:0;color:var(--text-secondary);font-weight:400;}
+:root[data-theme] .soulseekWorkspace .slskWorkspaceNotice {background:var(--quiet-fill);border:0;border-inline-start:2px solid var(--accent-color);box-shadow:none;padding:12px;gap:10px;}
+:root[data-theme] .soulseekWorkspace .slskNoticeText strong {font-size:.9rem;}
+:root[data-theme] .soulseekWorkspace .slskNoticeText {line-height:1.5;}
+:root[data-theme] .soulseekWorkspace :is(.slskResultsHeader,.slskResultsFooter,.slskTransfersHeader){border-block-end:1px solid var(--quiet-line);padding-block:9px;}
+:root[data-theme] .soulseekWorkspace :is(.slskResultRow,.slskTransferRow) {padding-block:12px;line-height:1.4;}
+:root[data-theme] .soulseekWorkspace .slskResultsHeader .sortable:focus-visible {outline:2px solid var(--border-focus);outline-offset:-2px;}
+:root[data-theme] .soulseekWorkspace :is(.slskDirPill,.slskToolbarActions .actionBtn,.slskTransferBtn) {min-height:44px;box-shadow:none;}
+:root[data-theme] .soulseekWorkspace .slskPlaceholder {padding:clamp(20px,5vh,50px) 12px;text-align:start;}
+:root[data-theme] .slskModalCard {box-shadow:none;}
+:root[data-theme] .slskModalCard :is(h2,h3,label,.actionBtn){text-transform:none;letter-spacing:0;}
+@media(max-width:768px){
+ :root[data-theme] .soulseekWorkspace .slskSearchArea {padding:8px 0;gap:8px;}
+ :root[data-theme] .soulseekWorkspace .slskPanelToggleBar {border:0;border-block-end:1px solid var(--quiet-line);border-radius:0;}
+ :root[data-theme] .soulseekWorkspace .slskToolbar {border-block-end:0;}
+ :root[data-theme] .soulseekWorkspace .slskWorkspaceNotice {padding:10px;}
+}
+.listeningDialog {width:min(560px,calc(100% - 24px));max-height:85dvh;overflow:auto;color:var(--text-primary);background:var(--bg-surface-1);padding:clamp(12px,3vw,24px);}
+.listeningDialog header,.listeningDialog footer {display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.listeningDialog h3 {margin:0;font-size:1.2rem;}
+.listeningDialog p,.listeningDialog small {color:var(--text-secondary);line-height:1.5;}
+.listeningDialog select {width:100%;min-height:44px;}
+.listeningDialog #listeningRows {padding:0;margin:12px 0;list-style:none;}
+.listeningDialog li {display:grid;grid-template-columns:2ch minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--quiet-line);font-variant-numeric:tabular-nums;}
+.listeningDialog li strong,.listeningDialog li small {display:block;overflow-wrap:anywhere;}
+.listeningDialog footer {border-top:1px solid var(--quiet-line);padding-top:12px;}
+.listeningDialog footer label {min-height:44px;display:flex;align-items:center;gap:8px;}
+@media(prefers-reduced-motion:reduce){:root :is(button,summary,[role="button"],label.actionBtn,#playPauseImg rect,#miniPlayImg rect,#compactMediaPlayImg rect){transition:none!important;animation:none!important;}}
+
+.slskMobileSort {display:none;}
+@media(max-width:768px){
+ :root[data-theme] .slskMobileSort {display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--quiet-line);}
+ .slskMobileSort label {font-size:.75rem;color:var(--text-secondary);}
+ .slskMobileSort select,.slskMobileSort button {min-height:44px;min-width:0;max-width:100%;}
+ .slskMobileSort select {flex:1 1 100px;}
+}
+:root[data-theme] .compactMediaTrigger {font-size:.75rem;min-height:44px;align-self:center;background:transparent;border-color:var(--quiet-line);box-shadow:none;}
+:root[data-theme] .compactMediaDialog {position:fixed;isolation:isolate;width:min(430px,calc(100% - 28px));padding:0;max-height:85dvh;overflow:auto;background:var(--bg-surface-1);color:var(--text-primary);}
+.compactMediaDialog:not([open]),.listeningDialog:not([open]) {display:none!important;}
+#compactMediaArt {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.12;z-index:-1;pointer-events:none;}
+#compactMediaArt:not([src]){display:none;}
+.compactMediaBody {padding:clamp(16px,4vw,26px);display:flex;flex-direction:column;gap:8px;}
+.compactMediaBody header,.compactMediaTimes {display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.compactMediaBody header {font-size:.8rem;color:var(--text-secondary);}
+.compactMediaBody h3 {font-size:1.2rem;line-height:1.25;margin:0;overflow-wrap:anywhere;}
+.compactMediaBody p {margin:0;color:var(--text-secondary);overflow-wrap:anywhere;}
+#compactMediaWave {width:100%;height:34px;color:var(--accent-color);}
+.compactMediaStatus,.compactMediaTimes {font-size:.75rem;color:var(--text-secondary);font-variant-numeric:tabular-nums;}
+#compactMediaSeek {width:100%;min-height:44px;accent-color:var(--accent-color);margin:0;}
+.compactMediaTransport {display:flex;align-items:center;justify-content:center;gap:clamp(14px,6vw,28px);}
+.compactMediaTransport button {min-width:44px;min-height:44px;display:grid;place-items:center;}
+.compactMediaTransport .playPauseBtn {width:56px;height:56px;}
+
+:root[data-theme] .slskMobileSort select {background:var(--bg-surface-2);color:var(--text-primary);border:1px solid var(--border-medium);border-radius:var(--shape-field,6px);padding-inline:8px;}
+:root[data-theme] .slskMiniStatus.actionBtn {display:inline-flex;align-items:center;gap:5px;width:auto;min-width:0;min-height:44px;padding:4px 6px;border:0;background:transparent;font-size:.7rem;color:var(--text-secondary);white-space:normal;}
+:root[data-theme] .slskPanelQuickActions {flex-wrap:wrap;justify-content:flex-end;}
+:root[data-theme] .slskModalCard .slskModalDesc {line-height:1.5;color:var(--text-secondary);font-size:.82rem;}
+:root[data-theme] .slskModalCard .slskFormGroup {gap:6px;margin-block:5px;}
+:root[data-theme] .slskModalCard .slskDirInputRow {display:flex;flex-wrap:wrap;gap:6px;}
+:root[data-theme] .slskModalCard .slskDirInputRow input {flex:1 1 180px;min-width:0;max-width:100%;}
+:root[data-theme] .slskModalCard :is(input,button) {min-height:44px;}
+@media(max-width:768px){:root[data-theme] .soulseekWorkspace .slskResultRow {grid-template-columns:minmax(0,1fr);gap:6px;align-items:start;}
+:root[data-theme] .soulseekWorkspace .slskResultRow .colAction {grid-column:1;grid-row:3;display:flex;flex-direction:row;justify-content:flex-start;gap:6px;}
+:root[data-theme] .soulseekWorkspace .slskResultRow .colAction button {width:auto;flex:1 1 120px;max-width:100%;min-width:0;white-space:normal;}
+:root[data-theme] .soulseekWorkspace .slskPanelToggleBar {flex-wrap:wrap;}
+:root[data-theme] .soulseekWorkspace .slskTransferRow {display:flex;flex-direction:column;align-items:stretch;gap:8px;}
+:root[data-theme] .soulseekWorkspace .slskTransferRow .slskTransferActions {display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px;}
+:root[data-theme] .soulseekWorkspace .slskTransferRow .slskTransferBarCon {width:100%;min-width:0;}}
+
+:root[data-theme] .deckTopControls .compactMediaTrigger {border:0;background:transparent;padding:4px;}
+/* Native dialog top layer needs its own centering, independently of reset.css. */
+:root[data-theme] :is(.compactMediaDialog,.listeningDialog) {position:fixed;inset:0;margin:auto;max-width:calc(100% - 24px);height:fit-content;max-height:85dvh;}
+:is(.compactMediaDialog,.listeningDialog)::backdrop {background:rgb(0 0 0 / .48);}
+#compactMediaArt:not([src]),#compactMediaArt[hidden] {display:none!important;}
+
+:root[data-theme] .libraryWorkspaceHeading {font-size:1.25rem;font-weight:650;line-height:1.3;margin:0 0 12px;padding-inline:4px;color:var(--text-primary);letter-spacing:-.015em;}
+@media(max-height:560px){:root[data-theme] .libraryWorkspaceHeading{margin-bottom:4px;font-size:1rem;}}
+@media(max-width:768px){:root[data-theme] .soulseekWorkspace .slskResultRow .colAction{flex-wrap:wrap;align-items:center;justify-content:flex-end;}
+:root[data-theme] .soulseekWorkspace .slskResultRow .colAction button{flex:0 1 auto;min-width:44px;min-height:44px;padding-inline:12px;}
+:root[data-theme] .soulseekWorkspace .slskResultRow .slskGetBtn{background:var(--quiet-fill);color:var(--text-primary);}
+:root[data-theme] .soulseekWorkspace .slskResultRow .slskPlayBtn{background:transparent;border-color:transparent;color:var(--text-secondary);}}
+@media(prefers-reduced-motion:reduce){:root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn):active{scale:1;}}
+
+.listeningDialog .listeningPlay {grid-column:2 / -1;justify-self:end;min-height:44px;padding:4px 12px;}
+
+#audioDiagnosticResult:not([hidden]){display:block;width:100%;min-width:0;max-width:100%;min-height:90px;margin-top:8px;font:inherit;font-size:.8rem;resize:vertical;}

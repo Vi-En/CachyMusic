@@ -117,9 +117,9 @@ export class WorkstationStore extends EventTarget {
         super();
         const { peqGains, peqQs } = createInitialPeq();
         let initVol = parseFloat(safeStorage.getItem('cachymusic_volume') || '0.8');
-        if (isNaN(initVol)) initVol = 0.8;
+        initVol = Number.isFinite(initVol) ? Math.max(0, Math.min(1.5, initVol)) : 0.8;
         let initBalance = parseFloat(safeStorage.getItem('cachymusic_stereo_balance') || '0');
-        if (isNaN(initBalance)) initBalance = 0;
+        initBalance = Number.isFinite(initBalance) ? Math.max(-1, Math.min(1, initBalance)) : 0;
         const visMode = resolveInitialVisMode();
 
         this.state = {

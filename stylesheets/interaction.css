@@ -1,22 +1,10 @@
 /* Shared interaction feedback. Never animate continuous control values. */
-:root { --motion-feedback: cubic-bezier(.2,0,0,1); --motion-short: 140ms; --motion-standard: 200ms; }
-:root :is(button,summary,[role="button"],input[type="checkbox"],select) {
- transition: background-color var(--motion-short) var(--motion-feedback), border-color var(--motion-short) var(--motion-feedback), color var(--motion-short) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback), transform 180ms cubic-bezier(.34,1.56,.64,1);
+:root { --motion-feedback:cubic-bezier(.22,.7,.25,1); --motion-short:140ms; --motion-standard:220ms; }
+:root :is(button,summary,[role="button"],input[type="checkbox"],select,label.actionBtn) {
+ transition:background-color var(--motion-short) var(--motion-feedback),border-color var(--motion-short) var(--motion-feedback),color var(--motion-short) var(--motion-feedback),opacity var(--motion-short) var(--motion-feedback),box-shadow var(--motion-short) var(--motion-feedback);
 }
-:root :is(button,summary,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.trackDetails):not(.playlistOpenBtn):active {
- opacity: .88;
- transform: scale(.945);
- transition-duration: 70ms;
- transition-timing-function: cubic-bezier(.2,0,0,1);
-}
-@keyframes cachyBtnPop {
- 0%   { transform: scale(.945); }
- 55%  { transform: scale(1.038); }
- 100% { transform: scale(1); }
-}
-:root :is(button,summary,[role="button"]).is-popping:not(:disabled):not([aria-disabled="true"]) {
- animation: cachyBtnPop 210ms cubic-bezier(.22,1,.36,1);
-}
+:root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn) {transition:background-color var(--motion-short) var(--motion-feedback),color var(--motion-short) var(--motion-feedback),border-color var(--motion-short) var(--motion-feedback),opacity var(--motion-short) var(--motion-feedback),scale 180ms var(--motion-feedback);}
+:root :is(.mediaBtn,.miniPlayBtn,.actionBtn,.deckActionBtn):not(:disabled):not([aria-disabled="true"]):active {scale:.975;opacity:.94;transition-duration:80ms;}
 :root :is(input[type="checkbox"],.toolsChevron,.settingsAdvancedChevron) { transition: background-color var(--motion-standard) var(--motion-feedback), border-color var(--motion-standard) var(--motion-feedback), transform var(--motion-standard) var(--motion-feedback), opacity var(--motion-short) var(--motion-feedback); }
 :root input[type="checkbox"]::before { transition: transform var(--motion-standard) var(--motion-feedback), background-color var(--motion-short) var(--motion-feedback); }
 :root input[type="range"]::-webkit-slider-thumb { transition: background-color var(--motion-short) var(--motion-feedback), box-shadow var(--motion-short) var(--motion-feedback); }

@@ -3,6 +3,9 @@
 // Cross-platform persistence in cachy_data_dir() via SQLite3 WAL (when loaded) + POSIX atomic JSON, with MySQL sync when available.
 
 require_once(__DIR__ . '/platform.php');
+require_once(__DIR__ . '/media_access.php');
+require_once(__DIR__ . '/recording_leases.php');
+require_once(__DIR__ . '/artwork_store.php');
 require_once(__DIR__ . '/playlist-sql.php');
 
 class Storage {
@@ -12,6 +15,8 @@ class Storage {
     private static $memoryCache = null;
     private static $memoryCacheMtime = 0;
     private static $batchDepth = 0;
+    private static $sqlScan = null;
+    private static $batchFailed = false;
     private static $isDirty = false;
     private static $pathToTidIndex = null;
     private static $readBase = null;
@@ -21,23 +26,61 @@ class Storage {
     private static function locked(callable $fn) {
         if (self::$writeLock !== null) return $fn();
         self::resolvePaths();
-        $lock = @fopen(self::$dataFile . '.lock', 'c');
+        $lockPath=self::$dataFile.'.lock';
+        $lock=cm_open_sidecar_lock($lockPath);
         if (!$lock) return false;
-        $deadline = microtime(true) + 3;
+        $deadline = hrtime(true) + 3000000000;
         while (!@flock($lock, LOCK_EX | LOCK_NB)) {
-            if (microtime(true) >= $deadline) { fclose($lock); return false; }
+            if (hrtime(true) >= $deadline) { fclose($lock); return false; }
             usleep(20000);
         }
+        if (!cm_regular_descriptor($lock,$lockPath)) {fclose($lock);return false;}
         self::$writeLock = $lock;
         try { return $fn(); }
         finally { self::$writeLock = null; flock($lock, LOCK_UN); fclose($lock); }
     }
 
+    public static function libraryByteLimit(): int {
+        $value=getenv('CACHYMUSIC_LIBRARY_MAX_BYTES');
+        if ($value===false||$value==='') return 67108864;
+        $limit=filter_var($value,FILTER_VALIDATE_INT,['options'=>['min_range'=>1024,'max_range'=>67108864]]);
+        if ($limit===false) throw new RuntimeException('Invalid library storage byte budget.');
+        return $limit;
+    }
+
+    // Launcher preflight must be non-mutating and use the same bounded
+    // descriptor policy as the authoritative JSON reader.
+    public static function preflightLibrary(): bool {
+        try {
+            self::resolvePaths();self::libraryByteLimit();
+            clearstatcache(true,self::$dataFile);
+            if (@lstat(self::$dataFile)===false) return !is_link(self::$dataFile)&&!file_exists(self::$dataFile);
+            $data=self::freshData();
+            return $data!==null&&array_is_list($data['playlists']);
+        } catch (Throwable $e) {return false;}
+    }
+
     private static function freshData() {
         clearstatcache(true, self::$dataFile);
-        $raw = @file_get_contents(self::$dataFile);
-        $data = $raw === false ? null : json_decode($raw, true);
-        return is_array($data) && isset($data['playlists'], $data['tracks']) && is_array($data['playlists']) && is_array($data['tracks']) ? $data : null;
+        $raw=false;$limit=self::libraryByteLimit();
+        for ($attempt=0;$attempt<3;$attempt++) {
+            clearstatcache(true,self::$dataFile);$named=@lstat(self::$dataFile);if (!cm_regular_stat($named)||$named['size']>$limit) return null;
+            $h=@fopen(self::$dataFile,'rb');if (!$h) return null;
+            try {if (cm_regular_descriptor($h,self::$dataFile)) {$raw=stream_get_contents($h,$limit+1);break;}}
+            finally {fclose($h);}
+        }
+        return !is_string($raw)||strlen($raw)>$limit ? null : self::decodeLibrarySnapshot($raw);
+    }
+
+    // Pure decode for derived lookup caches. Does not set a write baseline.
+    public static function decodeLibrarySnapshot(string $raw): ?array {
+        if (strlen($raw)>self::libraryByteLimit()) return null;
+        $data=json_decode($raw,true);
+        return self::validData($data)?$data:null;
+    }
+
+    private static function validData($data): bool {
+        return is_array($data) && isset($data['playlists'], $data['tracks']) && is_array($data['playlists']) && is_array($data['tracks']);
     }
 
     private static function playlistMutation(callable $fn) {
@@ -143,18 +186,79 @@ class Storage {
     }
 
     public static function beginBatch() {
+        if (self::$batchDepth === 0) {
+            self::$batchFailed = false;
+            self::read();
+            if (self::$readBase === null) self::$batchFailed = true;
+        }
         self::$batchDepth++;
+        return !self::$batchFailed;
     }
 
-    public static function commitBatch() {
-        if (self::$batchDepth > 0) {
-            self::$batchDepth--;
+    // SQL scans have a single authoritative transaction. The JSON mirror is
+    // intentionally not a participant; old overlay records remain read-only.
+    public static function beginScanBatch(): bool {
+        if (!self::hasMySQL()) return self::beginBatch();
+        if (self::$sqlScan !== null || self::$batchDepth !== 0) return false;
+        $conn=$GLOBALS['connection'];
+        // Refuse legacy nontransactional tables instead of promising rollback.
+        $engines=mysqli_query($conn,"SELECT TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('Tracks','DefaultDirectory')");
+        if (!$engines) return false;
+        $found=[];
+        while ($r=mysqli_fetch_assoc($engines)) $found[$r['TABLE_NAME']]=strtoupper((string)$r['ENGINE']);
+        if (($found['Tracks']??null)!=='INNODB'||($found['DefaultDirectory']??null)!=='INNODB') return false;
+        if (!$conn->begin_transaction()) return false;
+        self::$sqlScan=$conn; self::$batchFailed=false;
+        try {
+            // Ensure a singleton exists, then hold its row lock through publication.
+            if (!mysqli_query($conn,"INSERT INTO DefaultDirectory (ddid,default_directory) VALUES (1,'') ON DUPLICATE KEY UPDATE ddid=ddid")) throw new RuntimeException('SQL root lock unavailable');
+            $root=mysqli_query($conn,"SELECT default_directory FROM DefaultDirectory WHERE ddid=1 FOR UPDATE");
+            if (!$root||!mysqli_fetch_assoc($root)) throw new RuntimeException('SQL root lock unavailable');
+            return true;
+        } catch (Throwable $e) { self::abortBatch(); return false; }
+    }
+
+    public static function commitScanBatch(): bool {
+        if (self::$sqlScan===null) return self::commitBatch(true);
+        $conn=self::$sqlScan;
+        if (self::$batchFailed) { self::abortBatch(); return false; }
+        // Connection loss during commit can leave the outcome uncertain. Never
+        // retry here; the scanner reports failure and the owner must reconcile.
+        try { $ok=$conn->commit(); } catch (Throwable $e) { $ok=false; }
+        if (!$ok) { self::abortBatch(); return false; }
+        self::$sqlScan=null;self::abortBatch();return true;
+    }
+
+    private static function rejectWrite(): bool {
+        if (self::$batchDepth > 0 || self::$sqlScan!==null) self::$batchFailed = true;
+        return false;
+    }
+
+    public static function commitBatch(bool $requireDirectoryStable = false) {
+        if (self::$batchDepth === 0) return false;
+        if (--self::$batchDepth > 0) return !self::$batchFailed;
+        $ok = !self::$batchFailed;
+        if ($ok && self::$isDirty) $ok = self::write(self::$memoryCache, true, $requireDirectoryStable);
+        elseif ($ok) {
+            // Cached scan results still carry track IDs. Reject a changed
+            // track snapshot even when nothing needed to be written.
+            $fresh = self::freshData();
+            $ok = $fresh !== null && $fresh['tracks'] === self::$readBase['tracks'] && (!$requireDirectoryStable || ($fresh['default_directory']??'') === (self::$readBase['default_directory']??''));
         }
-        if (self::$batchDepth === 0 && self::$isDirty && is_array(self::$memoryCache)) {
-            self::$isDirty = false;
-            return self::write(self::$memoryCache, true);
-        }
-        return true;
+        // A failed commit must discard all provisional IDs and never be
+        // mistaken for a successful second commit. Next batch reads fresh.
+        self::$isDirty = false;
+        self::$batchFailed = false;
+        self::$memoryCache = self::$readBase = self::$pathToTidIndex = null;
+        return $ok;
+    }
+
+    // Discard unpublished changes after a failed worker job. A CLI worker
+    // processes multiple scans; request teardown no longer resets this state.
+    public static function abortBatch(): void {
+        if (self::$sqlScan!==null) { $conn=self::$sqlScan;self::$sqlScan=null;try {$conn->rollback();} catch (Throwable $e) {} }
+        self::$batchDepth=0; self::$batchFailed=false; self::$isDirty=false;
+        self::$memoryCache=self::$readBase=self::$pathToTidIndex=null;
     }
 
     public static function init() {
@@ -169,7 +273,7 @@ class Storage {
         }
         self::initSqlite();
 
-        if (!file_exists(self::$dataFile)) {
+        if (!file_exists(self::$dataFile)&&!is_link(self::$dataFile)) {
             $defaultDir = '';
 
             $initData = [
@@ -263,13 +367,18 @@ class Storage {
                 }
             }
 
-            self::locked(function() use ($initData) { if (!file_exists(self::$dataFile)) { $tmp = @tempnam(dirname(self::$dataFile), 'lib_init_'); if ($tmp !== false) { $raw = json_encode($initData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES); if ($raw === false || @file_put_contents($tmp,$raw) !== strlen($raw) || !@rename($tmp,self::$dataFile)) @unlink($tmp); } } });
+            self::locked(function() use ($initData) {
+                if (!file_exists(self::$dataFile)&&!is_link(self::$dataFile)) {
+                    $raw = json_encode($initData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+                    if ($raw !== false&&strlen($raw)<=self::libraryByteLimit()) cm_profile_replace_file(self::$dataFile, $raw, 0640);
+                }
+            });
         }
     }
 
     public static function read() {
         self::init();
-        if ((self::$batchDepth > 0 || self::$isDirty) && self::$memoryCache !== null) return self::$memoryCache;
+        if (self::$batchDepth > 0) return self::$memoryCache ?? [];
         $data = self::freshData();
         self::$readBase = $data;
         self::$memoryCache = $data;
@@ -277,16 +386,19 @@ class Storage {
         return $data ?? [];
     }
 
-    public static function write($data, $forceFlush = false) {
+    public static function write($data, $forceFlush = false, bool $requireDirectoryStable = false, ?array $expectedAuthority = null) {
         self::init();
-        if (!is_array($data) || self::$readBase === null) return false;
+        if (!self::validData($data) || self::$readBase === null || (self::$batchDepth > 0 && self::$batchFailed)) return self::rejectWrite();
         if (self::$batchDepth > 0 && !$forceFlush) {
             self::$memoryCache = $data; self::$isDirty = true; return true;
         }
-        return self::locked(function() use ($data) {
+        return self::locked(function() use ($data, $requireDirectoryStable, $expectedAuthority) {
             $fresh = self::freshData();
             if ($fresh === null) return false;
             $base = self::$readBase;
+            if ($expectedAuthority !== null && cm_media_authority($fresh) !== $expectedAuthority) return false;
+            if ($requireDirectoryStable && (($fresh['default_directory']??'') !== ($base['default_directory']??'') || $fresh['tracks'] !== $base['tracks'])) return false;
+            $oldAuthority = cm_media_authority($fresh);
             // Merge independent top-level changes, reject conflicts rather than
             // allowing a stale scan or other writer to replace playlist data.
             foreach (array_unique(array_merge(array_keys($base),array_keys($data))) as $key) {
@@ -294,51 +406,33 @@ class Storage {
                 if (array_key_exists($key,$base) !== array_key_exists($key,$fresh) || ($base[$key]??null) !== ($fresh[$key]??null)) return false;
                 if (array_key_exists($key,$data)) $fresh[$key] = $data[$key]; else unset($fresh[$key]);
             }
+            if (!self::validData($fresh)) return false;
             $json = json_encode($fresh, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
-            if ($json === false) return false;
-            $temp = @tempnam(dirname(self::$dataFile), 'lib_tmp_');
-            if ($temp === false) return false;
+            if ($json === false||strlen($json)>self::libraryByteLimit()) return false;
+            $authorityGuard = null;
+            if (!self::hasMySQL() && $oldAuthority !== cm_media_authority($fresh)) {
+                $authorityGuard = cm_recording_authority_change_guard();
+                if (!$authorityGuard) return false;
+            }
             try {
-                if (@file_put_contents($temp,$json,LOCK_EX) !== strlen($json)) return false;
-                @chmod($temp,0640);
-                // Never copy over the existing file after a failed atomic replace.
-                if (!@rename($temp,self::$dataFile)) return false;
-            } finally { if (is_file($temp)) @unlink($temp); }
-            self::$memoryCache = self::$readBase = $fresh;
-            self::$isDirty = false;
-            self::syncSqliteFromData($fresh);
-            return true;
+                if (!cm_profile_replace_file(self::$dataFile, $json, 0640)) return false;
+                self::$memoryCache = self::$readBase = $fresh;
+                self::$isDirty = false;
+                self::syncSqliteFromData($fresh);
+                return true;
+            } finally {if (is_resource($authorityGuard)) fclose($authorityGuard);}
         });
     }
 
     // --- DEFAULT DIRECTORY ---
     public static function getDefaultDirectory() {
-        $isPlaceholder = function($path) {
-            $trimmed = trim((string)$path);
-            return ($trimmed === '');
-        };
-
-        $data = self::read();
-        if (is_array($data) && array_key_exists('default_directory', $data)) {
-            $saved = trim((string)$data['default_directory']);
-            if (!$isPlaceholder($saved)) {
-                return $saved;
-            }
-            return '';
-        }
-
         if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $res = @mysqli_query($conn, "SELECT default_directory FROM DefaultDirectory WHERE ddid = 1 LIMIT 1");
-            if ($res && $row = mysqli_fetch_assoc($res)) {
-                $dbDir = trim((string)($row['default_directory'] ?? ''));
-                if (!$isPlaceholder($dbDir)) {
-                    return $dbDir;
-                }
-            }
+            $res=mysqli_query($GLOBALS['connection'],"SELECT default_directory FROM DefaultDirectory WHERE ddid = 1 LIMIT 1");
+            if (!$res) throw new RuntimeException('SQL directory lookup failed');
+            $row=mysqli_fetch_assoc($res);
+            return trim((string)($row['default_directory']??''));
         }
-
-        return '';
+        $data=self::read();return trim((string)($data['default_directory']??''));
     }
 
     public static function setDefaultDirectory($dir) {
@@ -346,19 +440,19 @@ class Storage {
         if (self::hasMySQL()) {
             $conn = $GLOBALS['connection'];
             $stmt = $conn->prepare("INSERT INTO DefaultDirectory (ddid, default_directory) VALUES (1, ?) ON DUPLICATE KEY UPDATE default_directory = VALUES(default_directory)");
-            if ($stmt) {
-                $stmt->bind_param("s", $dir);
-                $stmt->execute();
-            }
+            if (!$stmt) return self::rejectWrite();
+            try {if (!$stmt->bind_param("s",$dir)||!$stmt->execute()) return self::rejectWrite();}
+            finally {$stmt->close();}
+            return true; // SQL root is authoritative; do not publish a JSON mirror.
         }
 
         $data = self::read();
+        if (self::$readBase === null) return self::rejectWrite();
         if (($data['default_directory'] ?? '') === $dir) {
             return true;
         }
         $data['default_directory'] = $dir;
-        self::write($data);
-        return true;
+        return self::write($data);
     }
 
     // --- PLAYLISTS ---
@@ -574,26 +668,29 @@ class Storage {
     public static function getCachedTracks($searchPrefix = '') {
         $cached = [];
         if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $prefix = $searchPrefix . '%';
-            $stmt = $conn->prepare("SELECT tid, file_path, full_path, title, artist, album, genre, year, track_num, duration, bitrate, sample_rate, channels, bit_depth, format, file_size, mtime, has_cover, lyrics FROM Tracks WHERE full_path LIKE ? OR file_path LIKE ?");
-            if ($stmt) {
-                $stmt->bind_param("ss", $prefix, $prefix);
-                $stmt->execute();
-                $res = $stmt->get_result();
-                while ($row = $res->fetch_assoc()) {
-                    $key = $row['full_path'] ?: $row['file_path'];
-                    $cached[$key] = $row;
+            $conn=$GLOBALS['connection'];$prefix=$searchPrefix.'%';
+            $stmt=$conn->prepare("SELECT tid, file_path, full_path, title, artist, album, genre, year, track_num, duration, bitrate, sample_rate, channels, bit_depth, format, file_size, mtime, has_cover, lyrics FROM Tracks WHERE full_path LIKE ? OR file_path LIKE ?");
+            if (!$stmt) throw new RuntimeException('SQL track lookup failed');
+            try {
+                if (!$stmt->bind_param("ss",$prefix,$prefix)||!$stmt->execute()||!($res=$stmt->get_result())) throw new RuntimeException('SQL track lookup failed');
+                $ambiguous=[];
+                while ($row=$res->fetch_assoc()) {
+                    $key=$row['full_path']?:$row['file_path'];
+                    if ($key===''||($searchPrefix!==''&&!str_starts_with($key,$searchPrefix))) continue;
+                    if (isset($cached[$key])) {unset($cached[$key]);$ambiguous[$key]=true;}
+                    elseif (!isset($ambiguous[$key])) $cached[$key]=$row;
                 }
-                if (!empty($cached)) return $cached;
-            }
+                return $cached;
+            } finally {$stmt->close();}
         }
 
         $data = self::read();
+        $ambiguous = [];
         foreach ($data['tracks'] ?? [] as $t) {
-            $fullPath = $t['full_path'] ?: $t['file_path'];
-            if (empty($searchPrefix) || str_starts_with($fullPath, $searchPrefix)) {
-                $cached[$fullPath] = $t;
+            $fullPath = ($t['full_path'] ?? '') ?: ($t['file_path'] ?? '');
+            if ($fullPath !== '' && (empty($searchPrefix) || str_starts_with($fullPath, $searchPrefix))) {
+                if (isset($cached[$fullPath])) { unset($cached[$fullPath]); $ambiguous[$fullPath] = true; }
+                elseif (!isset($ambiguous[$fullPath])) $cached[$fullPath] = $t;
             }
         }
         return $cached;
@@ -601,119 +698,102 @@ class Storage {
 
     public static function upsertTrack($trackData) {
         $tid = null;
+        $fullPath=($trackData['full_path']??'')?:($trackData['file_path']??'');
+        if (!is_string($fullPath)||$fullPath==='') return self::rejectWrite();
         if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $stmt = $conn->prepare("
-                INSERT INTO Tracks (file_path, full_path, title, artist, album, genre, year, track_num, duration, bitrate, sample_rate, channels, bit_depth, format, file_size, mtime, has_cover, lyrics)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    full_path = VALUES(full_path),
-                    title = VALUES(title),
-                    artist = VALUES(artist),
-                    album = VALUES(album),
-                    genre = VALUES(genre),
-                    year = VALUES(year),
-                    track_num = VALUES(track_num),
-                    duration = VALUES(duration),
-                    bitrate = VALUES(bitrate),
-                    sample_rate = VALUES(sample_rate),
-                    channels = VALUES(channels),
-                    bit_depth = VALUES(bit_depth),
-                    format = VALUES(format),
-                    file_size = VALUES(file_size),
-                    mtime = VALUES(mtime),
-                    has_cover = VALUES(has_cover),
-                    lyrics = VALUES(lyrics)
-            ");
-            if ($stmt) {
-                $hasCoverInt = !empty($trackData['has_cover']) ? 1 : 0;
-                $stmt->bind_param(
-                    "sssssiisidiiisiiis",
-                    $trackData['file_path'],
-                    $trackData['full_path'],
-                    $trackData['title'],
-                    $trackData['artist'],
-                    $trackData['album'],
-                    $trackData['genre'],
-                    $trackData['year'],
-                    $trackData['track_num'],
-                    $trackData['duration'],
-                    $trackData['bitrate'],
-                    $trackData['sample_rate'],
-                    $trackData['channels'],
-                    $trackData['bit_depth'],
-                    $trackData['format'],
-                    $trackData['file_size'],
-                    $trackData['mtime'],
-                    $hasCoverInt,
-                    $trackData['lyrics']
-                );
-                if ($stmt->execute()) {
-                    $tid = $conn->insert_id ?: $stmt->insert_id;
-                }
+            if (self::$batchFailed) return self::rejectWrite();
+            $conn=$GLOBALS['connection'];$ownTransaction=self::$sqlScan===null;
+            if ($ownTransaction&&!$conn->begin_transaction()) return self::rejectWrite();
+            $committed=false;
+            try {
+                $columns=['file_path','full_path','title','artist','album','genre','year','track_num','duration','bitrate','sample_rate','channels','bit_depth','format','file_size','mtime','has_cover','lyrics'];
+                // A collated UNIQUE file_path may match a different spelling. Do
+                // not mutate that row. Exact path identity is required even when
+                // MySQL's collation treats distinct paths as equal.
+                $same="BINARY file_path = BINARY VALUES(file_path) AND BINARY COALESCE(NULLIF(full_path,''),file_path) = BINARY COALESCE(NULLIF(VALUES(full_path),''),VALUES(file_path))";
+                $assignments=["tid = IF($same, LAST_INSERT_ID(tid), tid)"];
+                foreach (array_slice($columns,1) as $column) $assignments[]="$column = IF($same, VALUES($column), $column)";
+                $stmt=$conn->prepare('INSERT INTO Tracks ('.implode(', ',$columns).') VALUES ('.implode(', ',array_fill(0,count($columns),'?')).') ON DUPLICATE KEY UPDATE '.implode(', ',$assignments));
+                if (!$stmt) return self::rejectWrite();
+                try {
+                    $hasCoverInt=!empty($trackData['has_cover'])?1:0;
+                    // All values are supplied, including nullable optional fields.
+                    $values=[];foreach($columns as $key) $values[]=$key==='has_cover'?$hasCoverInt:($trackData[$key]??null);
+                    if (!$stmt->bind_param("ssssssisdiiiisiiis",...$values)||!$stmt->execute()) return self::rejectWrite();
+                    $tid=cachy_positive_id($conn->insert_id?:$stmt->insert_id);
+                } finally {$stmt->close();}
+                if ($tid===null||self::getTrackPath($tid)!==$fullPath) return self::rejectWrite();
+                if ($ownTransaction&&!$conn->commit()) return self::rejectWrite();
+                $committed=true;
+                return $tid;
+            } finally {
+                if ($ownTransaction&&!$committed) try {$conn->rollback();} catch (Throwable $e) {}
             }
         }
 
         $data = self::read();
-        $fullPath = $trackData['full_path'] ?: $trackData['file_path'];
+        if (self::$readBase === null || (self::$batchDepth > 0 && self::$batchFailed)) return self::rejectWrite();
+        $fullPath = ($trackData['full_path'] ?? '') ?: ($trackData['file_path'] ?? '');
+        if (!is_string($fullPath) || $fullPath === '') return self::rejectWrite();
 
         if (self::$pathToTidIndex === null) {
             self::$pathToTidIndex = ['byPath' => [], 'maxTid' => 0];
-            foreach ($data['tracks'] ?? [] as $existingTid => $t) {
+            foreach ($data['tracks'] as $existingTid => $t) {
                 $numTid = (int)$existingTid;
-                if ($numTid > self::$pathToTidIndex['maxTid']) {
-                    self::$pathToTidIndex['maxTid'] = $numTid;
-                }
-                if (!empty($t['full_path'])) {
-                    self::$pathToTidIndex['byPath'][$t['full_path']] = $numTid;
-                }
-                if (!empty($t['file_path'])) {
-                    self::$pathToTidIndex['byPath'][$t['file_path']] = $numTid;
+                self::$pathToTidIndex['maxTid'] = max(self::$pathToTidIndex['maxTid'], $numTid);
+                // Full paths are authoritative. A legacy basename is not an
+                // alias for a different recording in a different directory.
+                $path = ($t['full_path'] ?? '') ?: ($t['file_path'] ?? '');
+                if ($path !== '') {
+                    $index =& self::$pathToTidIndex['byPath'];
+                    $index[$path] = array_key_exists($path, $index) ? false : $numTid;
+                    unset($index);
                 }
             }
         }
 
         if (!$tid) {
-            if (isset(self::$pathToTidIndex['byPath'][$fullPath])) {
-                $tid = self::$pathToTidIndex['byPath'][$fullPath];
-            } elseif (!empty($trackData['file_path']) && isset(self::$pathToTidIndex['byPath'][$trackData['file_path']])) {
-                $tid = self::$pathToTidIndex['byPath'][$trackData['file_path']];
+            $index = self::$pathToTidIndex['byPath'];
+            if (array_key_exists($fullPath, $index)) {
+                $tid = $index[$fullPath];
+                if (!$tid) return self::rejectWrite(); // ambiguous legacy data
             } else {
-                self::$pathToTidIndex['maxTid']++;
-                $tid = self::$pathToTidIndex['maxTid'];
+                if (self::$pathToTidIndex['maxTid'] >= PHP_INT_MAX) return self::rejectWrite();
+                $tid = ++self::$pathToTidIndex['maxTid'];
             }
+            unset($index);
         } elseif ((int)$tid > self::$pathToTidIndex['maxTid']) {
             self::$pathToTidIndex['maxTid'] = (int)$tid;
         }
 
         $tid = (int)$tid;
-        if (!empty($fullPath)) self::$pathToTidIndex['byPath'][$fullPath] = $tid;
-        if (!empty($trackData['file_path'])) self::$pathToTidIndex['byPath'][$trackData['file_path']] = $tid;
+        self::$pathToTidIndex['byPath'][$fullPath] = $tid;
 
         $existing = $data['tracks'][(string)$tid] ?? null;
+        if ($existing!==null&&(($existing['full_path']??'')?:($existing['file_path']??''))!==$fullPath) return self::rejectWrite();
         if ($existing !== null && ($existing['mtime'] ?? 0) === ($trackData['mtime'] ?? 0) && ($existing['file_size'] ?? 0) === ($trackData['file_size'] ?? 0) && !empty($existing['title'])) {
             return $tid;
         }
 
+        // A library-only artwork edit survives a rescan of the same path.
+        if ($existing && (($existing['full_path'] ?? '') ?: ($existing['file_path'] ?? '')) === $fullPath && !empty($existing['artwork_hash'])) {
+            $trackData['artwork_hash'] = $existing['artwork_hash'];
+            $trackData['has_cover'] = 1;
+        }
         $trackData['tid'] = $tid;
         $data['tracks'][(string)$tid] = $trackData;
-        self::write($data);
-        return $tid;
+        return self::write($data) ? $tid : false;
     }
 
     public static function getTrackPath($tid) {
         $tid = (int)$tid;
         if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $stmt = $conn->prepare("SELECT full_path, file_path FROM Tracks WHERE tid = ? LIMIT 1");
-            if ($stmt) {
-                $stmt->bind_param("i", $tid);
-                $stmt->execute();
-                $res = $stmt->get_result();
-                if ($res && $row = $res->fetch_assoc()) {
-                    return $row['full_path'] ?: $row['file_path'];
-                }
-            }
+            $stmt=$GLOBALS['connection']->prepare("SELECT full_path, file_path FROM Tracks WHERE tid = ? LIMIT 1");
+            if (!$stmt) throw new RuntimeException('SQL track identity lookup failed');
+            try {
+                if (!$stmt->bind_param("i",$tid)||!$stmt->execute()||!($res=$stmt->get_result())) throw new RuntimeException('SQL track identity lookup failed');
+                $row=$res->fetch_assoc();return $row?($row['full_path']?:$row['file_path']):null;
+            } finally {$stmt->close();}
         }
 
         $data = self::read();
@@ -725,21 +805,80 @@ class Storage {
     }
 
     public static function getTrackByPath($fullPath) {
-        if (empty($fullPath)) return null;
-        $normTarget = cachy_normalize_path((string)$fullPath);
-        $data = self::read();
-        foreach ($data['tracks'] ?? [] as $t) {
-            $fp = cachy_normalize_path((string)($t['full_path'] ?? $t['file_path'] ?? ''));
-            if ($fp === $normTarget) return $t;
+        if (!is_string($fullPath)||$fullPath==='') return null;
+        if (self::hasMySQL()) {
+            $stmt=$GLOBALS['connection']->prepare("SELECT tid, file_path, full_path, title, artist, album, genre, year, track_num, duration, bitrate, sample_rate, channels, bit_depth, format, file_size, mtime, has_cover, lyrics FROM Tracks WHERE BINARY COALESCE(NULLIF(full_path,''),file_path) = BINARY ? LIMIT 2");
+            if (!$stmt) throw new RuntimeException('SQL path lookup failed');
+            try {
+                if (!$stmt->bind_param('s',$fullPath)||!$stmt->execute()||!($res=$stmt->get_result())) throw new RuntimeException('SQL path lookup failed');
+                $row=$res->fetch_assoc();
+                return $row&&cm_media_record_path($row)===$fullPath&&cachy_positive_id($row['tid']??null)!==null&&!$res->fetch_assoc()?$row:null;
+            } finally {$stmt->close();}
         }
-        return null;
+        $data = self::read();
+        $match = null;
+        foreach ($data['tracks'] ?? [] as $t) {
+            $fp = ($t['full_path'] ?? '') ?: ($t['file_path'] ?? '');
+            if ($fp === $fullPath) {
+                if ($match !== null) return null;
+                $match = $t;
+            }
+        }
+        return $match;
     }
 
-    public static function updateTrackMetadata($tid, $fields) {
+    // SQL metadata is authoritative. A local artwork/comment overlay is only
+    // eligible when its recording identity matches the SQL row exactly.
+    public static function sqlTrackRecord(int $tid, bool $forUpdate=false): ?array {
+        if (!self::hasMySQL() || $tid<=0) return null;
+        $conn=$GLOBALS['connection'];
+        $stmt=$conn->prepare('SELECT tid, file_path, full_path, title, artist, album, genre, year, track_num, duration, bitrate, sample_rate, channels, bit_depth, format, file_size, mtime, has_cover, lyrics FROM Tracks WHERE tid = ? LIMIT 1'.($forUpdate?' FOR UPDATE':''));
+        if (!$stmt) throw new RuntimeException('SQL metadata lookup failed');
+        try {
+            if (!$stmt->bind_param('i',$tid)||!$stmt->execute()||!($res=$stmt->get_result())) throw new RuntimeException('SQL metadata lookup failed');
+            $row=$res->fetch_assoc();
+            if (!$row) return null;
+            if (cachy_positive_id($row['tid']??null)!==$tid||cm_media_record_path($row)===null) throw new RuntimeException('Invalid SQL recording identity');
+            return $row;
+        } finally {$stmt->close();}
+    }
+
+    // Supported SQL-only edits use a row transaction. Do not claim atomic
+    // publication of SQL plus local artwork or original audio file contents.
+    private static function updateSqlTrackMetadata(int $tid,array $fields,$expectedPath): array|false {
+        if (array_key_exists('artwork_hash',$fields)||array_key_exists('comment',$fields)) return false;
+        $conn=$GLOBALS['connection'];
+        if (!$conn->begin_transaction()) return false;
+        $committed=false;
+        try {
+            $row=self::sqlTrackRecord($tid,true);
+            if (!$row||($expectedPath!==null&&cm_media_record_path($row)!==$expectedPath)) return false;
+            $types='';$values=[];$assign=[];
+            foreach (['title'=>'s','artist'=>'s','album'=>'s','genre'=>'s','year'=>'i','track_num'=>'s','lyrics'=>'s','has_cover'=>'i'] as $key=>$type) {
+                if (!array_key_exists($key,$fields)) continue;
+                $val=$fields[$key]===null?null:trim((string)$fields[$key]);
+                if ($type==='i') $val=$key==='has_cover'?(int)!empty($fields[$key]):(is_numeric($val)?(int)$val:null);
+                $assign[]="$key = ?";$types.=$type;$values[]=$val;$row[$key]=$val;
+            }
+            if ($assign) {
+                $types.='i';$values[]=$tid;
+                $stmt=$conn->prepare('UPDATE Tracks SET '.implode(', ',$assign).' WHERE tid = ?');
+                if (!$stmt) return false;
+                try {if (!$stmt->bind_param($types,...$values)||!$stmt->execute()) return false;}
+                finally {$stmt->close();}
+            }
+            if (!$conn->commit()) return false;
+            $committed=true;return $row;
+        } finally {if (!$committed) $conn->rollback();}
+    }
+
+    public static function updateTrackMetadata($tid, $fields, $expectedPath = null, ?array $expectedAuthority = null, ?string $expectedRecord = null) {
         $tid = (int)$tid;
         if ($tid <= 0) return false;
+        if (self::hasMySQL()) return self::updateSqlTrackMetadata($tid,$fields,$expectedPath);
 
         $data = self::read();
+        if ($expectedAuthority !== null && cm_media_authority($data) !== $expectedAuthority) return false;
         $strTid = (string)$tid;
         $track = $data['tracks'][$strTid] ?? null;
 
@@ -754,14 +893,22 @@ class Storage {
         }
 
         if ($track === null) return false;
+        if ($expectedRecord !== null && !hash_equals($expectedRecord,hash('sha256',json_encode($track,JSON_THROW_ON_ERROR)))) return false;
 
-        $updatable = ['title', 'artist', 'album', 'genre', 'year', 'track_num', 'lyrics', 'has_cover'];
+        if ($expectedPath !== null && (($track['full_path'] ?? '') ?: ($track['file_path'] ?? '')) !== $expectedPath) return false;
+        if (array_key_exists('artwork_hash', $fields)) {
+            if (!is_string($fields['artwork_hash']) || cm_artwork_read($tid, $fields['artwork_hash']) === null) return false;
+            $fields['has_cover'] = 1;
+        }
+        $updatable = ['title', 'artist', 'album', 'genre', 'year', 'track_num', 'lyrics', 'comment', 'has_cover', 'artwork_hash'];
         $hasChanges = false;
         foreach ($updatable as $key) {
             if (array_key_exists($key, $fields)) {
                 $val = trim((string)$fields[$key]);
-                if ($key === 'year' || $key === 'track_num') {
+                if ($key === 'year') {
                     $val = is_numeric($val) ? (int)$val : null;
+                } elseif ($key === 'track_num') {
+                    $val = $val === '' ? null : $val;
                 } elseif ($key === 'has_cover') {
                     $val = !empty($fields[$key]) ? 1 : 0;
                 }
@@ -772,19 +919,9 @@ class Storage {
 
         if ($hasChanges) {
             $data['tracks'][$strTid] = $track;
-            self::write($data);
+            if (!self::write($data,false,false,$expectedAuthority)) return false;
 
-            if (self::hasMySQL()) {
-                $conn = $GLOBALS['connection'];
-                $hasCov = !empty($track['has_cover']) ? 1 : 0;
-                $stmt = $conn->prepare("UPDATE Tracks SET title = ?, artist = ?, album = ?, genre = ?, year = ?, track_num = ?, has_cover = ? WHERE tid = ?");
-                if ($stmt) {
-                    $yr = $track['year'] ?? null;
-                    $trk = $track['track_num'] ?? null;
-                    $stmt->bind_param("ssssiiii", $track['title'], $track['artist'], $track['album'], $track['genre'], $yr, $trk, $hasCov, $tid);
-                    $stmt->execute();
-                }
-            }
+
         }
 
         return $track;
@@ -793,11 +930,9 @@ class Storage {
     // --- SOULSEEK ACCOUNT ---
     public static function getSoulseekAccount() {
         if (self::hasMySQL()) {
-            $conn = $GLOBALS['connection'];
-            $res = @mysqli_query($conn, "SELECT id, username, password, is_powered_on, downloads_dir, shared_dir FROM SoulseekAccount WHERE id = 1 LIMIT 1");
-            if ($res && $row = mysqli_fetch_assoc($res)) {
-                return $row;
-            }
+            $res=mysqli_query($GLOBALS['connection'],"SELECT id, username, password, is_powered_on, downloads_dir, shared_dir FROM SoulseekAccount WHERE id = 1 LIMIT 1");
+            if (!$res) throw new RuntimeException('SQL peer-directory lookup failed');
+            return mysqli_fetch_assoc($res)?:['id'=>1,'username'=>'','password'=>'','is_powered_on'=>0,'downloads_dir'=>'','shared_dir'=>''];
         }
 
         $data = self::read();
@@ -833,8 +968,7 @@ class Storage {
             'downloads_dir' => $cfg['downloads_dir'] ?? '',
             'shared_dir' => $cfg['shared_dir'] ?? ''
         ];
-        self::write($data);
-        return true;
+        return self::write($data);
     }
 
     // --- USER ACCOUNTS ---
@@ -900,7 +1034,6 @@ class Storage {
             'password' => $passwordHash,
             'created_at' => date('Y-m-d H:i:s')
         ];
-        self::write($data);
-        return $newId;
+        return self::write($data) ? $newId : false;
     }
 }

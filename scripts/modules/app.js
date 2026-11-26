@@ -1,9 +1,13 @@
+import {installRecordingLease} from './recording-lease.js';
+import {requestServerBrowse} from './server-scan.js';
+import {initCompactMedia} from './compact-media.js';
+import {initListeningHistory} from './listening-history.js';
 import {playlistNavigationToken} from './library.js';
 import {bindSettingsNavigation} from './settings-navigation.js';
 import {bindTransportControls} from './transport-controls.js';
 import {bindPlatterSwipe} from './platter-gesture.js';
 import {installModalFocus, visibleDialog} from './modal-focus.js';
-import {dismissalKey, findTrackIndex} from './track-session.js';
+import {findTrackIndex} from './track-session.js';
 import {bindDisclosure} from './control-ui.js';
 import {createProgressScrubber} from './progress-scrubber.js';
 import { uiIcon } from './icons.js';
@@ -356,6 +360,7 @@ store.subscribe('workspace:change', ({ detail }) => {
 
         const runtime = await detectRuntimeCapabilities();
         applyRuntimeUiAdaptation(runtime);
+        if(runtime.hasPhpBackend&&!runtime.isAndroidNative)installRecordingLease(store,()=>console.warn('Recording reservation unavailable; playback continues.'));
         if (typeof window !== 'undefined' && window.__cachyMusic) {
             window.__cachyMusic.runtime = runtime;
         }
@@ -484,32 +489,8 @@ store.subscribe('workspace:change', ({ detail }) => {
     // Setup All Event Handlers
     function setupEventListeners() {
         installModalFocus();
-        // Subtle tactile pop animation on clickable buttons and disclosures.
-        const popTimers = new WeakMap();
-        const reducedMotionQuery = typeof window !== 'undefined' && window.matchMedia
-            ? window.matchMedia('(prefers-reduced-motion: reduce)')
-            : null;
-        document.addEventListener('click', (e) => {
-            if (reducedMotionQuery?.matches) return;
-            const btn = e.target?.closest?.('button, summary, [role="button"]');
-            if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return;
-            if (btn.classList.contains('trackDetails') || btn.classList.contains('playlistOpenBtn')) return;
-            const prevTimer = popTimers.get(btn);
-            if (prevTimer) clearTimeout(prevTimer);
-            if (btn.classList.contains('is-popping')) {
-                btn.classList.remove('is-popping');
-                void btn.offsetWidth;
-            }
-            btn.classList.add('is-popping');
-            const finish = () => {
-                const t = popTimers.get(btn);
-                if (t) clearTimeout(t);
-                popTimers.delete(btn);
-                btn.classList.remove('is-popping');
-            };
-            btn.addEventListener('animationend', finish, { once: true });
-            popTimers.set(btn, setTimeout(finish, 260));
-        }, { passive: true });
+        initListeningHistory({playTrack:index=>loadTrack(index,true,0,null,false,false,null)});
+        initCompactMedia();
         if (visPillBtns && visPillBtns.length > 0) {
             visPillBtns.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -709,7 +690,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         // Main Tracks Refresh Button
         if (refreshTracksBtn) {
             refreshTracksBtn.addEventListener('click', async () => {
-                refreshTracksBtn.textContent = 'REFRESHING...';
+                refreshTracksBtn.textContent = 'Scanning…';
                 refreshTracksBtn.disabled = true;
                 store.state.dismissedTracksMap.clear();
                 updateRestoreBtnUi();
@@ -717,9 +698,9 @@ store.subscribe('workspace:change', ({ detail }) => {
                     ? folderPathInput.value.trim() 
                     : (safeStorage.getItem('cachymusic_last_directory') || '');
                 await scanDirectory(path);
-                refreshTracksBtn.textContent = 'REFRESHED';
+                refreshTracksBtn.textContent = 'Scan complete';
                 setTimeout(() => {
-                    refreshTracksBtn.textContent = 'REFRESH';
+                    refreshTracksBtn.textContent = 'Rescan';
                     refreshTracksBtn.disabled = false;
                 }, 1200);
             });
@@ -903,6 +884,18 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         // Signal Path Inspector Modal & Triggers
+        const diagnosticBtn=document.getElementById('audioDiagnosticBtn'),diagnosticStatus=document.getElementById('audioDiagnosticStatus');
+        diagnosticBtn?.addEventListener('click',async()=>{
+            diagnosticBtn.disabled=true;const result=document.getElementById('audioDiagnosticResult');result.hidden=true;result.value='';diagnosticStatus.textContent='Collecting audio diagnostics…';
+            try{
+                const report=await audioEngineModule.collectAudioDiagnostic({valid:()=>signalPathModal?.style.display==='flex'});
+                if(signalPathModal?.style.display!=='flex')return;
+                const runtime=getRuntime();report.platform={mode:runtime.mode,os:runtime.osFamily};
+                const json=JSON.stringify(report,null,2);result.value=json;result.hidden=false;const blob=new Blob([json],{type:'application/json'}),url=URL.createObjectURL(blob);
+                const a=document.createElement('a');a.href=url;a.download='cachymusic-audio-diagnostics.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+                diagnosticStatus.textContent='Report prepared locally. Copy the text below if the download is unavailable. Review before sharing.';
+            }catch{diagnosticStatus.textContent='Could not prepare the audio report.';}finally{diagnosticBtn.disabled=false;}
+        });
         if (signalPathBadgeBtn) {
             signalPathBadgeBtn.addEventListener('click', openSignalPathModal);
         }
@@ -1188,6 +1181,7 @@ store.subscribe('workspace:change', ({ detail }) => {
         }
 
         // Folder Browse Action (Native Android SAF -> File System Access API -> Native OS Dialog -> HTML5 File/Folder Picker)
+        let folderBrowsePending=false;
         async function openFolderBrowser() {
             const rt = getRuntime();
             if (rt.isAndroidNative && window.AndroidBridge && typeof window.AndroidBridge.openFolderPicker === 'function') {
@@ -1204,30 +1198,24 @@ store.subscribe('workspace:change', ({ detail }) => {
                 setScanStatus('Opening folder selection dialog...', false);
                 const curPath = (folderPathInput ? folderPathInput.value.trim() : '') || (safeStorage.getItem('cachymusic_last_directory') || '');
 
+                if(folderBrowsePending)return;
+                folderBrowsePending=true;
                 try {
-                    const res = await fetch('php/api/browse_folder.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ initialDir: curPath })
-                    });
-
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.success && data.directory) {
-                            if (folderPathInput) folderPathInput.value = data.directory;
-                            const sInput = document.getElementById('settingsTabFolderPathInput');
-                            if (sInput) sInput.value = data.directory;
-                            setScanStatus(`Selected directory: ${data.directory}. Scanning library...`, false);
-                            await scanDirectory(data.directory, true);
-                            return;
-                        } else if (data.cancelled) {
-                            setScanStatus('Folder selection cancelled.', false);
-                            return;
-                        }
+                    const data=await requestServerBrowse({directory:curPath});
+                    if (data.success && data.directory) {
+                        if (folderPathInput) folderPathInput.value = data.directory;
+                        const sInput = document.getElementById('settingsTabFolderPathInput');
+                        if (sInput) sInput.value = data.directory;
+                        setScanStatus(`Selected directory: ${data.directory}. Scanning library...`, false);
+                        await scanDirectory(data.directory, true);
+                        return;
                     }
+                    if(data.cancelled){setScanStatus('Folder selection cancelled.', false);return;}
+                    if(!data.fallback){setScanStatus(data.message||'Folder selection failed.',true);return;}
                 } catch (err) {
-                    console.warn('Native folder chooser error:', err);
-                }
+                    setScanStatus(err?.message||'Native folder chooser unavailable.',true);
+                    return;
+                } finally {folderBrowsePending=false;}
             } else if (rt.hasDirectoryPicker) {
                 setScanStatus('Opening local music folder picker...', false);
                 const tracks = await promptLocalDirectoryOrFiles();
@@ -1309,71 +1297,11 @@ store.subscribe('workspace:change', ({ detail }) => {
                     return;
                 }
 
-                const rt = getRuntime();
-                let serverScanned = false;
-
-                if (rt.hasPhpBackend) {
-                    showTrackLoadingOverlay(
-                        'LOADING MUSIC LIBRARY...',
-                        `Scanning ${audioFiles.length} audio files from "${folderName}"...`
-                    );
-                    setScanStatus(`Reading ${audioFiles.length} audio files from "${folderName}"...`, false);
-
-                    const candidatePaths = [
-                        folderPathInput ? folderPathInput.value.trim() : '',
-                        `~/Music/${folderName}`,
-                        `~/Downloads/${folderName}`,
-                        `~/${folderName}`,
-                        folderName
-                    ].filter(Boolean);
-
-                    for (const cand of candidatePaths) {
-                        if (store.state.isTrackLoadingCancelled) break;
-                        try {
-                            store.state.activeScanAbortController = new AbortController();
-                            const res = await fetch(`php/api/scan.php?directory=${encodeURIComponent(cand)}`, {
-                                signal: store.state.activeScanAbortController.signal
-                            });
-                            if (res.ok) {
-                                const data = await res.json();
-                                if (data.success && Array.isArray(data.tracks) && data.tracks.length > 0) {
-                                    const resolvedDir = data.directory || cand;
-                                    if (folderPathInput) folderPathInput.value = resolvedDir;
-                                    const sInput = document.getElementById('settingsTabFolderPathInput');
-                                    if (sInput) sInput.value = resolvedDir;
-                                    try {
-                                        safeStorage.setItem('cachymusic_last_directory', resolvedDir);
-                                        safeStorage.setItem('cachymusic_directory_mode', 'server');
-                                    } catch (_) {}
-                                    if (store.state.dismissedTracksMap.size > 0) {
-                                        store.state.allTracks = data.tracks.filter(t => !store.state.dismissedTracksMap.has(dismissalKey(t)));
-                                    } else {
-                                        store.state.allTracks = data.tracks;
-                                    }
-                                    saveLibraryToIndexedDB(store.state.allTracks, resolvedDir);
-                                    setScanStatus(`Scanned ${data.count} audio tracks from ${resolvedDir}`, false);
-                                    hideTrackLoadingOverlay();
-                                    updateEmptyPlayerState();
-                                    applySearchAndSort();
-                                    loadTrack(0, false);
-                                    serverScanned = true;
-                                    break;
-                                }
-                            }
-                        } catch (err) {
-                            if (err && err.name === 'AbortError') break;
-                        } finally {
-                            store.state.activeScanAbortController = null;
-                        }
-                    }
-                }
-
-                if (!serverScanned && !store.state.isTrackLoadingCancelled) {
-                    await importLocalAudioFiles(audioFiles, folderName);
-                } else {
-                    hideTrackLoadingOverlay();
-                }
-                folderPickerInput.value = '';
+                // Browser file selection authorizes these files, not a guessed
+                // server directory with the same basename. Native/manual path
+                // scans use scanDirectory and its existing operation ownership.
+                try { await importLocalAudioFiles(audioFiles, folderName); }
+                finally { folderPickerInput.value = ''; }
             });
         }
 
@@ -1636,6 +1564,7 @@ store.subscribe('workspace:change', ({ detail }) => {
                     } catch (_) {}
                 }
 
+                mediaSessionController.syncPlaybackState(s.isPlaying);
                 const basePeriod = 1.8;
                 document.documentElement.style.setProperty('--platter-speed', `${(basePeriod / speed).toFixed(2)}s`);
                 if (s.isSoftwareDecoding && speed !== 1) {

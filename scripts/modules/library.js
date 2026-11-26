@@ -1,3 +1,5 @@
+import {requestServerScan,readServerDirectory} from './server-scan.js';
+import {serverLibraryGate,sameServerTransport} from './library-transition.js';
 import {startPlaylistSession, playbackPool, playlistNeighbor} from './playlist-playback.js';
 import {buildPlaylistLookupIndex, buildPlaylistLookupIndexAsync, buildPlaylistMutationIndex, preparePlaylistEdit, trackKey, canonicalizeMembership, memberLookupKey, isServerPlaylist, resolvePlaylistMembers, playlistSummary, moveMember, replacementMember, rebasePlaylistDraft, createPlaylistPickerIndex, createPlaylistPickerIndexAsync, searchPlaylistTracksAsync, classifyPlaylistSelection} from './playlist-model.js';
 import {createMetadataEditor} from './metadata-editor.js';
@@ -57,7 +59,7 @@ import {
     updateTrackLoadingOverlay
 } from './ui-elements.js';
 import { updateLyricsDisplay } from './lyrics.js';
-import { loadTrack, pauseAudio } from './player-core.js';
+import { loadTrack, pauseAudio, discardServerLibraryTransport } from './player-core.js';
 import { normalizeGenre, parseAudioFileMetadata } from './tag-parser.js';
 import {
     collectAudioFilesFromDirectoryHandle,
@@ -88,6 +90,7 @@ function stableHashKey(input) {
     return `local_${h.toString(36)}`;
 }
 
+let scanEpoch=0;
 async function importLocalAudioFiles(rawFiles, dirLabel = 'Local Music', autoSelect = true) {
     const s = store.state;
     const items = [];
@@ -112,39 +115,61 @@ async function importLocalAudioFiles(rawFiles, dirLabel = 'Local Music', autoSel
     showTrackLoadingOverlay('IMPORTING AUDIO FILES...', `Indexing ${items.length} local audio file${items.length === 1 ? '' : 's'}...`, 0);
     setScanStatus(`Parsing metadata for ${items.length} audio file${items.length === 1 ? '' : 's'}...`, false);
 
-    const overrides = await loadAllMetadataOverrides();
+    const epoch=++scanEpoch;
+    const owner=new AbortController();
+    s.activeScanAbortController?.abort();
+    s.activeScanAbortController=owner;
+    const ownsImport=()=>s.activeScanAbortController===owner&&!owner.signal.aborted;
     const parsedTracks = [];
-    const indexer=createIndexer();
-    for (let i = 0; i < items.length; i++) {
-        if (s.isTrackLoadingCancelled) break;
-        const { file, relativePath } = items[i];
-        try {
-            const meta = await indexer.parse(file);
-            const rel = relativePath || file.webkitRelativePath || file.name;
-            const localId = stableHashKey(`${rel}:${file.size}:${file.lastModified}`);
-            const ov = overrides.get(localId) || {};
-            const track = {
-                ...meta,
-                id: localId,
-                tid: localId,
-                filename: file.name,
-                fullPath: rel,
-                src: null,
-                _fileBlob: file,
-                ...ov
-            };
-            parsedTracks.push(track);
-        } catch (err) {
-            console.warn('[LocalImport] Skipped file:', file?.name, err);
+    const indexer=createIndexer({signal:owner.signal});
+    let indexingFailed=false;
+    try {
+        const overrides = await loadAllMetadataOverrides();
+        for (let i = 0; i < items.length; i++) {
+            if (!ownsImport()||s.isTrackLoadingCancelled) break;
+            const { file, relativePath } = items[i];
+            try {
+                const meta = await indexer.parse(file);
+                if(!ownsImport())break;
+                const rel = relativePath || file.webkitRelativePath || file.name;
+                const localId = stableHashKey(`${rel}:${file.size}:${file.lastModified}`);
+                const ov = overrides.get(localId) || {};
+                const track = {
+                    ...meta,
+                    id: localId,
+                    tid: localId,
+                    filename: file.name,
+                    fullPath: rel,
+                    fileSize: file.size,
+                    lastModified: file.lastModified,
+                    src: null,
+                    _fileBlob: file,
+                    ...ov
+                };
+                parsedTracks.push(track);
+            } catch (err) {
+                if(!ownsImport())break;
+                console.warn('[LocalImport] Skipped file:', file?.name, err);
+                if(indexer.closed){indexingFailed=true;break;}
+            }
+            if ((i + 1) % 8 === 0 || i + 1 === items.length) {
+                updateTrackLoadingOverlay(`Processed ${i + 1} of ${items.length} files`, (i + 1) / items.length * 100);
+            }
         }
-        if ((i + 1) % 8 === 0 || i + 1 === items.length) {
-            updateTrackLoadingOverlay(`Processed ${i + 1} of ${items.length} files`, (i + 1) / items.length * 100);
-        }
-    }
 
-    indexer.dispose();
-    hideTrackLoadingOverlay();
+    } catch(error){
+        console.warn('[LocalImport] Indexing interrupted:',error);
+        indexingFailed=true;
+    } finally {indexer.dispose();}
+    // Cancellation/supersession never commits a provisional batch or hides a newer overlay.
+    if(!ownsImport())return [];
+    if(indexingFailed){
+        hideTrackLoadingOverlay();
+        setScanStatus('Indexing interrupted; no files added. Retry the import.',true);
+        return [];
+    }
     if (parsedTracks.length === 0) {
+        hideTrackLoadingOverlay();
         setScanStatus(s.isTrackLoadingCancelled ? "Import cancelled; no files added." : "No files could be imported. Check that they are readable audio files.", !s.isTrackLoadingCancelled);
         updateEmptyPlayerState();
         return [];
@@ -165,7 +190,10 @@ async function importLocalAudioFiles(rawFiles, dirLabel = 'Local Music', autoSel
         safeStorage.setItem('cachymusic_directory_mode', 'local');
     } catch (_) {}
 
+    // In-memory membership is committed; cancellation after this point cannot undo a save.
+    hideTrackLoadingOverlay();
     const saved=await saveLibraryToLocalDb(s.allTracks,label);
+    if(epoch!==scanEpoch||s.activeScanAbortController)return s.allTracks;
     if(!saved)showToast("Library storage unavailable; files remain in this session only.");
     setScanStatus(`${s.isTrackLoadingCancelled ? "Import cancelled. " : "Import finished. "}${parsedTracks.length} files read; ${s.allTracks.length} tracks in library.${saved ? "" : " Changes are session-only."}`, false);
     updateEmptyPlayerState();
@@ -253,7 +281,7 @@ async function scanDirectory(path, autoSelectTrack = true, isSilentBoot = false)
 
         updateEmptyPlayerState('');
         applySearchAndSort();
-        if (s.allTracks.length > 0 && autoSelectTrack) {
+        if (s.allTracks.length > 0 && autoSelectTrack && !s.currentTrack && !s.isPlaying && !s.isPlayPending) {
             const urlParams = new URLSearchParams(window.location.search);
             const reqTrack = urlParams.get('track');
             let targetIdx = 0;
@@ -268,7 +296,9 @@ async function scanDirectory(path, autoSelectTrack = true, isSilentBoot = false)
         return;
     }
 
-    // PHP Desktop / LAN Server Scan
+    // Compare against the authoritative server root, never stale localStorage.
+    // Root-changing requests must exclude new playback from submission through publication.
+    if(serverLibraryGate.rootPending){setScanStatus('Previous directory change is unresolved. Refresh the library before retrying.',true);return;}
     if (!isSilentBoot) {
         showTrackLoadingOverlay(
             'LOADING MUSIC LIBRARY...',
@@ -280,68 +310,98 @@ async function scanDirectory(path, autoSelectTrack = true, isSilentBoot = false)
     if (s.activeScanAbortController) {
         try { s.activeScanAbortController.abort(); } catch (_) {}
     }
-    s.activeScanAbortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    ++scanEpoch;
+    const scanOwner=new AbortController();scanOwner.serverScan=true;
+    s.activeScanAbortController=scanOwner;
+    const ownsScan=()=>s.activeScanAbortController===scanOwner&&!scanOwner.signal.aborted;
 
+    let rootLease=null,confirmed=false,expectedDirectory;
     try {
-        const endpoint = cleanPath ? `php/api/scan.php?directory=${encodeURIComponent(cleanPath)}` : 'php/api/scan.php';
-        const res = await fetch(endpoint, s.activeScanAbortController ? { signal: s.activeScanAbortController.signal } : {});
-        if (s.isTrackLoadingCancelled) {
-            hideTrackLoadingOverlay();
-            return;
-        }
-        if (res.ok) {
-            const data = await res.json();
-            if (data.success && Array.isArray(data.tracks) && data.tracks.length > 0) {
-                s.allTracks = s.dismissedTracksMap.size > 0
-                    ? data.tracks.filter(t => !s.dismissedTracksMap.has(dismissalKey(t)))
-                    : data.tracks;
-                const activeDir = data.directory || cleanPath;
-                if (folderPathInput) folderPathInput.value = activeDir;
-                const settingsTabFolderPathInput = document.getElementById('settingsTabFolderPathInput');
-                if (settingsTabFolderPathInput) settingsTabFolderPathInput.value = activeDir;
-                if (activeDir) {
-                    try {
-                        safeStorage.setItem('cachymusic_last_directory', activeDir);
-                        safeStorage.setItem('cachymusic_directory_mode', 'server');
-                    } catch (_) {}
-                }
-                await saveLibraryToLocalDb(s.allTracks, activeDir);
-                setScanStatus(`Scanned ${data.count} audio tracks from ${activeDir}`, false);
-            } else if (data.needsDirectory) {
-                setScanStatus('No music directory selected yet. Choose a directory to load tracks.', false);
-            } else if (!data.success) {
-                errorNotice = data.message || 'Directory scan failed.';
-                setScanStatus(`${errorNotice} Please configure the directory manually in Settings → Library & Folders.`, true);
-            } else {
-                errorNotice = cleanPath ? `No supported audio files found in "${cleanPath}".` : '';
-                setScanStatus(
-                    cleanPath
-                        ? `No supported audio files found in "${cleanPath}". Please configure your folder manually in Settings → Library & Folders.`
-                        : 'Choose a music directory to load tracks.',
-                    Boolean(cleanPath)
-                );
+        if(cleanPath){
+            const savedRoot=await readServerDirectory();
+            expectedDirectory=savedRoot.trim();
+            if(!ownsScan())return;
+            if(cleanPath!==savedRoot.trim()){
+                rootLease=serverLibraryGate.beginRoot(s);
+                if(!rootLease){setScanStatus('Stop playback and finish any track-loading operation before changing the library directory.',true);return;}
             }
+        }
+        const data=await requestServerScan({directory:cleanPath,expectedDirectory,signal:scanOwner.signal,onPhase:phase=>{
+            if(ownsScan()&&!isSilentBoot)updateTrackLoadingOverlay(phase==='committing'?'Publishing indexed library…':'Indexing library in background…');
+        }});
+        if(!ownsScan()||s.isTrackLoadingCancelled)return;
+        // A structured terminal response is authoritative for the local JSON scan.
+        // Unknown/aborted requests retain the gate until reload rather than resume stale audio.
+        const valid=data.success===false||data.success===true&&((data.needsDirectory===true&&!rootLease)||(Array.isArray(data.tracks)&&typeof data.directory==='string'&&Boolean(data.directory)));
+        if(!valid)throw Error('Invalid scan result; refresh the library.');
+        confirmed=data.success===false;
+        if (data.success && !data.needsDirectory && Array.isArray(data.tracks) && typeof data.directory==='string' && data.directory) {
+            if(rootLease)discardServerLibraryTransport();
+            const active=s.currentTrack || s.allTracks[s.currentTrackIndex];
+            const next=s.dismissedTracksMap.size > 0
+                ? data.tracks.filter(t => !s.dismissedTracksMap.has(dismissalKey(t)))
+                : data.tracks;
+            const candidate=active?findTrackIndex(next,active):-1;
+            const at=candidate>=0&&sameServerTransport(active,next[candidate])?candidate:-1;
+            // Do not change a captured index while a track is loading. If the
+            // current recording vanished during playback, retain this session's
+            // library view; the new server snapshot will be used on next refresh.
+            if ((!rootLease && (serverLibraryGate.busy || s.isPlayPending || s.isSoftwareDecoding)) || (active && at<0 && (s.isPlaying || !next.length))) {
+                setScanStatus('Scan saved on server. Refresh after the current playback operation finishes.',false);return;
+            }
+            if(active && at>=0){
+                const oldIndex=s.currentTrackIndex;
+                // Preserve exact object and, when feasible, its existing index.
+                if(oldIndex>=0 && oldIndex<next.length){next.splice(at,1);next.splice(oldIndex,0,active);s.currentTrackIndex=oldIndex;}
+                else{next[at]=active;s.currentTrackIndex=at;}
+            } else if(active){discardServerLibraryTransport();}
+            s.allTracks=next;
+            store.emit('playback:order-change');
+            confirmed=true;
+            const activeDir = data.directory || cleanPath;
+            if (folderPathInput) folderPathInput.value = activeDir;
+            const settingsTabFolderPathInput = document.getElementById('settingsTabFolderPathInput');
+            if (settingsTabFolderPathInput) settingsTabFolderPathInput.value = activeDir;
+            if (activeDir) {
+                try {
+                    safeStorage.setItem('cachymusic_last_directory', activeDir);
+                    safeStorage.setItem('cachymusic_directory_mode', 'server');
+                } catch (_) {}
+            }
+            await saveLibraryToLocalDb(s.allTracks, activeDir);
+            if(!ownsScan())return;
+            setScanStatus(`Scanned ${data.count} audio tracks from ${activeDir}`, false);
+        } else if (data.needsDirectory) {
+            confirmed=true;
+            setScanStatus('No music directory selected yet. Choose a directory to load tracks.', false);
+        } else if (!data.success) {
+            errorNotice = data.message || 'Directory scan failed.';
+            setScanStatus(`${errorNotice} Please configure the directory manually in Settings → Library & Folders.`, true);
         } else {
-            errorNotice = `Could not read directory (HTTP ${res.status}).`;
-            setScanStatus(`${errorNotice} Please configure it manually in Settings → Library & Folders.`, true);
+            errorNotice = cleanPath ? `No supported audio files found in "${cleanPath}".` : '';
+            setScanStatus(
+                cleanPath
+                    ? `No supported audio files found in "${cleanPath}". Please configure your folder manually in Settings → Library & Folders.`
+                    : 'Choose a music directory to load tracks.',
+                Boolean(cleanPath)
+            );
         }
     } catch (err) {
-        if (err && err.name === 'AbortError') {
-            hideTrackLoadingOverlay();
-            return;
-        }
+        if (!ownsScan()||err?.name==='AbortError') return;
         console.warn('Scan API error:', err);
         if (!isSilentBoot) {
-            errorNotice = 'Unable to scan directory.';
-            setScanStatus('Unable to scan directory. Please configure it manually in Settings → Library & Folders.', true);
+            errorNotice = err?.message || 'Unable to scan directory.';
+            setScanStatus(errorNotice, true);
         }
     } finally {
-        hideTrackLoadingOverlay();
+        if(rootLease&&confirmed)rootLease.confirm();
+        if(rootLease&&!confirmed)setScanStatus('Directory change outcome uncertain. Refresh before starting playback.',true);
+        if(ownsScan())hideTrackLoadingOverlay();
     }
 
     updateEmptyPlayerState(errorNotice);
     applySearchAndSort();
-    if (s.allTracks.length > 0 && autoSelectTrack) {
+    if (s.allTracks.length > 0 && autoSelectTrack && !s.currentTrack && !s.isPlaying && !s.isPlayPending) {
         let targetIdx = 0;
         const urlParams = new URLSearchParams(window.location.search);
         const reqTrack = urlParams.get('track');
@@ -666,6 +726,8 @@ const MIN_TRACK_ROW_HEIGHT = 64;
 const VIRTUAL_BUFFER_ROWS = 4;
 const renderedTrack = new WeakMap();
 const artworkPrefetcher = createArtworkPrefetcher();
+store.subscribe('audio:spectrum-refresh', () => artworkPrefetcher.setPaused(store.state.isPlaying || document.hidden));
+document.addEventListener('visibilitychange', () => artworkPrefetcher.setPaused(store.state.isPlaying || document.hidden));
 const rowPool = [];
 const MAX_ROW_POOL = 48;
 let cachedRootRowHeight = 0;
@@ -713,7 +775,10 @@ function captureTrackFocus(container) {
     return {track:renderedTrack.get(row), menu:focused.classList.contains('trackMenuTriggerBtn'), element:focused};
 }
 function restoreTrackFocus(container, snapshot) {
-    if (!snapshot || snapshot.element.isConnected) return;
+    if (!snapshot) return;
+    // Pooled nodes can be connected again but no longer focused (or bound
+    // to a different recording). Only skip restoration for the same active row.
+    if (document.activeElement===snapshot.element && renderedTrack.get(snapshot.element.closest('.trackItem'))===snapshot.track) return;
     const rows = Array.from(container.children);
     // Object identity avoids jumping to a different song with the same filename.
     const row = rows.find(element => renderedTrack.get(element) === snapshot.track);
@@ -838,6 +903,7 @@ function renderVirtualTrackWindow(force = false) {
     const currentDisplayedIndex = getDisplayedTrackIndex(cur);
     const focusSnapshot = captureTrackFocus(container);
 
+    artworkPrefetcher.setPaused(s.isPlaying || document.hidden);
     artworkPrefetcher.prefetchWindow(s.displayedTracks, startIndex, endIndex, lastScrollDir, lastScrollVelocity);
 
     if (force) {
@@ -962,6 +1028,9 @@ function renderTrackList(preserveScroll = false) {
     const s = store.state;
     initTrackListDelegation();
     initVirtualScrollListener();
+    // A font-size change need not resize the scroll viewport. Recheck on
+    // explicit list rebuilds without introducing a layout read per scroll.
+    computeTrackRowHeight();
     if (trackCount) {
         trackCount.textContent = `${s.displayedTracks.length} track${s.displayedTracks.length === 1 ? '' : 's'}`;
     }

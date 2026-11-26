@@ -15,15 +15,19 @@ final class NativePlaybackOrder {
     }
 
     static final class Track {
-        final String uri, title, artist, album, cover, queueId;
+        final String uri, title, artist, album, cover, queueId, historyKey;
 
         Track(String uri, String title, String artist, String album, String cover, String queueId) {
+            this(uri,title,artist,album,cover,queueId,"");
+        }
+        Track(String uri, String title, String artist, String album, String cover, String queueId, String historyKey) {
             this.uri = uri;
             this.title = title;
             this.artist = artist;
             this.album = album;
             this.cover = cover;
             this.queueId = queueId;
+            this.historyKey = historyKey;
         }
     }
 

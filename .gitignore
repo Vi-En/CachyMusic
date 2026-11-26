@@ -102,3 +102,12 @@ local.properties
 # Heap captures may contain private music paths, credentials, and runtime state.
 *.heapsnapshot
 *.heapprofile
+BETA-ACCEPTANCE.md
+DEVELOPMENT.md
+ANDROID-APK-BUILD.md
+COMPATIBILITY.md
+INITIAL-TEST.md
+docs/
+tests/
+tools/audio-diagnostics/
+tools/build-source-kit.py

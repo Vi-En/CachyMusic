@@ -1,8 +1,8 @@
 # CachyMusic
 
-**Source revision: 3.0.0-dev.6.44 — initial user-test release.** Runnable source/build kit, not a device-certified public release.
+**Source revision: 3.0.0-dev.6.74 — initial user-test release.** Runnable source/build kit, not a device-certified public release.
 
-A private, local-first, cross-platform audiophile music player with integrated audio processing, local library management, online metadata lookup and optional Soulseek. Shared PWA interface; Android and desktop packaging provide native functionality beyond browser capabilities.
+A private, local-first, cross-platform music player with integrated audio processing, local library management, online metadata lookup and optional Soulseek. Shared PWA interface; Android and desktop packaging provide native functionality beyond browser capabilities.
 
 ## Start here
 
@@ -10,7 +10,7 @@ A private, local-first, cross-platform audiophile music player with integrated a
 
 - **[Platform compatibility and installation](COMPATIBILITY.md)** — Arch Linux, Windows and Android, requirements, startup commands and limitations.
 
-- **[Development and build guide](DEVELOPMENT.md)** — Android debug/release APK, signing, Linux portable packaging and clean-install tests.
+- **[Android build instructions](ANDROID-APK-BUILD.md)**, **[desktop packaging](packaging/desktop/README.md)** and **[beta acceptance](BETA-ACCEPTANCE.md)** — platform build and release gates.
 - **[Privacy, security and licensing](docs/PRIVACY-AND-LICENSING.md)** — local-only policy, network exceptions and release gates.
 
 The primary mobile reference is the Infinix Note 30 5G; responsive layout is based on logical CSS viewport dimensions, not physical pixels. Experimental shared-clock PCM/FLAC transitions are available; universal gapless playback, bit-perfect hardware output and complete security certification are not claimed.
@@ -50,4 +50,8 @@ No developer telemetry, analytics or remote crash reporting is intended. Core lo
 
 ## License
 
-CachyMusic: GPL-3.0-or-later (see `LICENSE`). NMS Futura Pro Book font: separate SIL OFL 1.1 license, `resources/fonts/OFL.txt`. Third-party dependencies and codecs retain their respective licenses. Distribution requires applicable notices, provenance review and corresponding source. No music or provider artwork is bundled.
+CachyMusic: GPL-3.0-or-later (see `LICENSE`). No font binaries are bundled; typography uses installed system fonts. See `docs/PRIVACY-AND-LICENSING.md`. Third-party dependencies and codecs retain their respective licenses. Distribution requires applicable notices, provenance review and corresponding source. No music or provider artwork is bundled.
+
+### dev.6.45 audio stability
+
+Regular media playback remains the default. The experimental Android MediaCodec PCM bridge is no longer auto-selected; it is retained for isolated developer testing only. Stateful PCM operations are serialized and packet geometry is validated. See INITIAL-TEST.md for distortion isolation and the limits of browser waveform acceptance.

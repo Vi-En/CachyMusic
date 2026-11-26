@@ -19,9 +19,8 @@
   }
 }
 
-@font-face { font-family: NMS; src: url('../resources/fonts/NMSFuturaProBook_Kerned.ttf') format('truetype'); font-display: swap; font-weight: 400; }
-/* NMS typography for identity; keep system font for dense controls and accessibility. */
-#trackName { font-family: NMS, system-ui, sans-serif; }
+/* Use installed geometric fonts when available; no bundled or remote font. */
+#trackName { font-family: Futura, "Century Gothic", system-ui, sans-serif; }
 /* 3.x listening-first layout. The original animated deck is an explicit option. */
 :root[data-presentation="artwork"] .turntableCon { width:min(100%, 360px, max(0px, calc(100cqh - 64px))); max-width:100%; }
 :root[data-presentation="artwork"] .vinylTurntable { border:0; background:var(--bg-surface-2); border-radius:12px; box-shadow:none; animation:none!important; transform:none!important; }
@@ -67,7 +66,7 @@ button:focus-visible,input:focus-visible,[tabindex]:focus-visible {outline:2px s
   .topActions { grid-column: 2; grid-row: 1; }
   .topBtn { min-height: 44px; padding: 0 12px; font-size: .81rem; letter-spacing: 0; }
   body:not(.view-player) .topActions { display: none; }
-  body:is(.view-settings, .view-soulseek) .topBar {
+  body:not(.mobile-tab-tracks) .topBar {
     min-height: 0;
     padding: var(--safe-top) 0 0 0;
     background: transparent;

@@ -18,8 +18,24 @@
                 }).catch(function () {});
                 return;
             }
+            // First installation can leave already-rendered managed covers on
+            // their nonblocking placeholder. Refresh only this endpoint when
+            // the worker gains control; do not reload the app or audio.
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+                if (!navigator.serviceWorker.controller) return;
+                var endpoint = new URL('./php/api/cover.php', window.location.href);
+                document.querySelectorAll('img[src]').forEach(function (img) {
+                    try {
+                        var url = new URL(img.getAttribute('src'), window.location.href);
+                        if (url.origin !== endpoint.origin || url.pathname !== endpoint.pathname) return;
+                        if (url.searchParams.has('cm_refresh')) return;
+                        url.searchParams.set('cm_refresh', '1');
+                        img.src = url.href;
+                    } catch (_) {}
+                });
+            });
             window.addEventListener('load', function () {
-                navigator.serviceWorker.register('./sw.js?v=3.0.0-dev.6.44-integrity-ux').catch(function (err) {
+                navigator.serviceWorker.register('./sw.js?v=3.0.0-dev.6.74-resource-isolation').catch(function (err) {
                     console.warn('[PWA] ServiceWorker registration failed:', err);
                 });
             });

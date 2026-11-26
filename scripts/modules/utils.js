@@ -94,6 +94,7 @@ import {createPreferenceStorage} from './preference-storage.js';
             if (!leaving || leaving === previousModalId || leaving === 'themeModal') return;
             const modal = document.getElementById(leaving);
             if (!modal?.getClientRects().length) return;
+            if(modal.tagName==='DIALOG'&&modal.open){modal.close();return;}
             const button = modal.querySelector('.closeModalBtn, .closeBtn');
             if (button) button.click();
             if(modal.getClientRects().length&&history.state?.cachyModal!==leaving)pushModalState(leaving);

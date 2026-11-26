@@ -1,6 +1,7 @@
+import {recordingKey} from './listening-history-model.js';
 import {playbackPool} from './playlist-playback.js';
 // Android-only native transport. The ordinary PWA never sees a privileged URI.
-import { sameTrack } from './pcm-transition.js';
+import { sameTrack, uniqueTrackIndex } from './pcm-transition.js';
 
 // Keep the serialized intent extras well within Android's Binder budget.
 const MAX_ORDER_TRACKS = 24;
@@ -24,6 +25,7 @@ function orderEntry(track) {
     const cover = String(track._resolvedNotificationCover || track.cover || '');
     return {
         uri,
+        historyKey: track.contentUri===uri?recordingKey(track):'',
         title: String(track.title || track.filename || '').slice(0, 256),
         artist: String(track.artist || '').slice(0, 256),
         album: String(track.album || '').slice(0, 256),
@@ -139,7 +141,7 @@ export function buildNativeOrder(state, supportsQueue = false, shuffleToken = ''
         return order;
     }
     const position = (!state.isShuffle || state.playlistPlayback) && !state.playQueue?.length
-        ? pool.findIndex(track => sameTrack(track, current)) : -1;
+        ? uniqueTrackIndex(pool,current) : -1;
     if (position < 0) {
         return repeatOne ? { tracks: [entry], index: 0, complete: false, repeatOne } : null;
     }
@@ -235,7 +237,17 @@ export class NativeTransport {
         if (catalog) order[shuffle ? 'shuffleCatalogId' : 'orderedCatalogId'] = catalog.id;
         return order;
     }
-    snapshot() { try { const v=JSON.parse(this.bridge?.nativePlaybackStatus()||'{}'); return v&&typeof v.token==='string'?v:null; } catch (_) {return null;} }
+    snapshot() {
+        try {
+            const raw=this.bridge?.nativePlaybackStatus();
+            if(typeof raw!=='string'||!raw)return null;
+            const v=JSON.parse(raw);
+            // The native service publishes exactly {} before its first session.
+            // An inaccessible/malformed bridge is NOT confirmation of release.
+            if(v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).length===0)return {token:'',state:'stopped'};
+            return v&&typeof v.token==='string'&&typeof v.state==='string'?v:null;
+        } catch (_) {return null;}
+    }
     get active(){return Boolean(this.token);}
     adopt(v){if(!v?.token||v.state==='stopped')return false;this.token=v.token;this.last=v;this.started=this.clock();return true;}
     start(track,position,gain,order){
@@ -245,7 +257,9 @@ export class NativeTransport {
         try{
             if (typeof order === 'function') order = order(token);
             const args = [token,uri,track.title||track.filename||'',track.artist||'',track.album||'',cover,Math.round(position*1000),gain];
-            const started = this.supportsOrder
+            const started = typeof this.bridge.nativePlaybackLoadWithHistory === 'function'
+                ? this.bridge.nativePlaybackLoadWithHistory(...args, order ? JSON.stringify(order) : '', track.contentUri===uri?recordingKey(track):'')
+                : this.supportsOrder
                 ? this.bridge.nativePlaybackLoadWithOrder(...args, order ? JSON.stringify(order) : '')
                 : this.bridge.nativePlaybackLoad(...args);
             if (!started) return false;
@@ -266,9 +280,10 @@ export class NativeTransport {
     }
     // Never hand playback to another backend until the service confirms release.
     async stop(){
-        if(!this.active){const v=this.snapshot();if(!v||v.state==='stopped')return true;this.adopt(v);}
+        if(!this.active){const v=this.snapshot();if(!v)return false;if(v.state==='stopped')return true;if(!this.adopt(v))return false;}
         const token=this.token;
-        if(this.snapshot()?.token===token&&this.snapshot()?.state==='stopped'){this.token='';this.last=null;return true;}
+        const initial=this.snapshot();
+        if(initial?.token===token&&initial.state==='stopped'){this.token='';this.last=null;return true;}
         if(!this.command('stop'))return false;
         const deadline=this.clock()+3000;
         while(this.clock()<deadline){

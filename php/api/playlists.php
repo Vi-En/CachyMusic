@@ -5,21 +5,47 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: private, no-store');
 
 @require_once(__DIR__ . '/../database.php');
 @require_once(__DIR__ . '/../storage.php');
 
 $currentUser = $_SESSION['username'] ?? 'default';
+if (session_status()===PHP_SESSION_ACTIVE) session_write_close();
 
 // Enable transparent gzip compression for playlists responses
 if (!in_array('ob_gzhandler', ob_list_handlers(), true) && extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
     @ob_start('ob_gzhandler');
 }
 
-$method = $_SERVER['REQUEST_METHOD'];
-$rawInput = file_get_contents('php://input');
-$data = json_decode($rawInput, true) ?: $_POST;
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+function playlist_bad(int $status,string $message): never {http_response_code($status);echo json_encode(['success'=>false,'message'=>$message]);exit;}
 function positive_playlist_id($value) { return (is_int($value)||is_string($value)) && preg_match('/^[1-9][0-9]*$/D',(string)$value) && filter_var($value,FILTER_VALIDATE_INT)!==false; }
+if (!in_array($method,['GET','POST'],true)) playlist_bad(405,'Method not allowed.');
+$data=[];
+if ($method==='POST') {
+    // Enforce a request-size cap before decoding; preserve form compatibility.
+    $limit=1048576;
+    if (isset($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH']>$limit) playlist_bad(413,'Playlist request too large.');
+    $rawInput=file_get_contents('php://input',false,null,0,$limit+1);
+    if ($rawInput===false||strlen($rawInput)>$limit) playlist_bad(413,'Playlist request too large.');
+    $contentType=strtolower(trim(explode(';',$_SERVER['CONTENT_TYPE']??'')[0]));
+    if ($contentType==='application/json' || ($rawInput!=='' && !$contentType)) {
+        $decoded=json_decode($rawInput,true,32);
+        if (!is_array($decoded)||($decoded!==[]&&array_is_list($decoded))||json_last_error()!==JSON_ERROR_NONE) playlist_bad(400,'Invalid playlist request.');
+        $data=$decoded;
+    } else if ($rawInput==='' || in_array($contentType,['application/x-www-form-urlencoded','multipart/form-data'],true)) $data=$_POST;
+    else playlist_bad(415,'Unsupported request format.');
+    if (!is_array($data)) playlist_bad(400,'Invalid playlist request.');
+    if (isset($data['action'],$_GET['action']) && $data['action']!==$_GET['action']) playlist_bad(400,'Conflicting actions.');
+    $action=$data['action']??$_GET['action']??'';
+    if (!is_string($action)||!in_array($action,['create','edit','edit_members','delete','add_track','remove_track','add_tracks'],true)) playlist_bad(400,'Invalid playlist action.');
+    if (in_array($action,['create','edit','edit_members'],true) && (!is_string($data['name']??null)||trim($data['name'])===''||strlen($data['name'])>200||preg_match('//u',$data['name'])!==1||preg_match('/[\x00-\x1f\x7f]/',$data['name']))) playlist_bad(400,'Invalid playlist name.');
+    if (array_key_exists('tracks',$data)) {
+        if (!is_array($data['tracks'])||!array_is_list($data['tracks'])||count($data['tracks'])>25000) playlist_bad(400,'Invalid playlist membership.');
+        foreach ($data['tracks'] as $id) if (!positive_playlist_id($id)) playlist_bad(400,'Invalid track ID.');
+    }
+}
 try {
 
 if ($method === 'GET') {
@@ -48,7 +74,7 @@ if ($method === 'GET') {
 
 if ($method === 'POST') {
     if ((Storage::hasMySQL()&&!PlaylistSql::enabled()) || (PlaylistSql::enabled()&&!Storage::hasMySQL())) { http_response_code(503); echo json_encode(['success'=>false,'message'=>'MySQL playlist changes require the explicit transactional migration and a working database.']); exit; }
-    $action = $data['action'] ?? $_GET['action'] ?? '';
+    
     if(in_array($action,['edit','edit_members','delete','add_track','remove_track','add_tracks'],true)&&!positive_playlist_id($data['plid']??null) || in_array($action,['add_track','remove_track'],true)&&!positive_playlist_id($data['tid']??null)){http_response_code(400);echo json_encode(['success'=>false,'message'=>'Invalid playlist or track ID.']);exit;}
 
     if ($action === 'create') {
@@ -75,7 +101,7 @@ if ($method === 'POST') {
     }
 
     if (in_array($action,['edit','edit_members'],true)) {
-        $ok=Storage::editPlaylist((int)($data['plid']??0),(string)($data['name']??''),$data['tracks']??null,$currentUser,$data['revision']??null,$action==='edit_members');
+        $ok=Storage::editPlaylist((int)($data['plid']??0),$data['name'],$data['tracks']??null,$currentUser,$data['revision']??null,$action==='edit_members');
         echo json_encode(['success'=>$ok,'message'=>$ok?'Playlist updated.':'Could not save playlist; membership or name may have changed.', 'playlist'=>$ok?array_values(array_filter(Storage::getPlaylists($currentUser),fn($p)=>(int)$p['plid']===(int)$data['plid']))[0]??null:null]);exit;
     }
     if ($action === 'delete') {

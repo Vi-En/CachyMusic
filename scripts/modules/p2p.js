@@ -1,3 +1,4 @@
+import {requestServerScan} from './server-scan.js';
 import { initSoulseekEventListeners as bindSoulseekControls, renderSlskDiagnosticAlert } from './soulseek-controls.js';
 import { requireSoulseekSuccess, downloadTransferId } from './soulseek-transport.js';
 import { findTrackIndex, mergeTracks, dismissalKey } from './track-session.js';
@@ -16,9 +17,11 @@ import { setMobileSearchPanelCollapsed, slskAccountAlert, slskAccountBtn, slskAc
     // =========================================================================
     // Soulseek Controller - Nicotine+ REST Engine
     // =========================================================================
+const filenameCollator=new Intl.Collator(undefined,{sensitivity:'base',numeric:true});
 function updateConnectionLabel(text) {
     const element = document.getElementById('slskStatusText');
     if (element && element.textContent !== text) element.textContent = text;
+    const mobile=document.getElementById('slskMobileStatusDot');if(mobile)mobile.setAttribute('aria-label',`Connection settings: ${text}`);
 }
 
     const soulseekController = {
@@ -100,21 +103,22 @@ function updateConnectionLabel(text) {
             this.isPowered = isPow;
             this.hasCredentials = hasCreds;
 
+            const mobileLabel=document.getElementById('slskMobileStatusLabel');if(mobileLabel)mobileLabel.textContent=isConnBusy?'Connecting':isConn?'Online':'Offline';
             if (slskPowerBtn) {
                 slskPowerBtn.classList.remove('power-on', 'power-off', 'busy');
                 if (isConnBusy) {
                     slskPowerBtn.classList.add('busy');
-                    if (slskPowerBtnText) slskPowerBtnText.textContent = 'CONNECTING...';
+                    if (slskPowerBtnText) slskPowerBtnText.textContent = 'Connecting…';
                     slskPowerBtn.disabled = true;
                     slskPowerBtn.title = 'Connecting to Soulseek network...';
                 } else if (isConn) {
                     slskPowerBtn.classList.add('power-on');
-                    if (slskPowerBtnText) slskPowerBtnText.textContent = 'DISCONNECT';
+                    if (slskPowerBtnText) slskPowerBtnText.textContent = 'Disconnect';
                     slskPowerBtn.disabled = false;
                     slskPowerBtn.title = 'Online. Click to Disconnect (disconnects and stops sharing files)';
                 } else {
                     slskPowerBtn.classList.add('power-off');
-                    if (slskPowerBtnText) slskPowerBtnText.textContent = 'CONNECT';
+                    if (slskPowerBtnText) slskPowerBtnText.textContent = 'Connect';
                     slskPowerBtn.disabled = false;
                     slskPowerBtn.title = hasCreds
                         ? 'Soulseek is Disconnected. Click to Connect'
@@ -126,14 +130,14 @@ function updateConnectionLabel(text) {
                 slskModalPowerBtn.classList.remove('power-on', 'busy');
                 if (isConnBusy) {
                     slskModalPowerBtn.classList.add('busy');
-                    slskModalPowerBtn.textContent = 'CONNECTING...';
+                    slskModalPowerBtn.textContent = 'Connecting…';
                     slskModalPowerBtn.disabled = true;
                 } else if (isConn) {
                     slskModalPowerBtn.classList.add('power-on');
-                    slskModalPowerBtn.textContent = 'DISCONNECT';
+                    slskModalPowerBtn.textContent = 'Disconnect';
                     slskModalPowerBtn.disabled = false;
                 } else {
-                    slskModalPowerBtn.textContent = 'CONNECT';
+                    slskModalPowerBtn.textContent = 'Connect';
                     slskModalPowerBtn.disabled = !hasCreds && !(slskModalUsername && slskModalUsername.value.trim());
                 }
             }
@@ -165,11 +169,11 @@ function updateConnectionLabel(text) {
                 slskPowerBtn.classList.add('busy');
             }
             if (slskPowerBtnText) {
-                slskPowerBtnText.textContent = targetState === 'on' ? 'CONNECTING...' : 'DISCONNECTING...';
+                slskPowerBtnText.textContent = targetState === 'on' ? 'Connecting…' : 'Disconnecting…';
             }
             if (slskModalPowerBtn) {
                 slskModalPowerBtn.disabled = true;
-                slskModalPowerBtn.textContent = targetState === 'on' ? 'CONNECTING...' : 'DISCONNECTING...';
+                slskModalPowerBtn.textContent = targetState === 'on' ? 'Connecting…' : 'Disconnecting…';
             }
 
             try {
@@ -390,6 +394,7 @@ function updateConnectionLabel(text) {
         },
 
         renderSearchingAnimation(query, statusText = 'Waiting for peer responses…') {
+            slskResultsList?.removeAttribute('aria-busy');
             if (!slskResultsList) return;
             slskResultsList.setAttribute('aria-label', 'Search results, searching');
             slskResultsList.innerHTML = `
@@ -401,6 +406,7 @@ function updateConnectionLabel(text) {
         },
 
         renderNoResultsFound(query, failed = false) {
+            slskResultsList?.removeAttribute('aria-busy');
             if (!slskResultsList) return;
             slskResultsList.setAttribute('aria-label', failed ? 'Search results unavailable' : 'Search results, none');
             slskResultsList.innerHTML = `
@@ -540,7 +546,9 @@ function updateConnectionLabel(text) {
         activeSortField: 'speed',
         activeSortDir: 'desc',
 
-        setSortColumn(field) {
+        setSortColumn(field, direction) {
+            if(!['filename','format','bitrate','size','speed','slots'].includes(field))return;
+            if(direction==='asc'||direction==='desc'){this.activeSortField=field;this.activeSortDir=direction;this.updateSortHeaderUI();this.applyFilterAndRender();return;}
             if (this.activeSortField === field) {
                 // Toggle direction
                 this.activeSortDir = this.activeSortDir === 'asc' ? 'desc' : 'asc';
@@ -554,10 +562,15 @@ function updateConnectionLabel(text) {
         },
 
         updateSortHeaderUI() {
+            const fieldSelect=document.getElementById('slskMobileSortField'), directionBtn=document.getElementById('slskMobileSortDir');
+            if(fieldSelect)fieldSelect.value=this.activeSortField;
+            if(directionBtn){directionBtn.textContent=this.activeSortDir==='asc'?'Ascending':'Descending';directionBtn.setAttribute('aria-label',`${directionBtn.textContent} order; change direction`);}
             const headerCols = document.querySelectorAll('.slskResultsHeader .col.sortable');
             headerCols.forEach(col => {
                 const field = col.dataset.sort;
                 const indicator = col.querySelector('.sortIndicator');
+                col.setAttribute('aria-pressed',String(field===this.activeSortField));
+                col.setAttribute('aria-label',`${col.querySelector('span')?.textContent || field}${field===this.activeSortField?`, ${this.activeSortDir==='asc'?'ascending':'descending'}`:''}`);
                 if (field === this.activeSortField) {
                     col.classList.add('active');
                     col.classList.toggle('asc', this.activeSortDir === 'asc');
@@ -726,74 +739,36 @@ function updateConnectionLabel(text) {
         },
 
         applyFilterAndRender() {
-            let filtered = [...this.rawResults];
+            const raw=this.rawResults,searchGeneration=this.searchGeneration,revision=(this.filterRevision||0)+1;
+            this.filterRevision=revision;
+            const current=()=>this.filterRevision===revision&&this.searchGeneration===searchGeneration&&this.rawResults===raw;
+            const incQuery=(this.includeFilterQuery||this.inResultFilterQuery||'').trim(),excQuery=(this.excludeFilterQuery||'').trim();
+            const incTerms=this.getFilterTerms(incQuery),excTerms=this.getFilterTerms(excQuery),format=this.activeFilter;
+            const sub=this.activeSubFilter?.value.toLowerCase()||'',norm=sub.replace(/[_.\-\s]+/g,' ').trim();
+            const match=item=>{
+                if(format==='flac'&&!item.isLossless&&item.extension!=='FLAC')return false;
+                if(format==='320'&&!item.isLossless&&(peerBitrate(item).value??0)<320)return false;
+                if(format==='slots'&&!item.freeSlots)return false;
+                if(sub){const text=`${item.albumGuess||''} ${item.filename||''} ${item.filePath||''}`.toLowerCase();if(!text.includes(sub)&&(!norm||!text.replace(/[_.\-\s]+/g,' ').includes(norm)))return false;}
+                if(incTerms.length||excTerms.length){const text=`${item.filename||''} ${item.filePath||''} ${item.albumGuess||''} ${item.artistGuess||''} ${item.username||''} ${item.extension||''}`.toLowerCase();if(!incTerms.every(term=>text.includes(term))||excTerms.some(term=>text.includes(term)))return false;}
+                return true;
+            };
+            const dir=this.activeSortDir==='asc'?1:-1,field=this.activeSortField;
+            const compare=(a,b)=>field==='filename'?dir*filenameCollator.compare(a.filename,b.filename):field==='format'?dir*(a.extension||'').localeCompare(b.extension||''):field==='bitrate'?comparePeerBitrate(a,b,dir):field==='size'?dir*((a.size||0)-(b.size||0)):field==='speed'?dir*((a.speed||0)-(b.speed||0)):field==='slots'?dir*(Number(!!a.freeSlots)-Number(!!b.freeSlots)):0;
+            const publish=filtered=>{if(!current())return;slskResultsList?.removeAttribute('aria-busy');this.publishFilteredResults(filtered,incQuery,excQuery);};
+            if(raw.length<=1000){publish(raw.filter(match).sort(compare));return;}
+            if(slskResultsList){slskResultsList.setAttribute('aria-busy','true');slskResultsList.replaceChildren();}
+            if(slskResultCount)slskResultCount.textContent='Filtering results…';
+            const yieldTurn=()=>typeof globalThis.scheduler?.yield==='function'?globalThis.scheduler.yield():new Promise(resolve=>setTimeout(resolve,0));
+            return (async()=>{
+                const runs=[];for(let i=0;i<raw.length;i+=512){if(!current())return;runs.push(raw.slice(i,i+512).filter(match).sort(compare));await yieldTurn();}
+                // Stable merge: each chunk's original order and equal-key order are preserved.
+                while(runs.length>1){const next=[];for(let i=0;i<runs.length;i+=2){if(!current())return;const left=runs[i],right=runs[i+1];if(!right){next.push(left);continue;}let a=0,b=0;const merged=[];while(a<left.length&&b<right.length){merged.push(compare(left[a],right[b])<=0?left[a++]:right[b++]);if(merged.length%2048===0){await yieldTurn();if(!current())return;}}next.push(merged.concat(left.slice(a),right.slice(b)));await yieldTurn();}runs.splice(0,runs.length,...next);}
+                publish(runs[0]||[]);
+            })().catch(()=>{if(current()){slskResultsList?.removeAttribute('aria-busy');if(slskResultCount)slskResultCount.textContent='Could not filter results. Change a filter to retry.';}});
+        },
 
-            // 1. Format Filter
-            if (this.activeFilter === 'flac') {
-                filtered = filtered.filter(item => item.isLossless || item.extension === 'FLAC');
-            } else if (this.activeFilter === '320') {
-                filtered = filtered.filter(item => item.isLossless || (peerBitrate(item).value ?? 0) >= 320);
-            } else if (this.activeFilter === 'slots') {
-                filtered = filtered.filter(item => item.freeSlots);
-            }
-
-            // 2. Suggested Sub-filter (Album / Track tag)
-            if (this.activeSubFilter) {
-                const targetVal = this.activeSubFilter.value.toLowerCase();
-                const targetNorm = targetVal.replace(/[_.\-\s]+/g, ' ').trim();
-                filtered = filtered.filter(item => {
-                    const alb = (item.albumGuess || '').toLowerCase();
-                    const fn = (item.filename || '').toLowerCase();
-                    const fp = (item.filePath || '').toLowerCase();
-                    if (alb.includes(targetVal) || fn.includes(targetVal) || fp.includes(targetVal)) return true;
-                    if (targetNorm) {
-                        const normStr = `${alb} ${fn} ${fp}`.replace(/[_.\-\s]+/g, ' ');
-                        return normStr.includes(targetNorm);
-                    }
-                    return false;
-                });
-            }
-
-            // 3. Include Text Filter (all tokens must match)
-            const incQuery = (this.includeFilterQuery || this.inResultFilterQuery || '').trim();
-            if (incQuery) {
-                const incTerms = this.getFilterTerms(incQuery);
-                if (incTerms.length > 0) {
-                    filtered = filtered.filter(item => {
-                        const target = `${item.filename || ''} ${item.filePath || ''} ${item.albumGuess || ''} ${item.artistGuess || ''} ${item.username || ''} ${item.extension || ''}`.toLowerCase();
-                        return incTerms.every(term => target.includes(term));
-                    });
-                }
-            }
-
-            // 4. Exclude Text Filter (any token match excludes the item)
-            const excQuery = (this.excludeFilterQuery || '').trim();
-            if (excQuery) {
-                const excTerms = this.getFilterTerms(excQuery);
-                if (excTerms.length > 0) {
-                    filtered = filtered.filter(item => {
-                        const target = `${item.filename || ''} ${item.filePath || ''} ${item.albumGuess || ''} ${item.artistGuess || ''} ${item.username || ''} ${item.extension || ''}`.toLowerCase();
-                        return !excTerms.some(term => target.includes(term));
-                    });
-                }
-            }
-
-            const dir = this.activeSortDir === 'asc' ? 1 : -1;
-
-            if (this.activeSortField === 'filename') {
-                filtered.sort((a, b) => dir * a.filename.localeCompare(b.filename, undefined, { sensitivity: 'base', numeric: true }));
-            } else if (this.activeSortField === 'format') {
-                filtered.sort((a, b) => dir * (a.extension || '').localeCompare(b.extension || ''));
-            } else if (this.activeSortField === 'bitrate') {
-                filtered.sort((a, b) => comparePeerBitrate(a, b, dir));
-            } else if (this.activeSortField === 'size') {
-                filtered.sort((a, b) => dir * ((a.size || 0) - (b.size || 0)));
-            } else if (this.activeSortField === 'speed') {
-                filtered.sort((a, b) => dir * ((a.speed || 0) - (b.speed || 0)));
-            } else if (this.activeSortField === 'slots') {
-                filtered.sort((a, b) => dir * ((a.freeSlots ? 1 : 0) - (b.freeSlots ? 1 : 0)));
-            }
-
+        publishFilteredResults(filtered,incQuery,excQuery) {
             const slskClearSubFilterBtn = document.getElementById('slskClearSubFilterBtn');
             if (slskClearSubFilterBtn) {
                 slskClearSubFilterBtn.style.display = (this.activeSubFilter || incQuery || excQuery) ? 'inline-block' : 'none';
@@ -933,7 +908,7 @@ function updateConnectionLabel(text) {
             const intent = autoPlayWhenDone ? {version:playbackIntentVersion(), serial:++this.playIntentSerial} : null;
             if (intent) this.autoPlayQueue.clear();
             if (btnEl) {
-                btnEl.textContent = 'QUEUEING...';
+                btnEl.textContent = 'Queueing…';
                 btnEl.disabled = true;
             }
 
@@ -953,7 +928,7 @@ function updateConnectionLabel(text) {
 
                 if (data.ok) {
                     if (btnEl) {
-                        btnEl.textContent = '✓ QUEUED';
+                        btnEl.textContent = 'Queued';
                         btnEl.classList.add('enqueued');
                     }
                     if (autoPlayWhenDone) {
@@ -1041,25 +1016,25 @@ function updateConnectionLabel(text) {
         getTransferActionsHtml(item, isFin) {
             if (isFin) {
                 return `
-                    ${isTransferPlayable(item) ? '<button type="button" class="slskPlayNowBtn">PLAY NOW</button>' : '<span class="status">File unavailable</span>'}
+                    ${isTransferPlayable(item) ? '<button type="button" class="slskPlayNowBtn">Play</button>' : '<span class="status">File unavailable</span>'}
                     <button type="button" class="slskTransferBtn slskCancelBtn slskIconOnlyBtn" title="Remove Completed Transfer">${uiIcon('close')}</button>
                 `;
             } else if (item.status === 'Paused') {
                 return `
-                    <button type="button" class="slskTransferBtn slskResumeBtn" title="Resume Download">RESUME</button>
-                    <button type="button" class="slskTransferBtn slskCancelBtn" title="Cancel Download">CANCEL</button>
+                    <button type="button" class="slskTransferBtn slskResumeBtn" title="Resume Download">Resume</button>
+                    <button type="button" class="slskTransferBtn slskCancelBtn" title="Cancel Download">Cancel</button>
                 `;
             } else if (item.status === 'Cancelled') {
                 return `
                     <button type="button" class="slskTransferBtn slskCancelBtn slskIconOnlyBtn" title="Remove Transfer">${uiIcon('close')}</button>
                 `;
             } else if (/^(Error|Denied|Busy)/.test(item.status || '')) {
-                return `<button type="button" class="slskTransferBtn slskResumeBtn" title="Retry Download">RETRY</button>
+                return `<button type="button" class="slskTransferBtn slskResumeBtn" title="Retry Download">Retry</button>
                     <button type="button" class="slskTransferBtn slskCancelBtn slskIconOnlyBtn" title="Remove Transfer">${uiIcon('close')}</button>`;
             } else {
                 return `
-                    <button type="button" class="slskTransferBtn slskPauseBtn" title="Pause Download">PAUSE</button>
-                    <button type="button" class="slskTransferBtn slskCancelBtn" title="Cancel Download">CANCEL</button>
+                    <button type="button" class="slskTransferBtn slskPauseBtn" title="Pause Download">Pause</button>
+                    <button type="button" class="slskTransferBtn slskCancelBtn" title="Cancel Download">Cancel</button>
                 `;
             }
         },
@@ -1188,14 +1163,14 @@ function updateConnectionLabel(text) {
                         slskResumeAllBtn.dataset.bound = 'true';
                         slskResumeAllBtn.addEventListener('click', async () => {
                             slskResumeAllBtn.disabled = true;
-                            slskResumeAllBtn.textContent = 'RESUMING...';
+                            slskResumeAllBtn.textContent = 'Resuming…';
                             try {
                                 requireSoulseekSuccess(await (await slskFetch('resume_all', { method: 'POST' })).json());
                                 await this.pollTransfers();
                             } catch (err) { showCachyToast(err.message || 'Resume all failed'); }
                             finally {
                                 slskResumeAllBtn.disabled = false;
-                                slskResumeAllBtn.textContent = 'RESUME ALL';
+                                slskResumeAllBtn.textContent = 'Resume all';
                             }
                         });
                     }
@@ -1239,6 +1214,7 @@ function updateConnectionLabel(text) {
                         if (speedEl && speedEl.textContent !== item.speedFormatted) speedEl.textContent = item.speedFormatted;
                         if (barFill) {
                             barFill.style.width = `${pct}%`;
+                            barFill.parentElement.setAttribute('aria-valuenow',String(pct));
                             barFill.classList.toggle('finished', isFin);
                         }
 
@@ -1266,7 +1242,7 @@ function updateConnectionLabel(text) {
                                     <span>${escapeHtml(item.username)}</span>
                                 </div>
                             </div>
-                            <div class="slskTransferBarCon">
+                            <div class="slskTransferBarCon" role="progressbar" aria-label="Download progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
                                 <div class="slskTransferBarFill ${isFin ? 'finished' : ''}" style="width: ${pct}%;"></div>
                             </div>
                             <div class="slskTransferActions">
@@ -1330,26 +1306,23 @@ function updateConnectionLabel(text) {
                 showCachyToast('Syncing downloads requires a desktop PHP backend or local Folder Import.');
                 return;
             }
-            if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = 'SCANNING...';
+            if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = 'Scanning…';
             try {
                 const targetDir = this.downloadsDir || '';
-                const res = await fetch('php/api/scan.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ directory: targetDir, preserveDirectory: true })
-                });
-                const data = await res.json();
+                if(!targetDir.trim())throw Error('Configure the downloads directory first.');
+                const data=await requestServerScan({directory:targetDir,preserveDirectory:true});
+                if (!data.success) throw Error(data.message||'Scan failed');
                 if (data.success && Array.isArray(data.tracks)) {
                     store.state.allTracks = mergeTracks(store.state.allTracks, data.tracks, t => store.state.dismissedTracksMap.has(dismissalKey(t)));
                     applySearchAndSort();
                     if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = `✓ LOADED ${data.count} TRACKS`;
                     setTimeout(() => {
-                        if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = 'SYNC ALL TO LIBRARY';
+                        if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = 'Add downloads to library';
                     }, 3000);
                 }
             } catch (err) {
                 console.warn('Sync downloads error:', err);
-                if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = 'SCAN FAILED';
+                if (slskScanDownloadsBtn) slskScanDownloadsBtn.textContent = 'Scan failed';
             }
         }
     };

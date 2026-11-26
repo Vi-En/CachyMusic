@@ -11,8 +11,17 @@ export function resolveTrackThumbUrl(track) {
     const raw = track.cover;
     if (!raw || typeof raw !== 'string') return DEFAULT_COVER;
     if (raw.startsWith('data:') || raw.startsWith('blob:') || raw.includes('default.svg')) return raw;
-    if (raw.includes('thumb=')) return raw;
-    return raw + (raw.includes('?') ? '&thumb=1' : '?thumb=1');
+    // Only our thumbnail endpoints understand this parameter. Preserve external
+    // signed URLs, fragments, and ordinary artwork paths exactly.
+    try {
+        const base = globalThis.location?.href || 'https://appassets.androidplatform.net/index.html';
+        const u = new URL(raw, base);
+        if (u.origin !== new URL(base).origin || !/(?:^|\/)php\/api\/cover\.php$|^\/android-media-art$/.test(u.pathname)) return raw;
+        if (u.searchParams.has('thumb')) return raw;
+        const hashAt = raw.indexOf('#');
+        const path = hashAt < 0 ? raw : raw.slice(0, hashAt);
+        return path + (path.includes('?') ? '&thumb=1' : '?thumb=1') + (hashAt < 0 ? '' : raw.slice(hashAt));
+    } catch (_) { return raw; }
 }
 
 function extractIndexedUri(thumbUrl) {
@@ -32,46 +41,59 @@ function extractIndexedUri(thumbUrl) {
  * the native Android artwork engine of high-priority scroll targets ahead of paint.
  */
 export function createArtworkPrefetcher({
-    maxEntries = 256,
-    maxInFlight = 6,
+    maxEntries = 64,
+    maxInFlight = 2,
+    maxDecodedBytes = 16 * 1024 * 1024,
+    maxNativeBatch = 16,
     bridge = typeof window !== 'undefined' ? window.AndroidBridge : null,
     ImageCtor = typeof Image !== 'undefined' ? Image : null
 } = {}) {
     const decoded = new Map();
-    const inFlight = new Set();
+    const inFlight = new Map();
     const queue = [];
     let activeCount = 0;
+    let decodedBytes = 0;
+    let paused = false;
 
     function touch(url, img) {
+        const bytes = Math.max(0, (img.naturalWidth || 0) * (img.naturalHeight || 0) * 4);
+        drop(url);
+        if (bytes > maxDecodedBytes) return;
+        decoded.set(url, {img, bytes});
+        decodedBytes += bytes;
+        while (decoded.size > maxEntries || decodedBytes > maxDecodedBytes) drop(decoded.keys().next().value);
+    }
+
+    function drop(url) {
+        const entry = decoded.get(url);
+        if (entry) decodedBytes -= entry.bytes;
         decoded.delete(url);
-        decoded.set(url, img);
-        while (decoded.size > maxEntries) {
-            const oldest = decoded.keys().next().value;
-            decoded.delete(oldest);
-        }
     }
 
     function drain() {
-        if (!ImageCtor) return;
+        if (!ImageCtor || paused) return;
         while (activeCount < maxInFlight && queue.length > 0) {
             const url = queue.shift();
             if (!url || decoded.has(url) || inFlight.has(url)) continue;
-            inFlight.add(url);
+            const job = {valid: true};
+            inFlight.set(url, job);
             activeCount++;
             const img = new ImageCtor();
             img.decoding = 'async';
             const finish = (keep) => {
+                if (inFlight.get(url) !== job) return;
                 inFlight.delete(url);
                 activeCount--;
-                if (keep) touch(url, img);
+                if (keep && job.valid && !paused) touch(url, img);
                 drain();
             };
-            img.src = url;
             if (typeof img.decode === 'function') {
-                img.decode().then(() => finish(true), () => finish(false));
+                img.src = url;
+                Promise.resolve().then(() => img.decode()).then(() => finish(true), () => finish(false));
             } else {
                 img.onload = () => finish(true);
                 img.onerror = () => finish(false);
+                img.src = url;
             }
         }
     }
@@ -79,7 +101,7 @@ export function createArtworkPrefetcher({
     function scheduleUrl(url) {
         if (!url || url === DEFAULT_COVER || url.includes('default.svg')) return;
         if (decoded.has(url)) {
-            touch(url, decoded.get(url));
+            touch(url, decoded.get(url).img);
             return;
         }
         if (inFlight.has(url) || queue.includes(url) || queue.length >= maxEntries) return;
@@ -87,7 +109,7 @@ export function createArtworkPrefetcher({
     }
 
     function prefetchWindow(tracks, startIdx, endIdx, direction = 1, velocityPxPerMs = 0) {
-        if (!Array.isArray(tracks) || tracks.length === 0) return;
+        if (paused || !Array.isArray(tracks) || tracks.length === 0) return;
         const fastBoost = Math.min(40, Math.floor(Math.abs(velocityPxPerMs) * 14));
         const ahead = 24 + fastBoost;
         const behind = 8;
@@ -112,7 +134,7 @@ export function createArtworkPrefetcher({
             const url = resolveTrackThumbUrl(tracks[i]);
             if (!url || url.includes('default.svg') || decoded.has(url)) continue;
             scheduleUrl(url);
-            if (androidBatch.length < 48) {
+            if (androidBatch.length < maxNativeBatch) {
                 const rawUri = extractIndexedUri(url);
                 if (rawUri) androidBatch.push(rawUri);
             }
@@ -128,7 +150,10 @@ export function createArtworkPrefetcher({
 
     function invalidate(url) {
         if (!url) return;
-        decoded.delete(url);
+        drop(url);
+        if (inFlight.has(url)) inFlight.get(url).valid = false;
+        const queued = queue.indexOf(url);
+        if (queued >= 0) queue.splice(queued, 1);
         const rawUri = extractIndexedUri(url);
         if (rawUri && typeof bridge?.invalidateArtwork === 'function') {
             try { bridge.invalidateArtwork(rawUri); } catch (_) {}
@@ -137,13 +162,24 @@ export function createArtworkPrefetcher({
 
     function clear() {
         decoded.clear();
+        decodedBytes = 0;
         queue.length = 0;
+        for (const job of inFlight.values()) job.valid = false;
+    }
+
+    function setPaused(value) {
+        paused = Boolean(value);
+        if (paused) {
+            queue.length = 0;
+            for (const job of inFlight.values()) job.valid = false;
+        }
     }
 
     return {
         prefetchWindow,
         invalidate,
         clear,
+        setPaused,
         has: url => decoded.has(url),
         get cachedCount() { return decoded.size; }
     };

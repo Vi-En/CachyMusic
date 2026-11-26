@@ -2,6 +2,7 @@
 // CachyMusic - Apple iOS Full-Screen WebClip Configuration Profile Generator (.mobileconfig)
 // Generates a dynamic iOS WebClip profile pointing to the active LAN / Server URL
 
+require_once __DIR__ . '/../platform.php';
 $port = (int)($_SERVER['SERVER_PORT'] ?? 8000);
 if ($port <= 0 || $port > 65535) $port = 8000;
 
@@ -12,7 +13,7 @@ $targetHost = '';
 if (!empty($hostHeader) && !str_starts_with($hostHeader, '127.0.0.1') && !str_starts_with($hostHeader, 'localhost')) {
     $targetHost = $hostHeader;
 } else {
-    $ipRoute = @shell_exec("ip route get 1.1.1.1 2>/dev/null");
+    $ipRoute = cachy_run_binary('ip',['route','get','1.1.1.1']);
     if ($ipRoute && preg_match('/src\s+([0-9\.]+)/', $ipRoute, $m)) {
         $candidate = trim($m[1]);
         if (filter_var($candidate, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {

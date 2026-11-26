@@ -40,10 +40,13 @@ export class PcmStream {
     }
 
     async prepare(seconds, quickStart = false) {
-        if (this.closed || this.prepared) throw Error('Stream cannot be prepared twice');
+        if (this.closed || this.prepared || this.preparing) throw Error('Stream cannot be prepared twice');
+        if(!Number.isFinite(seconds)||seconds<0||!Number.isInteger(this.ctx.sampleRate)||this.ctx.sampleRate<8000||this.ctx.sampleRate>384000)throw Error('Invalid PCM preparation geometry');
+        this.preparing=true;
         this.ensureWorker();
         const { frames } = await this.request({ type: 'init', file: this.file, format: this.format, rate: this.ctx.sampleRate });
         if (this.closed) return;
+        if(!Number.isSafeInteger(frames)||frames<=0)throw Error('Invalid PCM worker frame count');
         this.frames = frames;
         this.chunk = Math.max(128, Math.round(this.ctx.sampleRate / 4));
         this.first = Math.min(frames, Math.max(0, Math.floor(seconds * this.ctx.sampleRate)));
@@ -53,6 +56,7 @@ export class PcmStream {
         if (this.closed) return;
         this.ready = ready;
         this.prepared = true;
+        this.preparing=false;
     }
 
     async prebufferChunks(quickStart = false) {
@@ -87,6 +91,7 @@ export class PcmStream {
 
     async seek(seconds) {
         if (this.closed || !this.prepared) throw Error('Stream unavailable for seek');
+        if(!Number.isFinite(seconds)||seconds<0)throw Error('Invalid PCM seek position');
         const epoch = ++this.seekEpoch;
         clearInterval(this.timer);
         this.timer = null;
@@ -99,11 +104,13 @@ export class PcmStream {
         this.first = Math.min(this.frames, Math.max(0, Math.floor(Math.max(0, seconds) * this.ctx.sampleRate)));
         this.cursor = this.first;
         const quickStart = Boolean(this.fastStart);
-        const ready = await this.prebufferChunks(quickStart);
+        let ready;
+        try { ready = await this.prebufferChunks(quickStart); }
+        catch (error) { if (this.closed || epoch !== this.seekEpoch) return false; throw error; }
         if (this.closed || epoch !== this.seekEpoch) return false;
         this.ready = ready;
         this.startPrepared(this.ctx.currentTime + (quickStart ? 0.035 : 0.08), { notify: true });
-        return true;
+        return !this.closed && epoch === this.seekEpoch && this.started;
     }
 
     get endTime() {
@@ -111,15 +118,23 @@ export class PcmStream {
     }
 
     startPrepared(when, { notify = true } = {}) {
+        if (this.ctx.state && this.ctx.state !== 'running') throw Error('PCM output clock is not running');
         if (this.closed || this.started || !this.ready || !Number.isFinite(when) || when <= this.ctx.currentTime) {
             throw Error('Invalid PCM start clock');
         }
+        const epoch = this.seekEpoch;
         this.anchor = this.nextTime = when;
         this.scheduledFrames = 0;
-        for (const ch of this.ready) this.schedule(ch);
+        try{for (const ch of this.ready) this.schedule(ch);}catch(error){this.clearScheduledNodes();throw error;}
         this.ready = null;
         this.started = true;
-        if (notify) this.onStart(this.anchor, this.first / this.ctx.sampleRate);
+        try { if (notify) this.onStart?.(this.anchor, this.first / this.ctx.sampleRate); }
+        catch (error) {
+            if (epoch === this.seekEpoch) { this.clearScheduledNodes(); this.started=false; throw error; }
+            // A synchronous callback has transferred ownership to a new seek.
+            return;
+        }
+        if(this.closed || !this.started || epoch !== this.seekEpoch)return;
         clearInterval(this.timer);
         this.timer = setInterval(() => this.pump(), 120);
         void this.pump();
@@ -145,10 +160,18 @@ export class PcmStream {
     }
 
     async read() {
-        const count = Math.min(this.chunk, this.frames - this.cursor);
-        const { channels } = await this.request({ type: 'read', first: this.cursor, count });
-        if (!channels?.[0] || channels[0].length !== count) throw Error('Invalid PCM worker response');
-        this.cursor += count;
+        const first = this.cursor, epoch = this.seekEpoch;
+        const count = Math.min(this.chunk, this.frames - first);
+        const { channels } = await this.request({ type: 'read', first, count });
+        if (this.closed || epoch !== this.seekEpoch || first !== this.cursor) throw Error('Stale PCM read');
+        if (!Array.isArray(channels) || channels.length < 1 || channels.length > 2 || channels.some(ch => !(ch instanceof Float32Array) || ch.length !== count)) {
+            throw Error('Invalid PCM worker response');
+        }
+        const expected=this.format.channels??this.format.numberOfChannels;
+        if(expected!=null&&channels.length!==expected)throw Error('PCM channel layout changed');
+        // Worker checks decoded floats; also reject malformed transferred data at the consumer boundary.
+        for(const channel of channels)for(const sample of channel)if(!Number.isFinite(sample))throw Error('Nonfinite PCM worker response');
+        this.cursor = first + count;
         return channels;
     }
 
@@ -159,17 +182,23 @@ export class PcmStream {
         for (let c = 0; c < ch.length; c++) b.copyToChannel(ch[c], c);
         const source = this.ctx.createBufferSource();
         source.buffer = b;
-        source.connect(this.destination);
+        try{source.connect(this.destination);}catch(error){try{source.disconnect();}catch{}throw error;}
         this.nodes.add(source);
         source.onended = () => {
-            this.nodes.delete(source);
+            if (!this.nodes.delete(source)) return;
             try { source.disconnect(); } catch (_) {}
             // Keep refills flowing immediately when OS background timers throttle setInterval.
             if (!this.closed && this.started && !this.pumping && this.nextTime - this.ctx.currentTime < 2.2) {
                 void this.pump();
             }
         };
-        source.start(this.nextTime);
+        // Allocation/copy can take long enough to miss a scheduled boundary.
+        // Starting a past-due buffer would shift its clock and overlap audio.
+        if(this.ctx.currentTime>=this.nextTime){
+            source.onended=null;this.nodes.delete(source);source.disconnect();
+            throw Error('PCM scheduling deadline missed. Resume to retry.');
+        }
+        try{source.start(this.nextTime);}catch(error){source.onended=null;this.nodes.delete(source);try{source.disconnect();}catch{}throw error;}
         this.scheduledFrames += n;
         this.nextTime = this.anchor + this.scheduledFrames / this.ctx.sampleRate;
     }
@@ -180,11 +209,14 @@ export class PcmStream {
         const myPump = ++this.pumpEpoch;
         this.pumping = true;
         try {
+            if(this.ctx.state&&this.ctx.state!=='running')return;
             this.onProgress?.(this);
+            // Callbacks may synchronously stop, seek or suspend this stream.
+            if (this.closed || !this.started || epoch !== this.seekEpoch || (this.ctx.state && this.ctx.state !== 'running')) return;
             if (this.ctx.currentTime >= this.nextTime) {
                 if (this.cursor >= this.frames) {
                     this.stop();
-                    this.onEnd();
+                    this.onEnd?.();
                     return;
                 }
                 throw Error('PCM streaming underrun. Resume to retry.');
@@ -192,6 +224,7 @@ export class PcmStream {
             while (!this.closed && epoch === this.seekEpoch && this.cursor < this.frames && this.nextTime - this.ctx.currentTime < 2.5) {
                 const ch = await this.read();
                 if (this.closed || epoch !== this.seekEpoch) return;
+                if(this.ctx.state&&this.ctx.state!=='running'){this.cursor-=ch[0].length;return;}
                 if (this.ctx.currentTime >= this.nextTime) throw Error('PCM streaming underrun. Resume to retry.');
                 this.schedule(ch);
             }
@@ -230,7 +263,7 @@ export class PcmStream {
         if (this.closed) return;
         const position = this.position();
         this.stop();
-        this.onError(error, position);
+        this.onError?.(error, position);
     }
 
     stop() {
@@ -245,7 +278,7 @@ export class PcmStream {
                 this.worker.onerror = null;
                 try { this.worker.postMessage({ type: 'close' }); } catch (_) {}
             } else {
-                this.worker.terminate();
+                try { this.worker.terminate(); } catch (_) {}
             }
         }
         this.rejectPendingRequests('Stream stopped');

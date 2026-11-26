@@ -77,8 +77,8 @@ export function computeLimiterProfile(s) {
         release = Math.max(release, 0.100);
     }
 
-    if (s.currentVolumeValue > 1.0 && !s.isHardwareGain) {
-        const overdrive = (s.currentVolumeValue - 1.0) / 0.5;
+    if (hasDigitalOverdrive(s)) {
+        const overdrive = (Math.min(1.5,s.currentVolumeValue) - 1.0) / 0.5;
         threshold -= overdrive * 2.0;
         knee += overdrive * 1.5;
         attack = Math.min(attack, 0.0012);
@@ -109,13 +109,19 @@ export function computeLimiterProfile(s) {
 }
 
 export function hasDigitalOverdrive(s) {
-    return s.currentVolumeValue > 1 && !(s.isHardwareGain && s.hwGainAvailable);
+    // Mixer percentages are never digital gain, including while availability is pending.
+    return Number.isFinite(s.currentVolumeValue) && s.currentVolumeValue > 1 && !s.isHardwareGain;
+}
+
+export function appAttenuation(s) {
+    const value=s.isHardwareGain?s.hardwareAppGain:s.currentVolumeValue;
+    return Number.isFinite(value)?Math.max(0,Math.min(1,value)):0;
 }
 
 export function getEffectiveAmplification(s) {
     let ampDb = s.isAmpBoost ? 3.6 : 0;
     if (hasDigitalOverdrive(s)) {
-        const overdrive = (s.currentVolumeValue - 1.0) / 0.5;
+        const overdrive = (Math.min(1.5,s.currentVolumeValue) - 1.0) / 0.5;
         ampDb += overdrive * 3.0;
     }
     return Math.pow(10, ampDb / 20);
@@ -129,7 +135,7 @@ export function getPreAmpGainValue(s) {
         if (s.isVocalBoost) maxBoost = Math.max(maxBoost, 2.8);
         if (s.peqGains && s.peqGains.length) {
             for (const g of s.peqGains) {
-                if (g > maxBoost) maxBoost = g;
+                if (Number.isFinite(g) && g > maxBoost) maxBoost = Math.min(15,g);
             }
         }
     } else {
@@ -144,11 +150,15 @@ export function getPreAmpGainValue(s) {
 export function computeReplayGainMultiplier(s) {
     const curTrack = s.currentTrack || s.allTracks?.[s.currentTrackIndex];
     let rg = 1.0;
-    if (s.isReplayGain && curTrack && typeof curTrack.replayGain === 'number' && !isNaN(curTrack.replayGain)) {
-        rg = Math.pow(10, curTrack.replayGain / 20);
-        if (typeof curTrack.replayPeak === 'number' && curTrack.replayPeak > 0 && (rg * curTrack.replayPeak) > 0.965) {
-            rg = 0.965 / curTrack.replayPeak;
-        }
+    if (s.isReplayGain && curTrack && Number.isFinite(curTrack.replayGain)) {
+        // Malformed tags must not produce nonfinite or unbounded gain. Positive
+        // gain without a reliable peak is deliberately conservative (no boost).
+        const db=curTrack.replayGain, peak=curTrack.replayPeak;
+        if(db < -60 || db > 24)return 1;
+        rg=Math.min(4,Math.pow(10,db/20));
+        if(Number.isFinite(peak)&&peak>0&&peak<=64){
+            rg=Math.min(rg,0.965/peak);
+        }else if(rg>1){rg=1;}
     }
     return rg;
 }

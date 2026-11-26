@@ -138,7 +138,8 @@ final class AndroidDirectDecoder {
                 }
             } catch (Exception ignored) {}
 
-            if (sampleRate < 8000 || sampleRate > 384000 || inChannels < 1) {
+            if (pcmEncoding != AudioFormat.ENCODING_PCM_FLOAT && pcmEncoding != AudioFormat.ENCODING_PCM_16BIT) throw new IOException("Unsupported PCM encoding");
+            if (sampleRate < 8000 || sampleRate > 384000 || inChannels < 1 || inChannels > 2) {
                 throw new IOException("Unsupported audio stream geometry");
             }
 
@@ -190,8 +191,8 @@ final class AndroidDirectDecoder {
 
         MediaFormat plainFormat = extractor.getTrackFormat(trackIndex);
         MediaCodec plain = MediaCodec.createDecoderByType(mime);
-        plain.configure(plainFormat, null, null, 0);
-        return plain;
+        try { plain.configure(plainFormat, null, null, 0); return plain; }
+        catch (RuntimeException e) { try { plain.release(); } catch (Exception ignored) {} throw e; }
     }
 
     byte[] readChunk(String sessionId, long seekUs, int requestedFrames) throws IOException {
@@ -283,15 +284,21 @@ final class AndroidDirectDecoder {
                     }
                 } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                     MediaFormat outFmt = session.codec.getOutputFormat();
+                    int previousRate = session.sampleRate, previousChannels = session.inChannels, previousEncoding = session.pcmEncoding;
                     if (outFmt.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
                         session.sampleRate = outFmt.getInteger(MediaFormat.KEY_SAMPLE_RATE);
                     }
                     if (outFmt.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
-                        session.inChannels = Math.max(1, outFmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
+                        session.inChannels = outFmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
                         session.outChannels = Math.min(2, session.inChannels);
                     }
                     if (outFmt.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
                         session.pcmEncoding = outFmt.getInteger(MediaFormat.KEY_PCM_ENCODING);
+                    }
+                    if (session.pcmEncoding != AudioFormat.ENCODING_PCM_FLOAT && session.pcmEncoding != AudioFormat.ENCODING_PCM_16BIT) throw new IOException("Unsupported PCM encoding");
+                    if (session.sampleRate < 8000 || session.sampleRate > 384000 || session.inChannels < 1 || session.inChannels > 2) throw new IOException("Invalid decoder format");
+                    if ((pcmOut.size() > 0 || session.leftover.length > 0) && (previousRate != session.sampleRate || previousChannels != session.inChannels || previousEncoding != session.pcmEncoding)) {
+                        throw new IOException("PCM format changed within a packet");
                     }
                     frameBytes = session.outFrameBytes();
                     targetBytes = maxFrames * frameBytes;

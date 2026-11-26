@@ -206,7 +206,7 @@ switch ($action) {
             call_nicotine_api('POST', '/power', ['state' => 'off'], 5);
             $curAcc = Storage::getSoulseekAccount();
             $curAcc['is_powered_on'] = 0;
-            Storage::saveSoulseekAccount($curAcc);
+            if (!Storage::saveSoulseekAccount($curAcc)) { echo json_encode(['ok'=>false,'error'=>'Power-off requested, but local preferences could not be saved.']); exit; }
             echo json_encode([
                 'ok' => true,
                 'powered_on' => false,
@@ -269,7 +269,7 @@ switch ($action) {
 
             $curAcc = Storage::getSoulseekAccount();
             $curAcc['is_powered_on'] = 1;
-            Storage::saveSoulseekAccount($curAcc);
+            if (!Storage::saveSoulseekAccount($curAcc)) { echo json_encode(['ok'=>false,'error'=>'Service connected, but local preferences could not be saved.']); exit; }
 
             echo json_encode([
                 'ok' => true,
@@ -345,13 +345,13 @@ switch ($action) {
         $curDown = sanitize_soulseek_directory($downloadsDir ?: ($dbAcc['downloads_dir'] ?? ''), $DOWNLOADS_DIR);
         $curShare = sanitize_soulseek_directory($sharedDir, '');
 
-        Storage::saveSoulseekAccount([
+        if (!Storage::saveSoulseekAccount([
             'username' => $username,
             'password' => '',
             'is_powered_on' => 1,
             'downloads_dir' => $curDown,
             'shared_dir' => $curShare
-        ]);
+        ])) { echo json_encode(['ok'=>false,'error'=>'Soulseek preferences could not be saved.']); exit; }
 
         $serviceUp = ensure_standalone_service_running();
         if (!$serviceUp) {
@@ -415,7 +415,7 @@ switch ($action) {
         $curAcc['username'] = '';
         $curAcc['password'] = '';
         $curAcc['is_powered_on'] = 0;
-        Storage::saveSoulseekAccount($curAcc);
+        if (!Storage::saveSoulseekAccount($curAcc)) { echo json_encode(['ok'=>false,'error'=>'Local account preferences could not be cleared; service logout was requested.']); exit; }
         echo json_encode(['ok' => true, 'message' => 'Credentials removed from database and disconnected.']);
         exit;
 
@@ -430,7 +430,7 @@ switch ($action) {
             }
             $curAcc = Storage::getSoulseekAccount();
             $curAcc['downloads_dir'] = $newDir;
-            Storage::saveSoulseekAccount($curAcc);
+            if (!Storage::saveSoulseekAccount($curAcc)) { echo json_encode(['ok'=>false,'error'=>'Download directory could not be saved.']); exit; }
             call_nicotine_api('POST', '/directory', ['directory' => $newDir]);
         } else {
             $newDir = $DOWNLOADS_DIR;
@@ -446,7 +446,7 @@ switch ($action) {
         if($newDir!=='' && !is_safe_soulseek_directory($newDir)) {http_response_code(400);echo json_encode(['ok'=>false,'error'=>'Invalid shared directory']);exit;}
         $curAcc = Storage::getSoulseekAccount();
         $curAcc['shared_dir'] = $newDir;
-        Storage::saveSoulseekAccount($curAcc);
+        if (!Storage::saveSoulseekAccount($curAcc)) { echo json_encode(['ok'=>false,'error'=>'Shared directory could not be saved.']); exit; }
         call_nicotine_api('POST','/shared_directory',['directory'=>$newDir]);
         echo json_encode(['ok'=>true,'shared_dir'=>$newDir]);exit;
 
@@ -719,7 +719,7 @@ switch ($action) {
         $items = $res['data']['items'] ?? [];
         $formatted = [];
 
-        Storage::beginBatch();
+        if (!Storage::beginBatch()) { echo json_encode(['ok'=>false,'error'=>'Library storage unreadable.']); exit; }
         foreach ($items as $item) {
             $virtPath = $item['virtual_path'] ?? '';
             $norm = str_replace('\\', '/', $virtPath);
@@ -749,7 +749,7 @@ switch ($action) {
                         if (function_exists('extract_actual_audio_metadata')) {
                             $meta = extract_actual_audio_metadata($targetLocalFile, $ext, $fileSize);
                             Storage::upsertTrack([
-                                'file_path' => $fn,
+                                'file_path' => $targetLocalFile,
                                 'full_path' => $targetLocalFile,
                                 'title' => $meta['title'] ?: pathinfo($targetLocalFile, PATHINFO_FILENAME),
                                 'artist' => $meta['artist'] ?: 'Soulseek Download',
@@ -875,9 +875,10 @@ switch ($action) {
                 'cover' => null
             ];
 
+        $tid = null;
         if (class_exists('Storage')) {
-            Storage::upsertTrack([
-                'file_path' => $filename,
+            $tid = Storage::upsertTrack([
+                'file_path' => $realPath,
                 'full_path' => $realPath,
                 'title' => $meta['title'] ?: pathinfo($filename, PATHINFO_FILENAME),
                 'artist' => $meta['artist'] ?: 'Soulseek Download',
@@ -900,16 +901,9 @@ switch ($action) {
             ]);
         }
 
-        // Upsert to DB if connection exists
-        $tid = null;
-        if (isset($connection) && $connection && !mysqli_connect_errno()) {
-            $stmt = $connection->prepare("INSERT INTO Tracks (file_path) VALUES (?) ON DUPLICATE KEY UPDATE tid = LAST_INSERT_ID(tid)");
-            if ($stmt) {
-                $stmt->bind_param("s", $filename);
-                $stmt->execute();
-                $tid = $connection->insert_id;
-            }
-        }
+        // Storage allocated and verified the authoritative identity. Never
+        // reselect by basename: two different downloads may share a filename.
+        if (!$tid) { echo json_encode(['ok'=>false,'error'=>'Track could not be indexed. Check library storage.']); exit; }
 
         $trackObj = [
             'id' => $tid ?: $filename,

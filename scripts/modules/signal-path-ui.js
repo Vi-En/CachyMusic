@@ -3,9 +3,12 @@ import { describeSignalPath } from './signal-path-model.js';
 export function renderSignalPath(state, track, nativeActive, route, dspConfigured, doc = document) {
     const info = describeSignalPath(state, track, nativeActive, route, dspConfigured);
     const set = (id, value) => { const el = doc.getElementById(id); if (el) el.textContent = value; };
-    set('signalPathLabel', info.label);
+    set('signalPathLabel', 'Signal path');
     const badge = doc.getElementById('signalPathBadgeBtn');
-    if (badge) badge.dataset.signalState = info.state;
+    if (badge) {
+        badge.dataset.signalState = info.state;
+        badge.setAttribute('aria-label', `Signal path: ${info.dsp}. ${info.output}`);
+    }
     const quality = doc.getElementById('auditQualityBadge');
     if (quality) { quality.textContent = info.engine; quality.className = 'signalQualityBadge'; }
     for (const id of ['deckSignalDot','auditQualityDot']) {

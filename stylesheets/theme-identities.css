@@ -180,7 +180,7 @@ button:not(:disabled):active, summary:active, .trackItem:active { opacity: .88; 
 :root[data-theme] .trackMeta #trackName { font-family: var(--player-title-font); font-weight: var(--player-title-weight); letter-spacing: var(--player-title-spacing); font-size: clamp(1.45rem,5.8vw,2rem); line-height: 1.18; text-transform: none; }
 :root[data-theme] .trackMeta #artistName { font-size: 1rem; font-weight: 500; }
 :root[data-theme] .trackMeta .albumName { font-size: .83rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:root[data-theme] .metaBadgeRow { justify-content: var(--player-align); order: 1; gap: 10px; }
+:root[data-theme] .metaBadgeRow { align-self: stretch; justify-content: var(--player-align); order: 1; gap: 10px; }
 :root[data-theme] .metaBadgeRow .signalPathBadge { min-height: 32px; }
 :root[data-theme] .playerEmptyPrompt { width: 100%; border: 0; background: transparent; padding: 8px; }
 :root[data-theme] .playerDeck .mediaCon { background: var(--player-transport-bg); border-block: var(--player-edge); padding: 4px 0; }
@@ -197,9 +197,9 @@ button:not(:disabled):active, summary:active, .trackItem:active { opacity: .88; 
 :root[data-theme="default"] .playerDeck .mediaCon { border-block:1px solid var(--quiet-line); }
 :root[data-theme="default"] .turntableStage { align-items:center; }
 :root[data-theme="default"] .deckTopControls { align-self:center; }
-:root[data-theme="nms"] { --player-align:flex-start; --player-text-align:left; --player-title-font:NMS,system-ui,sans-serif; --player-title-weight:400; --player-title-spacing:.025em; --player-art-width:88cqw; --control-radius:2px; --play-radius:2px; }
+:root[data-theme="nms"] { --player-align:flex-start; --player-text-align:left; --player-title-font:Futura,"Century Gothic",system-ui,sans-serif; --player-title-weight:400; --player-title-spacing:.025em; --player-art-width:88cqw; --control-radius:2px; --play-radius:2px; }
 :root[data-theme="nms"] .turntableStage { border-inline-start:3px double var(--accent-color); padding-inline-start:14px; }
-:root[data-theme="nms"] .brandLogo { font-family:NMS,system-ui,sans-serif; letter-spacing:.05em; }
+:root[data-theme="nms"] .brandLogo { font-family:Futura,"Century Gothic",system-ui,sans-serif; letter-spacing:.05em; }
 :root[data-theme="solar-eclipse"] { --player-art-width:86cqw; --player-art-limit:370px; --control-radius:24px; --play-radius:50%; --player-title-weight:500; }
 :root[data-theme="solar-eclipse"] .turntableStage { background:radial-gradient(ellipse at center,transparent 47%,var(--quiet-line) 47.4%,transparent 48%,transparent 59%,var(--quiet-line) 59.4%,transparent 60%); }
 :root[data-theme="solar-eclipse"] .playerDeck .mediaCon { background:var(--quiet-fill); border-radius:40px; }

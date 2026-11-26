@@ -1,4 +1,5 @@
 // Metadata editor owns the draft, lookup and commit lifecycle. Library refresh is injected.
+import {requestServerMetadata} from './server-scan.js';
 import {findTrackIndex} from './track-session.js';
 import {rewriteMp4} from './mp4-tag-writer.js';
 import {rewriteOgg} from './ogg-tag-writer.js';
@@ -283,10 +284,11 @@ export function createMetadataEditor({getTrackKey, refreshLibrary, persistOverri
         const newAlbum = (inputAlbum ? inputAlbum.value : '').trim();
         const newGenre = (inputGenre ? inputGenre.value : '').trim();
         const newYear = inputYear && inputYear.value ? parseInt(inputYear.value, 10) : null;
-        const newTrackNum = inputTrackNum && inputTrackNum.value ? parseInt(inputTrackNum.value, 10) : null;
-        for (const input of [inputYear, inputTrackNum]) {
+        const newTrackNum = inputTrackNum?.value.trim() || null;
+        if (newTrackNum && (newTrackNum.length > 50 || /[\x00-\x1f\x7f]/.test(newTrackNum))) { showToast('Enter a valid track number (up to 50 characters).'); inputTrackNum.focus(); return; }
+        for (const input of [inputYear]) {
             if (input?.value && (!input.checkValidity() || !/^\d+$/.test(input.value))) {
-                showToast('Enter a valid whole number for year and track number.');
+                showToast('Enter a valid whole number for year.');
                 input.focus(); return;
             }
         }
@@ -301,7 +303,7 @@ export function createMetadataEditor({getTrackKey, refreshLibrary, persistOverri
         const origAlbum = (track.album || '').trim();
         const origGenre = (track.genre || '').trim();
         const origYear = (track.year && track.year > 0) ? parseInt(track.year, 10) : null;
-        const origTrackNum = (track.track || track.track_num) ? parseInt(track.track || track.track_num, 10) : null;
+        const origTrackNum = String(track.track ?? track.track_num ?? '').trim() || null;
         const origComment = (track.comment || '').trim();
 
         if (newTitle !== origTitle) changes.push({ field: 'Title', from: origTitle || '(empty)', to: newTitle });
@@ -440,6 +442,12 @@ export function createMetadataEditor({getTrackKey, refreshLibrary, persistOverri
 
         const coverDataPayload = chosenCover?.dataUrl || null;
 
+        // Rewriting the actively playing source can invalidate incremental PCM ranges.
+        const current = s.currentTrack || s.allTracks?.[s.currentTrackIndex];
+        if (writeFile && (s.isPlaying || s.isSoftwareDecoding) && current && findTrackIndex([current],targetTrack)===0) {
+            showToast('Stop playback of this recording before writing its original file.');
+            return;
+        }
         let backendStatus = '';
         const tid = targetTrack.tid || targetTrack.id || null;
         if (getRuntime().hasPhpBackend && tid && !String(tid).startsWith('local_') && typeof fetch === 'function') {
@@ -459,15 +467,12 @@ export function createMetadataEditor({getTrackKey, refreshLibrary, persistOverri
                 if (coverDataPayload && coverDataPayload.startsWith('data:image/')) {
                     postPayload.cover_data = coverDataPayload;
                 }
-                const resp = await fetch('php/api/metadata.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(postPayload)
-                });
-                const result = await resp.json();
-                backendStatus = resp.ok && result?.success ? (result.tagWriteSuccess ? ' · file tags written' : ' · library only; file not written') : ' · backend save failed';
+                const result = await requestServerMetadata(postPayload);
+                if (!result?.success) { showToast(result?.message || 'Backend save rejected. No local override applied.'); return; }
+                backendStatus = writeFile ? (result.tagWriteSuccess ? ' · file tags written' : ' · library saved; original file not written') : '';
             } catch (netErr) {
-                backendStatus = ' · backend unavailable; local override only';
+                showToast(netErr?.message || 'Backend outcome unconfirmed. Refresh the library before retrying.');
+                return;
             }
         }
 

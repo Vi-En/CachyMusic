@@ -1,3 +1,4 @@
+import {readServerDirectory} from './server-scan.js';
 import { requireSoulseekSuccess } from './soulseek-transport.js';
 import { isMobileDevice, popModalState, pushModalState, safeStorage, showCachyToast } from './utils.js';
 import { canReachSoulseekBackend, slskFetch } from './soulseek-client.js';
@@ -134,8 +135,7 @@ export function renderSlskDiagnosticAlert(el, data = {}, fallbackMsg = 'Connecti
                 // If not in input, ask scan.php for current library directory (PHP Desktop only)
                 if (!currentFolder && getRuntime().hasPhpBackend) {
                     try {
-                        const scanRes = await fetch('php/api/scan.php');
-                        const scanData = await scanRes.json();
+                        const scanData = {directory:await readServerDirectory()};
                         if (scanData.directory) {
                             currentFolder = scanData.directory;
                             if (folderPathInput) folderPathInput.value = currentFolder;
@@ -188,8 +188,7 @@ export function renderSlskDiagnosticAlert(el, data = {}, fallbackMsg = 'Connecti
                 let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
                 if (!currentFolder && getRuntime().hasPhpBackend) {
                     try {
-                        const scanRes = await fetch('php/api/scan.php');
-                        const scanData = await scanRes.json();
+                        const scanData = {directory:await readServerDirectory()};
                         if (scanData.directory) currentFolder = scanData.directory;
                     } catch (_) {}
                 }
@@ -208,8 +207,7 @@ export function renderSlskDiagnosticAlert(el, data = {}, fallbackMsg = 'Connecti
                 let currentFolder = (folderPathInput ? folderPathInput.value : '').trim();
                 if (!currentFolder && getRuntime().hasPhpBackend) {
                     try {
-                        const scanRes = await fetch('php/api/scan.php');
-                        const scanData = await scanRes.json();
+                        const scanData = {directory:await readServerDirectory()};
                         if (scanData.directory) currentFolder = scanData.directory;
                     } catch (_) {}
                 }
@@ -562,6 +560,7 @@ export function renderSlskDiagnosticAlert(el, data = {}, fallbackMsg = 'Connecti
         // Soulseek Column Header Sorting Listeners
         const slskSortHeaders = document.querySelectorAll('.slskResultsHeader .col.sortable');
         slskSortHeaders.forEach(col => {
+            col.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' '){e.preventDefault();col.click();} });
             col.addEventListener('click', () => {
                 const sortField = col.dataset.sort;
                 if (sortField) {
@@ -569,6 +568,8 @@ export function renderSlskDiagnosticAlert(el, data = {}, fallbackMsg = 'Connecti
                 }
             });
         });
+        document.getElementById('slskMobileSortField')?.addEventListener('change',e=>soulseekController.setSortColumn(e.target.value));
+        document.getElementById('slskMobileSortDir')?.addEventListener('click',()=>soulseekController.setSortColumn(soulseekController.activeSortField,soulseekController.activeSortDir==='asc'?'desc':'asc'));
         soulseekController.updateSortHeaderUI();
         if (slskStartDaemonBtn) {
             slskStartDaemonBtn.addEventListener('click', () => soulseekController.startDaemon());
@@ -610,10 +611,11 @@ export function renderSlskDiagnosticAlert(el, data = {}, fallbackMsg = 'Connecti
         }
         if (slskPanelToggleBar) {
             slskPanelToggleBar.addEventListener('click', (e) => {
-                if (e.target.closest('#slskMobileTransfersBtn')) return;
+                if (e.target.closest('#slskMobileTransfersBtn,#slskMobileStatusDot')) return;
                 toggleMobileSearchPanel();
             });
         }
+        document.getElementById('slskMobileStatusDot')?.addEventListener('click',()=>slskAccountBtn?.click());
         if (slskMobileTransfersBtn) {
             slskMobileTransfersBtn.addEventListener('click', (e) => {
                 e.stopPropagation();

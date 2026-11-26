@@ -198,7 +198,8 @@ export class PcmReader {
                     const x = f.little ? a | b << 8 | d << 16 : d | b << 8 | a << 16;
                     val = (x << 8 >> 8) / 8388608;
                 } else val = v.getInt32(p, f.little) / 2147483648;
-                channels[c][i] = Number.isFinite(val) ? val : 0;
+                if(!Number.isFinite(val))throw Error('Nonfinite PCM sample');
+                channels[c][i] = val;
             }
         }
         return channels;

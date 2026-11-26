@@ -23,7 +23,8 @@ export function createWorkletAcknowledgements({timeout=700}={}) {
             const channel=channels.get(node);
             if(!channel||data?.type!=='status'||!Number.isSafeInteger(data.revision)||data.revision<=0||data.revision>channel.sent)return;
             channel.received=Math.max(channel.received,data.revision);
-            for(const item of channel.waiters){if(item.revision<=channel.received){clearTimeout(item.timer);channel.waiters.delete(item);item.resolve();}}
+            // Waiters follow the latest committed send, with their original deadline.
+            if(channel.received>=channel.sent)settle(channel);
         },
         pending(node){const c=channels.get(node);return !!node&&(!c||c.sent===0||c.received<c.sent);},
         wait(node){
@@ -32,7 +33,7 @@ export function createWorkletAcknowledgements({timeout=700}={}) {
             if(c.sent===0)return Promise.reject(Error("DSP parameters not sent"));
             if(c.received>=c.sent)return Promise.resolve();
             return new Promise((resolve,reject)=>{
-                const item={revision:c.sent,resolve,reject,timer:null};
+                const item={resolve,reject,timer:null};
                 item.timer=setTimeout(()=>{c.waiters.delete(item);reject(Error('DSP parameter acknowledgement timed out'));},timeout);
                 c.waiters.add(item);
             });

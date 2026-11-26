@@ -49,7 +49,7 @@ final class NativeShuffle {
     private void record(Track track) {
         history.subList(cursor + 1, history.size()).clear();
         // A history replay never consumes the original queue entry again.
-        history.add(new Track(track.uri, track.title, track.artist, track.album, track.cover, ""));
+        history.add(new Track(track.uri, track.title, track.artist, track.album, track.cover, "", track.historyKey));
         if (history.size() > NativePlaybackOrder.MAX_TRACKS) history.remove(0);
         cursor = history.size() - 1;
         played.add(track.uri);

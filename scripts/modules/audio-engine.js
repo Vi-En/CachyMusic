@@ -1,3 +1,4 @@
+import {buildAudioDiagnostic} from './signal-path-model.js';
 import {createAudioPreferencesUi} from './audio-preferences-ui.js';
 import {createMixerWriteQueue} from './mixer-write-queue.js';
 import {createDspControlTransaction, createLatestControlQueue} from './dsp-control-transaction.js';
@@ -16,8 +17,8 @@ import {
 import { PEQ_FREQS, hasActiveDsp, store } from './state.js';
 import { miniVolumeSlider, volumeLevel, volumeSlider } from './ui-elements.js';
 import { getRuntime } from './runtime-capabilities.js';
-import { createPlaybackAudioContext } from './audio-context-policy.js';
-import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, createLinearCurve, computeLimiterProfile as computeLimiterProfilePolicy, getEffectiveAmplification as getEffectiveAmplificationPolicy, getPreAmpGainValue as getPreAmpGainValuePolicy, computeReplayGainMultiplier as computeReplayGainMultiplierPolicy, hasUserShapingDsp as hasUserShapingDspPolicy } from './audio-policies.js';
+import { createPlaybackAudioContext, requireRunningGraph, canActivatePreparedWorklet } from './audio-context-policy.js';
+import { appAttenuation, effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, createLinearCurve, computeLimiterProfile as computeLimiterProfilePolicy, getEffectiveAmplification as getEffectiveAmplificationPolicy, getPreAmpGainValue as getPreAmpGainValuePolicy, computeReplayGainMultiplier as computeReplayGainMultiplierPolicy, hasUserShapingDsp as hasUserShapingDspPolicy } from './audio-policies.js';
 
 
 
@@ -32,10 +33,14 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         if (s.audioContext && s.audioContext.state !== 'closed' && (s.mathPrecision !== 'native' || hasUserShapingDsp()) && !s.dspWorkletNode && typeof s.audioContext.audioWorklet?.addModule === 'function') {
             await loadDspWorklet();
         }
+        if(s.dspWorkletNode&&!s.dspWorkletNode._cachyConfigured&&(s.mathPrecision!=='native'||hasUserShapingDsp())&&s.audioContext?.state==='running'){
+            const node=s.dspWorkletNode;await workletAcks.wait(node);
+            if(s.dspWorkletNode===node&&!workletAcks.pending(node)){node._cachyConfigured=true;updateAudioRouting();}
+        }
         if(getConfirmedAudioRoute()==='worklet'){
             const ctx=s.audioContext,node=s.dspWorkletNode;
             await workletAcks.wait(node);
-            if(s.audioContext!==ctx||s.dspWorkletNode!==node||getConfirmedAudioRoute()!=='worklet')throw Error('DSP route changed during acknowledgement');
+            if(s.audioContext!==ctx||s.dspWorkletNode!==node||workletAcks.pending(node)||getConfirmedAudioRoute()!=='worklet')throw Error('DSP route changed during acknowledgement');
         }
     }
 
@@ -534,23 +539,32 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
                 numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2]
             });
             s.dspWorkletNode = node;
+            node._cachyConfigured=false;
             workletAcks.register(node);
             node.onprocessorerror = error => {
                 if (s.dspWorkletNode !== node) return;
                 console.warn('[AudioWorklet] Processor failed; using fallback:', error);
+                if(getConfirmedAudioRoute()==='worklet')store.emit('audio:processor-failed');
                 releaseDspWorklet();
                 updateAudioRouting();
             };
             node.port.onmessage = ({data}) => {
                 if (s.dspWorkletNode !== node) return;
                 workletAcks.receive(node,data);
-                if(data?.type==='status'){updateDspButtonsUi(false);store.emit('audio:preferences-changed');return;}
+                if(data?.type==='status'){
+                    if(!node._cachyConfigured&&!workletAcks.pending(node)){
+                        node._cachyConfigured=true;
+                        updateAudioRouting();
+                    }
+                    updateDspButtonsUi(false);store.emit('audio:preferences-changed');return;
+                }
                 if(data?.type !== 'agp_telemetry') return;
                 const status = document.getElementById('peqAgpStatus');
                 if (status && s.isAgpEnabled && Number.isFinite(data.gainReductionDb)) {
                     status.textContent = data.gainReductionDb < -0.1 ? `${data.gainReductionDb.toFixed(1)} dB` : 'GUARD ON';
                 }
             };
+            updateWorkletParams();
             updateAudioRouting();
         },
         failed(error) {
@@ -576,6 +590,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
 
     function hasUserShapingDsp() { return hasUserShapingDspPolicy(store.state); }
 
+    const sentWorkletParameters=new WeakMap();
     function updateWorkletParams() {
         const s = store.state;
         if (!s.dspWorkletNode || !s.dspWorkletNode.port) return;
@@ -588,7 +603,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         const usePrecision64 = s.mathPrecision !== '32';
         const quantBits = (trackBits === 16 && sr <= 48000 && !usePrecision64) ? 16 : 24;
 
-        workletAcks.send(s.dspWorkletNode,{
+        const node=s.dspWorkletNode,params={
             precision64: usePrecision64,
             agpEnabled: s.isAgpEnabled,
             limiterEnabled: effectiveLimiterEnabled(s),
@@ -612,7 +627,10 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
             monoMix: s.isMonoMix,
             stereoWidth: s.isSurroundWidener ? 1.35 : 1.0,
             stereoBalance: s.stereoBalance
-        });
+        };
+        const signature=JSON.stringify(params);
+        if(sentWorkletParameters.get(node)===signature)return;
+        workletAcks.send(node,params);sentWorkletParameters.set(node,signature);
     }
 
     // Enumeration does not verify the active physical output or DAC rate.
@@ -701,7 +719,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
                         hwGainText.textContent = `SYSTEM VOLUME: ON (${s.hwVolumeBackend.toUpperCase()})`;
                     }
                 }
-                if (s.isHardwareGain && data.available && typeof data.volume === 'number') {
+                if (s.isHardwareGain && data.available && Number.isFinite(data.volume)) {
                     s.currentVolumeValue = Math.max(0, Math.min(1.5, data.volume));
                     syncVolumeSliders(s.currentVolumeValue, volumeSlider, miniVolumeSlider);
                     if (volumeLevel) {
@@ -711,7 +729,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
                     store.emit('ui:sync-volume-icon', { volume: Math.min(1.0, s.currentVolumeValue) });
                     if (s.audio) {
                         // Preserve explicit application mute; mixer mute belongs to the OS.
-                        s.audio.volume = s.hardwareAppGain;
+                        s.audio.volume = appAttenuation(s);
                     }
                     syncSoftwareVolume();
                 }
@@ -810,7 +828,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
     function setVolume(val, updateInput = false, persist = true, {preserveMute=false,dispatchSystem=true}={}) {
         const s = store.state;
         if (typeof val !== 'number' || isNaN(val) || !isFinite(val)) {
-            val = 0.8;
+            val = Number.isFinite(s.currentVolumeValue)?s.currentVolumeValue:0;
         }
         s.currentVolumeValue = Math.max(0, Math.min(1.5, val));
         if (persist) safeStorage.setItem('cachymusic_volume', s.currentVolumeValue.toString());
@@ -819,7 +837,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         if (s.isHardwareGain && s.hwGainAvailable && getRuntime().hasHardwareGain) {
             // Keep the pre-switch app attenuation; changing the OS mixer must not reset it.
             if (s.audio) {
-                s.audio.volume = s.hardwareAppGain;
+                s.audio.volume = appAttenuation(s);
                 // Do not clear application mute when adjusting the OS mixer.
             }
             if(dispatchSystem)dispatchHardwareVolume(s.currentVolumeValue);
@@ -829,10 +847,10 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
             updateAudioRouting();
         } else {
             // Standard HTML5 audio.volume clamped to [0.0, 1.0]
-            const baseVol = Math.min(1.0, s.currentVolumeValue);
+            const baseVol = appAttenuation(s);
             if (s.audio) {
                 s.audio.volume = baseVol;
-                if(!preserveMute)s.audio.muted = false;
+                if(!preserveMute&&!s.isHardwareGain)s.audio.muted = false;
             }
 
             if (s.audioContext) {
@@ -899,7 +917,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
 
         // 0. ReplayGain / EBU R128 Loudness Normalization Stage
         s.replayGainNode = ctx.createGain();
-        s.replayGainNode.gain.value = 1.0;
+        s.replayGainNode.gain.value = computeReplayGainMultiplier();
 
         // 0.5. Dynamic Headroom Pre-Amp Gain Stage
         s.preAmpGainNode = ctx.createGain();
@@ -941,7 +959,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
 
         // 4. Clean Amplification Gain Stage (raw unconstrained gain)
         s.ampGainNode = ctx.createGain();
-        s.ampGainNode.gain.value = s.isAmpBoost ? getEffectiveAmplification() : 1.0;
+        s.ampGainNode.gain.value = getEffectiveAmplification();
 
         // 5. Dedicated Studio-Grade Transparent Brickwall Limiter (Master anti-clipping protection)
         s.dspLimiter = ctx.createDynamicsCompressor();
@@ -1003,6 +1021,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         const newAudio = document.createElement('audio');
         newAudio.id = 'audioPlayer';
         newAudio.preload = 'auto';
+        newAudio._trackGeneration=oldAudio._trackGeneration;
         if (oldAudio.crossOrigin) {
             newAudio.crossOrigin = oldAudio.crossOrigin;
         }
@@ -1062,7 +1081,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
     function syncSoftwareVolume(immediate=false) {
         const s=store.state,node=s.softwareSourceGainNode;
         if(!node||!s.audioContext||node.context!==s.audioContext)return;
-        const target=s.audio?.muted?0:(s.isHardwareGain&&s.hwGainAvailable&&getRuntime().hasHardwareGain?Math.max(0,Math.min(1,s.hardwareAppGain)):Math.max(0,Math.min(1,s.currentVolumeValue)));
+        const target=s.audio?.muted?0:appAttenuation(s);
         const now=s.audioContext.currentTime;
         node.gain.cancelScheduledValues(now);
         if(immediate)node.gain.setValueAtTime(target,now);else node.gain.setTargetAtTime(target,now,0.01);
@@ -1097,10 +1116,12 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         }
         if(s.isSoftwareDecoding)syncSoftwareVolume(previousCoreRoute?.active!==s.softwareSourceGainNode);
         const active=s.isSoftwareDecoding&&s.softwareSourceGainNode?s.softwareSourceGainNode:s.audioSourceNode;
-        const route=(s.mathPrecision==='native'&&!hasUserShapingDsp())?'direct':s.dspWorkletNode?'worklet':'fallback';
-        const topology=route==='fallback'?[s.isSubsonic&&s.mathPrecision!=='native',Boolean(hasActiveDsp()),Boolean(s.isCrossfeed&&s.xfeedNetwork),effectiveLimiterEnabled(s)].join(':'):route;
+        const audible=s.isSoftwareDecoding?(!s.isSoftwarePaused&&Boolean(s.softwareSourceNode||s.activeDecodedBuffer?.streaming)):Boolean(s.audio&&!s.audio.paused);
+        const usable=canActivatePreparedWorklet({configured:s.dspWorkletNode?._cachyConfigured,previousRoute:previousCoreRoute?.route,audible,held:outputHold.held});
+        const route=(s.mathPrecision==='native'&&!hasUserShapingDsp())?'direct':usable?'worklet':'fallback';
+        const topology=route==='fallback'?[Boolean(s.isSubsonic),Boolean(hasActiveDsp()),Boolean(s.isCrossfeed&&s.xfeedNetwork),effectiveLimiterEnabled(s)].join(':'):route;
         // Parameter-only edits do not disconnect the live audio route.
-        if(previousCoreRoute?.active===active&&previousCoreRoute?.route===route&&previousCoreRoute?.ctx===s.audioContext&&previousCoreRoute?.worklet===s.dspWorkletNode&&previousCoreRoute?.topology===topology){updateWorkletParams();store.emit('ui:sync-dac-status');return;}
+        if(previousCoreRoute?.active===active&&previousCoreRoute?.route===route&&previousCoreRoute?.ctx===s.audioContext&&(route!=='worklet'||previousCoreRoute?.worklet===s.dspWorkletNode)&&previousCoreRoute?.topology===topology){updateWorkletParams();store.emit('ui:sync-dac-status');return;}
         previousCoreRoute=null;
         confirmedRoute=null;
         try {
@@ -1127,7 +1148,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
 
             // Primary Studio 64-Bit Single-Path Worklet Graph:
             // All filtering, EQ, crossfeed, R.A.C.E., M/S, AGP, soft-clip & final dither run strictly inside dspWorkletNode
-            if (s.dspWorkletNode) {
+            if (route==='worklet') {
                 updateWorkletParams();
                 activeSource.connect(s.dspWorkletNode);
                 s.dspWorkletNode.connect(s.outputGate);
@@ -1141,7 +1162,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
             ensureFallbackDspNodes();
             updatePreAmpGain(s.audioContext.currentTime);
             let rootNode = activeSource;
-            if (s.isSubsonic && s.subsonicFilter && s.mathPrecision !== 'native') {
+            if (s.isSubsonic && s.subsonicFilter) {
                 activeSource.connect(s.subsonicFilter);
                 rootNode = s.subsonicFilter;
             }
@@ -1208,8 +1229,11 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         return Boolean(s.audioContext && s.audioContext.state !== 'closed' && appliedBufferLatency !== s.bufferLatencyTarget);
     }
 
+    const graphClockStates=new WeakMap();
     function onGraphStateChange(event) {
         const ctx = event.currentTarget;
+        const previous=graphClockStates.get(ctx);graphClockStates.set(ctx,ctx.state);
+        if((ctx.state==='interrupted'||(previous==='running'&&ctx.state==='suspended'))&&store.state.audioContext===ctx&&!graphLifecycle.replacing)store.emit('audio:graph-interrupted');
         if (ctx.state === 'closed' && !graphLifecycle.replacing && store.state.audioContext === ctx) {
             clearClosedGraph(ctx);
             store.emit('audio:graph-lost');
@@ -1260,6 +1284,7 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
             confirmedRoute = previousCoreRoute = null;
             console.warn('Audio graph initialization failed:', error);
         }
+        graphClockStates.set(ctx,ctx.state);
         ctx.addEventListener('statechange', onGraphStateChange);
         refreshSpectrum();
         store.emit('ui:sync-dac-status');
@@ -1275,11 +1300,11 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
 
     const pendingResumes = new WeakMap();
     function resumeGraph(ctx) {
-        if (ctx?.state === 'suspended' && getConfirmedAudioRoute() && !graphLifecycle.replacing && !pendingResumes.has(ctx)) {
+        if (['suspended','interrupted'].includes(ctx?.state) && getConfirmedAudioRoute() && !graphLifecycle.replacing && !pendingResumes.has(ctx)) {
             try {
                 const task = ctx.resume();
                 pendingResumes.set(ctx, task);
-                task.catch(() => {}).finally(() => pendingResumes.delete(ctx));
+                task.catch(() => {}).finally(() => {if(pendingResumes.get(ctx)===task)pendingResumes.delete(ctx);});
             } catch (_) {}
         }
         return ctx;
@@ -1300,6 +1325,26 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         if (ctx && !s.audioSourceNode) { getOrCreateAudioSourceNode(); updateAudioRouting(); }
         store.emit('ui:sync-dac-status');
         return ctx === s.audioContext && getConfirmedAudioRoute() ? resumeGraph(ctx) : null;
+    }
+
+    export async function requirePlaybackGraph() {
+        const s=store.state,context=s.audioContext;
+        try{
+            if(context&&getConfirmedAudioRoute())updateAudioRouting();
+            await requireRunningGraph({context,current:()=>s.audioContext,confirmed:getConfirmedAudioRoute,resume:resumeAudioGraph});
+            if(getConfirmedAudioRoute()==='worklet'){
+                const node=s.dspWorkletNode;await workletAcks.wait(node);
+                if(s.audioContext!==context||s.dspWorkletNode!==node||context.state!=='running'||workletAcks.pending(node)||getConfirmedAudioRoute()!=='worklet')throw Error('DSP route changed before playback. Press Play to retry.');
+            }
+            return context;
+        }
+        catch(error){
+            // A resume promise can stay pending indefinitely on some output
+            // devices. Let a later explicit Play retry; an old completion must
+            // not remove the new attempt or start any source on its own.
+            if(context&&context.state!=='running')pendingResumes.delete(context);
+            throw error;
+        }
     }
 
     function initAudioContext(preferredRate = null) {
@@ -1346,8 +1391,13 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         const s = store.state;
         const targetGain = computeReplayGainMultiplier();
         if (s.replayGainNode && s.audioContext) {
-            s.replayGainNode.gain.setTargetAtTime(targetGain, s.audioContext.currentTime, 0.04);
+            const now=s.audioContext.currentTime;
+            s.replayGainNode.gain.cancelScheduledValues(now);
+            if(!s.isSoftwareDecoding && s.audio?.paused)s.replayGainNode.gain.setValueAtTime(targetGain,now);
+            else s.replayGainNode.gain.setTargetAtTime(targetGain,now,.04);
         }
+        // Track-specific ReplayGain can change the required protection topology.
+        updateAudioRouting();
         updateWorkletParams();
         store.emit('ui:sync-dac-status');
     });
@@ -1394,3 +1444,26 @@ import { effectiveLimiterEnabled, requiresPeakProtection, createSoftClipCurve, c
         updatePreAmpGain,
         updateWorkletParams
     };
+
+// On-demand, bounded graph observation. Never connect the meter to a destination,
+// retain raw audio or acquire a microphone. Native output is not measured here.
+export async function collectAudioDiagnostic({valid=()=>true, sleep=ms=>new Promise(r=>setTimeout(r,ms))}={}){
+    const s=store.state,ctx=s.audioContext,gate=s.outputGate,route=getConfirmedAudioRoute();
+    const track=s.currentTrack,nativeActive=Boolean(s.isNativePlaybackActive?.()),source=s.audioSourceNode,software=s.softwareSourceGainNode;
+    const snapshot=buildAudioDiagnostic(s,track,nativeActive,route,null);
+    if(nativeActive||!route||!gate||ctx?.state!=='running'||!s.isPlaying)return snapshot;
+    let split;const meters=[];
+    try{
+        split=ctx.createChannelSplitter(2);gate.connect(split);
+        for(let i=0;i<2;i++){const meter=ctx.createAnalyser();meter.fftSize=2048;meters.push(meter);split.connect(meter,i);}
+        const samples=new Float32Array(2048),totals=meters.map(()=>({peak:0,sum:0,finiteSamples:0,overFullScale:0,nonfinite:0}));
+        for(let i=0;i<5;i++){
+            await sleep(100);
+            if(!valid()||s.audioContext!==ctx||s.outputGate!==gate||getConfirmedAudioRoute()!==route||s.currentTrack!==track||s.audioSourceNode!==source||s.softwareSourceGainNode!==software||ctx.state!=='running'||!s.isPlaying)return {...snapshot,levels:{status:'interrupted'}};
+            meters.forEach((meter,j)=>{meter.getFloatTimeDomainData(samples);const t=totals[j];for(const v of samples){if(!Number.isFinite(v)){t.nonfinite++;continue;}const a=Math.abs(v);t.peak=Math.max(t.peak,a);t.sum+=v*v;t.finiteSamples++;if(a>1)t.overFullScale++;}});
+        }
+        snapshot.levels={status:'sampled',scope:'post-output-gate Web Audio graph; five short windows, not true peak or hardware',channels:totals.map(({sum,...t})=>({...t,rms:t.finiteSamples?Math.sqrt(sum/t.finiteSamples):null}))};
+        return snapshot;
+    }catch{return {...snapshot,levels:{status:'unavailable'}};}
+    finally{if(split){try{gate.disconnect(split);}catch{}try{split.disconnect();}catch{}}for(const m of meters)try{m.disconnect();}catch{}}
+}

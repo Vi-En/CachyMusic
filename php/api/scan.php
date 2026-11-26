@@ -4,6 +4,8 @@ if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
 require_once(__DIR__ . '/../platform.php');
+require_once(__DIR__ . '/../scan_budget.php');
+require_once(__DIR__ . '/../scan_resume.php');
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: private, no-store');
 cachy_send_local_cors('GET, POST, OPTIONS');
@@ -19,14 +21,33 @@ $scriptBase = basename($_SERVER['SCRIPT_FILENAME'] ?? '');
 $isDirectScanRequest = ($scriptBase === 'scan.php' || $scriptBase === 'tracks.php');
 
 if ($isDirectScanRequest) {
-    $rawInput = file_get_contents('php://input');
-    $json = json_decode($rawInput, true);
+    require_once __DIR__.'/../scan_jobs.php';
+    if (CachyScanJob::session()!==null) {
+        http_response_code(409);echo json_encode(['success'=>false,'code'=>'managed_scan_required','message'=>'Use the managed scan job endpoint; reload the client.']);exit;
+    }
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if (!in_array($method,['GET','POST'],true) || ($method==='GET' && isset($_GET['directory']))) { http_response_code(405); echo json_encode(['success'=>false,'message'=>'Explicit directory changes require POST']); exit; }
+    $rawInput = file_get_contents('php://input', false, null, 0, 16385);
+    if ($rawInput === false || strlen($rawInput) > 16384) { http_response_code(413); echo json_encode(['success'=>false,'message'=>'Request too large']); exit; }
+    $json = $rawInput === '' ? [] : json_decode($rawInput, true);
+    if (!is_array($json)) { http_response_code(400); echo json_encode(['success'=>false,'message'=>'Invalid request']); exit; }
 
     $requestedDir = $json['directory'] ?? $_POST['directory'] ?? $_GET['directory'] ?? '';
+    if (!is_string($requestedDir) || strlen($requestedDir) > 4096 || strpos($requestedDir, "\0") !== false) { http_response_code(400); echo json_encode(['success'=>false,'message'=>'Invalid directory']); exit; }
     $requestedDir = trim($requestedDir);
+    if (array_key_exists('expectedDirectory',$json) && (!is_string($json['expectedDirectory'])||strlen($json['expectedDirectory'])>4096||str_contains($json['expectedDirectory'],"\0")||preg_match('//u',$json['expectedDirectory'])!==1)) {http_response_code(400);echo json_encode(['success'=>false,'message'=>'Invalid expected directory']);exit;}
+    if (array_key_exists('preserveDirectory',$json)&&!is_bool($json['preserveDirectory'])) {http_response_code(400);echo json_encode(['success'=>false,'message'=>'Invalid preserveDirectory']);exit;}
 
+    [$status,$response] = cachy_execute_scan($json,$requestedDir);
+    http_response_code($status); echo $response; exit;
+}
+
+// Shared scanner, used by the synchronous compatibility endpoint and the
+// launcher-owned background worker. No HTTP globals or process exit here.
+function cachy_execute_scan(array $json,string $requestedDir,?CachyScanJob $job=null): array {
     // 1. Determine directory to scan
-    if (empty($requestedDir)) {
+    $implicitDirectory = $requestedDir === '';
+    if ($implicitDirectory) {
         $requestedDir = Storage::getDefaultDirectory();
     }
 
@@ -34,14 +55,14 @@ if ($isDirectScanRequest) {
 
     // If no directory has been chosen yet, do not load placeholder tracks; prompt user to choose directory first
     if (empty($requestedDir)) {
-        echo json_encode([
+        if (Storage::read() === []) return [200,json_encode(['success'=>false,'message'=>'Library storage unreadable. Restore or repair the profile.'])];
+        return [200,json_encode([
             'success'        => true,
             'directory'      => '',
             'count'          => 0,
             'tracks'         => [],
             'needsDirectory' => true
-        ]);
-        exit;
+        ])];
     }
 
     if (!empty($requestedDir) && (str_starts_with($requestedDir, '~') || str_starts_with($requestedDir, '~/'))) {
@@ -49,159 +70,182 @@ if ($isDirectScanRequest) {
     }
 
     $realDir = realpath($requestedDir);
-    if ($realDir === false || !is_dir($realDir) || !is_readable($realDir)) {
+    if (($realDir === false || !is_dir($realDir) || !is_readable($realDir)) && !preg_match('#^(?:[A-Za-z]:|[/\\\\])#',$requestedDir)) {
         $alt = realpath(__DIR__ . '/../../' . ltrim($requestedDir, "/\\"));
         if ($alt && is_dir($alt) && is_readable($alt)) {
             $realDir = $alt;
         }
     }
     if ($realDir === false || !is_dir($realDir) || !is_readable($realDir)) {
-        echo json_encode([
+        return [200,json_encode([
             'success' => false,
             'message' => "Directory does not exist or is not readable: " . htmlspecialchars($requestedDir) . ". Please set a valid directory manually in Settings -> Library & Folders."
-        ]);
-        exit;
+        ])];
     }
 
     // Security: Block system directories and enforce cross-platform sandbox allowlist
     if (!cachy_is_allowed_scan_path($realDir)) {
-        http_response_code(403);
-        echo json_encode([
+        return [403,json_encode([
             'success' => false,
             'message' => "Security restriction: Scanning system or unauthorized root directories is not permitted."
-        ]);
-        exit;
+        ])];
     }
 
-    // 2. Persist to DefaultDirectory
-    if (($json['preserveDirectory'] ?? false) !== true) Storage::setDefaultDirectory($realDir);
+    // Bounds are administrator configuration, never caller-supplied. Fail
+    // rather than publishing a truncated library. Local JSON remains unchanged.
 
-    // 3. Load existing cached tracks for instant lookup
-    $cachedTracks = Storage::getCachedTracks($realDir);
-
-    // 4. Scan directory for audio files (with batching & recursion depth limits)
-    $AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'oga', 'flac', 'm4a', 'aac', 'opus', 'wma', 'aiff', 'aif', 'alac', 'mp4'];
+    $AUDIO_EXTS = ['mp3','wav','ogg','oga','flac','m4a','aac','opus','wma','aiff','aif','alac','mp4'];
     $tracks = [];
-    $MAX_TRACKS = 25000;
-
+    $scanLock=null;
+    $resume=null;
     try {
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($realDir, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST, RecursiveIteratorIterator::CATCH_GET_CHILD
-        );
-        $iterator->setMaxDepth(12);
-    } catch (Exception $e) {
-        echo json_encode(['success' => false, 'message' => "Could not read directory."]);
-        exit;
-    }
+        $lockPath=cachy_data_dir().DIRECTORY_SEPARATOR.'scan.lock';
+        clearstatcache(true,$lockPath);
+        $before=@lstat($lockPath);
+        if ($before&&(($before['mode']&0170000)!==0100000||$before['nlink']!==1)) throw new RuntimeException('Unsafe scan lock');
+        $scanLock=@fopen($lockPath,cachy_is_windows()?'c':'ce');
+        if (!$scanLock || !flock($scanLock,LOCK_EX|LOCK_NB)) throw new CachyScanLimit('A library scan is already running. Retry after it finishes.');
+        $opened=fstat($scanLock);clearstatcache(true,$lockPath);$named=@lstat($lockPath);
+        if (!$opened||!$named||($named['mode']&0170000)!==0100000||$named['nlink']!==1||$opened['nlink']!==1||$opened['dev']!==$named['dev']||$opened['ino']!==$named['ino']) throw new RuntimeException('Unsafe scan lock');
+        $budget = new CachyScanBudget($job ? fn()=> $job->checkpoint() : null);
+        if ($job) $resume = new CachyScanResume($realDir);
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($realDir, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST);
+        $iterator->setMaxDepth(13);
+        if (!Storage::beginScanBatch()) throw new RuntimeException('Library storage unreadable.');
+        if (array_key_exists('expectedDirectory',$json) && Storage::getDefaultDirectory()!==$json['expectedDirectory']) return [409,json_encode(['success'=>false,'code'=>'root_changed','message'=>'Library directory changed since confirmation. Refresh before retrying.'])];
+        if ($implicitDirectory && Storage::getDefaultDirectory() !== $requestedDir) throw new RuntimeException('Library directory changed; retry scan.');
+        // Cache and provisional writes share the same immutable base snapshot.
+        $cachedTracks = Storage::getCachedTracks($realDir);
+        foreach ($iterator as $file) {
+            $budget->visit($iterator->getDepth());
+            if ($file->isLink() || !$file->isFile()) continue;
+            $ext = strtolower($file->getExtension());
+            if (!in_array($ext, $AUDIO_EXTS, true)) continue;
 
-    Storage::beginBatch();
-    foreach ($iterator as $file) {
-        if (count($tracks) >= $MAX_TRACKS) break;
-        if (!$file->isFile()) continue;
-        $ext = strtolower($file->getExtension());
-        if (!in_array($ext, $AUDIO_EXTS, true)) continue;
+            $fullPath = $file->getRealPath();
+            if ($fullPath === false || !cm_media_path_allowed($fullPath, [$realDir])) continue;
+            $budget->track();
+            $filename = $file->getFilename();
+            $fileSize = $file->getSize();
+            $mtime = $file->getMTime();
 
-        $fullPath = $file->getPathname();
-        $filename = $file->getFilename();
-        $fileSize = $file->getSize();
-        $mtime = $file->getMTime();
+            $tid = null;
+            $meta = null;
+            $hasCover = false;
+            $artworkHash = $cachedTracks[$fullPath]['artwork_hash'] ?? null;
 
-        $tid = null;
-        $meta = null;
-        $hasCover = false;
+            // Check cache: if path, size and mtime match, use cached metadata instantly (<0.01ms)
+            if (isset($cachedTracks[$fullPath]) && (int)$cachedTracks[$fullPath]['mtime'] === (int)$mtime && isset($cachedTracks[$fullPath]['file_size']) && (int)$cachedTracks[$fullPath]['file_size'] === (int)$fileSize && !empty($cachedTracks[$fullPath]['duration'])) {
+                $c = $cachedTracks[$fullPath];
+                $tid = (int)$c['tid'];
+                $hasCover = !empty($c['has_cover']);
+                $cachedSr = $c['sample_rate'] ? (int)$c['sample_rate'] : null;
+                $cachedFmt = $c['format'] ?: strtoupper($ext);
+                $cachedBps = (!empty($c['bit_depth'])) ? (int)$c['bit_depth'] : (($cachedSr && $cachedSr >= 88200 && ($cachedFmt === 'FLAC' || $cachedFmt === 'WAV')) ? 24 : 16);
+                $meta = [
+                    'title'      => $c['title'],
+                    'artist'     => $c['artist'],
+                    'album'      => $c['album'],
+                    'genre'      => $c['genre'],
+                    'year'       => $c['year'] ? (int)$c['year'] : null,
+                    'track'      => $c['track_num'],
+                    'duration'   => (float)$c['duration'],
+                    'bitrate'    => $c['bitrate'] ? (int)$c['bitrate'] : null,
+                    'sampleRate' => $cachedSr,
+                    'channels'   => $c['channels'] ? (int)$c['channels'] : 2,
+                    'bitDepth'   => $cachedBps,
+                    'codec'      => $cachedFmt,
+                    'lyrics'     => $c['lyrics'],
+                    'replayGain' => $c['replay_gain'] ?? null,
+                    'replayPeak' => $c['replay_peak'] ?? null,
+                    'hasCover'   => $hasCover
+                ];
+            } else {
+                // Extract metadata from audio file
+                $fingerprint = $resume?->fingerprint($fullPath);
+                $meta = $resume?->lookup($fullPath,$fingerprint);
+                if ($meta === null) {
+                    $meta = extract_actual_audio_metadata($fullPath, $ext, $fileSize, $budget);
+                    if ($resume && $fingerprint !== null && $resume->fingerprint($fullPath) === $fingerprint) $resume->record($fullPath,$fingerprint,$meta);
+                }
+                $budget->checkpoint();
+                $hasCover = !empty($meta['hasCover']);
 
-        // Check cache: if path and mtime match, use cached metadata instantly (<0.01ms)
-        if (isset($cachedTracks[$fullPath]) && (int)$cachedTracks[$fullPath]['mtime'] === (int)$mtime && !empty($cachedTracks[$fullPath]['duration'])) {
-            $c = $cachedTracks[$fullPath];
-            $tid = (int)$c['tid'];
-            $hasCover = !empty($c['has_cover']);
-            $cachedSr = $c['sample_rate'] ? (int)$c['sample_rate'] : null;
-            $cachedFmt = $c['format'] ?: strtoupper($ext);
-            $cachedBps = (!empty($c['bit_depth'])) ? (int)$c['bit_depth'] : (($cachedSr && $cachedSr >= 88200 && ($cachedFmt === 'FLAC' || $cachedFmt === 'WAV')) ? 24 : 16);
-            $meta = [
-                'title'      => $c['title'],
-                'artist'     => $c['artist'],
-                'album'      => $c['album'],
-                'genre'      => $c['genre'],
-                'year'       => $c['year'] ? (int)$c['year'] : null,
-                'track'      => $c['track_num'],
-                'duration'   => (float)$c['duration'],
-                'bitrate'    => $c['bitrate'] ? (int)$c['bitrate'] : null,
-                'sampleRate' => $cachedSr,
-                'channels'   => $c['channels'] ? (int)$c['channels'] : 2,
-                'bitDepth'   => $cachedBps,
-                'codec'      => $cachedFmt,
-                'lyrics'     => $c['lyrics'],
-                'replayGain' => $c['replay_gain'] ?? null,
-                'replayPeak' => $c['replay_peak'] ?? null,
-                'hasCover'   => $hasCover
-            ];
-        } else {
-            // Extract metadata from audio file
-            $meta = extract_actual_audio_metadata($fullPath, $ext, $fileSize);
-            $hasCover = !empty($meta['hasCover']);
+                // Insert or update in storage (batched in memory, flushed once after loop)
+                $tid = Storage::upsertTrack([
+                    'file_path'   => $fullPath,
+                    'full_path'   => $fullPath,
+                    'title'       => $meta['title'],
+                    'artist'      => $meta['artist'],
+                    'album'       => $meta['album'],
+                    'genre'       => $meta['genre'],
+                    'year'        => $meta['year'] ?: null,
+                    'track_num'   => $meta['track'],
+                    'duration'    => (float)($meta['duration'] ?: 0),
+                    'bitrate'     => $meta['bitrate'] ?: null,
+                    'sample_rate' => $meta['sampleRate'] ?: null,
+                    'channels'    => (int)($meta['channels'] ?: 2),
+                    'bit_depth'   => (int)($meta['bitDepth'] ?: 16),
+                    'format'      => strtoupper($meta['codec'] ?: $ext),
+                    'file_size'   => $fileSize,
+                    'mtime'       => $mtime,
+                    'has_cover'   => $hasCover ? 1 : 0,
+                    'lyrics'      => $meta['lyrics'] ?? null,
+                    'replay_gain' => $meta['replayGain'] ?? null,
+                    'replay_peak' => $meta['replayPeak'] ?? null
+                ]);
+                if ($tid === false) throw new RuntimeException('Track indexing failed; check library storage.');
+            }
 
-            // Insert or update in storage (batched in memory, flushed once after loop)
-            $tid = Storage::upsertTrack([
-                'file_path'   => $fullPath,
-                'full_path'   => $fullPath,
+            if ($artworkHash) $hasCover = true;
+            $row = [
+                'id'          => $tid ?: $filename,
+                'tid'         => $tid,
+                'filename'    => $filename,
+                'fullPath'    => $fullPath,
+                'fileSize'    => $fileSize,
+                'lastModified' => $mtime,
                 'title'       => $meta['title'],
                 'artist'      => $meta['artist'],
                 'album'       => $meta['album'],
                 'genre'       => $meta['genre'],
-                'year'        => $meta['year'] ?: null,
-                'track_num'   => $meta['track'],
-                'duration'    => (float)($meta['duration'] ?: 0),
-                'bitrate'     => $meta['bitrate'] ?: null,
-                'sample_rate' => $meta['sampleRate'] ?: null,
-                'channels'    => (int)($meta['channels'] ?: 2),
-                'bit_depth'   => (int)($meta['bitDepth'] ?: 16),
+                'year'        => $meta['year'],
+                'track'       => $meta['track'],
+                'duration'    => $meta['duration'],
+                'bitrate'     => $meta['bitrate'],
+                'sampleRate'  => $meta['sampleRate'],
+                'channels'    => $meta['channels'],
+                'bitDepth'    => $meta['bitDepth'] ?? ((!empty($meta['sampleRate']) && $meta['sampleRate'] >= 88200) ? 24 : 16),
                 'format'      => strtoupper($meta['codec'] ?: $ext),
-                'file_size'   => $fileSize,
-                'mtime'       => $mtime,
-                'has_cover'   => $hasCover ? 1 : 0,
+                'size'        => format_filesize($fileSize),
+                'cover'       => $hasCover ? ('php/api/cover.php?tid=' . ($tid ?: urlencode($fullPath)) . ($artworkHash ? '&v=' . $artworkHash : '')) : null,
+                'hasCover'    => $hasCover,
                 'lyrics'      => $meta['lyrics'] ?? null,
-                'replay_gain' => $meta['replayGain'] ?? null,
-                'replay_peak' => $meta['replayPeak'] ?? null
-            ]);
+                'replayGain'  => $meta['replayGain'] ?? null,
+                'replayPeak'  => $meta['replayPeak'] ?? null,
+                'src'         => $tid ? ('php/api/stream.php?tid=' . $tid) : ('php/api/stream.php?path=' . urlencode($fullPath))
+            ];
+            $budget->account($row);
+            $tracks[] = $row;
         }
-
-        $tracks[] = [
-            'id'          => $tid ?: $filename,
-            'tid'         => $tid,
-            'filename'    => $filename,
-            'fullPath'    => $fullPath,
-            'title'       => $meta['title'],
-            'artist'      => $meta['artist'],
-            'album'       => $meta['album'],
-            'genre'       => $meta['genre'],
-            'year'        => $meta['year'],
-            'track'       => $meta['track'],
-            'duration'    => $meta['duration'],
-            'bitrate'     => $meta['bitrate'],
-            'sampleRate'  => $meta['sampleRate'],
-            'channels'    => $meta['channels'],
-            'bitDepth'    => $meta['bitDepth'] ?? ((!empty($meta['sampleRate']) && $meta['sampleRate'] >= 88200) ? 24 : 16),
-            'format'      => strtoupper($meta['codec'] ?: $ext),
-            'size'        => format_filesize($fileSize),
-            'cover'       => $hasCover ? ('php/api/cover.php?tid=' . ($tid ?: urlencode($fullPath))) : null,
-            'hasCover'    => $hasCover,
-            'lyrics'      => $meta['lyrics'] ?? null,
-            'replayGain'  => $meta['replayGain'] ?? null,
-            'replayPeak'  => $meta['replayPeak'] ?? null,
-            'src'         => $tid ? ('php/api/stream.php?tid=' . $tid) : ('php/api/stream.php?path=' . urlencode($fullPath))
-        ];
-    }
-    if (!Storage::commitBatch()) { echo json_encode(['success'=>false,'message'=>'Library changed during scan or storage commit failed. Scan again.']); exit; }
-
-    echo json_encode([
-        'success'   => true,
-        'directory' => $realDir,
-        'count'     => count($tracks),
-        'tracks'    => $tracks
-    ], JSON_UNESCAPED_SLASHES);
-    exit;
+        $budget->checkpoint();
+        $response = json_encode(['success'=>true,'directory'=>$realDir,'count'=>count($tracks),'tracks'=>$tracks],JSON_UNESCAPED_SLASHES|JSON_INVALID_UTF8_SUBSTITUTE|JSON_THROW_ON_ERROR);
+        $budget->response(strlen($response));
+        if (($json['preserveDirectory']??false)!==true && !Storage::setDefaultDirectory($realDir)) throw new RuntimeException('Library directory could not be saved.');
+        $budget->checkpoint();
+        if ($job) $job->beginCommit();
+        if (!Storage::commitScanBatch()) {
+            if (Storage::hasMySQL()) return [503,json_encode(['success'=>false,'code'=>'sql_commit_uncertain','message'=>'SQL scan publication could not be confirmed. Refresh the authoritative library before retrying.'])];
+            return [409,json_encode(['success'=>false,'code'=>'scan_commit_conflict','message'=>'Library changed, a listening client reserved a recording, or storage commit failed. Pause other clients and refresh before retrying.'])];
+        }
+        $resume?->complete();
+        return [200,$response];
+    } catch (CachyScanLimit $e) {
+        return [200,json_encode(['success'=>false,'code'=>'scan_budget','message'=>$e->getMessage()])];
+    } catch (Throwable $e) {
+        // Do not commit provisional IDs or publish a partial result.
+        return [200,json_encode(['success'=>false,'message'=>'Scan could not finish safely. Check the directory and library storage, then retry.'])];
+    } finally { $resume?->close(); Storage::abortBatch(); if (is_resource($scanLock)) fclose($scanLock); }
 }
 
 /* ========================================================================= */
@@ -244,7 +288,7 @@ function normalize_id3_genre($g) {
     return $g;
 }
 
-function extract_actual_audio_metadata($path, $ext, $fileSize) {
+function extract_actual_audio_metadata($path, $ext, $fileSize, ?CachyScanBudget $budget = null) {
     $result = [
         'title'      => null,
         'artist'     => null,
@@ -256,6 +300,7 @@ function extract_actual_audio_metadata($path, $ext, $fileSize) {
         'bitrate'    => null,
         'sampleRate' => null,
         'channels'   => null,
+        'bitDepth'   => null,
         'codec'      => strtoupper($ext),
         'cover'      => null,
         'hasCover'   => false,
@@ -267,16 +312,18 @@ function extract_actual_audio_metadata($path, $ext, $fileSize) {
     $baseName = pathinfo($path, PATHINFO_FILENAME);
     $lrcFile = $dirName . '/' . $baseName . '.lrc';
     $txtLyrics = $dirName . '/' . $baseName . '.lyrics';
-    if (file_exists($lrcFile) && is_readable($lrcFile)) {
-        $result['lyrics'] = @file_get_contents($lrcFile);
-    } elseif (file_exists($txtLyrics) && is_readable($txtLyrics)) {
-        $result['lyrics'] = @file_get_contents($txtLyrics);
+    foreach ([$lrcFile,$txtLyrics] as $sidecar) {
+        clearstatcache(true,$sidecar);
+        $stat=@lstat($sidecar);
+        if (!$stat || ($stat['mode'] & 0170000)!==0100000 || $stat['nlink']!==1 || $stat['size']>262144) continue;
+        $lyrics=cm_read_regular_file($sidecar,262144);
+        if (is_string($lyrics) && strlen($lyrics)<=262144) { $result['lyrics']=$lyrics; break; }
     }
 
     // Check for folder cover art
     $commonCovers = ['cover.jpg', 'cover.png', 'folder.jpg', 'folder.png', 'front.jpg', 'front.png', 'album.jpg'];
     foreach ($commonCovers as $cc) {
-        if (file_exists($dirName . '/' . $cc)) {
+        if (!is_link($dirName . '/' . $cc) && is_file($dirName . '/' . $cc)) {
             $result['hasCover'] = true;
             break;
         }
@@ -286,7 +333,7 @@ function extract_actual_audio_metadata($path, $ext, $fileSize) {
     $hasFfprobe = false;
     $ffprobeBin = cachy_find_binary('ffprobe');
     if ($ffprobeBin !== null) {
-        $probeOut = cachy_run_args([$ffprobeBin, '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', $path]);
+        $probeOut = cachy_run_args([$ffprobeBin, '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', $path], 4 * 1024 * 1024, $budget ? $budget->remaining(15) : 15,$budget ? fn()=> $budget->checkpoint() : null);
         if ($probeOut && strlen($probeOut) > 10) {
             $probeData = json_decode($probeOut, true);
             if ($probeData && (isset($probeData['format']) || isset($probeData['streams']))) {
@@ -296,15 +343,16 @@ function extract_actual_audio_metadata($path, $ext, $fileSize) {
         }
     }
 
+    if ($budget) $budget->checkpoint();
     // Method 2: Pure-PHP binary metadata parsers (ID3, FLAC, WAV, OGG/Opus, M4A/MP4/ALAC)
     if (!$hasFfprobe || ($result['title'] === null && $result['artist'] === null)) {
         $phpTags = null;
         if ($ext === 'mp3') {
             $phpTags = read_php_id3_tags($path);
         } elseif ($ext === 'flac') {
-            $phpTags = read_php_flac_tags($path, $fileSize);
+            $phpTags = read_php_flac_tags($path, $fileSize, $budget);
         } elseif ($ext === 'wav' || $ext === 'aiff' || $ext === 'aif') {
-            $phpTags = read_php_wav_tags($path, $fileSize);
+            $phpTags = read_php_wav_tags($path, $fileSize, $budget);
         } elseif ($ext === 'ogg' || $ext === 'opus' || $ext === 'oga') {
             $phpTags = read_php_ogg_tags($path, $fileSize);
         } elseif ($ext === 'm4a' || $ext === 'mp4' || $ext === 'aac' || $ext === 'alac') {
@@ -587,7 +635,7 @@ function decode_id3_text($raw) {
     return trim(str_replace("\0", '', $text ?: $body));
 }
 
-function read_php_flac_tags($path, $fileSize) {
+function read_php_flac_tags($path, $fileSize, ?CachyScanBudget $budget = null) {
     $out = ['title' => null, 'artist' => null, 'album' => null, 'genre' => null, 'year' => null, 'track' => null, 'duration' => null, 'bitrate' => null, 'sampleRate' => null, 'channels' => null, 'bitDepth' => 16, 'hasCover' => false, 'lyrics' => null];
     $fh = @fopen($path, 'rb');
     if (!$fh) return $out;
@@ -600,6 +648,7 @@ function read_php_flac_tags($path, $fileSize) {
 
     $isLast = false;
     while (!$isLast && !feof($fh)) {
+        if ($budget) $budget->checkpoint();
         $header = fread($fh, 4);
         if (strlen($header) < 4) break;
         $byte0 = ord($header[0]);
@@ -610,6 +659,7 @@ function read_php_flac_tags($path, $fileSize) {
 
         if ($type === 0 && $len >= 34) { // STREAMINFO
             $info = fread($fh, $len);
+            if (strlen($info)<34) break;
             $sr = (ord($info[10]) << 12) | (ord($info[11]) << 4) | (ord($info[12]) >> 4);
             $ch = ((ord($info[12]) >> 1) & 0x07) + 1;
             $bps = (((ord($info[12]) & 0x01) << 4) | (ord($info[13]) >> 4)) + 1;
@@ -630,12 +680,14 @@ function read_php_flac_tags($path, $fileSize) {
             fseek($fh, $len, SEEK_CUR);
         } elseif ($type === 4) { // VORBIS_COMMENT
             $commentBlock = fread($fh, $len);
+            if (strlen($commentBlock)<4) break;
             $vendorLen = unpack('V', substr($commentBlock, 0, 4))[1];
             $pos = 4 + $vendorLen;
             if ($pos + 4 <= strlen($commentBlock)) {
                 $commentCount = unpack('V', substr($commentBlock, $pos, 4))[1];
                 $pos += 4;
                 for ($i = 0; $i < $commentCount; $i++) {
+                    if ($budget && ($i&255)===0) $budget->checkpoint();
                     if ($pos + 4 > strlen($commentBlock)) break;
                     $cLen = unpack('V', substr($commentBlock, $pos, 4))[1];
                     $pos += 4;
@@ -667,7 +719,7 @@ function read_php_flac_tags($path, $fileSize) {
     return $out;
 }
 
-function read_php_wav_tags($path, $fileSize) {
+function read_php_wav_tags($path, $fileSize, ?CachyScanBudget $budget = null) {
     $out = ['title' => null, 'artist' => null, 'album' => null, 'genre' => null, 'year' => null, 'track' => null, 'duration' => null, 'bitrate' => null, 'sampleRate' => null, 'channels' => null, 'bitDepth' => 16, 'hasCover' => false, 'lyrics' => null, 'codec' => 'PCM WAV'];
     $fh = @fopen($path, 'rb');
     if (!$fh) return $out;
@@ -679,6 +731,7 @@ function read_php_wav_tags($path, $fileSize) {
     $byteRate = 0;
     $dataSize = 0;
     while (!feof($fh)) {
+        if ($budget) $budget->checkpoint();
         $chunkHdr = fread($fh, 8);
         if (strlen($chunkHdr) < 8) break;
         $cid = substr($chunkHdr, 0, 4);
@@ -686,6 +739,7 @@ function read_php_wav_tags($path, $fileSize) {
         $pad = ($cSize % 2);
         if ($cid === 'fmt ' && $cSize >= 16) {
             $fmt = fread($fh, min($cSize, 64));
+            if (strlen($fmt)<16) break;
             if ($cSize > 64) fseek($fh, $cSize - 64, SEEK_CUR);
             $out['channels'] = unpack('v', substr($fmt, 2, 2))[1];
             $out['sampleRate'] = unpack('V', substr($fmt, 4, 4))[1];

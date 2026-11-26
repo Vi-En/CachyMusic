@@ -2,7 +2,7 @@
 // Cache Storage is shared by every installation on an origin. Scope the
 // cache name so a subdirectory installation cannot evict another one.
 const CACHE_PREFIX = 'cachymusic-shell:' + encodeURIComponent(self.registration.scope) + ':';
-const CACHE_NAME = CACHE_PREFIX + '3.0.0-dev.6.44';
+const CACHE_NAME = CACHE_PREFIX + '3.0.0-dev.6.74';
 
 const PRECACHE_ASSETS = [
   './',
@@ -10,6 +10,11 @@ const PRECACHE_ASSETS = [
   './manifest.json',
   './stylesheets/homepage.css',
   './stylesheets/interaction.css',
+  './stylesheets/interaction-refinement.css',
+  './scripts/modules/listening-history.js',
+  './scripts/modules/recording-lease.js',
+  './scripts/modules/compact-media.js',
+  './scripts/modules/listening-history-model.js',
   './stylesheets/library-rows.css',
   './stylesheets/playlist-workspace.css',
   './stylesheets/settings-navigation.css',
@@ -77,6 +82,8 @@ const PRECACHE_ASSETS = [
   './scripts/modules/signal-path-ui.js',
   './scripts/modules/progress-scrubber.js',
   './scripts/modules/library.js',
+  './scripts/modules/server-scan.js',
+  './scripts/modules/library-transition.js',
   './scripts/modules/playlist-model.js',
   './scripts/modules/playlist-playback.js',
   './scripts/modules/metadata-editor.js',
@@ -96,7 +103,6 @@ const PRECACHE_ASSETS = [
   './scripts/modules/container-tag-writer.js',
   './scripts/modules/ogg-tag-writer.js',
   './scripts/modules/mp4-tag-writer.js',
-  './resources/fonts/NMSFuturaProBook_Kerned.ttf',
   './scripts/modules/lyrics.js',
   './scripts/modules/theme-catalog.js',
   './stylesheets/visualizer-platter.css',
@@ -121,7 +127,6 @@ const PRECACHE_ASSETS = [
   './scripts/modules/visualizers/station.js',
   './scripts/modules/visualizers/studio.js',
   './scripts/modules/visualizers/themed-wave.js',
-  './scripts/modules/visualizers/mini-strip.js',
   './scripts/modules/visualizer-budget.js',
   './scripts/modules/visualizer.js',
   './scripts/modules/settings.js',
@@ -163,11 +168,43 @@ self.addEventListener('activate', event => {
     await self.clients.claim();
   })());
 });
+// Artwork misses are deferred only for controlled image requests. API/media
+// responses are never stored in CacheStorage. Unmanaged servers remain compatible.
+let coverInFlight = 0;
+async function fetchCover(request) {
+  const fallback = async () => {
+    const cache = await caches.open(CACHE_NAME);
+    return await cache.match(new Request(new URL('resources/images/default.svg', self.registration.scope))) || new Response('', {status: 503});
+  };
+  if (coverInFlight >= 24) return fallback();
+  coverInFlight++;
+  const deadline = Date.now() + 15000;
+  const url = new URL(request.url); url.searchParams.set('defer','1');
+  try {
+    while (Date.now() < deadline) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), Math.max(1,deadline-Date.now()));
+      let response;
+      try { response = await fetch(url.href,{credentials:'same-origin',cache:'no-store',redirect:'error',signal:controller.signal}); }
+      finally {clearTimeout(timer);}
+      if (response.status !== 202 && response.status !== 503) return response;
+      // A 503 without the pending protocol's retry header is a real error.
+      if (response.headers.get('Retry-After') !== '1') return response;
+      await new Promise(resolve => setTimeout(resolve,500));
+    }
+    return fallback();
+  } catch (_) {return fallback();}
+  finally {coverInFlight--;}
+}
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET' || request.headers.has('range')) return;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || !SHELL.has(url.pathname)) return;
+  if (url.origin !== self.location.origin) return;
+  if (request.destination === 'image' && url.pathname === new URL('php/api/cover.php',self.registration.scope).pathname) {
+    event.respondWith(fetchCover(request)); return;
+  }
+  if (!SHELL.has(url.pathname)) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     const cached = await cache.match(request, {ignoreSearch: true});

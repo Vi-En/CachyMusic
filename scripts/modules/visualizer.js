@@ -18,16 +18,11 @@ import {
     visModeBtns,
     visPillBtns,
     visualizerCanvas,
-    visualizerDock,
-    persistentMiniPlayer,
-    miniVisStrip,
-    miniVisCanvas
+    visualizerDock
 } from './ui-elements.js';
-import { getThemeNotificationProfile } from './theme-catalog.js';
 import { loadCore } from './visualizers/registry.js';
 import { drawSolidWave, emitSparkle, updateAndDrawSparkles } from './visualizers/liquid-wave.js';
 import { drawVerticalDash, drawRoundedRect } from './visualizers/segmented-bars.js';
-import { drawMiniThemeStrip, resetMiniThemeStrip } from './visualizers/mini-strip.js';
 import { drawSplinePath, updateAndDrawShockwaves } from './visualizers/canvas-geometry.js';
 
 let activeCore = null;
@@ -135,64 +130,6 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
     let cachedDockH = 0;
     let cachedCenterW = 0;
     let cachedCenterH = 0;
-    let cachedMiniW = 0;
-    let cachedMiniH = 0;
-    let lastMiniW = 0;
-    let lastMiniH = 0;
-    let lastMiniDpr = 0;
-    const miniVisCtx = miniVisCanvas ? miniVisCanvas.getContext('2d') : null;
-
-    function clearMiniStrip() {
-        if (miniVisStrip) miniVisStrip.classList.remove('is-active');
-        if (miniVisCtx && miniVisCanvas) {
-            miniVisCtx.clearRect(0, 0, miniVisCanvas.width, miniVisCanvas.height);
-        }
-        resetMiniThemeStrip();
-    }
-
-    function canRunMiniStrip(st) {
-        const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
-        return window.innerWidth <= 768
-            && !reducedMotion
-            && Boolean(persistentMiniPlayer && persistentMiniPlayer.style.display !== 'none')
-            && Boolean(miniVisStrip && miniVisCanvas && miniVisCtx)
-            && Boolean(st?.isPlaying && st?.analyser)
-            && !st?.isNativePlaybackActive?.();
-    }
-
-    function syncMiniStripVisibility(st, isMobileViewport, reducedMotion) {
-        const active = isMobileViewport
-            && !reducedMotion
-            && Boolean(persistentMiniPlayer && persistentMiniPlayer.style.display !== 'none')
-            && Boolean(miniVisStrip && miniVisCanvas && miniVisCtx)
-            && Boolean(st.isPlaying && st.analyser)
-            && !st.isNativePlaybackActive?.();
-        if (miniVisStrip) {
-            const wasActive = miniVisStrip.classList.contains('is-active');
-            miniVisStrip.classList.toggle('is-active', active);
-            miniVisStrip.dataset.visStyle = getThemeNotificationProfile(getActiveTheme()).style;
-            if (wasActive && !active) {
-                clearMiniStrip();
-            }
-        }
-        return active;
-    }
-
-    function syncMiniStripResolution(w, h) {
-        if (!miniVisCanvas || w <= 0 || h <= 0) return 1;
-        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-        const pw = Math.round(w * dpr);
-        const ph = Math.round(h * dpr);
-        if (miniVisCanvas.width !== pw || miniVisCanvas.height !== ph || dpr !== lastMiniDpr) {
-            miniVisCanvas.width = pw;
-            miniVisCanvas.height = ph;
-            lastMiniW = w;
-            lastMiniH = h;
-            lastMiniDpr = dpr;
-        }
-        return dpr;
-    }
-
     function refreshCanvasDimensions() {
         if (visualizerDock) {
             const w = Math.round(visualizerDock.clientWidth || visualizerDock.getBoundingClientRect().width);
@@ -212,15 +149,6 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
                 if (typeof store.state.resumeVisualizerLoop === 'function') store.state.resumeVisualizerLoop();
             }
         }
-        if (miniVisStrip) {
-            const mw = Math.round(miniVisStrip.clientWidth || miniVisStrip.getBoundingClientRect().width);
-            const mh = Math.round(miniVisStrip.clientHeight || miniVisStrip.getBoundingClientRect().height);
-            if (mw > 0 && mh > 0) {
-                cachedMiniW = mw;
-                cachedMiniH = mh;
-                syncMiniStripResolution(mw, mh);
-            }
-        }
     }
 
     if (window.ResizeObserver) {
@@ -238,18 +166,11 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
                     if (cachedCenterW > 0 && cachedCenterH > 0 && typeof store.state.resumeVisualizerLoop === 'function') {
                         store.state.resumeVisualizerLoop();
                     }
-                } else if (entry.target === miniVisStrip) {
-                    cachedMiniW = Math.round(entry.contentRect.width);
-                    cachedMiniH = Math.round(entry.contentRect.height);
-                    if (cachedMiniW > 0 && cachedMiniH > 0) {
-                        syncMiniStripResolution(cachedMiniW, cachedMiniH);
-                    }
                 }
             }
         });
         if (visualizerDock) resizeObs.observe(visualizerDock);
         if (turntableCenterCanvas) resizeObs.observe(turntableCenterCanvas);
-        if (miniVisStrip) resizeObs.observe(miniVisStrip);
     }
     window.addEventListener('resize', refreshCanvasDimensions, { passive: true });
     window.addEventListener('orientationchange', refreshCanvasDimensions, { passive: true });
@@ -366,8 +287,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
 
         store.state.resumeVisualizerLoop = function() {
             const st = store.state;
-            const miniReady = canRunMiniStrip(st);
-            if (document.hidden || (!miniReady && (st.currentWorkspace !== 'player' || st.activeVisualizerMode === 'artwork'))) return;
+            if (document.hidden || st.currentWorkspace !== 'player' || st.activeVisualizerMode === 'artwork') return;
             if (!st.isVisualizerLoopRunning) {
                 st.isVisualizerLoopRunning = true;
                 idleFramesAfterPause = 0;
@@ -381,7 +301,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             if (st.animFrameId != null) cancelAnimationFrame(st.animFrameId);
             st.animFrameId = null;
             st.isVisualizerLoopRunning = false;
-            clearMiniStrip();
+
             resetPeak();
         }
         document.addEventListener('visibilitychange', () => {
@@ -392,10 +312,10 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
         window.addEventListener('pageshow', () => store.state.resumeVisualizerLoop());
         store.subscribe('visualizer:resume', () => store.state.resumeVisualizerLoop());
         store.subscribe('visualizer:change', () => {
-            if (store.state.activeVisualizerMode === 'artwork' && !canRunMiniStrip(store.state)) stop();
+            if (store.state.activeVisualizerMode === 'artwork') stop();
         });
         store.subscribe('workspace:change', ({ detail }) => {
-            if (detail?.viewName === 'player' || canRunMiniStrip(store.state)) {
+            if (detail?.viewName === 'player') {
                 refreshCanvasDimensions();
                 store.state.resumeVisualizerLoop();
             } else stop();
@@ -406,13 +326,12 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             try { renderFrameBody(now); }
             catch (error) {
                 store.state.isVisualizerLoopRunning = false;
-                clearMiniStrip();
+
                 console.warn('Visualizer stopped; album artwork restored:', error);
                 // Reset any partially applied canvas transforms or clips.
                 if (visualizerCanvas) visualizerCanvas.width = visualizerCanvas.width;
                 if (turntableCenterCanvas) turntableCenterCanvas.width = turntableCenterCanvas.width;
-                if (miniVisCanvas) miniVisCanvas.width = miniVisCanvas.width;
-                lastCanvasDpr = lastCenterDpr = lastMiniDpr = 0;
+                lastCanvasDpr = lastCenterDpr = 0;
                 setVisualizerMode('artwork');
             }
         }
@@ -425,9 +344,8 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             const audioContext = st.audioContext;
             const isMobileViewport = mobileViewportQuery ? cachedMobileViewport : window.innerWidth <= 768;
             const reducedMotion = cachedReducedMotion;
-            const isMiniVisVisible = syncMiniStripVisibility(st, isMobileViewport, reducedMotion);
 
-            if (!isMiniVisVisible && (st.currentWorkspace !== 'player' || activeVisualizerMode==='artwork')) {
+            if (st.currentWorkspace !== 'player' || activeVisualizerMode==='artwork') {
                 if (statPeakLevel) statPeakLevel.textContent = 'Unavailable';
                 lastPeakText = '';
                 st.isVisualizerLoopRunning = false;
@@ -437,7 +355,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             if (document.hidden) {
                 if (statPeakLevel) statPeakLevel.textContent = 'Unavailable';
                 lastPeakText = '';
-                clearMiniStrip();
+
                 st.isVisualizerLoopRunning = false;
                 return;
             }
@@ -475,7 +393,7 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
                 const isDeckActive = showDeckVisuals && Boolean(playerDeckEl && playerDeckEl.classList.contains('mobileActive') && !st.isLyricsView);
                 const isInfoActive = showDeckVisuals && Boolean(settingsPanelEl && settingsPanelEl.classList.contains('mobileActive'));
                 const isSignalOpen = showDeckVisuals && Boolean(signalPathModal && signalPathModal.style.display === 'flex');
-                if (!isDeckActive && !isInfoActive && !isSignalOpen && !isMiniVisVisible) {
+                if (!isDeckActive && !isInfoActive && !isSignalOpen) {
                     st.isVisualizerLoopRunning = false;
                     return;
                 }
@@ -728,26 +646,6 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
                     }
                     currentCenterCtx.restore();
                     currentCenterCtx.restore();
-                }
-            }
-
-            // 6. Theme-matched mobile mini-player visualizer strip
-            if (isMiniVisVisible && miniVisStrip && miniVisCanvas && miniVisCtx) {
-                let mw = cachedMiniW;
-                let mh = cachedMiniH;
-                if (mw === 0 || mh === 0) {
-                    mw = Math.round(miniVisStrip.clientWidth || miniVisStrip.getBoundingClientRect().width);
-                    mh = Math.round(miniVisStrip.clientHeight || miniVisStrip.getBoundingClientRect().height);
-                    cachedMiniW = mw;
-                    cachedMiniH = mh;
-                }
-                if (mw > 0 && mh > 0) {
-                    const mdpr = syncMiniStripResolution(mw, mh);
-                    miniVisCtx.save();
-                    miniVisCtx.scale(mdpr, mdpr);
-                    miniVisCtx.clearRect(0, 0, mw, mh);
-                    drawMiniThemeStrip(miniVisCtx, mw, mh, smoothBands, isPlaying, now, dt, beatPulse, getActiveTheme());
-                    miniVisCtx.restore();
                 }
             }
 

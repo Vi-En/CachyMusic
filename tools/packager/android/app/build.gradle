@@ -10,8 +10,8 @@ android {
         applicationId "org.cachymusic.app"
         minSdk 24
         targetSdk 34
-        versionCode 70
-        versionName "3.0.0-dev.6.44"
+        versionCode 99
+        versionName "3.0.0-dev.6.74"
     }
     buildTypes {
         release {
@@ -36,7 +36,7 @@ dependencies {
 
 tasks.register('syncWorkstationAssets', Sync) {
     from("${project.rootDir}/../../..") {
-        include 'index.html', 'manifest.json', 'sw.js', 'LICENSE'
+        include 'index.html', 'manifest.json', 'sw.js', 'LICENSE', 'THIRD-PARTY-NOTICES.md'
         include 'stylesheets/**'
         include 'scripts/**'
         include 'resources/**'

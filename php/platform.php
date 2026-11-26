@@ -92,6 +92,15 @@ if (!function_exists('cachy_is_windows')) {
         return cachy_require_dir($dir);
     }
 
+    // IDs cross JSON and query-string boundaries; PHP's casts would turn
+    // booleans, arrays, fractional values and numeric prefixes into other IDs.
+    function cachy_positive_id($value): ?int {
+        if (is_int($value)) return $value > 0 ? $value : null;
+        if (!is_string($value) || !preg_match('/^[1-9][0-9]*$/D', $value)) return null;
+        $id = filter_var($value, FILTER_VALIDATE_INT);
+        return $id === false ? null : $id;
+    }
+
     function cachy_normalize_path(string $path): string {
         return str_replace('\\', '/', trim($path));
     }
@@ -104,14 +113,131 @@ if (!function_exists('cachy_is_windows')) {
         return $root !== '' && ($path === $root || str_starts_with($path, $root . '/'));
     }
 
-    // Pass arguments directly, avoiding shell expansion and POSIX redirection on Windows.
-    function cachy_run_args(array $args): ?string {
-        if (!function_exists('proc_open')) return null;
-        $process = @proc_open($args, [0=>['pipe','r'], 1=>['pipe','w'], 2=>['file', cachy_is_windows() ? 'NUL' : '/dev/null','a']], $pipes, null, null, ['bypass_shell'=>true]);
-        if (!is_resource($process)) return null;
-        fclose($pipes[0]);
-        $out = stream_get_contents($pipes[1]); fclose($pipes[1]);
-        return proc_close($process) === 0 && is_string($out) ? $out : null;
+    // POSIX pipe mode has no unbounded temporary output files. Read both
+    // streams fairly and cap each buffer before accumulating more data.
+    // Windows pipe nonblocking is not portable; retain its sampled spool path.
+    function cachy_run_process_pipes(array $args,int $maxOutput,float $timeout,$input,?Closure $checkpoint=null): ?array {
+        $process=null;$pipes=[];$out='';$err='';$exit=-1;$done=false;$pid=null;$group=false;
+        // setsid is optional and deliberately resolved at a fixed system path.
+        // Never signal a group unless the child is confirmed as its leader.
+        $isolate=PHP_OS_FAMILY==='Linux' && function_exists('posix_getpgid') && function_exists('posix_kill') && is_executable('/usr/bin/setsid');
+        if ($isolate) $args=array_merge(['/usr/bin/setsid','--'],$args);
+        try {
+            $process=@proc_open($args,[0=>$input??['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes,null,null,['bypass_shell'=>true]);
+            if (!is_resource($process)) return null;
+            $initial=proc_get_status($process);$pid=$initial['pid'];
+            if (!$initial['running']) {$exit=$initial['exitcode'];$done=true;}
+            if (isset($pipes[0])) {fclose($pipes[0]);unset($pipes[0]);}
+            foreach ($pipes as $pipe) if (!stream_set_blocking($pipe,false)) return null;
+            $deadline=hrtime(true)/1e9+$timeout;
+            do {
+                if ($isolate && !$done && $pid>1 && @posix_getpgid($pid)===$pid) $group=true;
+                if ($checkpoint) $checkpoint();
+                $remaining=$deadline-hrtime(true)/1e9;
+                if ($remaining<=0) return null;
+                $read=array_values($pipes);$write=$except=null;
+                if ($read) {
+                    $ready=@stream_select($read,$write,$except,0,(int)min(10000,max(0,$remaining*1e6)));
+                    if ($ready===false) {usleep(1000);continue;}
+                    foreach ([1,2] as $idx) {
+                        if (!isset($pipes[$idx])||!in_array($pipes[$idx],$read,true)) continue;
+                        $length=$idx===1?strlen($out):strlen($err);
+                        $chunk=fread($pipes[$idx],min(65536,$maxOutput-$length+1));
+                        if ($chunk===false || $length+strlen($chunk)>$maxOutput) return null;
+                        if ($idx===1) $out.=$chunk; else $err.=$chunk;
+                        if (feof($pipes[$idx])) {fclose($pipes[$idx]);unset($pipes[$idx]);}
+                    }
+                } else usleep((int)min(10000,max(1,$remaining*1e6)));
+                if (!$done) {
+                    $status=proc_get_status($process);
+                    if (!$status['running']) {$exit=$status['exitcode'];$done=true;}
+                }
+                if ($done&&!$pipes) break;
+            } while(true);
+            $closed=proc_close($process);$process=null;
+            return ['exitcode'=>$exit===-1?$closed:$exit,'stdout'=>$out,'stderr'=>$err];
+        } catch (Throwable $e) {return null;}
+        finally {
+            foreach ($pipes as $pipe) if (is_resource($pipe)) fclose($pipe);
+            if (is_resource($process)) {
+                if ($group && !$done && $pid>1 && @posix_getpgid($pid)===$pid) @posix_kill(-$pid,9);
+                @proc_terminate($process,9);@proc_close($process);
+            }
+        }
+    }
+
+    // Direct subprocess execution with a monotonic deadline and bounded reads.
+    // Managed Windows source launches require the probed bounded supervisor.
+    // Unmanaged/portable compatibility launches retain sampled spool limits.
+    function cachy_windows_process_policy(): string {
+        $python=getenv('CACHYMUSIC_WINDOWS_PYTHON');$helper=getenv('CACHYMUSIC_WINDOWS_PROCESS_HELPER');
+        if ($python!==false||$helper!==false) return is_string($python)&&is_string($helper)&&is_file($python)&&is_file($helper)?'supervised':'deny';
+        return getenv('CACHYMUSIC_WINDOWS_REQUIRE_SUPERVISOR')==='1'?'deny':'compatibility';
+    }
+    function cachy_run_process(array $args, int $maxOutput = 1048576, float $timeout = 15.0, $input = null, ?Closure $checkpoint=null): ?array {
+        if (!function_exists('proc_open') || !$args || $maxOutput < 0 || $maxOutput > 67108864 || !is_finite($timeout) || $timeout <= 0 || $timeout > 300) return null;
+        foreach ($args as $arg) if (!is_string($arg) || strpos($arg, "\0") !== false) return null;
+        if ($args[0] === '' || ($input !== null && !is_resource($input))) return null;
+        if (!cachy_is_windows()) return cachy_run_process_pipes($args,$maxOutput,$timeout,$input,$checkpoint);
+        $python=getenv('CACHYMUSIC_WINDOWS_PYTHON');$helper=getenv('CACHYMUSIC_WINDOWS_PROCESS_HELPER');
+        $policy=cachy_windows_process_policy();
+        if ($policy==='deny') return null;
+        if ($policy==='supervised') {
+            $framed=cachy_run_process_spool(array_merge([$python,$helper,(string)$maxOutput,sprintf('%.6F',$timeout),'--'],$args),16+2*$maxOutput,65536,$timeout,$input,$checkpoint);
+            return cachy_decode_supervisor_result($framed,$maxOutput);
+        }
+        return cachy_run_process_spool($args,$maxOutput,$maxOutput,$timeout,$input,$checkpoint);
+    }
+    function cachy_decode_supervisor_result(?array $result,int $cap): ?array {
+        if ($result===null||$result['exitcode']!==0||!is_string($result['stdout'])||strlen($result['stdout'])<16) return null;
+        $bytes=$result['stdout'];$head=unpack('a4magic/Nexit/Nout/Nerr',substr($bytes,0,16));
+        if (!$head||$head['magic']!=='CMP1'||$head['out']>$cap||$head['err']>$cap||strlen($bytes)!==16+$head['out']+$head['err']) return null;
+        $exit=$head['exit'];if ($exit>2147483647) $exit-=4294967296;
+        return ['exitcode'=>$exit,'stdout'=>substr($bytes,16,$head['out']),'stderr'=>substr($bytes,16+$head['out'],$head['err'])];
+    }
+    // The supervised helper emits only the final bounded frame. In legacy
+    // mode child output remains sampled; both paths enforce bounded reads.
+    function cachy_run_process_spool(array $args,int $stdoutLimit,int $stderrLimit,float $timeout,$input,?Closure $checkpoint=null): ?array {
+        $stdout = $stderr = $process = null;
+        $pipes = [];
+        try {
+            $stdout = tmpfile(); $stderr = tmpfile();
+            if (!$stdout || !$stderr) return null;
+            $process = @proc_open($args, [0=>$input ?? ['pipe','r'], 1=>$stdout, 2=>$stderr], $pipes, null, null, ['bypass_shell'=>true]);
+            if (!is_resource($process)) return null;
+            if (isset($pipes[0])) { fclose($pipes[0]); unset($pipes[0]); }
+            $deadline = hrtime(true) + $timeout * 1000000000;
+            do {
+                if ($checkpoint) $checkpoint();
+                $status = proc_get_status($process);
+                $outStat = fstat($stdout); $errStat = fstat($stderr);
+                if (!$outStat || !$errStat || $outStat['size'] > $stdoutLimit || $errStat['size'] > $stderrLimit || hrtime(true) >= $deadline) return null;
+                if (!$status['running']) break;
+                usleep(10000);
+            } while (true);
+            $exit = $status['exitcode'];
+            $closed = proc_close($process); $process = null;
+            rewind($stdout); rewind($stderr);
+            $out = stream_get_contents($stdout, $stdoutLimit + 1);
+            $err = stream_get_contents($stderr, $stderrLimit + 1);
+            if (!is_string($out) || !is_string($err) || strlen($out) > $stdoutLimit || strlen($err) > $stderrLimit) return null;
+            return ['exitcode'=>$exit === -1 ? $closed : $exit, 'stdout'=>$out, 'stderr'=>$err];
+        } catch (Throwable $e) {
+            return null;
+        } finally {
+            if (is_resource($process)) { @proc_terminate($process, 9); @proc_close($process); }
+            foreach ($pipes as $pipe) if (is_resource($pipe)) fclose($pipe);
+            foreach ([$stdout, $stderr] as $file) if (is_resource($file)) fclose($file);
+        }
+    }
+    function cachy_run_args(array $args, ?int $maxOutput = null, float $timeout = 15.0, ?Closure $checkpoint=null): ?string {
+        $result = cachy_run_process($args, $maxOutput ?? 1048576, $timeout, null,$checkpoint);
+        return $result !== null && $result['exitcode'] === 0 ? $result['stdout'] : null;
+    }
+
+    function cachy_run_binary(string $binary, array $args, int $maxOutput = 1048576, float $timeout = 3.0): ?string {
+        $path = cachy_find_binary($binary);
+        return $path === null ? null : cachy_run_args(array_merge([$path], $args), $maxOutput, $timeout);
     }
 
     function cachy_is_allowed_scan_path(string $realPath): bool {

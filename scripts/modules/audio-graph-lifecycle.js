@@ -1,8 +1,8 @@
 // Context ownership: synchronous creation for gesture handlers, single-flight
 // asynchronous replacement. A failed close must never create a second graph.
-export function createGraphLifecycle({ current, create, clear, ready = () => true, onError = console.warn }) {
+export function createGraphLifecycle({ current, create, clear, ready = () => true, onError = console.warn, closeTimeoutMs=2500 }) {
     let replacement = null;
-    let closing = null;
+    let closing = null, closeWait=null;
     function init() {
         if (replacement) return null;
         const ctx = current();
@@ -11,7 +11,7 @@ export function createGraphLifecycle({ current, create, clear, ready = () => tru
         catch (error) { onError(error); return null; }
     }
     function ensure(force = false) {
-        if (replacement) return replacement;
+        if (replacement) return closeWait;
         const ctx = current();
         if (!ctx || ctx.state === 'closed' || (!force && ready(ctx))) return Promise.resolve(init());
         // Publish the transition before executing any teardown callbacks.
@@ -32,15 +32,22 @@ export function createGraphLifecycle({ current, create, clear, ready = () => tru
             if (current()) return null;
             const next = create(); return next && ready(next) ? next : null;
         }).catch(error => { onError(error); return null; })
-          .finally(() => { replacement = null; closing = null; });
-        return replacement;
+          .finally(() => { replacement = null; closing = null; closeWait=null; });
+        // The close operation is not cancellable. Bound the caller wait but
+        // retain single-flight ownership until the real close settles.
+        let timer;
+        closeWait=Promise.race([replacement,new Promise(resolve=>{timer=setTimeout(()=>{
+            onError(new Error('AudioContext close timed out; existing graph remains owned'));
+            resolve(null);
+        },closeTimeoutMs);})]).finally(()=>clearTimeout(timer));
+        return closeWait;
     }
     return { init, ensure, isClosing: ctx => closing === ctx, get replacing() { return replacement !== null; } };
 }
 
 // One load attempt per context, including failed attempts. Worklet failures
 // use the fallback route until a new context is explicitly constructed.
-export function createWorkletLoader({ current, isCurrent, install, failed }) {
+export function createWorkletLoader({ current, isCurrent, install, failed, timeoutMs=4000 }) {
     const attempts = new WeakMap();
     return function load() {
         const ctx = current();
@@ -48,7 +55,9 @@ export function createWorkletLoader({ current, isCurrent, install, failed }) {
         if (attempts.has(ctx)) return attempts.get(ctx);
         const task = Promise.resolve().then(async () => {
             if (!isCurrent(ctx)) return;
-            await ctx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=3.0.0-dev.6.44');
+            let timer;
+            try{await Promise.race([ctx.audioWorklet.addModule('scripts/dsp-worklet-processor.js?v=3.0.0-dev.6.74'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('DSP module load timed out')),timeoutMs);})]);}
+            finally{clearTimeout(timer);}
             if (isCurrent(ctx)) install(ctx);
         }).catch(error => { if (isCurrent(ctx)) failed(error); });
         attempts.set(ctx, task);

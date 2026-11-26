@@ -1,5 +1,5 @@
 pkgname=cachymusic
-pkgver=3.0.0.dev6.44
+pkgver=3.0.0.dev6.74
 pkgrel=1
 pkgdesc='Local-first music player with optional DSP and Soulseek'
 arch=('any')
@@ -26,7 +26,7 @@ sha256sums=('SOURCE_SHA256')
 package() {
     cd "${srcdir}/${pkgname}-${pkgver}"
     install -dm755 "${pkgdir}/usr/share/cachymusic" "${pkgdir}/usr/bin"
-    cp -r index.html index.php manifest.json sw.js schema.sql LICENSE package.json resources scripts stylesheets php bin server "${pkgdir}/usr/share/cachymusic/"
+    cp -r index.html index.php manifest.json sw.js schema.sql LICENSE THIRD-PARTY-NOTICES.md package.json resources scripts stylesheets php bin server "${pkgdir}/usr/share/cachymusic/"
     chmod 755 "${pkgdir}/usr/share/cachymusic/bin/cachymusic"
     ln -s /usr/share/cachymusic/bin/cachymusic "${pkgdir}/usr/bin/cachymusic"
     install -Dm644 packaging/aur/cachymusic.desktop "${pkgdir}/usr/share/applications/cachymusic.desktop"

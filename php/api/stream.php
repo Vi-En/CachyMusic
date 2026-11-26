@@ -23,72 +23,47 @@ if (!empty($origin)) {
     }
 }
 header("Access-Control-Allow-Methods: GET, HEAD, OPTIONS");
-header("Access-Control-Allow-Headers: Range, Origin, Accept, Content-Type");
-header("Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges");
+header("Access-Control-Allow-Headers: Range, Origin, Accept, Content-Type, X-Cachy-Media-Version");
+header("Access-Control-Expose-Headers: Content-Range, Content-Length, Accept-Ranges, X-Cachy-Media-Version");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 
-$filePath = $_GET['path'] ?? $_GET['file'] ?? '';
-$trackId = $_GET['tid'] ?? $_GET['id'] ?? null;
-
-if (empty($filePath) && empty($trackId)) {
-    http_response_code(400);
-    exit('No file path or track ID provided.');
+if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'HEAD'], true)) {
+    header('Allow: GET, HEAD, OPTIONS'); http_response_code(405); exit;
 }
+
+require_once __DIR__ . '/../platform.php';
+$filePath = $_GET['path'] ?? $_GET['file'] ?? '';
+$rawId = $_GET['tid'] ?? $_GET['id'] ?? null;
+$trackId = $rawId === null ? null : cachy_positive_id($rawId);
+if (!is_string($filePath) || strlen($filePath)>4096 || str_contains($filePath,"\0") || ($rawId !== null && $trackId === null)
+    || (isset($_GET['path'],$_GET['file'])) || (isset($_GET['tid'],$_GET['id']))) {
+    http_response_code(400); exit('Invalid media identifier.');
+}
+if ($trackId !== null && $filePath !== '') { http_response_code(400); exit('Ambiguous media identifier.'); }
+if ($filePath === '' && $trackId === null) { http_response_code(400); exit('No file path or track ID provided.'); }
 
 // 1. Establish authorized library root directories
-$projectRoot = realpath(__DIR__ . '/../../');
-$allowedRoots = [
-    realpath($projectRoot . '/downloads'),
-];
-
-@require_once(__DIR__ . '/../database.php');
-
-$allowedRoots[] = realpath(cachy_data_dir() . '/downloads');
-$defaultDir = Storage::getDefaultDirectory();
-if ($defaultDir && is_dir($defaultDir)) {
-    $realDef = realpath($defaultDir);
-    if ($realDef) $allowedRoots[] = $realDef;
-}
-$slskAcc = Storage::getSoulseekAccount();
-if (!empty($slskAcc['downloads_dir'])) {
-    $slskDown = realpath($slskAcc['downloads_dir']);
-    if ($slskDown && is_dir($slskDown)) $allowedRoots[] = $slskDown;
-}
-if (!empty($slskAcc['shared_dir'])) {
-    $slskShare = realpath($slskAcc['shared_dir']);
-    if ($slskShare && is_dir($slskShare)) $allowedRoots[] = $slskShare;
-}
-
-$userHome = cachy_home_dir();
-if ($userHome) {
-    if (is_dir($userHome . '/Music/Main')) {
-        $mainMusic = realpath($userHome . '/Music/Main');
-        if ($mainMusic) $allowedRoots[] = $mainMusic;
-    }
-    if (is_dir($userHome . '/Music')) {
-        $systemMusic = realpath($userHome . '/Music');
-        if ($systemMusic) $allowedRoots[] = $systemMusic;
-    }
-    if (is_dir($userHome . '/Downloads')) {
-        $downMusic = realpath($userHome . '/Downloads');
-        if ($downMusic) $allowedRoots[] = $downMusic;
-    }
-}
-
-// Filter allowed roots
-$allowedRoots = array_values(array_unique(array_filter($allowedRoots)));
+$projectRoot=realpath(__DIR__.'/../../');
+require_once __DIR__.'/../database.php';
+require_once __DIR__.'/../cover_index.php';
+require_once __DIR__.'/../media_access.php';
+$mysql=Storage::hasMySQL();
+$snapshot=$mysql?[]:cm_cover_snapshot($trackId);
+if (!$mysql&&!isset($snapshot['tracks'])) {http_response_code(503);exit('Library storage unavailable.');}
+$allowedRoots=cm_media_roots($snapshot,$mysql);
 
 // 2. Resolve target file to canonical path
 $realPath = false;
 
 // If a track ID was provided or path is a bare ID, query storage
-if (!empty($trackId)) {
-    $candidatePath = Storage::getTrackPath($trackId);
-    if ($candidatePath) {
+if ($trackId !== null) {
+    $row = $snapshot['tracks'][(string)$trackId] ?? null;
+    $candidatePath = $mysql ? Storage::getTrackPath($trackId) : cm_media_record_path($row);
+    if (is_string($candidatePath) && $candidatePath !== '' && !str_contains($candidatePath,"\0")) {
         $candReal = realpath($candidatePath);
         if ($candReal && is_file($candReal) && is_readable($candReal)) {
             $realPath = $candReal;
@@ -126,13 +101,12 @@ if (!$realPath && !empty($filePath)) {
 
 // Check database lookup by file_path or full_path
 if (!$realPath && !empty($filePath) && isset($connection) && $connection && !mysqli_connect_errno()) {
-    $stmt = $connection->prepare("SELECT full_path, file_path FROM Tracks WHERE file_path = ? OR full_path = ? OR file_path LIKE ? LIMIT 1");
+    $stmt = $connection->prepare("SELECT full_path, file_path FROM Tracks WHERE file_path = ? OR full_path = ? LIMIT 2");
     if ($stmt) {
-        $likePattern = '%' . basename($filePath);
-        $stmt->bind_param("sss", $filePath, $filePath, $likePattern);
+        $stmt->bind_param("ss", $filePath, $filePath);
         $stmt->execute();
         $dbRes = $stmt->get_result();
-        if ($dbRow = $dbRes->fetch_assoc()) {
+        if ($dbRes && $dbRes->num_rows === 1 && ($dbRow = $dbRes->fetch_assoc())) {
             $candidatePath = $dbRow['full_path'] ?: $dbRow['file_path'];
             $candReal = realpath($candidatePath);
             if ($candReal && is_file($candReal) && is_readable($candReal)) {
@@ -171,21 +145,17 @@ if (!isset($mimeMap[$ext])) {
 }
 
 // 4. Strict directory tree boundary verification
-$isPathAllowed = false;
-foreach ($allowedRoots as $allowedRoot) {
-    if (!$allowedRoot) continue;
-    if (cachy_path_within($realPath, $allowedRoot)) {
-        $isPathAllowed = true;
-        break;
-    }
-}
-
-if (!$isPathAllowed) {
+if (!cm_media_path_allowed($realPath,$allowedRoots)) {
     http_response_code(403);
     exit('Access denied: file path is outside authorized audio library directories.');
 }
 
 // 5. Stream Audio with HTTP Byte-Range support
+require_once __DIR__.'/../recording_lock.php';
+try {$recordingGuard=cm_recording_lock($realPath,false);} catch (Throwable $e) {$recordingGuard=false;}
+if (!$recordingGuard) {http_response_code(503);header('Retry-After: 1');header('Cache-Control: no-store');exit('Recording temporarily unavailable.');}
+// PHP closes the guard at request shutdown, including disconnect/error exits.
+
 ignore_user_abort(false);
 
 while (ob_get_level() > 0) {
@@ -194,10 +164,22 @@ while (ob_get_level() > 0) {
 
 clearstatcache(true, $realPath);
 $mime = $mimeMap[$ext];
-$size = (int)filesize($realPath);
+// Read metadata from the actual opened file, not from a second pathname lookup.
+// This is a change detector, not a cryptographic content identity.
+$fp = @fopen($realPath, 'rb');
+if (!$fp) { http_response_code(500); exit('Could not open audio file.'); }
+if (!flock($fp,LOCK_SH|LOCK_NB)) {fclose($fp);http_response_code(503);header('Retry-After: 1');header('Cache-Control: no-store');exit('Recording temporarily unavailable.');}
+$stat = fstat($fp);
+clearstatcache(true,$realPath);$named=@lstat($realPath);
+if (!cm_regular_stat($stat)||!cm_regular_stat($named)||$named['dev']!==$stat['dev']||$named['ino']!==$stat['ino']||realpath($realPath)!==$realPath) { fclose($fp); http_response_code(409);header('Cache-Control: no-store');exit; }
+$size = (int)$stat['size'];
+$version = hash('sha256', json_encode([$realPath, $stat['dev'], $stat['ino'], $size, $stat['mtime'], $stat['ctime']], JSON_INVALID_UTF8_SUBSTITUTE));
+header("X-Cachy-Media-Version: $version");
+$expectedVersion = $_SERVER['HTTP_X_CACHY_MEDIA_VERSION'] ?? '';
+if ($expectedVersion !== '' && !hash_equals($version, $expectedVersion)) { fclose($fp); http_response_code(412); exit('Media source changed; reload track.'); }
 
 // Lossy fallback removed: never transcode a source silently.
-if (isset($_GET['transcode'])) { http_response_code(400); exit('Lossy compatibility conversion disabled.'); }
+if (isset($_GET['transcode'])) { fclose($fp); http_response_code(400); exit('Lossy compatibility conversion disabled.'); }
 
 if ($size <= 0) {
     header("Content-Type: $mime");
@@ -205,6 +187,7 @@ if ($size <= 0) {
     header("Cache-Control: no-store");
     header("Content-Length: 0");
     http_response_code(200);
+    fclose($fp);
     exit;
 }
 
@@ -212,12 +195,16 @@ $start = 0;
 $end = $size - 1;
 $isRangeRequest = false;
 
-if (isset($_SERVER['HTTP_RANGE']) && preg_match('/bytes\s*=\s*(\d*)\s*-\s*(\d*)/i', $_SERVER['HTTP_RANGE'], $matches)) {
+if (isset($_SERVER['HTTP_RANGE'])) {
+    if (!preg_match('/^bytes\s*=\s*(\d*)\s*-\s*(\d*)$/iD', $_SERVER['HTTP_RANGE'], $matches) || ($matches[1] === '' && $matches[2] === '')) {
+        fclose($fp); http_response_code(416); header("Content-Range: bytes */$size"); exit;
+    }
     $isRangeRequest = true;
     if ($matches[1] === '' && $matches[2] !== '') {
         // RFC 7233 suffix range ("bytes=-N"): the LAST N bytes of the file
         $suffixLen = (int)$matches[2];
         if ($suffixLen <= 0) {
+            fclose($fp);
             http_response_code(416);
             header("Content-Range: bytes */$size");
             exit;
@@ -250,6 +237,7 @@ while (ob_get_level() > 0) {
     @ob_end_clean();
 }
 
+if ($_SERVER['REQUEST_METHOD'] !== 'HEAD' && fseek($fp, $start) !== 0) { fclose($fp); http_response_code(500); exit('Unable to seek audio file.'); }
 header("Content-Type: $mime");
 header("Accept-Ranges: bytes");
 header("Cache-Control: no-store");
@@ -266,13 +254,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'HEAD') {
     exit;
 }
 
-$fp = fopen($realPath, 'rb');
-if (!$fp) {
-    http_response_code(500);
-    exit('Could not open audio file.');
-}
-
-fseek($fp, $start);
 $buffer = 65536; // 64KB chunk buffer: streams without whole-file buffering
 $remaining = $length;
 
