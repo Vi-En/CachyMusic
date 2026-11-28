@@ -7,7 +7,7 @@
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: https://musicbrainz.org https://coverartarchive.org https://archive.org https://*.archive.org https://lrclib.net; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
     <meta name="theme-color" content="#090e14">
-    <script src="scripts/theme-preload.js?v=3.0.0-dev.7.2"></script>
+    <script src="scripts/theme-preload.js?v=3.0.0-dev.7.3"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,7 +26,7 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.7.2">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.7.3">
     <script src="scripts/pwa-init.js" defer></script>
 </head>
 <body class="view-player mobile-tab-player">
@@ -197,17 +197,16 @@
 
         <!-- Center Panel: The Turntable Deck & Now Playing -->
         <section class="panel playerDeck mobileActive empty-deck">
-            <!-- Embedded Artwork Layer (Full-Deck Backdrop in visualizer modes) -->
-            <div class="deckArtworkWrapper" id="deckArtworkWrapper">
-                <img src="resources/images/default.svg" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true" decoding="async">
-                <div class="deckArtworkCard" id="deckArtworkCard">
-                    <img src="resources/images/default.svg" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop" decoding="async">
-                </div>
-                <div class="deckArtworkScrim"></div>
-            </div>
-
             <!-- Turntable Stage: Centered Artwork / Vinyl Deck & Quick Actions -->
             <div class="turntableStage" id="turntableStage">
+                <!-- Embedded Artwork Layer (Stage-Scoped Backdrop behind roundtable) -->
+                <div class="deckArtworkWrapper" id="deckArtworkWrapper">
+                    <img src="resources/images/default.svg" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true" decoding="async">
+                    <div class="deckArtworkCard" id="deckArtworkCard">
+                        <img src="resources/images/default.svg" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop" decoding="async">
+                    </div>
+                    <div class="deckArtworkScrim"></div>
+                </div>
 
                 <!-- Lyrics View (overlays turntable) -->
                 <div class="lyricsCon lyricsActiveHidden is-empty" id="lyricsCon" style="display:none;">
@@ -376,7 +375,6 @@
 
         <!-- Right Panel: Track Library & Playlists -->
         <section class="panel trackListPanel">
-            <h2 class="libraryWorkspaceHeading">Library</h2>
             <!-- Library / Playlist / Up Next Navigation Tabs -->
             <div class="libraryTabs" id="libraryTabs" role="tablist" aria-label="Library sections">
                 <button type="button" class="libTab active" id="tabLibrary" role="tab" aria-selected="true" aria-controls="trackList" tabindex="0">Library</button>
@@ -629,14 +627,14 @@
 <option value="buddies">Buddies</option>
 </select>
 <button class="actionBtn primaryBtn slskSubmitBtn" id="slskSearchSubmitBtn" type="submit">Search</button>
-</form><div class="slskPanelToggleBar"><button aria-controls="slskPanelCollapsible" aria-expanded="false" class="slskPanelToggleControl" id="slskPanelToggleBar" title="Expand or collapse search filters" type="button"><span class="slskToggleBarLeft"><span class="slskToggleTitle">Filters</span><span class="slskToggleActiveFilter" id="slskMobileActiveFilter">All</span></span><span aria-hidden="true" class="slskToggleChevron" id="slskPanelToggleChevron">⌄</span></button><div class="slskPanelQuickActions"><button type="button" class="slskMiniStatus actionBtn" id="slskMobileStatusDot" aria-label="Connection settings" title="Connection settings"><span class="slskStatusDot" aria-hidden="true"></span><span id="slskMobileStatusLabel">Connection</span></button><button class="slskMiniTransfersBtn" id="slskMobileTransfersBtn" title="View transfers" type="button">Transfers (<span id="slskMobileTransferCount">0</span>)</button></div></div><div class="slskPanelCollapsible" id="slskPanelCollapsible"><div class="slskFilterRow">
+</form><div class="slskPanelToggleBar"><button aria-controls="slskPanelCollapsible" aria-expanded="false" class="slskPanelToggleControl" id="slskPanelToggleBar" title="Expand or collapse search filters" type="button"><span class="slskToggleBarLeft"><span class="slskToggleTitle">Filters</span><span class="slskToggleActiveFilter" id="slskMobileActiveFilter">All</span></span><span aria-hidden="true" class="slskToggleChevron" id="slskPanelToggleChevron"><svg class="uiIcon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span></button><div class="slskPanelQuickActions"><button type="button" class="slskMiniStatus actionBtn" id="slskMobileStatusDot" aria-label="Connection settings" title="Connection settings"><span class="slskStatusDot" aria-hidden="true"></span><span id="slskMobileStatusLabel">Connection</span></button><button class="slskMiniTransfersBtn" id="slskMobileTransfersBtn" title="View transfers" type="button">Transfers (<span id="slskMobileTransferCount">0</span>)</button></div></div><div class="slskPanelCollapsible" id="slskPanelCollapsible"><div class="slskFilterRow">
 <div class="slskFilterGroup" id="slskFilterChips" role="group" aria-label="File format filters">
 <button aria-pressed="true" class="slskChip active" data-filter="all" type="button">All formats</button>
 <button aria-pressed="false" class="slskChip" data-filter="flac" type="button">Lossless</button>
 <button aria-pressed="false" class="slskChip" data-filter="320" type="button">Lossless / 320+</button>
 <button aria-pressed="false" class="slskChip" data-filter="slots" type="button">Free slots</button>
 
-</div><button aria-controls="slskTextFiltersCon" aria-expanded="false" class="slskFilterToggleBtn" id="slskTextFilterToggleBtn" title="More Text Filters" type="button">Text filters<span aria-hidden="true" class="slskDisclosureChevron">⌄</span></button>
+</div><button aria-controls="slskTextFiltersCon" aria-expanded="false" class="slskFilterToggleBtn" id="slskTextFilterToggleBtn" title="More Text Filters" type="button">Text filters<span aria-hidden="true" class="slskDisclosureChevron"><svg class="uiIcon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span></button>
 <div class="slskTextFiltersCon" id="slskTextFiltersCon">
 <div class="slskTextFilterItem">
 <label class="slskFilterLabel" for="slskIncludeFilterInput">Include Text:</label>
@@ -659,7 +657,7 @@
 <div class="slskSuggestedChips" id="slskSuggestedChips"></div>
 <button class="slskClearSubBtn" id="slskClearSubFilterBtn" style="display: none;" title="Clear Sub-filter" type="button"><svg aria-hidden="true" class="uiIcon" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><path d="m6 6 12 12M18 6 6 18"></path></svg> RESET</button>
 </div>
-</div><button aria-controls="slskToolbar" aria-expanded="false" class="slskConnectionToggleBtn" id="slskConnectionToggleBtn" type="button">Connection &amp; folders<span aria-hidden="true" class="slskDisclosureChevron">⌄</span></button><div class="slskToolbar" id="slskToolbar">
+</div><button aria-controls="slskToolbar" aria-expanded="false" class="slskConnectionToggleBtn" id="slskConnectionToggleBtn" type="button">Connection &amp; folders<span aria-hidden="true" class="slskDisclosureChevron"><svg class="uiIcon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span></button><div class="slskToolbar" id="slskToolbar">
 <div class="slskBrand">
 <button aria-label="Toggle Soulseek Network Connection" class="actionBtn slskPowerBtn" id="slskPowerBtn" title="Connect / Disconnect Soulseek Network (Disconnects and stops sharing files)" type="button">
 <svg aria-hidden="true" class="powerIcon" fill="none" height="14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewbox="0 0 24 24" width="14"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" x2="12" y1="2" y2="12"></line></svg>
@@ -1164,23 +1162,6 @@
                                 <button type="button" class="visModeBtn" data-mode="wave">Liquid wave</button>
                                 <button type="button" class="visModeBtn" data-mode="dash">Segmented bars</button>
                                 <button type="button" class="visModeBtn" data-mode="thematic">Theme visualizer</button>
-                            </div>
-                        </div>
-                        <div class="settingsRowItem" id="settingsRowMotion">
-                            <div class="settingsRowHeader">
-                                <div class="settingsRowTitleGroup">
-                                    <h4 class="settingsRowTitle">Motion &amp; scrolling</h4>
-                                    <p class="settingsRowDesc">Follow OS reduced motion or pause scrolling track text.</p>
-                                </div>
-                            </div>
-                            <div class="settingsOptionToggles">
-                                <label class="settingsSelectLabel" for="settingsMotionModeSelect">Motion</label>
-                                <select id="settingsMotionModeSelect" class="cachySelect" aria-label="Motion preference">
-                                    <option value="system">System default</option>
-                                    <option value="reduce">Reduced motion</option>
-                                    <option value="normal">Standard transitions</option>
-                                </select>
-                                <button type="button" id="settingsMarqueePauseBtn" class="actionBtn" aria-pressed="false">Pause scrolling text</button>
                             </div>
                         </div>
                     </div>
@@ -1882,7 +1863,7 @@
                         </button>
                     </div>
                     </div>
-                    <!-- Category 1: Sci-Fi & Universe (No Man's Sky) -->
+                    <!-- Category 1: Colour & Character Collection -->
                     <div class="themeCategoryGroup" data-category="scifi">
                     <div class="themeCategoryHeader">
                         <div class="themeCategoryHeading">
@@ -2004,7 +1985,7 @@
                     </div>
                 </div>
 
-                <!-- Category 3: Minimalist Modernist Architecture -->
+                <!-- Category 3: Minimal Architectural Collection -->
                 <div class="themeCategoryGroup" data-category="minimalist">
                     <div class="themeCategoryHeader">
                         <div class="themeCategoryHeading">

@@ -4,11 +4,11 @@ import { getActiveCustomTheme } from '../custom-theme-engine.js';
 
 const loaders = {
     'default': () => import('./studio.js'),
-    'carbon-signal': () => import('./studio.js'),
-    'paper-sonata': () => import('./paper.js'),
-    'blue-note-console': () => import('./alloy.js'),
-    'copper-reel': () => import('./station.js'),
-    'orchid-matrix': () => import('./amethyst.js'),
+    'carbon-signal': () => import('./carbon-signal.js'),
+    'paper-sonata': () => import('./paper-sonata.js'),
+    'blue-note-console': () => import('./blue-note-console.js'),
+    'copper-reel': () => import('./copper-reel.js'),
+    'orchid-matrix': () => import('./orchid-matrix.js'),
     'nms': () => import('./crimson.js'),
     'solar-eclipse': () => import('./orbit.js'),
     'euclid-horizon': () => import('./station.js'),

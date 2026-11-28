@@ -19,7 +19,10 @@ function runWorkspaceViewTransition(updateDomFn) {
         return;
     }
     try {
-        document.startViewTransition(updateDomFn);
+        const vt = document.startViewTransition(updateDomFn);
+        vt?.finished?.catch?.(() => {});
+        vt?.ready?.catch?.(() => {});
+        vt?.updateCallbackDone?.catch?.(() => {});
     } catch (_) {
         updateDomFn();
     }

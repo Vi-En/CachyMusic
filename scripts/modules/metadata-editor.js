@@ -17,6 +17,7 @@ import {saveMetadataOverride} from './local-library.js';
 import {getRuntime} from './runtime-capabilities.js';
 import {mediaSessionController} from './media-session.js';
 import {renderTrackMetadata, applyArtworkToDeck} from './player-presentation.js';
+import {updateMarqueeText} from './player-marquee.js';
 
 export function createMetadataEditor({getTrackKey, refreshLibrary, persistOverride = saveMetadataOverride}) {
     let saveInFlight = false;
@@ -518,13 +519,13 @@ export function createMetadataEditor({getTrackKey, refreshLibrary, persistOverri
         const isCurrentPlaying = activeTrack && findTrackIndex([activeTrack], targetTrack) === 0;
 
         if (isCurrentPlaying) {
-            if (trackName) trackName.textContent = newTitle;
-            if (artistName) artistName.textContent = newArtist || 'Unknown Artist';
-            if (albumName) albumName.textContent = newAlbum || 'Unknown Album';
+            updateMarqueeText(trackName, newTitle);
+            updateMarqueeText(artistName, newArtist || 'Unknown Artist');
+            updateMarqueeText(albumName, newAlbum || 'Unknown Album');
             if (lyricsTrackName) lyricsTrackName.textContent = newTitle;
             if (lyricsArtistName) lyricsArtistName.textContent = newArtist || 'Unknown Artist';
-            if (miniTitle) miniTitle.textContent = newTitle;
-            if (miniArtist) miniArtist.textContent = newArtist || 'Unknown Artist';
+            updateMarqueeText(miniTitle, newTitle);
+            updateMarqueeText(miniArtist, newArtist || 'Unknown Artist');
 
             if (coverDataPayload) {
                 applyArtworkToDeck(coverDataPayload, true);

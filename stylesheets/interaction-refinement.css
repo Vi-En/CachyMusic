@@ -8,10 +8,8 @@
     :is(.playPauseBtn,.miniPlayBtn).playing :is(#playPauseImg,#miniPlayImg) .morph-left {clip-path:polygon(25% 20.8333%,41.6667% 20.8333%,41.6667% 79.1667%,25% 79.1667%);}
     :is(.playPauseBtn,.miniPlayBtn).playing :is(#playPauseImg,#miniPlayImg) .morph-right {clip-path:polygon(58.3333% 20.8333%,75% 20.8333%,75% 79.1667%,58.3333% 79.1667%);}
 }
-/* Capped negative space: preserve scrolling area on short devices. */
-:root[data-theme] .trackListPanel {padding-block-start:clamp(12px, 5vh, 44px);}
-@media(max-width:768px){:root[data-theme] .trackListPanel {padding-block-start:clamp(8px, 4vh, 32px);}}
-@media(max-height:560px){:root[data-theme] .trackListPanel {padding-block-start:12px;}}
+/* Compact top alignment: start tabs flush at the panel top edge. */
+:root[data-theme] .trackListPanel {padding-block-start:0;}
 :root[data-theme] .libraryToolsToggleBtn:is(.active,[aria-expanded="true"]) {box-shadow:none;background:var(--quiet-fill);border-color:var(--quiet-line);color:var(--text-primary);}
 :root[data-theme] .libraryControls {background:transparent;box-shadow:none;gap:10px;padding-block:10px;}
 :root[data-theme] .libraryControls .sortSelect[data-sort-active="true"] {background:var(--bg-surface-2);color:var(--text-primary);border-color:var(--border-medium);}
@@ -37,7 +35,7 @@
 :root[data-theme] .slskModalCard :is(h2,h3,label,.actionBtn){text-transform:none;letter-spacing:0;}
 @media(max-width:768px){
  :root[data-theme] .soulseekWorkspace .slskSearchArea {padding:8px 0;gap:8px;}
- :root[data-theme] .soulseekWorkspace .slskPanelToggleBar {border:0;border-block-end:1px solid var(--quiet-line);border-radius:0;}
+ :root[data-theme] .soulseekWorkspace .slskPanelToggleBar {background:var(--bg-surface-2);border:1px solid var(--border-subtle);border-radius:10px;padding:3px 4px;}
  :root[data-theme] .soulseekWorkspace .slskToolbar {border-block-end:0;}
  :root[data-theme] .soulseekWorkspace .slskWorkspaceNotice {padding:10px;}
 }
@@ -72,7 +70,7 @@
 @media(max-width:768px){:root[data-theme] .soulseekWorkspace .slskResultRow {grid-template-columns:minmax(0,1fr);gap:6px;align-items:start;}
 :root[data-theme] .soulseekWorkspace .slskResultRow .colAction {grid-column:1;grid-row:3;display:flex;flex-direction:row;justify-content:flex-start;gap:6px;}
 :root[data-theme] .soulseekWorkspace .slskResultRow .colAction button {width:auto;flex:1 1 120px;max-width:100%;min-width:0;white-space:normal;}
-:root[data-theme] .soulseekWorkspace .slskPanelToggleBar {flex-wrap:wrap;}
+:root[data-theme] .soulseekWorkspace .slskPanelToggleBar {flex-wrap:nowrap;}
 :root[data-theme] .soulseekWorkspace .slskTransferRow {display:flex;flex-direction:column;align-items:stretch;gap:8px;}
 :root[data-theme] .soulseekWorkspace .slskTransferRow .slskTransferActions {display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px;}
 :root[data-theme] .soulseekWorkspace .slskTransferRow .slskTransferBarCon {width:100%;min-width:0;}}
@@ -82,8 +80,7 @@
 .listeningDialog:not([open]) {display:none!important;}
 .listeningDialog::backdrop {background:rgb(0 0 0 / .48);}
 
-:root[data-theme] .libraryWorkspaceHeading {font-size:1.25rem;font-weight:650;line-height:1.3;margin:0 0 12px;padding-inline:4px;color:var(--text-primary);letter-spacing:-.015em;}
-@media(max-height:560px){:root[data-theme] .libraryWorkspaceHeading{margin-bottom:4px;font-size:1rem;}}
+
 @media(max-width:768px){:root[data-theme] .soulseekWorkspace .slskResultRow .colAction{flex-wrap:wrap;align-items:center;justify-content:flex-end;}
 :root[data-theme] .soulseekWorkspace .slskResultRow .colAction button{flex:0 1 auto;min-width:44px;min-height:44px;padding-inline:12px;}
 :root[data-theme] .soulseekWorkspace .slskResultRow .slskGetBtn{background:var(--quiet-fill);color:var(--text-primary);}

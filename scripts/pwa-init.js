@@ -91,7 +91,7 @@
 
     function registerWorker() {
         if (typeof navigator.serviceWorker.register !== 'function') return;
-        navigator.serviceWorker.register('./sw.js?v=3.0.0-dev.7.2')
+        navigator.serviceWorker.register('./sw.js?v=3.0.0-dev.7.3')
             .then(watchRegistration)
             .catch(function (err) {
                 console.warn('[PWA] ServiceWorker registration failed:', err);

@@ -1,6 +1,6 @@
 # CachyMusic
 
-**Source revision: 3.0.0-dev.7.2 — pre-release qualification build.** Runnable source/build kit and verified browser/AVD test build; physical-handset, iOS, Windows/macOS interactive, and assistive-technology release gates remain manual.
+**Source revision: 3.0.0-dev.7.3 — pre-release qualification build.** Runnable source/build kit and verified browser/AVD test build; physical-handset, iOS, Windows/macOS interactive, and assistive-technology release gates remain manual.
 
 A private, local-first, cross-platform music player with integrated audio processing, local library management, online metadata lookup and optional Soulseek. Shared PWA interface; Android and desktop packaging provide native functionality beyond browser capabilities.
 

@@ -39,6 +39,13 @@ for(const id of VALID_THEME_IDS){
 }
 // Registry browser tests execute actual modules; node test checks offline mappings without DOM imports.
 const registry=read('scripts/modules/visualizers/registry.js');
-for(const id of VALID_THEME_IDS)assert.ok(registry.includes(`'${id}': () => import(`), id);
+const mappedModules = [];
+for(const id of VALID_THEME_IDS){
+    assert.ok(registry.includes(`'${id}': () => import(`), id);
+    const m = registry.match(new RegExp(`'${id}':\\s*\\(\\)\\s*=>\\s*import\\('([^']+)'\\)`));
+    assert.ok(m && m[1], `missing import path for ${id}`);
+    mappedModules.push(m[1]);
+}
+assert.equal(new Set(mappedModules).size, VALID_THEME_IDS.length, 'Every theme must map to a unique visualizer module');
 assert.equal(typeof loadCore,'function');
 console.log('PASS 17 theme labels, descriptions, registry mappings, system-mode pair, and prepaint compatibility');

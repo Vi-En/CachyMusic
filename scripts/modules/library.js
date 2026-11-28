@@ -4,6 +4,7 @@ import {startPlaylistSession, playbackPool, playlistNeighbor} from './playlist-p
 import {buildPlaylistLookupIndex, buildPlaylistLookupIndexAsync, buildPlaylistMutationIndex, preparePlaylistEdit, trackKey, canonicalizeMembership, memberLookupKey, isServerPlaylist, resolvePlaylistMembers, playlistSummary, moveMember, replacementMember, rebasePlaylistDraft, createPlaylistPickerIndex, createPlaylistPickerIndexAsync, searchPlaylistTracksAsync, classifyPlaylistSelection} from './playlist-model.js';
 import {findTrackIndex, mergeTracks, dismissalKey} from './track-session.js';
 import {renderTrackMetadata} from './player-presentation.js';
+import {updateMarqueeText} from './player-marquee.js';
 import { createLibraryQueryController } from './library-query-controller.js';
 import { queryLibrary } from './library-query.js';
 import { uiIcon } from './icons.js';
@@ -701,18 +702,10 @@ function initTrackListDelegation() {
                     item.classList.add('active', 'is-selecting');
                     item.querySelector('.trackDetails')?.setAttribute('aria-current', 'true');
                     setTimeout(() => item.classList.remove('is-selecting'), 180);
-                    if (miniTitle) miniTitle.textContent = track.title || track.filename || 'Unknown Track';
-                    if (miniArtist) miniArtist.textContent = track.artist || 'Unknown Artist';
-                    if (trackName) {
-                        const span = trackName.querySelector('.marqueeContent');
-                        if (span) span.textContent = track.title || track.filename || 'Unknown';
-                        else trackName.textContent = track.title || track.filename || 'Unknown';
-                    }
-                    if (artistName) {
-                        const span = artistName.querySelector('.marqueeContent');
-                        if (span) span.textContent = track.artist || 'Unknown';
-                        else artistName.textContent = track.artist || 'Unknown';
-                    }
+                    updateMarqueeText(miniTitle, track.title || track.filename || 'Unknown Track');
+                    updateMarqueeText(miniArtist, track.artist || 'Unknown Artist');
+                    updateMarqueeText(trackName, track.title || track.filename || 'Unknown');
+                    updateMarqueeText(artistName, track.artist || 'Unknown');
                     void loadTrack(masterIdx,true,0,null,false,false,proposed.playlistPlayback??null,null,{fromClick:true}).then(()=>store.emit('playback:order-change'));
                 }
             }

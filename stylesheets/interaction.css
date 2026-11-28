@@ -73,13 +73,13 @@
 }
 :root[data-theme] .trackMeta .isMarquee .marqueeContent { padding-inline: 2px; }
 
-/* Pause offscreen marquee and spin animations when culled from view. */
-body:not(.view-player) :is(.isMarquee .marqueeContent, .vinylTurntable, .ambientAuraGlow),
-body:not(.mobile-tab-player) .isMarquee .marqueeContent {
+/* Pause offscreen marquee and spin animations only in their inactive viewport panes. */
+body:not(.view-player) :is(.playerDeck .isMarquee .marqueeContent, .vinylTurntable, .ambientAuraGlow),
+body:not(.view-settings) .settingsWorkspace .isMarquee .marqueeContent {
  animation-play-state: paused;
 }
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
- body:not(.mobile-tab-player) .vinylTurntable { animation-play-state: paused; }
+ body:not(.mobile-tab-player) :is(.playerDeck .isMarquee .marqueeContent, .vinylTurntable) { animation-play-state: paused; }
 }
 .turntableCon.lyricsActiveHidden .vinylTurntable { animation-play-state: paused; }
 
@@ -234,6 +234,10 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
  align-items: flex-start;
  gap: 8px 12px;
 }
+:root[data-theme] .settingsWorkspace .settingsRowTitleGroup {
+ flex: 1 1 180px;
+ min-width: 0;
+}
 :root[data-theme] :is(.settingsEnginePill,.settingsSleepBadge) {
  padding: 3px 8px;
  border-radius: var(--radius-xs);
@@ -242,6 +246,28 @@ body:not(.mobile-tab-player) .isMarquee .marqueeContent {
  font-size: .72rem;
  font-weight: 650;
  white-space: nowrap;
+ max-width: 100%;
+ min-width: 0;
+ overflow: hidden;
+ text-overflow: ellipsis;
+}
+:root[data-theme] :is(.settingsEnginePill,.settingsSleepBadge).isMarquee,
+:root[data-theme] #settingsHwGainText.isMarquee {
+ text-overflow: clip;
+}
+:root[data-theme] #settingsHwGainToggleBtn {
+ min-width: 0;
+ max-width: 100%;
+ overflow: hidden;
+}
+:root[data-theme] #settingsHwGainText {
+ display: block;
+ flex: 1 1 auto;
+ min-width: 0;
+ max-width: 100%;
+ overflow: hidden;
+ white-space: nowrap;
+ text-overflow: ellipsis;
 }
 :root[data-theme] .settingsSleepBadge.active {
  background: var(--accent-color);

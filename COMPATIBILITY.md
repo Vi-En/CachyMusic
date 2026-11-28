@@ -1,11 +1,11 @@
-# CachyMusic 3.0.0-dev.7.2 — platform compatibility
+# CachyMusic 3.0.0-dev.7.3 — platform compatibility
 
 This revision shares one unified web frontend across 17 built-in themes (12 classic/minimalist + 5 Signature collections), optional OS appearance follow mode, custom themes, the DSP engine, audio graph lifecycle, and EQ spectrum renderer. Local-first playback works without optional Soulseek or desktop services. See `INITIAL-TEST.md` for backup, upgrade, and rollback procedures.
 
 ## Honest platform capability & limitation matrix
 
 - **Android Chrome / Chromium:** Supports folder/file import, standalone install prompt (`beforeinstallprompt` when eligible), offline Service Worker critical core, Media Session controls, portrait/landscape, and system navigation insets. Background tab playback remains subject to Android browser suspension.
-- **Android Native APK (`minSdk=24`, `targetSdk=34`, `versionCode=102`):** Syncs web assets via `syncWorkstationAssets` without browser SW caching, supplies theme-matched `NotificationThemeArt` across all 17 built-in themes + custom palettes, and supports foreground native playback. Requires current Android System WebView and explicit debug vs maintainer release signing keys.
+- **Android Native APK (`minSdk=24`, `targetSdk=34`, `versionCode=103`):** Syncs web assets via `syncWorkstationAssets` without browser SW caching, supplies theme-matched `NotificationThemeArt` across all 17 built-in themes + custom palettes, and supports foreground native playback. Requires current Android System WebView and explicit debug vs maintainer release signing keys.
 - **iPhone / iPad Safari:** Supports Home Screen web-app installation via Share -> Add to Home Screen (surfaced in the accessible Installation Help sheet), offline critical shell, marquee pause/full-text dialog, and Media Session controls. Desktop `beforeinstallprompt`, File Handling API (`launchQueue`), Background Sync, and App Badging are not promised and degrade safely to plain browser / manual import workflows.
 - **Windows / macOS / Linux Chromium & Edge:** Supports loopback launcher (`127.0.0.1`), desktop File Handling (`launchQueue` routed through explicit Play-now / Add-to-queue / Cancel confirmation), optional Window Controls Overlay (`0px` reset when hidden), keyboard shortcuts, and optional App Badging for active Soulseek transfers. Web File Handling and WCO remain feature-detected rather than assumed.
 - **Firefox Desktop & Mobile:** Core playback, offline Service Worker critical shell, reduced motion, custom themes, and file/folder pickers work without install CTA deception (surfaces Installation Help / browser fallback rather than `prompt()`).

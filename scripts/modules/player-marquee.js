@@ -1,14 +1,31 @@
-// Measured overflow text controller (batch read/write, WeakMap element keys, RTL-aware, pauseable + full-text fallback).
+// Measured overflow text controller (batch read/write, WeakMap element keys, RTL-aware, Settings & player marquee coverage).
 import { store } from './state.js';
 import { safeStorage, showToast } from './utils.js';
 import { trackName, artistName, albumName } from './ui-elements.js';
 import { scheduleRead, scheduleWrite, cancelScheduled } from './frame-scheduler.js';
 
 const MARQUEE_PAUSE_KEY = 'cachymusic_marquee_paused';
+const SETTINGS_MARQUEE_IDS = [
+    'miniTitle',
+    'miniArtist',
+    'settingsHardwareGainPill',
+    'settingsHwGainText',
+    'settingsUltrasonicPill',
+    'settingsAmbiPill',
+    'settingsEnginePrecisionPill',
+    'settingsDitherPill',
+    'settingsBufferPill',
+    'settingsDebugPill',
+    'settingsTabCurrentThemeBadge',
+];
+const OBSERVER_MARQUEE_IDS = ['trackName', 'artistName', 'albumName', ...SETTINGS_MARQUEE_IDS];
 const elementKeyMap = new WeakMap();
+const mutatingSet = new WeakSet();
+const observedSet = new WeakSet();
 let nextElementKeyId = 1;
 let listenersBound = false;
 let marqueeTriggerEl = null;
+let textObserver = null;
 
 function getElementKey(el) {
     if (el.id) return `marquee:${el.id}`;
@@ -18,6 +35,50 @@ function getElementKey(el) {
         elementKeyMap.set(el, id);
     }
     return id;
+}
+
+function getMarqueeTargets() {
+    const targets = new Set([trackName, artistName, albumName]);
+    if (typeof document !== 'undefined') {
+        for (const id of SETTINGS_MARQUEE_IDS) {
+            const node = document.getElementById(id);
+            if (node) targets.add(node);
+        }
+        if (typeof document.querySelectorAll === 'function') {
+            for (const pill of document.querySelectorAll('.settingsEnginePill, .settingsSleepBadge')) {
+                if (pill) targets.add(pill);
+            }
+        }
+    }
+    targets.delete(null);
+    targets.delete(undefined);
+    return Array.from(targets);
+}
+
+function ensureMarqueeSpan(el, textOverride) {
+    if (!el) return null;
+    const raw = textOverride !== undefined ? String(textOverride || '') : String(el.textContent || '');
+    const existing = el.firstElementChild;
+    if (existing && existing.classList?.contains('marqueeContent') && el.childElementCount === 1 && textOverride === undefined) {
+        if (el.title !== raw && raw) el.title = raw;
+        return existing;
+    }
+    mutatingSet.add(el);
+    try {
+        el.title = raw;
+        let span = existing && existing.classList?.contains('marqueeContent') && el.childElementCount === 1 ? existing : null;
+        if (!span) {
+            span = document.createElement('span');
+            span.className = 'marqueeContent';
+            span.textContent = raw;
+            el.replaceChildren(span);
+        } else if (span.textContent !== raw) {
+            span.textContent = raw;
+        }
+        return span;
+    } finally {
+        queueMicrotask(() => mutatingSet.delete(el));
+    }
 }
 
 export function isMarqueePaused() {
@@ -86,6 +147,17 @@ export function openFullTrackTextDialog(track = store.state.currentTrack || stor
     return true;
 }
 
+function measureContentBox(el, span) {
+    const rawClientW = el.clientWidth <= 0 ? 0 : el.clientWidth;
+    if (rawClientW <= 0) return { clientW: 0, scrollW: 0, isRtl: false };
+    const cs = typeof getComputedStyle === 'function' ? getComputedStyle(el) : null;
+    const padX = cs ? ((parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)) : 0;
+    const clientW = Math.max(0, rawClientW - padX);
+    const scrollW = clientW > 0 ? (span.scrollWidth || el.scrollWidth || 0) : 0;
+    const isRtl = clientW > 0 && cs?.direction === 'rtl';
+    return { clientW, scrollW, isRtl };
+}
+
 function applyMeasurement(el, span, clientW, scrollW, isRtl) {
     if (!el.isConnected || span.parentNode !== el) return;
     if (clientW <= 0) {
@@ -97,7 +169,7 @@ function applyMeasurement(el, span, clientW, scrollW, isRtl) {
         return;
     }
     const overflow = scrollW - clientW;
-    const active = overflow > 4;
+    const active = overflow > 2;
     el.classList.toggle('isMarquee', active);
     if (active) {
         const dist = Math.ceil(overflow) + 12;
@@ -113,26 +185,22 @@ function applyMeasurement(el, span, clientW, scrollW, isRtl) {
     syncOverflowControls();
 }
 
+function observeTarget(el) {
+    if (!textObserver || !el || observedSet.has(el)) return;
+    observedSet.add(el);
+    textObserver.observe(el, { childList: true, characterData: true, subtree: true });
+}
+
 export function updateMarqueeText(el, text) {
     if (!el) return;
-    const clean = text || '';
-    el.title = clean;
-    let span = el.firstElementChild;
-    if (!span || !span.classList.contains('marqueeContent') || el.childElementCount !== 1) {
-        span = document.createElement('span');
-        span.className = 'marqueeContent';
-        span.textContent = clean;
-        el.replaceChildren(span);
-    } else if (span.textContent !== clean) {
-        span.textContent = clean;
-    }
+    observeTarget(el);
+    const span = ensureMarqueeSpan(el, text || '');
+    if (!span) return;
     const key = getElementKey(el);
     cancelScheduled(key);
     scheduleRead(key, () => {
         if (!el.isConnected || span.parentNode !== el) return;
-        const clientW = el.clientWidth <= 0 ? 0 : el.clientWidth;
-        const scrollW = clientW > 0 ? span.scrollWidth : 0;
-        const isRtl = clientW > 0 && typeof getComputedStyle === 'function' && getComputedStyle(el).direction === 'rtl';
+        const { clientW, scrollW, isRtl } = measureContentBox(el, span);
         scheduleWrite(key, () => applyMeasurement(el, span, clientW, scrollW, isRtl));
     });
 }
@@ -141,12 +209,12 @@ export function recomputeMarquees() {
     cancelScheduled('marquee:batch');
     scheduleRead('marquee:batch', () => {
         const results = [];
-        for (const el of [trackName, artistName, albumName]) {
-            const span = el?.querySelector('.marqueeContent');
-            if (!el || !span || !el.isConnected || span.parentNode !== el) continue;
-            const clientW = el.clientWidth;
-            const scrollW = clientW > 0 ? span.scrollWidth : 0;
-            const isRtl = clientW > 0 && typeof getComputedStyle === 'function' && getComputedStyle(el).direction === 'rtl';
+        for (const el of getMarqueeTargets()) {
+            if (!el || !el.isConnected) continue;
+            observeTarget(el);
+            const span = ensureMarqueeSpan(el);
+            if (!span || span.parentNode !== el) continue;
+            const { clientW, scrollW, isRtl } = measureContentBox(el, span);
             results.push({ el, span, clientW, scrollW, isRtl });
         }
         if (results.length === 0) {
@@ -165,22 +233,47 @@ export function recomputeMarquees() {
 export function bindMeasuredOverflowLifecycle() {
     if (typeof window === 'undefined' || listenersBound) return;
     listenersBound = true;
-    const metaBox = document.querySelector('.trackMeta');
-    const observer = window.ResizeObserver && metaBox ? new window.ResizeObserver(recomputeMarquees) : null;
+    const metaBox = document.querySelector?.('.trackMeta');
+    const settingsBox = document.querySelector?.('.settingsWorkspace');
+    const miniBox = document.querySelector?.('.persistentMiniPlayer');
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(recomputeMarquees) : null;
+    if (typeof MutationObserver === 'function' && !textObserver) {
+        textObserver = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                const target = m.target?.nodeType === 1 ? m.target : m.target?.parentElement;
+                const host = target?.closest?.(`#${OBSERVER_MARQUEE_IDS.join(',#')}, .settingsEnginePill, .settingsSleepBadge`) || (OBSERVER_MARQUEE_IDS.includes(target?.id) ? target : null);
+                if (!host || mutatingSet.has(host)) continue;
+                updateMarqueeText(host, host.textContent || '');
+            }
+        });
+    }
+
+    const onSettingsInteract = (e) => {
+        if (e.target?.closest?.('.settingsCatBtn, .settingsAdvancedSummary, #settingsAdvancedAudio')) {
+            requestAnimationFrame(() => recomputeMarquees());
+        }
+    };
+
     let started = false;
     const start = () => {
         if (started) return;
         started = true;
         if (metaBox?.isConnected) observer?.observe(metaBox);
+        if (settingsBox?.isConnected) observer?.observe(settingsBox);
+        if (miniBox?.isConnected) observer?.observe(miniBox);
+        for (const el of getMarqueeTargets()) observeTarget(el);
         window.addEventListener('resize', recomputeMarquees, { passive: true });
         document.addEventListener('visibilitychange', syncOverflowControls);
+        document.addEventListener('click', onSettingsInteract);
     };
     const stop = () => {
         if (!started) return;
         started = false;
         observer?.disconnect();
+        textObserver?.disconnect();
         window.removeEventListener('resize', recomputeMarquees);
         document.removeEventListener('visibilitychange', syncOverflowControls);
+        document.removeEventListener('click', onSettingsInteract);
         cancelScheduled('marquee:batch');
     };
     start();
@@ -188,6 +281,7 @@ export function bindMeasuredOverflowLifecycle() {
         document.fonts.ready.then(recomputeMarquees).catch(() => {});
     }
     store.subscribe('workspace:change', recomputeMarquees);
+    store.subscribe('ui:sync-dac-status', recomputeMarquees);
     store.subscribe('motion:change', () => { syncOverflowControls(); recomputeMarquees(); });
     window.addEventListener('pagehide', stop);
     window.addEventListener('pageshow', start);
@@ -210,6 +304,7 @@ export function bindMeasuredOverflowLifecycle() {
         marqueeTriggerEl = null;
     });
     syncOverflowControls();
+    recomputeMarquees();
 }
 
 bindMeasuredOverflowLifecycle();

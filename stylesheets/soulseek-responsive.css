@@ -140,8 +140,19 @@
     letter-spacing: 0;
   }
   .soulseekWorkspace .slskFilterToggleBtn.active { color: var(--text-primary); border-color: var(--border-medium); }
-  .soulseekWorkspace .slskDisclosureChevron { font-size: 18px; line-height: 1; }
-  .soulseekWorkspace :is(.slskFilterToggleBtn, .slskConnectionToggleBtn)[aria-expanded="true"] .slskDisclosureChevron { transform: rotate(180deg); }
+  .soulseekWorkspace .slskDisclosureChevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    color: var(--text-muted);
+    transition: transform 220ms var(--ease-silky, cubic-bezier(0.22, 1, 0.36, 1));
+  }
+  .soulseekWorkspace .slskDisclosureChevron svg,
+  .soulseekWorkspace .slskToggleChevron svg { display: block; width: 14px; height: 14px; }
+  .soulseekWorkspace :is(.slskFilterToggleBtn, .slskConnectionToggleBtn)[aria-expanded="true"] .slskDisclosureChevron { transform: rotate(180deg); color: var(--text-accent); }
   .soulseekWorkspace .slskTextFiltersCon:not(.open) { display: none; }
   .soulseekWorkspace .slskTextFiltersCon.open {
     display: grid;
@@ -236,15 +247,20 @@
       flex-wrap: nowrap;
       justify-content: space-between;
       order: 1;
-      gap: 5px;
+      gap: 4px;
       min-width: 0;
-      padding: 0;
+      padding: 3px 4px;
       background: var(--bg-surface-2);
       border: 1px solid var(--border-subtle);
       border-radius: 10px;
     }
+    .soulseekWorkspace .slskControlsPanel:not(.is-collapsed) .slskPanelToggleBar {
+      border-color: var(--border-medium);
+      border-bottom-left-radius: 6px;
+      border-bottom-right-radius: 6px;
+    }
     .soulseekWorkspace .slskPanelToggleControl {
-      min-height: 48px;
+      min-height: 44px;
       flex: 1 1 auto;
       min-width: 0;
       display: inline-flex;
@@ -252,8 +268,8 @@
       justify-content: space-between;
       gap: 8px;
       border: 0;
-      border-radius: 10px;
-      padding: 0 10px;
+      border-radius: 7px;
+      padding: 0 8px;
       background: transparent;
       color: var(--text-primary);
       font-size: 13px;
@@ -276,15 +292,18 @@
       font-weight: 700;
     }
     .soulseekWorkspace .slskToggleChevron {
-      display: inline-block;
-      flex: 0 0 auto;
-      font-size: 19px;
-      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      flex: 0 0 20px;
       color: var(--text-muted);
       transform: rotate(0);
+      transition: transform 220ms var(--ease-silky, cubic-bezier(0.22, 1, 0.36, 1));
     }
-    .soulseekWorkspace .slskPanelToggleControl[aria-expanded="true"] .slskToggleChevron { transform: rotate(180deg); }
-    .soulseekWorkspace .slskPanelQuickActions { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding-right: 5px; }
+    .soulseekWorkspace .slskPanelToggleControl[aria-expanded="true"] .slskToggleChevron { transform: rotate(180deg); color: var(--text-accent); }
+    .soulseekWorkspace .slskPanelQuickActions { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding-right: 2px; }
     .soulseekWorkspace .slskMiniStatus { display: inline-flex; width: 10px; align-items: center; justify-content: center; }
     .soulseekWorkspace .slskMiniTransfersBtn {
       display: inline-flex;
@@ -308,12 +327,12 @@
       display: flex;
       flex-direction: column;
       gap: 9px;
-      padding: 0;
+      padding: 10px 2px 2px;
+      margin-top: 2px;
       background: transparent;
       border: 0;
       border-top: 1px solid var(--border-subtle);
       border-radius: 0;
-      padding-top: 10px;
     }
     .soulseekWorkspace .slskFilterGroup {
       flex-wrap: wrap;
@@ -331,11 +350,10 @@
       display: flex;
       order: 4;
       min-height: 44px;
-      border: 0;
-      border-top: 1px solid var(--border-subtle);
-      border-radius: 0;
-      padding: 10px 3px 0;
-      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 9px;
+      padding: 0 12px;
+      background: var(--bg-surface-2);
     }
     .soulseekWorkspace .slskToolbar { order: 5; }
     .soulseekWorkspace .slskToolbar:not(.is-open) { display: none; }

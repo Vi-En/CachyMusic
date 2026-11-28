@@ -3,7 +3,6 @@ import { popModalState, pushModalState, safeStorage } from './utils.js';
 import { store } from './state.js';
 import { SYSTEM_THEME_PAIR, THEMES, normalizeThemeId } from './theme-catalog.js';
 import { themeModal, themeQuickBtns, themeSelectCards, topThemeLabel } from './ui-elements.js';
-import { isMarqueePaused, setMarqueePaused } from './player-marquee.js';
 
 let enginePromise = null;
 let storePromise = null;
@@ -38,10 +37,8 @@ let systemSchemeQuery = null;
 let systemSchemeListener = null;
 let motionQuery = null;
 let motionListener = null;
-let controlsBound = false;
 
 const THEME_MODE_KEY = 'cachymusic_theme_mode';
-const MOTION_MODE_KEY = 'cachymusic_reduced_motion';
 
 function syncBrowserThemeColor(themeName, customChromeHex = null) {
     if (typeof document === 'undefined') return;
@@ -285,68 +282,31 @@ export function initSystemThemeMode() {
 }
 
 export function getMotionPreference() {
-    const raw = safeStorage.getItem(MOTION_MODE_KEY);
-    return (raw === 'reduce' || raw === 'normal') ? raw : 'system';
+    return 'system';
 }
 
-export function setMotionPreference(mode) {
-    const normalized = (mode === 'reduce' || mode === 'normal') ? mode : 'system';
-    try { safeStorage.setItem(MOTION_MODE_KEY, normalized); } catch (_) {}
+export function setMotionPreference() {
     const sysReduce = typeof window !== 'undefined'
         && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
-    const reduced = normalized === 'reduce' || (normalized === 'system' && sysReduce);
     if (typeof document !== 'undefined') {
-        document.documentElement.dataset.reducedMotion = reduced ? 'true' : 'false';
-        const selectEl = document.getElementById('settingsMotionModeSelect');
-        if (selectEl && selectEl.value !== normalized) selectEl.value = normalized;
+        document.documentElement.dataset.reducedMotion = sysReduce ? 'true' : 'false';
     }
-    store.emit('motion:change', { mode: normalized, reduced });
-    return reduced;
-}
-
-function syncSettingsMarqueeButton() {
-    if (typeof document === 'undefined') return;
-    const btn = document.getElementById('settingsMarqueePauseBtn');
-    if (!btn) return;
-    const paused = isMarqueePaused();
-    btn.setAttribute('aria-pressed', String(paused));
-    btn.textContent = paused ? 'Resume scrolling text' : 'Pause scrolling text';
+    store.emit('motion:change', { mode: 'system', reduced: sysReduce });
+    return sysReduce;
 }
 
 export function initMotionPreferences() {
     if (typeof window === 'undefined') return;
+    try { safeStorage.removeItem?.('cachymusic_reduced_motion'); } catch (_) {}
     if (motionQuery && motionListener) {
         motionQuery.removeEventListener?.('change', motionListener);
     }
     motionQuery = typeof window.matchMedia === 'function'
         ? window.matchMedia('(prefers-reduced-motion: reduce)')
         : null;
-    motionListener = () => {
-        if (getMotionPreference() === 'system') {
-            setMotionPreference('system');
-        }
-    };
+    motionListener = () => setMotionPreference();
     motionQuery?.addEventListener?.('change', motionListener);
-
-    setMotionPreference(getMotionPreference());
-
-    if (typeof document !== 'undefined' && !controlsBound) {
-        controlsBound = true;
-        const selectEl = document.getElementById('settingsMotionModeSelect');
-        if (selectEl) {
-            selectEl.value = getMotionPreference();
-            selectEl.addEventListener('change', () => setMotionPreference(selectEl.value));
-        }
-        const marqueeBtn = document.getElementById('settingsMarqueePauseBtn');
-        if (marqueeBtn) {
-            syncSettingsMarqueeButton();
-            marqueeBtn.addEventListener('click', () => {
-                setMarqueePaused(!isMarqueePaused());
-                syncSettingsMarqueeButton();
-            });
-            store.subscribe('motion:change', syncSettingsMarqueeButton);
-        }
-    }
+    setMotionPreference();
 }
 
 function openThemeModal(event) {

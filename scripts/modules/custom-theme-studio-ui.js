@@ -80,7 +80,7 @@ const BG_SCOPES = [
 const GRADIENT_PRESETS = [
     { name: 'Midnight Teal', type: 'linear', angle: 135, stops: [{ color: '#08121a', pos: 0 }, { color: '#112a3d', pos: 55 }, { color: '#091926', pos: 100 }] },
     { name: 'Crimson Horizon', type: 'linear', angle: 150, stops: [{ color: '#1a080d', pos: 0 }, { color: '#3b111c', pos: 52 }, { color: '#120b18', pos: 100 }] },
-    { name: 'Solar Eclipse', type: 'radial', angle: 0, stops: [{ color: '#1a2356', pos: 0 }, { color: '#0d102b', pos: 60 }, { color: '#070814', pos: 100 }] },
+    { name: 'Orbital Dusk', type: 'radial', angle: 0, stops: [{ color: '#1a2356', pos: 0 }, { color: '#0d102b', pos: 60 }, { color: '#070814', pos: 100 }] },
     { name: 'Emerald Depth', type: 'linear', angle: 145, stops: [{ color: '#05150f', pos: 0 }, { color: '#0f382a', pos: 60 }, { color: '#071b1c', pos: 100 }] },
     { name: 'Warm Espresso', type: 'linear', angle: 160, stops: [{ color: '#f7f1e7', pos: 0 }, { color: '#eadcc8', pos: 100 }] },
     { name: 'Studio Slate', type: 'conic', angle: 45, stops: [{ color: '#111923', pos: 0 }, { color: '#1a293a', pos: 50 }, { color: '#111923', pos: 100 }] }
@@ -340,7 +340,7 @@ function renderColorsTab(body) {
         ]),
         makeSelectRow('Clone Colors & Character From Built-In Theme', [
             { value: '', label: 'Choose a built-in theme to clone...' },
-            ...VALID_THEME_IDS.map(id => ({ value: id, label: `${THEMES[id].name} (${id})` }))
+            ...VALID_THEME_IDS.map(id => ({ value: id, label: THEMES[id].name }))
         ], '', (baseId) => {
             if (!baseId) return;
             const seeded = createDefaultCustomTheme(studio.draft.name, baseId, studio.draft.id);

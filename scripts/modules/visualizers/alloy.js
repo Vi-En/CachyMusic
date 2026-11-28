@@ -442,366 +442,85 @@ function drawScene(ctx, width, height, playing, now, dt, beatPulse, snarePulse, 
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Hover Transform Applied to Floating Drone Chassis
+    // Hover Transform Applied to Floating Delta Craft
     ctx.translate(0, hoverY);
-    ctx.rotate(bankAng);
-
-    // 2. Twin Ion Plasma Thruster Plumes
-    const thrusterX = 15 * s;
-    const thrusterY = 17 * s;
-    const plumeLen = (20 + smoothBass * 34 + beatPulse * 44) * s;
-    const plumeW = (6.0 + beatPulse * 3.5) * s;
-    [-thrusterX, thrusterX].forEach(tx => {
-        ctx.save();
-        const jetGrad = ctx.createLinearGradient(tx, thrusterY, tx, thrusterY + plumeLen);
-        if (isCombat) {
-            jetGrad.addColorStop(0, '#ffffff');
-            jetGrad.addColorStop(0.25, '#ff2a00');
-            jetGrad.addColorStop(0.65, 'rgba(255, 42, 0, 0.45)');
-            jetGrad.addColorStop(1, 'rgba(255, 42, 0, 0)');
-        } else {
-            jetGrad.addColorStop(0, '#ffffff');
-            jetGrad.addColorStop(0.25, '#00e5ff');
-            jetGrad.addColorStop(0.65, 'rgba(0, 229, 255, 0.45)');
-            jetGrad.addColorStop(1, 'rgba(0, 229, 255, 0)');
-        }
-        ctx.beginPath();
-        ctx.moveTo(tx - plumeW / 2, thrusterY);
-        ctx.quadraticCurveTo(tx - plumeW * 0.65, thrusterY + plumeLen * 0.5, tx, thrusterY + plumeLen);
-        ctx.quadraticCurveTo(tx + plumeW * 0.65, thrusterY + plumeLen * 0.5, tx + plumeW / 2, thrusterY);
-        ctx.closePath();
-        ctx.fillStyle = jetGrad;
-        ctx.shadowColor = isCombat ? '#ff2a00' : '#00e5ff';
-        setCanvasShadowBlur(ctx, (14 + beatPulse * 18) * s);
-        ctx.fill();
-
-        // Inner Blazing White Core Jet
-        ctx.beginPath();
-        ctx.moveTo(tx - plumeW * 0.25, thrusterY);
-        ctx.lineTo(tx, thrusterY + plumeLen * 0.55);
-        ctx.lineTo(tx + plumeW * 0.25, thrusterY);
-        ctx.closePath();
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.restore();
-    });
-
-    // 3. Articulated Ceramic Armor Wing Cowlings with Exposed Glowing Heatsinks
-    const flareSpread = playing ? (beatPulse * 4.8 * s) : 0;
-
-    // --- Left Wing Cowling ---
-    ctx.save();
-    // Exposed Glowing Orange Heatsink Grille behind Left Armor Plate
-    ctx.beginPath();
-    ctx.moveTo(-10 * s, -10 * s);
-    ctx.lineTo(-24 * s - flareSpread * 0.6, -4 * s);
-    ctx.lineTo(-26 * s - flareSpread * 0.6, 8 * s);
-    ctx.lineTo(-12 * s, 12 * s);
-    ctx.closePath();
-    ctx.fillStyle = '#1e1b18';
-    ctx.fill();
-    for (let sl = 0; sl < 4; sl++) {
-        const sly = -2 * s + sl * 3.2 * s;
-        ctx.beginPath();
-        ctx.moveTo(-12 * s, sly);
-        ctx.lineTo(-22 * s - flareSpread * 0.4, sly - 2 * s);
-        ctx.strokeStyle = `rgba(255, 87, 34, ${0.75 + beatPulse * 0.25})`;
-        ctx.lineWidth = 1.2 * s;
-        ctx.stroke();
-    }
-
-    // Left Outer Ceramic Wing Armor Plate
-    ctx.beginPath();
-    ctx.moveTo(-10 * s, -15 * s);
-    ctx.lineTo(-28 * s - flareSpread, -6 * s);
-    ctx.lineTo(-30 * s - flareSpread, 8 * s);
-    ctx.lineTo(-14 * s, 15 * s);
-    ctx.lineTo(-8 * s, 4 * s);
-    ctx.closePath();
-    const lWingGrad = ctx.createLinearGradient(-30 * s, -15 * s, -8 * s, 15 * s);
-    lWingGrad.addColorStop(0, '#ffffff');
-    lWingGrad.addColorStop(0.4, '#e2e8f0');
-    lWingGrad.addColorStop(0.8, '#94a3b8');
-    lWingGrad.addColorStop(1, '#334155');
-    ctx.fillStyle = lWingGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = Math.max(1.2, 1.5 * s);
-    ctx.shadowColor = '#00e5ff';
-    setCanvasShadowBlur(ctx, 6 * s);
-    ctx.stroke();
-
-    // Left Wing Specular Edge Chamfer
-    ctx.beginPath();
-    ctx.moveTo(-10 * s, -15 * s);
-    ctx.lineTo(-28 * s - flareSpread, -6 * s);
-    ctx.lineTo(-30 * s - flareSpread, 8 * s);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.2 * s;
-    ctx.stroke();
-
-    // Left Wing Hazard Stripe Accent
-    ctx.save();
-    ctx.clip();
-    ctx.beginPath();
-    ctx.moveTo(-30 * s - flareSpread, 1 * s);
-    ctx.lineTo(-14 * s, 11 * s);
-    ctx.strokeStyle = '#ff2a00';
-    ctx.lineWidth = 3.2 * s;
-    ctx.shadowColor = '#ff2a00';
-    setCanvasShadowBlur(ctx, 8 * s);
-    ctx.stroke();
-    ctx.restore();
-    ctx.restore();
-
-    // --- Right Wing Cowling ---
-    ctx.save();
-    // Exposed Glowing Orange Heatsink Grille behind Right Armor Plate
-    ctx.beginPath();
-    ctx.moveTo(10 * s, -10 * s);
-    ctx.lineTo(24 * s + flareSpread * 0.6, -4 * s);
-    ctx.lineTo(26 * s + flareSpread * 0.6, 8 * s);
-    ctx.lineTo(12 * s, 12 * s);
-    ctx.closePath();
-    ctx.fillStyle = '#1e1b18';
-    ctx.fill();
-    for (let sl = 0; sl < 4; sl++) {
-        const sly = -2 * s + sl * 3.2 * s;
-        ctx.beginPath();
-        ctx.moveTo(12 * s, sly);
-        ctx.lineTo(22 * s + flareSpread * 0.4, sly - 2 * s);
-        ctx.strokeStyle = `rgba(255, 87, 34, ${0.75 + beatPulse * 0.25})`;
-        ctx.lineWidth = 1.2 * s;
-        ctx.stroke();
-    }
-
-    // Right Outer Ceramic Wing Armor Plate
-    ctx.beginPath();
-    ctx.moveTo(10 * s, -15 * s);
-    ctx.lineTo(28 * s + flareSpread, -6 * s);
-    ctx.lineTo(30 * s + flareSpread, 8 * s);
-    ctx.lineTo(14 * s, 15 * s);
-    ctx.lineTo(8 * s, 4 * s);
-    ctx.closePath();
-    const rWingGrad = ctx.createLinearGradient(30 * s, -15 * s, 8 * s, 15 * s);
-    rWingGrad.addColorStop(0, '#ffffff');
-    rWingGrad.addColorStop(0.4, '#e2e8f0');
-    rWingGrad.addColorStop(0.8, '#94a3b8');
-    rWingGrad.addColorStop(1, '#334155');
-    ctx.fillStyle = rWingGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = Math.max(1.2, 1.5 * s);
-    ctx.shadowColor = '#00e5ff';
-    setCanvasShadowBlur(ctx, 6 * s);
-    ctx.stroke();
-
-    // Right Wing Specular Edge Chamfer
-    ctx.beginPath();
-    ctx.moveTo(10 * s, -15 * s);
-    ctx.lineTo(28 * s + flareSpread, -6 * s);
-    ctx.lineTo(30 * s + flareSpread, 8 * s);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.2 * s;
-    ctx.stroke();
-
-    // Right Wing Hazard Stripe Accent
-    ctx.save();
-    ctx.clip();
-    ctx.beginPath();
-    ctx.moveTo(30 * s + flareSpread, 1 * s);
-    ctx.lineTo(14 * s, 11 * s);
-    ctx.strokeStyle = '#ff2a00';
-    ctx.lineWidth = 3.2 * s;
-    ctx.shadowColor = '#ff2a00';
-    setCanvasShadowBlur(ctx, 8 * s);
-    ctx.stroke();
-    ctx.restore();
-    ctx.restore();
-
-    // 4. Main Aeron Drone Body Chassis (Matte White Faceted Armor Shell)
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(0, -28 * s);
-    ctx.lineTo(13 * s, -13 * s);
-    ctx.lineTo(15 * s, 6 * s);
-    ctx.lineTo(9 * s, 20 * s);
-    ctx.lineTo(-9 * s, 20 * s);
-    ctx.lineTo(-15 * s, 6 * s);
-    ctx.lineTo(-13 * s, -13 * s);
-    ctx.closePath();
-    const bodyGrad = ctx.createLinearGradient(0, -28 * s, 0, 20 * s);
-    bodyGrad.addColorStop(0, '#ffffff');
-    bodyGrad.addColorStop(0.35, '#f8fafc');
-    bodyGrad.addColorStop(0.7, '#cbd5e1');
-    bodyGrad.addColorStop(1, '#1e293b');
-    ctx.fillStyle = bodyGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = Math.max(1.2, 1.6 * s);
-    ctx.shadowColor = '#00e5ff';
-    setCanvasShadowBlur(ctx, 8 * s);
-    ctx.stroke();
-
-    // Central Facet Ridge (Illuminated 3D Spine)
-    ctx.beginPath();
-    ctx.moveTo(0, -28 * s);
-    ctx.lineTo(0, 20 * s);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.lineWidth = 1.4 * s;
-    ctx.stroke();
-
-    // Top Spire Sensor Fin
-    ctx.beginPath();
-    ctx.moveTo(0, -27 * s);
-    ctx.lineTo(6 * s, -16 * s);
-    ctx.lineTo(-6 * s, -16 * s);
-    ctx.closePath();
-    ctx.fillStyle = '#060a12';
-    ctx.fill();
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = 0.9 * s;
-    ctx.stroke();
-    ctx.restore();
-
-    // Recessed twin radiator banks, with no circular focal element.
-    drawHullVents(ctx, s, 1, playing ? beatPulse : 0);
+    drawDeltaCraft(ctx, s, playing, beatPulse, smoothBass);
 
     ctx.restore();
 }
 
-function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, smoothBass, smoothMid, smoothTreble) {
-    ctx.save();
+function drawDeltaCraft(ctx, s, playing, beatPulse, smoothBass) {
+    const energy = playing ? Math.min(1, Math.max(0, beatPulse * 0.65 + smoothBass * 0.45)) : 0;
 
-    // Anti-gravity levitation hover & mechanical banking
-    const hoverY = playing ? Math.sin(now * 0.0036) * (3.2 * s) : Math.sin(now * 0.0018) * (1.2 * s);
-    const bankAngle = playing ? (Math.sin(now * 0.0024) * 0.04 + (snarePulse * 0.03)) : 0;
-    const droneY = cy + hoverY;
-
-    ctx.translate(cx, droneY);
-    ctx.rotate(bankAngle);
-
-    // Lateral Ion Repulsor Jet Thrusters (Left & Right)
-    const thrusterX = 14 * s;
-    const thrusterY = 6 * s;
-    const plumeLen = (18 + smoothBass * 32 + beatPulse * 38) * s;
-    const plumeW = (4.8 + beatPulse * 2.8) * s;
-    const isCombatJet = (playing && beatPulse > 0.40);
-
-    [-thrusterX, thrusterX].forEach((tx) => {
+    // 1. Twin Restrained Ion Exhaust Trails
+    const plumeLen = (12 + energy * 24) * s;
+    const plumeW = (3.4 + energy * 1.4) * s;
+    for (const tx of [-7.5 * s, 7.5 * s]) {
         ctx.save();
-        const jetGrad = ctx.createLinearGradient(tx, thrusterY, tx, thrusterY + plumeLen);
-        if (isCombatJet) {
-            jetGrad.addColorStop(0, '#ffffff');
-            jetGrad.addColorStop(0.2, '#ff3d00');
-            jetGrad.addColorStop(0.6, 'rgba(255, 61, 0, 0.45)');
-            jetGrad.addColorStop(1, 'rgba(255, 61, 0, 0)');
-        } else {
-            jetGrad.addColorStop(0, '#ffffff');
-            jetGrad.addColorStop(0.2, '#00e5ff');
-            jetGrad.addColorStop(0.6, 'rgba(0, 229, 255, 0.45)');
-            jetGrad.addColorStop(1, 'rgba(0, 229, 255, 0)');
-        }
-
+        const jet = ctx.createLinearGradient(tx, 14 * s, tx, 14 * s + plumeLen);
+        jet.addColorStop(0, 'rgba(224, 247, 250, 0.92)');
+        jet.addColorStop(0.45, 'rgba(56, 189, 248, 0.45)');
+        jet.addColorStop(1, 'rgba(56, 189, 248, 0)');
         ctx.beginPath();
-        ctx.moveTo(tx - plumeW / 2, thrusterY);
-        ctx.quadraticCurveTo(tx - plumeW * 0.6, thrusterY + plumeLen * 0.5, tx, thrusterY + plumeLen);
-        ctx.quadraticCurveTo(tx + plumeW * 0.6, thrusterY + plumeLen * 0.5, tx + plumeW / 2, thrusterY);
+        ctx.moveTo(tx - plumeW * 0.5, 14 * s);
+        ctx.lineTo(tx, 14 * s + plumeLen);
+        ctx.lineTo(tx + plumeW * 0.5, 14 * s);
         ctx.closePath();
-        ctx.fillStyle = jetGrad;
-        ctx.shadowColor = isCombatJet ? '#ff3d00' : '#00e5ff';
-        setCanvasShadowBlur(ctx, (12 + beatPulse * 18) * s);
+        ctx.fillStyle = jet;
         ctx.fill();
         ctx.restore();
-    });
+    }
 
-    // Articulated Lateral Ceramic Flare Winglets
-    const flareSpread = playing ? (beatPulse * 3.8 * s) : 0;
-    ctx.save();
-    // Left Winglet
-    ctx.beginPath();
-    ctx.moveTo(-6 * s, -8 * s);
-    ctx.lineTo(-24 * s - flareSpread, -2 * s);
-    ctx.lineTo(-26 * s - flareSpread, 8 * s);
-    ctx.lineTo(-12 * s, 6 * s);
-    ctx.lineTo(-6 * s, 10 * s);
-    ctx.closePath();
-    ctx.fillStyle = '#f8fafc';
-    ctx.fill();
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = Math.max(0.9, 1.2 * s);
-    ctx.stroke();
-
-    // Right Winglet
-    ctx.beginPath();
-    ctx.moveTo(6 * s, -8 * s);
-    ctx.lineTo(24 * s + flareSpread, -2 * s);
-    ctx.lineTo(26 * s + flareSpread, 8 * s);
-    ctx.lineTo(12 * s, 6 * s);
-    ctx.lineTo(6 * s, 10 * s);
-    ctx.closePath();
-    ctx.fillStyle = '#f8fafc';
-    ctx.fill();
-    ctx.strokeStyle = '#00e5ff';
-    ctx.lineWidth = Math.max(0.9, 1.2 * s);
-    ctx.stroke();
-    ctx.restore();
-
-    // Main Drone Body (Hardened Graphite Core & Matte Ceramic Shell)
+    // 2. Clean Swept Brushed-Alloy Delta Wing Silhouette
+    const sweep = playing ? beatPulse * 1.8 * s : 0;
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(0, -22 * s);
-    ctx.lineTo(10 * s, -10 * s);
-    ctx.lineTo(12 * s, 4 * s);
-    ctx.lineTo(7 * s, 14 * s);
-    ctx.lineTo(-7 * s, 14 * s);
-    ctx.lineTo(-12 * s, 4 * s);
-    ctx.lineTo(-10 * s, -10 * s);
+    ctx.moveTo(0, -25 * s);
+    ctx.lineTo(24 * s + sweep, 10 * s);
+    ctx.lineTo(13 * s, 15 * s);
+    ctx.lineTo(5 * s, 12 * s);
+    ctx.lineTo(-5 * s, 12 * s);
+    ctx.lineTo(-13 * s, 15 * s);
+    ctx.lineTo(-24 * s - sweep, 10 * s);
     ctx.closePath();
-    const hullGrad = ctx.createLinearGradient(0, -22 * s, 0, 14 * s);
-    hullGrad.addColorStop(0, '#ffffff');
-    hullGrad.addColorStop(0.35, '#e2e8f0');
-    hullGrad.addColorStop(0.7, '#1e293b');
-    hullGrad.addColorStop(1, '#0f172a');
+    const hullGrad = ctx.createLinearGradient(0, -25 * s, 0, 15 * s);
+    hullGrad.addColorStop(0, '#f8fafc');
+    hullGrad.addColorStop(0.48, '#cbd5e1');
+    hullGrad.addColorStop(1, '#334155');
     ctx.fillStyle = hullGrad;
     ctx.fill();
-    ctx.strokeStyle = '#f8fafc';
-    ctx.lineWidth = Math.max(1.0, 1.4 * s);
+    ctx.strokeStyle = 'rgba(103, 232, 249, 0.8)';
+    ctx.lineWidth = Math.max(1, 1.2 * s);
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.55)';
+    setCanvasShadowBlur(ctx, (4 + energy * 4) * s);
     ctx.stroke();
 
-    // Central Graphite Inset
+    // Central Graphite Canopy & Spine Line
+    setCanvasShadowBlur(ctx, 0);
     ctx.beginPath();
-    ctx.moveTo(0, -16 * s);
-    ctx.lineTo(6 * s, -6 * s);
-    ctx.lineTo(6 * s, 8 * s);
-    ctx.lineTo(-6 * s, 8 * s);
-    ctx.lineTo(-6 * s, -6 * s);
+    ctx.moveTo(0, -17 * s);
+    ctx.lineTo(5.5 * s, -3 * s);
+    ctx.lineTo(4 * s, 7 * s);
+    ctx.lineTo(-4 * s, 7 * s);
+    ctx.lineTo(-5.5 * s, -3 * s);
     ctx.closePath();
-    ctx.fillStyle = '#070a12';
+    ctx.fillStyle = '#0f172a';
     ctx.fill();
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 0.8 * s;
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.6)';
+    ctx.lineWidth = Math.max(0.7, 0.85 * s);
     ctx.stroke();
 
-    drawHullVents(ctx, s, 0.58, playing ? beatPulse : 0);
-
+    drawHullVents(ctx, s, 0.52, playing ? beatPulse : 0);
     ctx.restore();
+}
 
-    // Floating 5-Star Alert HUD Reticle above Drone: [ ◆ ◆ ◆ ◆ ◆ ] WANTED LEVEL: 5
+function drawDockScene(ctx, cx, cy, s, playing, now, dt, beatPulse, snarePulse, smoothBass) {
     ctx.save();
-    const reticleY = -27 * s;
-    ctx.fillStyle = '#ff3d00';
-    ctx.shadowColor = '#ff3d00';
-    setCanvasShadowBlur(ctx, 8 * s);
-    ctx.font = `800 ${Math.max(6, Math.round(7.5 * s))}px "JetBrains Mono", monospace`;
-    ctx.textAlign = 'center';
-
-    ctx.fillStyle = 'rgba(0, 229, 255, 0.9)';
-    ctx.shadowColor = '#00e5ff';
-    setCanvasShadowBlur(ctx, 5 * s);
-
-    ctx.restore();
-
+    const hoverY = playing ? Math.sin(now * 0.0036) * (2.6 * s) : Math.sin(now * 0.0018) * (1.0 * s);
+    const bankAngle = playing ? (Math.sin(now * 0.0024) * 0.03 + (snarePulse * 0.02)) : 0;
+    ctx.translate(cx, cy + hoverY);
+    ctx.rotate(bankAngle);
+    drawDeltaCraft(ctx, s, playing, beatPulse, smoothBass);
     ctx.restore();
 }
 

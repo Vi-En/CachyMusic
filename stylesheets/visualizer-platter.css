@@ -7,11 +7,11 @@
 :root[data-presentation="thematic"] .turntableCenterVis { z-index: 3; overflow: hidden; }
 :root[data-presentation="thematic"] .turntableCenterCanvas { display: block; }
 
-/* Platter alignment invariant: center on the player stage; backdrop covers full deck. */
+/* Platter alignment invariant: keep artwork backdrop scoped inside the top turntableStage behind the platter. */
 :root[data-theme] .playerDeck { position:relative; isolation:isolate; flex-direction:column; align-items:center; }
-:root[data-theme] .playerDeck > .deckArtworkWrapper { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; border-radius:inherit; grid-column:auto; grid-row:auto; }
-:root[data-theme] .playerDeck > :not(.deckArtworkWrapper) { position:relative; z-index:2; }
-:root[data-theme] .playerDeck .turntableStage { align-items:center; width:100%; padding-inline:8px; border-inline-width:0; }
+:root[data-theme] .turntableStage { position:relative; isolation:isolate; align-items:center; width:100%; padding-inline:8px; border-inline-width:0; }
+:root[data-theme] .turntableStage > .deckArtworkWrapper { position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; border-radius:inherit; grid-column:auto; grid-row:auto; }
+:root[data-theme] .turntableStage > :not(.deckArtworkWrapper) { position:relative; z-index:2; }
 :root[data-theme] .playerDeck .turntableCon { align-self:center; margin-inline:auto; transform:none; }
 @media (max-width:768px), (max-height:500px) and (orientation:landscape) {
  :root[data-theme] .playerDeck.mobileActive { display:flex; }

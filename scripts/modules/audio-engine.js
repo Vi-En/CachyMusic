@@ -8,6 +8,7 @@ import {effectState} from './audio-settings-status.js';
 import {createPeqWorkstation} from './peq-workstation.js';
 import {createGraphLifecycle, createWorkletLoader, clearGraphNodes} from './audio-graph-lifecycle.js';
 import {syncVolumeSliders} from './control-ui.js';
+import {updateMarqueeText} from './player-marquee.js';
 // CachyMusic - Audiophile DSP Engine (64-Bit Worklet & Web Audio Fallback)
 import {
     getValidSampleRate,
@@ -691,7 +692,7 @@ import { appAttenuation, effectiveLimiterEnabled, requiresPeakProtection, create
                 const hwGainText = document.getElementById('settingsHwGainText');
                 const devTag = data.activeDevice ? `${s.hwVolumeBackend.toUpperCase()} • ${data.activeDevice}` : s.hwVolumeBackend.toUpperCase();
                 if (pill) {
-                    pill.textContent = data.available ? `READY (${devTag})` : 'UNAVAILABLE';
+                    updateMarqueeText(pill, data.available ? `READY (${devTag})` : 'UNAVAILABLE');
                 }
                 if (!data.available) {
                     markHwGainUnavailable();
@@ -703,7 +704,7 @@ import { appAttenuation, effectiveLimiterEnabled, requiresPeakProtection, create
                         hwGainBtn.title = 'System Volume Control is unavailable on this platform or output interface.';
                     }
                     if (hwGainDot) hwGainDot.classList.remove('active');
-                    if (hwGainText) hwGainText.textContent = 'SYSTEM VOLUME: UNAVAILABLE';
+                    if (hwGainText) updateMarqueeText(hwGainText, 'SYSTEM VOLUME: UNAVAILABLE');
                 } else {
                     if (hwGainBtn) {
                         hwGainBtn.disabled = false;
@@ -716,7 +717,7 @@ import { appAttenuation, effectiveLimiterEnabled, requiresPeakProtection, create
                     if (typeof s.syncHwGainDraftUi === 'function') {
                         s.syncHwGainDraftUi();
                     } else if (hwGainText && s.isHardwareGain) {
-                        hwGainText.textContent = `SYSTEM VOLUME: ON (${s.hwVolumeBackend.toUpperCase()})`;
+                        updateMarqueeText(hwGainText, `SYSTEM VOLUME: ON (${s.hwVolumeBackend.toUpperCase()})`);
                     }
                 }
                 if (s.isHardwareGain && data.available && Number.isFinite(data.volume)) {
@@ -756,9 +757,12 @@ import { appAttenuation, effectiveLimiterEnabled, requiresPeakProtection, create
         const hwGainDot = document.getElementById('settingsHwGainDot');
         const hwGainText = document.getElementById('settingsHwGainText');
         if (pill) {
-            pill.textContent = s.hasExternalDac
-                ? `DAC DETECTED (${s.detectedDacLabel}) • OS VOL ONLY`
-                : 'UNAVAILABLE';
+            updateMarqueeText(
+                pill,
+                s.hasExternalDac
+                    ? `DAC DETECTED (${s.detectedDacLabel}) • OS VOL ONLY`
+                    : 'UNAVAILABLE'
+            );
         }
         if (hwGainBtn) {
             hwGainBtn.disabled = true;
@@ -771,7 +775,7 @@ import { appAttenuation, effectiveLimiterEnabled, requiresPeakProtection, create
         }
         if (hwGainDot) hwGainDot.classList.remove('active');
         if (hwGainText) {
-            hwGainText.textContent = s.hasExternalDac ? 'SYSTEM VOLUME: BROWSER OS-LOCKED' : 'SYSTEM VOLUME: UNAVAILABLE';
+            updateMarqueeText(hwGainText, s.hasExternalDac ? 'SYSTEM VOLUME: BROWSER OS-LOCKED' : 'SYSTEM VOLUME: UNAVAILABLE');
         }
     }
 

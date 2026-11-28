@@ -8,6 +8,7 @@ import {setDebugMode, updateAudioDiagnosticsUi, updateDebugHudState} from './set
 import {syncVolumeSliders} from './control-ui.js';
 import {ultrasonicFilterStatus} from './ultrasonic-status.js';
 import {requestWithPreflight} from './permission-preflight.js';
+import {updateMarqueeText} from './player-marquee.js';
 
 // Preference UI and transactions request graph/mixer operations through explicit callbacks.
 export function createAudioPreferencesUi({acknowledgeAudioEdit, audioBufferChangePending, checkDacCapabilities, checkHardwareGainStatus, ensureAudioEngineForSampleRate, getConfirmedAudioRoute, setVolume, syncSoftwareVolume, updateAmpGain, updateAudioRouting, updateDspButtonsUi, updateLimiterState, updateWorkletParams, workletAcks, beginMixerTransition, endMixerTransition}) {
@@ -95,25 +96,31 @@ export function createAudioPreferencesUi({acknowledgeAudioEdit, audioBufferChang
                 if (hwGainBtn) hwGainBtn.classList.remove('active');
                 if (hwGainDot) hwGainDot.classList.remove('active');
                 if (hwGainText) {
-                    hwGainText.textContent = s.hasExternalDac ? 'SYSTEM VOLUME: BROWSER OS-LOCKED' : 'SYSTEM VOLUME: UNAVAILABLE';
+                    updateMarqueeText(hwGainText, s.hasExternalDac ? 'SYSTEM VOLUME: BROWSER OS-LOCKED' : 'SYSTEM VOLUME: UNAVAILABLE');
                 }
                 return;
             }
             if (hwGainBtn) { hwGainBtn.classList.toggle('active', draft.isHardwareGain); hwGainBtn.setAttribute('aria-pressed', String(draft.isHardwareGain)); }
             if (hwGainDot) hwGainDot.classList.toggle('active', draft.isHardwareGain);
             if (hwGainText) {
-                hwGainText.textContent = draft.isHardwareGain
-                    ? `SYSTEM VOLUME: ON (${String(s.hwVolumeBackend || 'READY').toUpperCase()})`
-                    : 'SYSTEM VOLUME: OFF';
+                updateMarqueeText(
+                    hwGainText,
+                    draft.isHardwareGain
+                        ? `SYSTEM VOLUME: ON (${String(s.hwVolumeBackend || 'READY').toUpperCase()})`
+                        : 'SYSTEM VOLUME: OFF'
+                );
             }
         };
         s.syncHwGainDraftUi = updateHwGainUi;
         s.syncHwGainCapabilitiesUi = () => {
             const pill = document.getElementById('settingsHardwareGainPill');
             if (!s.hwGainAvailable && pill) {
-                pill.textContent = s.hasExternalDac
-                    ? `DAC DETECTED (${s.detectedDacLabel}) • OS VOL ONLY`
-                    : 'UNAVAILABLE';
+                updateMarqueeText(
+                    pill,
+                    s.hasExternalDac
+                        ? `DAC DETECTED (${s.detectedDacLabel}) • OS VOL ONLY`
+                        : 'UNAVAILABLE'
+                );
             }
             updateHwGainUi();
         };

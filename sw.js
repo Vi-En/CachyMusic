@@ -2,7 +2,7 @@
 // Cache Storage is shared by every installation on an origin. Scope the
 // cache name so a subdirectory installation cannot evict another one.
 const CACHE_PREFIX = 'cachymusic-shell:' + encodeURIComponent(self.registration.scope) + ':';
-const CACHE_VERSION = '3.0.0-dev.7.2';
+const CACHE_VERSION = '3.0.0-dev.7.3';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
 const CACHE_RUNTIME_NAME = CACHE_PREFIX + 'runtime:' + CACHE_VERSION;
 const MAX_RUNTIME_ENTRIES = 128;
@@ -146,15 +146,20 @@ const OPTIONAL_RUNTIME_ASSETS = [
   './scripts/modules/visualizers/alloy.js',
   './scripts/modules/visualizers/amethyst.js',
   './scripts/modules/visualizers/bloom.js',
+  './scripts/modules/visualizers/blue-note-console.js',
   './scripts/modules/visualizers/canvas-geometry.js',
   './scripts/modules/visualizers/canvas-shadow.js',
+  './scripts/modules/visualizers/carbon-signal.js',
+  './scripts/modules/visualizers/copper-reel.js',
   './scripts/modules/visualizers/crimson.js',
   './scripts/modules/visualizers/graphite.js',
   './scripts/modules/visualizers/instrument-rim.js',
   './scripts/modules/visualizers/jade.js',
   './scripts/modules/visualizers/midnight.js',
   './scripts/modules/visualizers/orbit.js',
+  './scripts/modules/visualizers/orchid-matrix.js',
   './scripts/modules/visualizers/paper.js',
+  './scripts/modules/visualizers/paper-sonata.js',
   './scripts/modules/visualizers/particles.js',
   './scripts/modules/visualizers/record-dial.js',
   './scripts/modules/visualizers/registry.js',

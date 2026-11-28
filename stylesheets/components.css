@@ -96,8 +96,8 @@
 
     /* Center Panel: Vinyl Turntable Deck */
     .playerDeck { position: relative; isolation: isolate; padding: var(--space-sm) var(--space-md); justify-content: space-between; gap: var(--space-xs); overflow-y: auto; scroll-padding-bottom: max(16px, var(--safe-bottom)); }
-    .playerDeck > :not(.deckArtworkWrapper) { position: relative; z-index: 2; }
-    .turntableStage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; border-radius: var(--radius-md); background: radial-gradient(circle at center, var(--accent-surface), transparent 72%); container-type: size; }
+    .turntableStage { position: relative; isolation: isolate; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; border-radius: var(--radius-md); background: radial-gradient(circle at center, var(--accent-surface), transparent 72%); container-type: size; }
+    .turntableStage > :not(.deckArtworkWrapper) { position: relative; z-index: 2; }
     .deckArtworkWrapper { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
     .deckArtworkAmbient { display: none; }
     .deckArtworkBackdrop { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
@@ -147,10 +147,18 @@
     .formatBadge, .signalPathBadge, .signalQualityBadge { padding: 0.18rem 0.55rem; border-radius: var(--radius-full); font-size: var(--font-3xs); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: 0.05em; border: 1px solid var(--border-medium); background: var(--accent-surface); color: var(--text-accent); display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
     .signalQualityBadge.bitPerfect { border-color: var(--status-success); color: var(--status-success); }
     .signalQualityBadge.highPrecision { border-color: var(--border-bold); color: var(--text-accent); }
-    #trackName { font-size: var(--font-lg); font-weight: 800; letter-spacing: -0.018em; line-height: 1.15; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); }
-    #artistName { font-size: var(--font-sm); font-weight: 600; color: var(--text-secondary); max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .albumName { font-size: var(--font-xs); color: var(--text-muted); }
-    .isMarquee { text-overflow: clip; }
+    #trackName { font-size: var(--font-lg); font-weight: 800; letter-spacing: -0.018em; line-height: 1.15; display: block; width: 100%; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); }
+    #artistName { font-size: var(--font-sm); font-weight: 600; color: var(--text-secondary); display: block; width: 100%; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .albumName { font-size: var(--font-xs); color: var(--text-muted); display: block; width: 100%; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    :is(#settingsHwGainText, #settingsTabScanStatus, #settingsThemeCurrentLabel, #settingsTabCurrentThemeBadge, #miniTitle, #miniArtist, .settingsEnginePill, .settingsSleepBadge) {
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    .isMarquee { text-overflow: clip; overflow: hidden; white-space: nowrap; max-width: 100%; }
+    .marqueeContent { display: inline-block; white-space: nowrap; }
     .isMarquee .marqueeContent { display: inline-block; animation: marqueeScroll var(--marquee-duration, 10s) linear infinite; will-change: transform; }
     .playerEmptyPrompt { padding: var(--space-md); border-radius: var(--radius-md); background: var(--bg-surface-2); border: 1px dashed var(--border-medium); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); max-width: 30rem; }
     .playerEmptyTitle { font-weight: 800; font-size: var(--font-md); letter-spacing: -0.015em; line-height: 1.18; color: var(--text-primary); }

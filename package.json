@@ -1,6 +1,6 @@
 {
   "name": "cachymusic",
-  "version": "3.0.0-dev.7.2",
+  "version": "3.0.0-dev.7.3",
   "description": "Local-first music player with optional DSP and Soulseek",
   "main": "server/soulseek-service.js",
   "scripts": {

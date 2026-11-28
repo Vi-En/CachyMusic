@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VERSION="3.0.0~dev7.2"
+VERSION="3.0.0~dev7.3"
 ARCH="all"
 PKG_NAME="cachymusic_${VERSION}_${ARCH}"
 STAGING_DIR="$PROJECT_ROOT/dist/$PKG_NAME"
@@ -60,6 +60,15 @@ EOF
 if command -v dpkg-deb >/dev/null 2>&1; then
     dpkg-deb --build --root-owner-group "$STAGING_DIR" "$OUT_DEB"
     echo "[Packaging] Built Debian package: $OUT_DEB"
+elif command -v ar >/dev/null 2>&1; then
+    WORK_DEB_TMP="$(mktemp -d)"
+    trap 'rm -rf "$WORK_DEB_TMP"' EXIT
+    printf '2.0\n' > "$WORK_DEB_TMP/debian-binary"
+    tar -C "$STAGING_DIR/DEBIAN" --owner=0 --group=0 --numeric-owner -czf "$WORK_DEB_TMP/control.tar.gz" .
+    tar -C "$STAGING_DIR" --exclude='./DEBIAN' --owner=0 --group=0 --numeric-owner -czf "$WORK_DEB_TMP/data.tar.gz" .
+    rm -f "$OUT_DEB"
+    ar rcs "$OUT_DEB" "$WORK_DEB_TMP/debian-binary" "$WORK_DEB_TMP/control.tar.gz" "$WORK_DEB_TMP/data.tar.gz"
+    echo "[Packaging] Built Debian package via ar+tar fallback: $OUT_DEB"
 else
-    echo "[Packaging] Staged Debian root at $STAGING_DIR (install dpkg-deb to assemble .deb)"
+    echo "[Packaging] Staged Debian root at $STAGING_DIR (install dpkg-deb or ar to assemble .deb)"
 fi
