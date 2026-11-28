@@ -30,7 +30,4 @@ for name in ['php','scripts','stylesheets','resources','server']:
 if not a.core_only:shutil.copytree(a.node_modules,player/'node_modules',symlinks=True)
 shutil.copytree(a.runtime,resources/'cachymusic-runtime',symlinks=True,ignore=(lambda directory,names: {'node'} if Path(directory).resolve()==a.runtime.resolve() and 'node' in names else set()) if a.core_only else None);shutil.copytree(a.notices,resources/'third-party-notices');
 for f in [root/'README.md',root/'LICENSE',root/'THIRD-PARTY-NOTICES.md'] : shutil.copy2(f,a.output/f.name)
-for opt in ['INITIAL-TEST.md','BETA-ACCEPTANCE.md']:
- opt_path=root/opt
- if opt_path.is_file():shutil.copy2(opt_path,a.output/opt_path.name)
 print('Staged portable '+a.platform+' application at '+str(a.output));print('Run '+str(a.output/('electron'+suffix))+'; packaging is not a verified release until the clean-install tests pass.')

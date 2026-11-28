@@ -1,6 +1,5 @@
 # Dependencies & Runtimes
 node_modules/
-package-lock.json
 
 # User Data, Databases & Local Cache
 data/
@@ -12,11 +11,10 @@ downloads/
 *.pid
 *.port
 
-# Presentations & Office Documents
+# Office Documents & Local Scratch
 *.pptx
 *.ppt
 *.odp
-*.key
 *.docx
 *.xlsx
 
@@ -32,7 +30,7 @@ downloads/
 id_rsa*
 id_ed25519*
 
-# Ephemeral Developer & Audit Tools
+# Ephemeral Developer Artifacts
 tools/screenshots/
 tools/test_*.js
 tools/retest_*.js
@@ -40,10 +38,6 @@ tools/audit_*
 tools/capture_*
 tools/inspect_*
 tools/verify_*
-tools/find_overflow.js
-tools/generate_minimalist_suites.py
-tools/apply_contrast_overhaul.py
-tools/update_presentation.py
 
 # Server Runtime Caches
 server/soulseek-config.json

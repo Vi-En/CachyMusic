@@ -1,4 +1,4 @@
-# Privacy, security and licensing release gate (3.0.0-dev.7.0)
+# Privacy, security and licensing (3.0.0-dev.7.4)
 
 ## Local-first boundary
 
@@ -18,7 +18,7 @@ Soulseek updates partially bound decompression, packet strings, transfer size, n
 
 ## Licensing
 
-CachyMusic retains GPL-3.0-or-later (see LICENSE). As of dev.6.55 the previously bundled NMS Futura-derived font and its extracted notice are removed from the distributed kit. The upstream community project labels its font SIL OFL 1.1, but describes its relationship to a game-derived Futura typeface; the complete chain of rights for the exact binary was not established. See https://font.nmscd.com/ and https://nmscd.com/ . The application now uses locally installed geometric or system fonts. No remote font loading, font redistribution or claim that the earlier binary was unlawful. This deliberately removes a provenance dependency rather than relying on the embedded notice alone.
+CachyMusic retains GPL-3.0-or-later (see LICENSE). No font binary or third-party font redistribution is included in the distributed kit; the application uses locally installed geometric or system fonts. No remote font loading or telemetry is performed.
 
 Release gates: pin and verify exact dependency versions, record provenance/checksums/SBOM, review every native codec and runtime component (including FFmpeg configuration, Electron, AndroidX and slsk-client), include license notices and complete corresponding source wherever required, validate update signing, run offline and network-capture tests, audit all upload/sharing behavior and device permissions, and perform independent security review. Do not distribute copyrighted music or covers with the app. This is engineering/legal risk reduction, not legal advice or a lawsuit-proof guarantee.
 

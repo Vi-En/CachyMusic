@@ -29,7 +29,8 @@ with tempfile.TemporaryDirectory() as tmp:
         subprocess.run(cmd,check=True,timeout=30,capture_output=True)
         assert (out/'resources/app/player/bin/cachymusic-process.py').read_bytes()==(root/'bin/cachymusic-process.py').read_bytes()
         if platform=='windows':assert (out/'resources/cachymusic-runtime/python/python.exe').is_file()
-        assert (out/'INITIAL-TEST.md').read_bytes()==(root/'INITIAL-TEST.md').read_bytes()
+        assert (out/'README.md').read_bytes()==(root/'README.md').read_bytes()
+        assert (out/'THIRD-PARTY-NOTICES.md').read_bytes()==(root/'THIRD-PARTY-NOTICES.md').read_bytes()
         assert not (out/'DEVELOPMENT.md').exists()
         assert (out/'resources/app/player/scripts/dsp-worklet-processor.js').read_bytes()==(root/'scripts/dsp-worklet-processor.js').read_bytes()
         assert subprocess.run(cmd,timeout=30,capture_output=True).returncode!=0

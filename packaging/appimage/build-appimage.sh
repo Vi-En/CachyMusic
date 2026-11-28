@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VERSION="3.0.0-dev.7.3"
+VERSION="3.0.0-dev.7.4"
 ARCH="${ARCH:-x86_64}"
 APPDIR="$PROJECT_ROOT/dist/CachyMusic.AppDir"
 OUT_APPIMAGE="$PROJECT_ROOT/dist/CachyMusic-${VERSION}-${ARCH}.AppImage"
@@ -15,13 +15,10 @@ mkdir -p "$APPDIR/usr/share/cachymusic" "$APPDIR/usr/bin" \
 
 cp -r "$PROJECT_ROOT/index.html" "$PROJECT_ROOT/index.php" \
       "$PROJECT_ROOT/manifest.json" "$PROJECT_ROOT/sw.js" \
-      "$PROJECT_ROOT/schema.sql" "$PROJECT_ROOT/LICENSE" "$PROJECT_ROOT/THIRD-PARTY-NOTICES.md" "$PROJECT_ROOT/resources" \
+      "$PROJECT_ROOT/schema.sql" "$PROJECT_ROOT/README.md" "$PROJECT_ROOT/LICENSE" "$PROJECT_ROOT/THIRD-PARTY-NOTICES.md" "$PROJECT_ROOT/resources" \
       "$PROJECT_ROOT/scripts" "$PROJECT_ROOT/stylesheets" \
       "$PROJECT_ROOT/php" "$PROJECT_ROOT/bin" "$PROJECT_ROOT/server" "$PROJECT_ROOT/package.json" \
       "$APPDIR/usr/share/cachymusic/"
-for doc in INITIAL-TEST.md BETA-ACCEPTANCE.md; do
-    [ -f "$PROJECT_ROOT/$doc" ] && cp "$PROJECT_ROOT/$doc" "$APPDIR/usr/share/cachymusic/"
-done
 
 rm -rf "$APPDIR/usr/share/cachymusic/resources/audio"
 find "$APPDIR/usr/share/cachymusic" -type d -name __pycache__ -prune -exec rm -rf {} +

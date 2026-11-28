@@ -8,8 +8,8 @@ import re
 import stat
 import zipfile
 
-ROOT_FILES = frozenset('''.gitignore ANDROID-APK-BUILD.md BETA-ACCEPTANCE.md COMPATIBILITY.md INITIAL-TEST.md LICENSE README.md THIRD-PARTY-NOTICES.md index.html index.php install.sh manifest.json package.json schema.sql sw.js uninstall.sh'''.split())
-OPTIONAL_ROOT = frozenset({'package-lock.json'})
+ROOT_FILES = frozenset('''.gitignore LICENSE README.md THIRD-PARTY-NOTICES.md index.html index.php install.sh manifest.json package.json package-lock.json schema.sql sw.js uninstall.sh'''.split())
+OPTIONAL_ROOT = frozenset()
 SOURCE_DIRS = frozenset({'bin','docs','packaging','php','resources','scripts','server','stylesheets','tests','tools','.github'})
 LEGACY_REQUIRED = ROOT_FILES | {'scripts/dsp-worklet-processor.js','tools/release-verify.py','tests/run-all.sh','bin/desktop-launcher.py','tools/packager/android/app/build.gradle','tools/packager/android/app/src/main/AndroidManifest.xml'}
 REQUIRED = LEGACY_REQUIRED | {'php/scan_worker.php','php/scan_jobs.php','php/api/scan_jobs.php','scripts/modules/server-scan.js','php/scan_resume.php','php/cover_cache_budget.php','php/media_access.php','php/metadata_edit.php','php/cover_jobs.php','php/cover_extract.php','php/recording_lock.php','bin/cachymusic-process.py','php/folder_picker.php','scripts/modules/library-transition.js','php/recording_leases.php','php/api/recording_lease.php','scripts/modules/recording-lease.js','php/profile_budget.php','tests/profile-admission.py','php/cover_index_portable.php','tests/portable-lookup.py'}

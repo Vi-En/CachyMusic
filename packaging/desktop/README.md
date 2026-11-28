@@ -31,10 +31,10 @@ Use `--platform windows` with corresponding Windows inputs. The portable output 
 
 Use `--core-only` and omit `--node-modules` to stage local playback without the optional Soulseek runtime. The supplied PHP, FFmpeg/FFprobe and Electron inputs still require provenance review, notices, actual builds and target-system acceptance. An optional peer-service startup or exit failure must not stop the core playback shell. The full edition still needs an audited, locked dependency tree; staging does not certify that tree.
 
-### Required manifest format (dev.6.55)
+### Required manifest format
 
 `DEPENDENCIES.json` is a list of reviewed component entries containing `name`, `version`, `license`, public HTTPS `source`, `tree`, `notices` and a `files` object mapping every relative input path to its SHA-256 digest. Use trees `electron`, `runtime`, and `node-modules` (or `runtime-core` instead of `runtime` for core-only). Every runtime file must be covered exactly once, notices must be referenced under `LICENSES/`, and symlinks must be resolved in the supplied reviewed input tree. Unreviewed files, stale digests and a pre-existing Electron application payload are rejected before copying. See `THIRD-PARTY-NOTICES.md`. This is integrity validation, not a certification of a supplied license or publisher.
 
-### Managed Windows external tools and lookup (dev.6.74)
+### Managed Windows external tools and lookup
 
 For full Windows metadata/artwork/tag support, provide an audited Python runtime at `runtime/python/python.exe` with its required standard library, DLLs, notices and every runtime file covered by the existing input manifest. The shell stages its own supervisor source and probes the supplied interpreter before enabling external PHP tools. Without a successful probe, the portable shell refuses external PHP tool execution; basic playback remains available. It never silently uses system Python or downloads a runtime. PHP sodium support enables the optional encrypted content-bound lookup; missing sodium retains the authoritative full-read route. The staging test uses inert inputs, not actual Windows binaries.

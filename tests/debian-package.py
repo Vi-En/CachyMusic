@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory(prefix='cachy-deb-') as t:
  subprocess.run(['bash','packaging/debian/build-deb.sh'],cwd=tree,check=True,timeout=60)
  deb=next((tree/'dist').glob('*.deb'));assert subprocess.check_output(['dpkg-deb','-f',str(deb),'Version'],text=True).strip()==json.loads((root/'package.json').read_text())['version'].replace('-dev.','~dev')
  extract=t/'extract';subprocess.run(['dpkg-deb','-x',str(deb),str(extract)],check=True,timeout=60);app=extract/'usr/share/cachymusic'
- for rel in ('index.html','index.php','scripts/dsp-worklet-processor.js','scripts/modules/pcm-range.js','package.json','INITIAL-TEST.md','BETA-ACCEPTANCE.md','LICENSE','THIRD-PARTY-NOTICES.md'):
+ for rel in ('index.html','index.php','scripts/dsp-worklet-processor.js','scripts/modules/pcm-range.js','package.json','README.md','LICENSE','THIRD-PARTY-NOTICES.md'):
   assert (app/rel).read_bytes()==(root/rel).read_bytes(),rel
  assert not list(app.rglob('__pycache__')) and not (app/'resources/audio').exists()
  with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
