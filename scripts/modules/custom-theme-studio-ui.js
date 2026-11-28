@@ -54,7 +54,12 @@ import {
     saveCustomTheme,
     saveThemeAsset
 } from './custom-theme-store.js';
-import { applyTheme, renderCustomThemeCardsInModal, updateActiveThemeIndicators } from './themes.js';
+
+let hostCallbacks = {
+    applyTheme: null,
+    renderCustomThemeCardsInModal: null,
+    updateActiveThemeIndicators: null
+};
 
 const TABS = [
     { id: 'colors', label: 'Colors & Planes' },
@@ -851,7 +856,7 @@ function renderLibraryTab(body) {
             studio.draft = structuredClone(saved);
             syncUiBgModes(studio.draft);
             studio.savedThemes = await listCustomThemes();
-            await applyTheme(saved.id);
+            await hostCallbacks.applyTheme?.(saved.id);
             renderStudioShell();
             showToast(`Imported custom theme "${saved.name}".`);
         } catch (err) {
@@ -907,7 +912,7 @@ function renderLibraryTab(body) {
                             const copy = validateAndNormalizeCustomTheme({ ...structuredClone(item), id: generateCustomThemeId(), name: `${item.name} Copy` });
                             await saveCustomTheme(copy);
                             studio.savedThemes = await listCustomThemes();
-                            await renderCustomThemeCardsInModal();
+                            await hostCallbacks.renderCustomThemeCardsInModal?.();
                             renderActiveTabBody();
                             showToast(`Duplicated "${item.name}".`);
                         }
@@ -918,8 +923,8 @@ function renderLibraryTab(body) {
                             const wasActive = store.state.activeTheme === item.id;
                             await deleteCustomTheme(item.id);
                             studio.savedThemes = await listCustomThemes();
-                            if (wasActive) await applyTheme('default');
-                            await renderCustomThemeCardsInModal();
+                            if (wasActive) await hostCallbacks.applyTheme?.('default');
+                            await hostCallbacks.renderCustomThemeCardsInModal?.();
                             renderActiveTabBody();
                             showToast(`Deleted "${item.name}".`);
                         }
@@ -1001,8 +1006,8 @@ function renderStudioShell() {
                     studio.savedThemes = await listCustomThemes();
                     studio.originalSnapshot = null;
                     await applyCustomTheme(saved, { persist: true });
-                    updateActiveThemeIndicators(saved.id, `${saved.name} (Custom)`);
-                    await renderCustomThemeCardsInModal();
+                    hostCallbacks.updateActiveThemeIndicators?.(saved.id, `${saved.name} (Custom)`);
+                    await hostCallbacks.renderCustomThemeCardsInModal?.();
                     showToast(`Saved custom theme "${saved.name}".`);
                     await closeCustomThemeStudio({ discardPreview: false });
                 }
@@ -1072,7 +1077,14 @@ function renderStudioShell() {
     renderActiveTabBody();
 }
 
-export async function openCustomThemeStudio(themeIdOrBase = null) {
+export async function openCustomThemeStudio(themeIdOrBase = null, callbacks = null) {
+    if (callbacks && typeof callbacks === 'object') {
+        hostCallbacks = {
+            applyTheme: callbacks.applyTheme ?? hostCallbacks.applyTheme,
+            renderCustomThemeCardsInModal: callbacks.renderCustomThemeCardsInModal ?? hostCallbacks.renderCustomThemeCardsInModal,
+            updateActiveThemeIndicators: callbacks.updateActiveThemeIndicators ?? hostCallbacks.updateActiveThemeIndicators
+        };
+    }
     const { backdrop } = modalEls();
     if (!backdrop) return;
     if (!studio.isOpen && typeof document !== 'undefined') {
@@ -1127,7 +1139,7 @@ export async function closeCustomThemeStudio({ discardPreview = true } = {}) {
         if (studio.originalSnapshot.custom) {
             await applyCustomTheme(studio.originalSnapshot.custom, { persist: true });
         } else {
-            await applyTheme(studio.originalSnapshot.activeTheme || 'default');
+            await hostCallbacks.applyTheme?.(studio.originalSnapshot.activeTheme || 'default');
         }
     }
     studio.originalSnapshot = null;

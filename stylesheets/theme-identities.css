@@ -24,6 +24,16 @@
     .themeCardPreview[data-theme="minimalist-warm"] .previewDot { border-radius: 9px; }
     .themeCardPreview[data-theme="minimalist-obsidian"] { border-radius: 0; border: 1px solid var(--text-primary); background: #000; }
     .themeCardPreview[data-theme="minimalist-obsidian"] .previewDot { border-radius: 0; width: 2px; }
+    .themeCardPreview[data-theme="carbon-signal"] { border-radius: 6px; border: 1px solid #71858D; }
+    .themeCardPreview[data-theme="carbon-signal"] .previewDot { border-radius: 2px; }
+    .themeCardPreview[data-theme="paper-sonata"] { border-radius: 4px; border: 1px solid #827366; border-bottom: 3px solid #8B2F3C; }
+    .themeCardPreview[data-theme="paper-sonata"] .previewDot { border-radius: 2px; }
+    .themeCardPreview[data-theme="blue-note-console"] { border-radius: 10px; border: 1px solid #758EAA; }
+    .themeCardPreview[data-theme="blue-note-console"] .previewDot { border-radius: 3px; }
+    .themeCardPreview[data-theme="copper-reel"] { border-radius: 14px; border: 1px solid #9D7D65; }
+    .themeCardPreview[data-theme="copper-reel"] .previewDot { border-radius: 50%; }
+    .themeCardPreview[data-theme="orchid-matrix"] { border-radius: 16px; border: 1px solid #8C78A5; border-inline-start: 4px solid #D0A2FF; }
+    .themeCardPreview[data-theme="orchid-matrix"] .previewDot { border-radius: 4px; }
 
     /* Shared Semantic Plane & Ergonomic Identity Tokens */
     :root {
@@ -527,6 +537,52 @@
         --album-frame: 0 0 0 1px var(--border-surface); --album-radius: 0;
     }
     :root[data-theme="minimalist-obsidian"] .playPauseBtn { background: var(--text-primary); color: #000; border-color: transparent; }
+
+    /* Signature Collection: 5 Complete Architectural Theme Identities */
+    :root[data-theme="carbon-signal"] {
+        --identity-radius: 8px; --chrome-radius: 6px; --group-radius: 8px; --nav-radius: 4px;
+        --control-radius: 6px; --play-radius: 50%; --player-align: center; --player-text-align: center;
+        --player-title-weight: 600; --album-frame: 0 0 0 1px #71858D; --album-radius: 4px;
+        --dur-hover: 140ms; --dur-press: 110ms; --dur-release: 200ms; --ease-spring-subtle: cubic-bezier(0.2, 0, 0, 1);
+    }
+    :root[data-theme="carbon-signal"] .turntableStage { border-block-end: 1px solid var(--border-divider); }
+
+    :root[data-theme="paper-sonata"] {
+        --identity-radius: 4px; --chrome-radius: 4px; --group-radius: 6px; --group-inset: 16px; --nav-radius: 3px;
+        --control-radius: 4px; --play-radius: 50%; --player-align: flex-start; --player-text-align: left;
+        --player-title-font: Georgia, 'Times New Roman', serif; --player-title-weight: 600;
+        --album-frame: 0 0 0 1px #827366, 0 8px 22px rgba(33, 29, 25, 0.08); --album-radius: 2px;
+        --dur-hover: 160ms; --dur-release: 220ms; --ease-spring-subtle: cubic-bezier(0.2, 0, 0, 1);
+    }
+    :root[data-theme="paper-sonata"] :is(.settingsSectionHeader, .slskTransfersHeader, .panelHeader) { font-family: Georgia, 'Times New Roman', serif; }
+    :root[data-theme="paper-sonata"] .turntableStage { background: transparent; border-block-end: 1px solid var(--border-divider); }
+
+    :root[data-theme="blue-note-console"] {
+        --identity-radius: 12px; --chrome-radius: 10px; --group-radius: 12px; --group-inset: 14px; --nav-radius: 8px;
+        --control-radius: 10px; --play-radius: 12px; --player-align: flex-start; --player-text-align: left;
+        --album-frame: 0 0 0 1px #758EAA, 0 6px 20px rgba(4, 17, 28, 0.45); --album-radius: 8px;
+        --dur-hover: 150ms; --dur-release: 240ms;
+    }
+    :root[data-theme="blue-note-console"] .turntableStage { background: var(--quiet-fill); border: 1px solid var(--border-divider); }
+    :root[data-theme="blue-note-console"] .playerDeck .mediaCon { background: var(--bg-surface-1); border: 1px solid var(--border-divider); border-radius: 12px; padding: 6px 10px; }
+
+    :root[data-theme="copper-reel"] {
+        --identity-radius: 14px; --chrome-radius: 10px; --group-radius: 14px; --group-inset: 16px; --nav-radius: 10px;
+        --control-radius: 10px; --play-radius: 50%; --player-align: center; --player-text-align: center;
+        --player-title-font: Georgia, system-ui, sans-serif; --player-title-weight: 600;
+        --album-frame: 0 0 0 1px #9D7D65, 0 10px 26px rgba(0, 0, 0, 0.35); --album-radius: 10px;
+        --dur-hover: 160ms; --dur-release: 220ms; --ease-spring-subtle: cubic-bezier(0.2, 0, 0, 1);
+    }
+    :root[data-theme="copper-reel"] .turntableStage { background: radial-gradient(circle at center, rgba(232, 160, 107, 0.08), transparent 72%); border: 1px solid var(--border-divider); }
+
+    :root[data-theme="orchid-matrix"] {
+        --identity-radius: 18px; --chrome-radius: 12px; --group-radius: 18px; --group-inset: 16px; --nav-radius: 10px;
+        --control-radius: 10px; --play-radius: 16px; --player-align: flex-start; --player-text-align: left;
+        --player-title-weight: 650; --album-frame: 0 0 0 1px #8C78A5, 0 10px 28px rgba(16, 13, 22, 0.45); --album-radius: 14px;
+        --dur-hover: 150ms; --dur-release: 200ms;
+    }
+    :root[data-theme="orchid-matrix"] .turntableStage { background: var(--quiet-fill); border-inline-start: 3px solid var(--accent-color); }
+    :root[data-theme="orchid-matrix"] .settingsSectionPanel { border-radius: 18px; }
 
     :root[data-theme][data-presentation="artwork"] .vinylLabel img {
         border-radius: var(--album-radius);

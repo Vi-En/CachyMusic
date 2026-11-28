@@ -93,7 +93,8 @@ import android.graphics.Bitmap;
 public class ThemeArtTest {
     public static void main(String[] args) {
         String[] ids = {
-            "default", "nms", "solar-eclipse", "euclid-horizon",
+            "default", "carbon-signal", "paper-sonata", "blue-note-console",
+            "copper-reel", "orchid-matrix", "nms", "solar-eclipse", "euclid-horizon",
             "alien-paradise", "abyssal-void", "dissonance", "sentinel",
             "minimalist-light", "minimalist-dark", "minimalist-warm", "minimalist-obsidian"
         };
@@ -144,10 +145,10 @@ with tempfile.TemporaryDirectory() as tmp:
 
     subprocess.run(["javac", "-d", str(t), *map(str, t.rglob("*.java"))], check=True)
     out = subprocess.check_output(["java", "-cp", str(t), "ThemeArtTest"], text=True).strip().splitlines()
-    assert len(out) == 12
+    assert len(out) == 17
     for row in out:
         tid, style, light = row.split("|")
         assert js_profiles[tid]["style"] == style, (tid, js_profiles[tid]["style"], style)
         assert str(js_profiles[tid]["light"]).lower() == light, (tid, js_profiles[tid]["light"], light)
 
-print("PASS NotificationThemeArt compiles cleanly, renders all 12 themes, and matches JS theme-catalog styles")
+print("PASS NotificationThemeArt compiles cleanly, renders all 17 themes, and matches JS theme-catalog styles")

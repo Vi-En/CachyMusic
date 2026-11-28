@@ -12,6 +12,7 @@ assert.equal(await recoverPendingAudio(db,remove,2),1);assert.deepEqual(removed,
 assert.equal(await recoverPendingAudio(db,remove,16),1);assert.deepEqual(removed,[key(1),key(4),key(4),key(5)]);
 assert(records.has(pendingAudioRecord(key(2)).key));assert(records.has(pendingAudioRecord(key(3)).key));assert(records.has(pendingAudioRecord(key(4)).key));assert(records.has('foreign'));
 assert.throws(()=>pendingAudioRecord('../not-owned'));
+Object.defineProperty(globalThis,'navigator',{configurable:true,value:{}});
 assert.equal(await withOfflineWriteLock(locked=>locked),false);
 let tail=Promise.resolve(),active=0,max=0;
 Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{request(name,opts,fn){assert.equal(name,'cachymusic-offline-library-v1');assert.equal(opts.mode,'exclusive');const next=tail.then(fn);tail=next.catch(()=>{});return next;}}}});

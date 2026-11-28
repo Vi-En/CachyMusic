@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-VERSION="3.0.0-dev.7.1"
+VERSION="3.0.0-dev.7.2"
 ARCH="${ARCH:-x86_64}"
 APPDIR="$PROJECT_ROOT/dist/CachyMusic.AppDir"
 OUT_APPIMAGE="$PROJECT_ROOT/dist/CachyMusic-${VERSION}-${ARCH}.AppImage"

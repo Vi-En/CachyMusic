@@ -14,7 +14,7 @@ with tempfile.TemporaryDirectory() as tmp:
     for codec,fast in [('aac',False),('alac',True)]:
         src=d/('source-'+codec+'.m4a');browser=d/('browser-'+codec+'.m4a');desktop=d/('desktop-'+codec+'.m4a')
         run('ffmpeg','-v','error','-f','lavfi','-i','anoisesrc=duration=35:sample_rate=48000','-c:a',codec,'-metadata','album=Keep Album',*(['-movflags','+faststart'] if fast else []),str(src));original=src.read_bytes();desktop.write_bytes(original)
-        try:run('node','--experimental-default-type=module','tests/mp4-tags.mjs',str(src),str(browser),str(pic))
+        try:run('node','tests/mp4-tags.mjs',str(src),str(browser),str(pic))
         except subprocess.CalledProcessError as e:print(e.output.decode());raise
         code='require "php/platform.php";require "php/flac_metadata.php";require "php/packet_metadata.php";exit(cm_packet_rewrite($argv[1],["title"=>"新曲","artist"=>"Test Artist","lyrics"=>"[00:01.00] A line","track_num"=>"3/12"],file_get_contents($argv[2]),["mime"=>"image/png",192,192])?0:1);'
         run('php','-r',code,str(desktop),str(pic))

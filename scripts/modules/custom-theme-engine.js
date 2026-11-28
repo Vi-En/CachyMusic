@@ -422,6 +422,14 @@ export async function applyCustomTheme(rawTheme, { persist = true, previewOnly =
         document.documentElement.dataset.theme = 'custom';
         document.body?.removeAttribute('data-theme');
     }
+    store.setState({
+        activeCustomThemeMeta: {
+            id: theme.id,
+            name: theme.name,
+            viewTransition: theme.motion?.viewTransition || 'none',
+            motionProfile: theme.motion?.profile || 'standard'
+        }
+    });
 
     if (persist && !previewOnly) {
         saveCustomThemeSnapshot(theme);
@@ -447,6 +455,7 @@ export async function applyCustomTheme(rawTheme, { persist = true, previewOnly =
  */
 export function clearCustomThemeOverrides({ clearStorage = true } = {}) {
     activeCustomTheme = null;
+    store.setState({ activeCustomThemeMeta: null });
     if (typeof document !== 'undefined') {
         const styleEl = document.getElementById('cachyCustomThemeVars');
         if (styleEl) styleEl.textContent = '';
@@ -497,7 +506,8 @@ export function runViewTransition(updateDomFn) {
         return;
     }
     const mode = activeCustomTheme?.motion?.viewTransition || 'none';
-    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    const docMotion = typeof document !== 'undefined' ? document.documentElement?.dataset?.reducedMotion : undefined;
+    const reduced = docMotion === 'true' || (docMotion !== 'false' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
     if (mode === 'none' || reduced || activeCustomTheme?.motion?.profile === 'reduced') {
         updateDomFn();
         return;

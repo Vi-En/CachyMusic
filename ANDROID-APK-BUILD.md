@@ -1,10 +1,10 @@
-# CachyMusic 3.0.0-dev.7.0 — Initial-test Android APK build kit
+# CachyMusic 3.0.0-dev.7.2 — Android APK build kit
 
-This archive contains **the full updated CachyMusic source** with the audited Soulseek results screen, storage ordering fixes, deferred network interface, responsive settings, Custom Theme Studio, 3-plane WCAG 2.2 contrast overhaul, the Android native host, its Soulseek client, and an APK build workflow. **It is not an already compiled APK.** The packaging environment that prepared this kit had no Android SDK/Gradle tools or network access to install them. No build-success or installation claim is made.
+This archive contains **the full updated CachyMusic source** with 17 built-in themes (12 classic/expressive/minimalist + 5 Signature compositions), Custom Theme Studio, 3-plane WCAG 2.2 contrast overhaul, responsive short-landscape & accessibility repairs, tiered Service Worker & PWA install flows, the Android native host, its Soulseek client, and an APK build workflow. **Wait for Gradle verification / `app-debug.apk` creation before sideloading.** Debug APKs use development signing keys and remain pre-release test builds.
 
 ## Easiest: build online via GitHub Actions
 
-1. Extract the archive. Put the **contents of `CachyMusic-3.0.0-dev.7.0/`** (including `.github/`) at the root of a private GitHub repository. Preserve the directory structure.
+1. Extract the archive. Put the **contents of `CachyMusic-3.0.0-dev.7.2/`** (including `.github/`) at the root of a private GitHub repository. Preserve the directory structure.
 2. Open the repository's **Actions** tab, select **Build installable Android debug APK**, then **Run workflow** on the repository's default branch.
 3. When the workflow completes successfully, open that run's **Artifacts**, download `CachyMusic-debug-apk-<commit SHA>`, and unzip it.
 4. Install `app-debug.apk` on the Android device. For USB debugging/ADB: `adb install -r app-debug.apk`.
@@ -36,8 +36,8 @@ Alternatively, open `tools/packager/android/` in Android Studio and run the `ass
 ## Project identity
 
 - Application ID: `org.cachymusic.app`
-- Version name: `3.0.0-dev.7.0`
-- Version code: `100`
+- Version name: `3.0.0-dev.7.2`
+- Version code: `102`
 - Source input: latest Android build-kit source plus audited changes in this revision
 
 ## Existing docs

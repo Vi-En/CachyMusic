@@ -1,6 +1,6 @@
 # CachyMusic
 
-**Source revision: 3.0.0-dev.7.1 — initial user-test release.** Runnable source/build kit, not a device-certified public release.
+**Source revision: 3.0.0-dev.7.2 — pre-release qualification build.** Runnable source/build kit and verified browser/AVD test build; physical-handset, iOS, Windows/macOS interactive, and assistive-technology release gates remain manual.
 
 A private, local-first, cross-platform music player with integrated audio processing, local library management, online metadata lookup and optional Soulseek. Shared PWA interface; Android and desktop packaging provide native functionality beyond browser capabilities.
 
@@ -15,7 +15,13 @@ A private, local-first, cross-platform music player with integrated audio proces
 
 The primary mobile reference is the Infinix Note 30 5G; responsive layout is based on logical CSS viewport dimensions, not physical pixels. Experimental shared-clock PCM/FLAC transitions are available; universal gapless playback, bit-perfect hardware output and complete security certification are not claimed.
 
-## What's new in dev.6
+## What's new in dev.7.2
+
+- Full responsive & accessibility pass: independent full-deck backdrop layer separated from the platter/lyrics stage, repaired short-landscape geometry and 44px controls, landmark navigation, WAI-ARIA tablist keyboard navigation, live status announcements, lyrics auto-scroll pause/resume, raised typography scale floor, and measured bidirectional marquee with Pause + Full-Text dialog.
+- Five Signature aesthetic systems (`carbon-signal`, `paper-sonata`, `blue-note-console`, `copper-reel`, `orchid-matrix`) plus optional OS appearance follow mode (`Paper Sonata` / `Carbon Signal`), preserving all 12 prior themes, custom themes, and Android `NotificationThemeArt` parity across all 17 built-in themes.
+- Acyclic startup architecture (<350 KiB gzipped critical closure) with lazy-loaded Metadata Editor and Custom Theme Engine/Studio, tiered Service Worker caching (critical shell vs. bounded lazy runtime cache), user-approved non-disruptive `#pwaUpdateBanner`, single-source PWA install state machine with accessible help/file-launch/preflight dialogs, dedicated maskable icons, conservative App Badge integration, and versioned `?v=` immutable asset headers.
+
+## Previous dev.6 changes
 
 - Experimental Android native playback for indexed local audio, off by default. The service can continue the Play Queue, ordered playback and shuffle while the interface is closed. Background ordered playback and shuffle can each use up to 4,096 indexed tracks. The Play Queue can hold up to 512 indexed entries for background playback. Catalog size limits apply. During shuffle, Previous follows playback history. Android 14 emulator checks covered all three expanded playback modes after the activity closed. Playback on the physical reference phone remains pending.
 - Android Soulseek validates public numeric IPv4 peer endpoints, rejects private and special-use ranges, and bounds direct file sockets; unavailable Android sharing is labeled explicitly. Local host tests cover the address policy and connection lifecycle.

@@ -1,19 +1,47 @@
 // CachyMusic theme selection, Custom Theme coordination, and browser colors.
-import { escapeHtml, popModalState, pushModalState, safeStorage } from './utils.js';
+import { popModalState, pushModalState, safeStorage } from './utils.js';
 import { store } from './state.js';
-import { THEMES, normalizeThemeId } from './theme-catalog.js';
+import { SYSTEM_THEME_PAIR, THEMES, normalizeThemeId } from './theme-catalog.js';
 import { themeModal, themeQuickBtns, themeSelectCards, topThemeLabel } from './ui-elements.js';
-import {
-    applyCustomTheme,
-    clearCustomThemeOverrides,
-    getActiveCustomTheme
-} from './custom-theme-engine.js';
-import { getCustomTheme, listCustomThemes } from './custom-theme-store.js';
+import { isMarqueePaused, setMarqueePaused } from './player-marquee.js';
+
+let enginePromise = null;
+let storePromise = null;
+
+async function loadCustomThemeEngine() {
+    if (!enginePromise) {
+        enginePromise = import('./custom-theme-engine.js').catch(err => {
+            enginePromise = null;
+            console.warn('[Themes] Failed to load custom theme engine:', err);
+            return null;
+        });
+    }
+    return enginePromise;
+}
+
+async function loadCustomThemeStore() {
+    if (!storePromise) {
+        storePromise = import('./custom-theme-store.js').catch(err => {
+            storePromise = null;
+            console.warn('[Themes] Failed to load custom theme store:', err);
+            return null;
+        });
+    }
+    return storePromise;
+}
 
 let themeTrigger;
 let closingThemeHistory = false;
 let queuedThemeOpen = false;
 let studioModulePromise = null;
+let systemSchemeQuery = null;
+let systemSchemeListener = null;
+let motionQuery = null;
+let motionListener = null;
+let controlsBound = false;
+
+const THEME_MODE_KEY = 'cachymusic_theme_mode';
+const MOTION_MODE_KEY = 'cachymusic_reduced_motion';
 
 function syncBrowserThemeColor(themeName, customChromeHex = null) {
     if (typeof document === 'undefined') return;
@@ -37,11 +65,22 @@ function updateActiveThemeIndicators(activeId, label) {
     }
 }
 
-async function applyTheme(themeName) {
+async function applyTheme(themeName, options = {}) {
+    const source = options === true
+        ? 'explicit'
+        : (options === false ? 'boot' : (options?.source || 'explicit'));
+
+    if (source === 'explicit') {
+        try { safeStorage.setItem(THEME_MODE_KEY, 'explicit'); } catch (_) {}
+        const sysToggle = typeof document !== 'undefined' ? document.getElementById('themeSystemModeToggle') : null;
+        if (sysToggle) sysToggle.checked = false;
+    }
+
     if (typeof themeName === 'string' && themeName.startsWith('custom:')) {
-        const saved = await getCustomTheme(themeName);
-        if (saved) {
-            const applied = await applyCustomTheme(saved, { persist: true });
+        const [storeMod, engineMod] = await Promise.all([loadCustomThemeStore(), loadCustomThemeEngine()]);
+        const saved = await storeMod?.getCustomTheme?.(themeName);
+        if (saved && engineMod?.applyCustomTheme) {
+            const applied = await engineMod.applyCustomTheme(saved, { persist: source !== 'system' });
             updateActiveThemeIndicators(applied.id, `${applied.name} (Custom)`);
             store.emit('ui:sync-signal-path');
             store.emit('ui:sync-dac-status');
@@ -53,16 +92,26 @@ async function applyTheme(themeName) {
         themeName = 'default';
     }
 
-    clearCustomThemeOverrides({ clearStorage: true });
+    const hadCustom = typeof document !== 'undefined' && (
+        document.documentElement.dataset.theme === 'custom' ||
+        Boolean(store.state.activeCustomThemeMeta) ||
+        Boolean(safeStorage.getItem('cachymusic_custom_theme_snapshot'))
+    );
+    if (hadCustom) {
+        const engineMod = await loadCustomThemeEngine();
+        engineMod?.clearCustomThemeOverrides?.({ clearStorage: source !== 'system' });
+    }
     themeName = normalizeThemeId(themeName);
     document.documentElement.dataset.theme = themeName;
     document.body?.removeAttribute('data-theme');
     syncBrowserThemeColor(themeName);
     store.setState({ activeTheme: themeName }, ['theme:change']);
-    try {
-        safeStorage.setItem('cachymusic_active_theme', themeName);
-    } catch (_) {}
-    try { window.AndroidBridge?.saveTheme?.(themeName); } catch (_) {}
+    if (source !== 'system') {
+        try {
+            safeStorage.setItem('cachymusic_active_theme', themeName);
+        } catch (_) {}
+        try { window.AndroidBridge?.saveTheme?.(themeName); } catch (_) {}
+    }
 
     syncThemeUrl(themeName);
     updateActiveThemeIndicators(themeName, THEMES[themeName].name);
@@ -88,11 +137,15 @@ export async function renderCustomThemeCardsInModal() {
     if (typeof document === 'undefined') return;
     const grid = document.getElementById('customThemeModalGrid');
     if (!grid) return;
-    const themes = await listCustomThemes();
-    const activeId = getActiveCustomTheme()?.id || store.state.activeTheme;
+    const storeMod = await loadCustomThemeStore();
+    const themes = (await storeMod?.listCustomThemes?.()) || [];
+    const activeId = store.state.activeCustomThemeMeta?.id || store.state.activeTheme;
 
     if (themes.length === 0) {
-        grid.innerHTML = '<p class="themeCardDesc">No custom themes saved yet. Click "Create / Customize Theme" to design one.</p>';
+        const empty = document.createElement('p');
+        empty.className = 'themeCardDesc';
+        empty.textContent = 'No custom themes saved yet. Click "Create / Customize Theme" to design one.';
+        grid.replaceChildren(empty);
         return;
     }
 
@@ -110,18 +163,42 @@ export async function renderCustomThemeCardsInModal() {
         selectBtn.style.cssText = 'border:0;background:transparent;padding:0;flex:1;min-width:0;';
         selectBtn.dataset.theme = ct.id;
         selectBtn.setAttribute('aria-pressed', String(isActive));
-        selectBtn.innerHTML =
-            `<span class="themeCardPreview" style="background:${escapeHtml(ct.colors.bgCanvas)};border-color:${escapeHtml(ct.colors.borderControl)};" aria-hidden="true">` +
-            `<span class="previewDot" style="background:${escapeHtml(ct.colors.accent)};"></span>` +
-            `<span class="previewDot" style="background:${escapeHtml(ct.colors.textPrimary)};"></span>` +
-            `<span class="previewDot" style="background:${escapeHtml(ct.colors.surface2)};"></span>` +
-            `</span>` +
-            `<span class="themeCardContent">` +
-            `<span class="themeCardHeading"><span class="themeCardTitle">${escapeHtml(ct.name)}</span><span class="themeActivePill">ACTIVE</span></span>` +
-            `<span class="themeCardDesc">${escapeHtml(ct.mode === 'light' ? 'Light' : 'Dark')} · ${escapeHtml(ct.backgrounds.canvas.mode)} · ${escapeHtml(ct.notificationStyle)}</span>` +
-            `</span>`;
+
+        const preview = document.createElement('span');
+        preview.className = 'themeCardPreview';
+        preview.setAttribute('aria-hidden', 'true');
+        preview.style.background = String(ct.colors.bgCanvas || '');
+        preview.style.borderColor = String(ct.colors.borderControl || '');
+        for (const swatchColor of [ct.colors.accent, ct.colors.textPrimary, ct.colors.surface2]) {
+            const dot = document.createElement('span');
+            dot.className = 'previewDot';
+            dot.style.background = String(swatchColor || '');
+            preview.appendChild(dot);
+        }
+
+        const content = document.createElement('span');
+        content.className = 'themeCardContent';
+        const heading = document.createElement('span');
+        heading.className = 'themeCardHeading';
+        const titleEl = document.createElement('span');
+        titleEl.className = 'themeCardTitle';
+        titleEl.textContent = String(ct.name || 'Custom');
+        const activePill = document.createElement('span');
+        activePill.className = 'themeActivePill';
+        activePill.textContent = 'ACTIVE';
+        heading.append(titleEl, activePill);
+
+        const descEl = document.createElement('span');
+        descEl.className = 'themeCardDesc';
+        const modeLabel = ct.mode === 'light' ? 'Light' : 'Dark';
+        const bgMode = ct.backgrounds?.canvas?.mode || 'solid';
+        const notifStyle = ct.notificationStyle || 'segmented';
+        descEl.textContent = `${modeLabel} · ${bgMode} · ${notifStyle}`;
+        content.append(heading, descEl);
+
+        selectBtn.append(preview, content);
         selectBtn.addEventListener('click', () => {
-            void applyTheme(ct.id);
+            void applyTheme(ct.id, { source: 'explicit' });
             closeThemeModal();
         });
 
@@ -151,7 +228,125 @@ export async function openThemeStudio(themeIdOrBase = null) {
         });
     }
     const mod = await studioModulePromise;
-    await mod?.openCustomThemeStudio?.(themeIdOrBase);
+    await mod?.openCustomThemeStudio?.(themeIdOrBase, {
+        applyTheme,
+        renderCustomThemeCardsInModal,
+        updateActiveThemeIndicators
+    });
+}
+
+export function resolveSystemThemeId() {
+    const prefersLight = typeof window !== 'undefined'
+        && Boolean(window.matchMedia?.('(prefers-color-scheme: light)')?.matches);
+    return prefersLight ? SYSTEM_THEME_PAIR.light : SYSTEM_THEME_PAIR.dark;
+}
+
+export function isSystemThemeModeEnabled() {
+    return safeStorage.getItem(THEME_MODE_KEY) === 'system';
+}
+
+export async function setSystemThemeMode(enabled) {
+    const useSystem = Boolean(enabled);
+    try { safeStorage.setItem(THEME_MODE_KEY, useSystem ? 'system' : 'explicit'); } catch (_) {}
+    const toggle = typeof document !== 'undefined' ? document.getElementById('themeSystemModeToggle') : null;
+    if (toggle) toggle.checked = useSystem;
+    if (useSystem) {
+        return applyTheme(resolveSystemThemeId(), { source: 'system' });
+    }
+    const saved = safeStorage.getItem('cachymusic_active_theme') || 'default';
+    return applyTheme(saved, { source: 'explicit' });
+}
+
+export function initSystemThemeMode() {
+    if (typeof window === 'undefined') return;
+    if (systemSchemeQuery && systemSchemeListener) {
+        systemSchemeQuery.removeEventListener?.('change', systemSchemeListener);
+    }
+    systemSchemeQuery = typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-color-scheme: light)')
+        : null;
+    systemSchemeListener = () => {
+        if (isSystemThemeModeEnabled()) {
+            void applyTheme(resolveSystemThemeId(), { source: 'system' });
+        }
+    };
+    systemSchemeQuery?.addEventListener?.('change', systemSchemeListener);
+
+    const toggle = typeof document !== 'undefined' ? document.getElementById('themeSystemModeToggle') : null;
+    if (toggle) {
+        toggle.checked = isSystemThemeModeEnabled();
+        if (!toggle.dataset.boundSystemTheme) {
+            toggle.dataset.boundSystemTheme = 'true';
+            toggle.addEventListener('change', () => {
+                void setSystemThemeMode(toggle.checked);
+            });
+        }
+    }
+}
+
+export function getMotionPreference() {
+    const raw = safeStorage.getItem(MOTION_MODE_KEY);
+    return (raw === 'reduce' || raw === 'normal') ? raw : 'system';
+}
+
+export function setMotionPreference(mode) {
+    const normalized = (mode === 'reduce' || mode === 'normal') ? mode : 'system';
+    try { safeStorage.setItem(MOTION_MODE_KEY, normalized); } catch (_) {}
+    const sysReduce = typeof window !== 'undefined'
+        && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+    const reduced = normalized === 'reduce' || (normalized === 'system' && sysReduce);
+    if (typeof document !== 'undefined') {
+        document.documentElement.dataset.reducedMotion = reduced ? 'true' : 'false';
+        const selectEl = document.getElementById('settingsMotionModeSelect');
+        if (selectEl && selectEl.value !== normalized) selectEl.value = normalized;
+    }
+    store.emit('motion:change', { mode: normalized, reduced });
+    return reduced;
+}
+
+function syncSettingsMarqueeButton() {
+    if (typeof document === 'undefined') return;
+    const btn = document.getElementById('settingsMarqueePauseBtn');
+    if (!btn) return;
+    const paused = isMarqueePaused();
+    btn.setAttribute('aria-pressed', String(paused));
+    btn.textContent = paused ? 'Resume scrolling text' : 'Pause scrolling text';
+}
+
+export function initMotionPreferences() {
+    if (typeof window === 'undefined') return;
+    if (motionQuery && motionListener) {
+        motionQuery.removeEventListener?.('change', motionListener);
+    }
+    motionQuery = typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-reduced-motion: reduce)')
+        : null;
+    motionListener = () => {
+        if (getMotionPreference() === 'system') {
+            setMotionPreference('system');
+        }
+    };
+    motionQuery?.addEventListener?.('change', motionListener);
+
+    setMotionPreference(getMotionPreference());
+
+    if (typeof document !== 'undefined' && !controlsBound) {
+        controlsBound = true;
+        const selectEl = document.getElementById('settingsMotionModeSelect');
+        if (selectEl) {
+            selectEl.value = getMotionPreference();
+            selectEl.addEventListener('change', () => setMotionPreference(selectEl.value));
+        }
+        const marqueeBtn = document.getElementById('settingsMarqueePauseBtn');
+        if (marqueeBtn) {
+            syncSettingsMarqueeButton();
+            marqueeBtn.addEventListener('click', () => {
+                setMarqueePaused(!isMarqueePaused());
+                syncSettingsMarqueeButton();
+            });
+            store.subscribe('motion:change', syncSettingsMarqueeButton);
+        }
+    }
 }
 
 function openThemeModal(event) {

@@ -12,6 +12,51 @@ import {
     turntableCon
 } from './ui-elements.js';
 
+    let userScrolledLyrics = false;
+    let isProgrammaticLyricScroll = false;
+
+    function getResumeFollowBtn() {
+        return typeof document !== 'undefined' ? document.getElementById('lyricsResumeFollowBtn') : null;
+    }
+
+    function syncResumeFollowVisibility() {
+        const btn = getResumeFollowBtn();
+        if (!btn) return;
+        const shouldShow = Boolean(userScrolledLyrics && store.state.isLyricsView && store.state.parsedLyrics?.isSynced);
+        btn.hidden = !shouldShow;
+    }
+
+    function scrollLyricElementIntoView(el) {
+        if (!lyricsScrollArea || !el) return;
+        const elTop = el.offsetTop - lyricsScrollArea.offsetTop;
+        const targetScroll = elTop - (lyricsScrollArea.clientHeight / 2) + (el.clientHeight / 2);
+        const reduceMotion = typeof document !== 'undefined' && (
+            document.documentElement.dataset.reducedMotion === 'true' ||
+            window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        );
+        isProgrammaticLyricScroll = true;
+        lyricsScrollArea.scrollTo({ top: Math.max(0, targetScroll), behavior: reduceMotion ? 'auto' : 'smooth' });
+        setTimeout(() => { isProgrammaticLyricScroll = false; }, reduceMotion ? 32 : 360);
+    }
+
+    if (typeof window !== 'undefined' && lyricsScrollArea) {
+        const markUserScroll = () => {
+            if (isProgrammaticLyricScroll || !store.state.parsedLyrics?.isSynced) return;
+            if (!userScrolledLyrics) {
+                userScrolledLyrics = true;
+                syncResumeFollowVisibility();
+            }
+        };
+        lyricsScrollArea.addEventListener('wheel', markUserScroll, { passive: true });
+        lyricsScrollArea.addEventListener('touchstart', markUserScroll, { passive: true });
+        getResumeFollowBtn()?.addEventListener('click', () => {
+            userScrolledLyrics = false;
+            syncResumeFollowVisibility();
+            const activeEl = lyricsContent?.querySelector('.lyricLine.active');
+            if (activeEl) scrollLyricElementIntoView(activeEl);
+        });
+    }
+
     // Parse Lyrics (supporting standard text and timestamped LRC format [mm:ss.xx])
     function parseLyrics(raw) {
         if (!raw || typeof raw !== 'string' || !raw.trim()) return null;
@@ -53,6 +98,8 @@ import {
         if (!lyricsTrackName || !lyricsArtistName || !lyricsContent) return;
 
         store.state.activeLyricIndex = -1;
+        userScrolledLyrics = false;
+        syncResumeFollowVisibility();
         const title = track ? (track.title || track.filename || 'Select A Track') : '—';
         const artist = track ? (track.artist || 'Unknown Artist') : '—';
         lyricsTrackName.textContent = title;
@@ -121,10 +168,8 @@ import {
             allEls.forEach((el, i) => {
                 if (i === s.activeLyricIndex) {
                     el.classList.add('active');
-                    if (lyricsScrollArea) {
-                        const elTop = el.offsetTop - lyricsScrollArea.offsetTop;
-                        const targetScroll = elTop - (lyricsScrollArea.clientHeight / 2) + (el.clientHeight / 2);
-                        lyricsScrollArea.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+                    if (lyricsScrollArea && !userScrolledLyrics) {
+                        scrollLyricElementIntoView(el);
                     }
                 } else {
                     el.classList.remove('active');

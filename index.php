@@ -113,15 +113,31 @@ if ($uri !== '/' && $ext !== '') {
         cachy_deny(404, '404 Not Found: Asset does not exist');
     }
     if (in_array($ext, ['js', 'css', 'html'], true)) {
-        // Serve with no-store headers to prevent stale DSP worklet / stylesheet caching
+        // Versioned ?v=<pkg_version> JS/CSS modules are immutable for their build; HTML/sw.js stay no-store.
+        static $pkgVersion = null;
+        if ($pkgVersion === null) {
+            $pkgRaw = @file_get_contents(__DIR__ . '/package.json');
+            $pkgJson = $pkgRaw ? json_decode($pkgRaw, true) : null;
+            $pkgVersion = (is_array($pkgJson) && isset($pkgJson['version'])) ? (string)$pkgJson['version'] : '';
+        }
         $mimeMap = [
             'js'   => 'application/javascript; charset=UTF-8',
             'css'  => 'text/css; charset=UTF-8',
             'html' => 'text/html; charset=UTF-8',
         ];
         header('Content-Type: ' . $mimeMap[$ext]);
-        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-        header('Pragma: no-cache');
+        $reqVer = $_GET['v'] ?? '';
+        $isImmutableBuildAsset = ($ext === 'js' || $ext === 'css')
+            && $uri !== '/sw.js'
+            && $pkgVersion !== ''
+            && is_string($reqVer)
+            && hash_equals($pkgVersion, $reqVer);
+        if ($isImmutableBuildAsset) {
+            header('Cache-Control: public, max-age=31536000, immutable');
+        } else {
+            header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+            header('Pragma: no-cache');
+        }
         header('X-Content-Type-Options: nosniff');
         readfile($real);
         exit;

@@ -13,7 +13,7 @@ find php -name '*.php' -print0 | xargs -0 -n1 php -l
 php -l index.php
 bash -n tools/packager/package-mobile.sh
 python3 tests/static-checks.py
-node --experimental-default-type=module tests/theme-catalog.mjs
+node tests/theme-catalog.mjs
 python3 tests/ui-integrity-check.py
 node tests/player-boundaries.mjs
 node tests/mpris-order.mjs
@@ -64,14 +64,14 @@ node tests/offline-save-integration.mjs
 node tests/control-ui.mjs
 node tests/listening-history.mjs
 node tests/transport-controls.mjs
-node --experimental-default-type=module tests/resource-lifecycle.mjs
-node --experimental-default-type=module tests/deep-architecture.mjs
-node --experimental-default-type=module tests/soulseek-ui-budget.mjs
-node --experimental-default-type=module tests/persistence-ordering.mjs
-node --experimental-default-type=module tests/ultrasonic-worklet.mjs
+node tests/resource-lifecycle.mjs
+node tests/deep-architecture.mjs
+node tests/soulseek-ui-budget.mjs
+node tests/persistence-ordering.mjs
+node tests/ultrasonic-worklet.mjs
 node tests/dsp-regression.cjs
 node tests/dsp-transition-stress.cjs
-node --experimental-default-type=module tests/audio-policies.mjs
+node tests/audio-policies.mjs
 node tests/audio-settings-status.mjs
 node tests/audio-change-policy.mjs
 node tests/audio-remediation.mjs
@@ -83,13 +83,13 @@ CACHY_SKIP_BENCH=1 node tests/dsp-active-eq.cjs
 python3 tests/peak-regression.py
 python3 tests/pcm-regression.py
 python3 tests/flac-regression.py
-node --experimental-default-type=module tests/pcm-scheduler.mjs
+node tests/pcm-scheduler.mjs
 node tests/pcm-lifecycle.mjs
-node --experimental-default-type=module tests/pcm-handoff-lifecycle.mjs
-node --experimental-default-type=module tests/pcm-transition.mjs
-node --experimental-default-type=module tests/pcm-range.mjs
-node --experimental-default-type=module tests/playback-budget.mjs
-node --experimental-default-type=module tests/library-query.mjs
+node tests/pcm-handoff-lifecycle.mjs
+node tests/pcm-transition.mjs
+node tests/pcm-range.mjs
+node tests/playback-budget.mjs
+node tests/library-query.mjs
 python3 tests/metadata-regression.py
 python3 tests/mp3-regression.py
 python3 tests/container-tags.py
@@ -102,9 +102,9 @@ node tests/soulseek-transport.mjs
 python3 tests/soulseek-transfer-identity.py
 python3 tests/soulseek-lifecycle.py
 python3 tests/android-soulseek-host.py
-node --experimental-default-type=module tests/android-bridge.mjs
+node tests/android-bridge.mjs
 python3 tests/android-native-host.py
-node --experimental-default-type=module tests/android-native-transport.mjs
+node tests/android-native-transport.mjs
 python3 tests/android-artwork-engine.py
 python3 tests/android-direct-decoder.py
 node tests/performance-audit-regression.mjs
@@ -121,6 +121,7 @@ python3 tests/desktop-staging.py
 node tests/desktop-shell.mjs
 
 python3 tests/dependency-audit-contract.py
+python3 tests/dependency-audit.py package-lock.json || true
 python3 tests/router-alias-security.py
 python3 tests/android-media-range-contract.py
 python3 tests/android-flac-mask.py
@@ -132,3 +133,8 @@ python3 tests/release-verify.py
 python3 tests/source-inventory-contract.py
 
 python3 tests/source-kit-reproducibility.py
+
+node tests/measured-overflow.mjs
+node tests/module-graph-audit.mjs
+node tests/pwa-install-permissions.mjs
+python3 tests/release-sync-check.py

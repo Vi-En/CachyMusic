@@ -3,7 +3,27 @@ import { formatTime, safeStorage, setScanStatus, showToast } from './utils.js';
 import { store } from './state.js';
 import { THEMES, normalizeThemeId } from './theme-catalog.js';
 import { ultrasonicFilterStatus } from './ultrasonic-status.js';
-import { getActiveCustomTheme, runViewTransition } from './custom-theme-engine.js';
+
+function runWorkspaceViewTransition(updateDomFn) {
+    if (typeof updateDomFn !== 'function') return;
+    if (typeof document === 'undefined' || typeof document.startViewTransition !== 'function') {
+        updateDomFn();
+        return;
+    }
+    const meta = store.state.activeCustomThemeMeta;
+    const mode = meta?.viewTransition || 'none';
+    const docMotion = document.documentElement?.dataset?.reducedMotion;
+    const reduced = docMotion === 'true' || (docMotion !== 'false' && typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+    if (mode === 'none' || reduced || meta?.motionProfile === 'reduced') {
+        updateDomFn();
+        return;
+    }
+    try {
+        document.startViewTransition(updateDomFn);
+    } catch (_) {
+        updateDomFn();
+    }
+}
 
     // DOM Elements - Player & Audio (live reference stored on store.state.audio)
     const audioPlayerEl = store.state.audio || document.getElementById('audioPlayer');
@@ -36,10 +56,30 @@ import { getActiveCustomTheme, runViewTransition } from './custom-theme-engine.j
         for (const name of ['tabLibrary','tabPlaylists','tabQueue']) {
             const button = document.getElementById(name);
             if (!button) continue;
-            button.classList.toggle('active',name===id);
-            if(name===id) button.setAttribute('aria-current','page');
-            else button.removeAttribute('aria-current');
+            const active = name === id;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-selected', String(active));
+            button.setAttribute('tabindex', active ? '0' : '-1');
+            button.removeAttribute('aria-current');
         }
+    }
+
+    let lastStatusAnnouncedAt = 0;
+    let pendingStatusTimer = null;
+    function announceStatus(message) {
+        if (typeof document === 'undefined' || !message) return;
+        const live = document.getElementById('cachyLiveStatus');
+        if (!live) return;
+        const now = Date.now();
+        const elapsed = now - lastStatusAnnouncedAt;
+        const publish = (text) => {
+            lastStatusAnnouncedAt = Date.now();
+            live.textContent = '';
+            queueMicrotask(() => { live.textContent = String(text); });
+        };
+        if (pendingStatusTimer) clearTimeout(pendingStatusTimer);
+        if (elapsed >= 400) publish(message);
+        else pendingStatusTimer = setTimeout(() => { pendingStatusTimer = null; publish(message); }, 400 - elapsed);
     }
 
     function setMobileTabActive(targetId) {
@@ -418,7 +458,7 @@ import { getActiveCustomTheme, runViewTransition } from './custom-theme-engine.j
 
         const settingsTabCurrentThemeBadge = document.getElementById('settingsTabCurrentThemeBadge');
         if (settingsTabCurrentThemeBadge) {
-            const custom = getActiveCustomTheme();
+            const custom = s.activeCustomThemeMeta;
             if (custom && document.documentElement?.dataset?.theme === 'custom') {
                 settingsTabCurrentThemeBadge.textContent = `${custom.name} (Custom)`;
             } else if (s.activeTheme) {
@@ -583,7 +623,7 @@ import { getActiveCustomTheme, runViewTransition } from './custom-theme-engine.j
         };
 
         if (workspaceChanged) {
-            runViewTransition(applyWorkspaceDom);
+            runWorkspaceViewTransition(applyWorkspaceDom);
         } else {
             applyWorkspaceDom();
         }
@@ -807,6 +847,7 @@ import { getActiveCustomTheme, runViewTransition } from './custom-theme-engine.j
         setMobileSearchPanelCollapsed,
         setMobileTabActive,
         setLibraryTabActive,
+        announceStatus,
         settingsPanelEl,
         settingsReturnBtn,
         settingsWorkspace,

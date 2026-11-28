@@ -21,6 +21,8 @@ class FakeDB {
         completes++;
         tx.oncomplete?.();
       }, 8);
+    } else {
+      queueMicrotask(() => tx.oncomplete?.());
     }
     return tx;
   }

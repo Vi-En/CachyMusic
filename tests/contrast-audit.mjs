@@ -1,5 +1,5 @@
 /**
- * Automated WCAG 2.2 FG / MG / BG Contrast Audit across all 12 built-in themes
+ * Automated WCAG 2.2 FG / MG / BG Contrast Audit across all 17 built-in themes
  * and adversarial Auto-Fix Solver verification.
  */
 import assert from 'node:assert/strict';
@@ -30,7 +30,7 @@ for (const [, selRaw, body] of blocks) {
     parsedThemes.set(id, props);
 }
 
-assert.equal(parsedThemes.size, 12, 'Expected 12 built-in theme blocks in stylesheets/themes.css');
+assert.equal(parsedThemes.size, 17, 'Expected 17 built-in theme blocks in stylesheets/themes.css');
 
 for (const [id, props] of parsedThemes.entries()) {
     const resolveHex = (key, fallback = '#888888') => {

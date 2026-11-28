@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory() as d:
     for ext,codec in [('wav','pcm_s16le'),('aiff','pcm_s24be')]:
         src=d/('source.'+ext);out=d/('browser.'+ext);desk=d/('desktop.'+ext)
         run('ffmpeg','-v','error','-f','lavfi','-i','sine=frequency=440:duration=37:sample_rate=48000','-c:a',codec,str(src));original=src.read_bytes();desk.write_bytes(original)
-        print(run('node','--experimental-default-type=module','tests/container-tags.mjs',str(src),str(out),str(pic)).decode().strip())
+        print(run('node','tests/container-tags.mjs',str(src),str(out),str(pic)).decode().strip())
         code='require "php/pcm_metadata.php"; exit(cm_pcm_tag_rewrite($argv[1],["title"=>"新曲","artist"=>"Test Artist","lyrics"=>"[00:01.00] A line"],file_get_contents($argv[2]),["mime"=>"image/png"])?0:1);'
         run('php','-r',code,str(desk),str(pic))
         reference=run('ffmpeg','-v','error','-i',str(src),'-map','0:a:0','-f','s32le','-')

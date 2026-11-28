@@ -10,10 +10,13 @@ assert 'resources/fonts/' not in read('sw.js')
 assert "connect-src 'self' blob: https://musicbrainz.org" in read('index.html')
 assert "script-src 'self';" in read('index.html')
 assert "'unsafe-inline'" not in read('index.html').split('script-src',1)[1].split(';',1)[0]
-assert 'skipWaiting()' not in read('sw.js')
+sw_src = read('sw.js')
+install_block = sw_src.split("self.addEventListener('install'", 1)[1].split("self.addEventListener('message'", 1)[0]
+assert 'skipWaiting' not in install_block, 'skipWaiting must never run inside SW install'
+assert 'CACHY_SKIP_WAITING' in sw_src and 'self.skipWaiting()' in sw_src, 'skipWaiting must be gated by CACHY_SKIP_WAITING message'
 assert "@import url('./theme-identities.css');" in read('stylesheets/homepage.css')
 css = read('stylesheets/theme-identities.css')
-for theme in ['nms','solar-eclipse','euclid-horizon','alien-paradise','abyssal-void','dissonance','sentinel','minimalist-light','minimalist-dark','minimalist-warm','minimalist-obsidian']:
+for theme in ['carbon-signal','paper-sonata','blue-note-console','copper-reel','orchid-matrix','nms','solar-eclipse','euclid-horizon','alien-paradise','abyssal-void','dissonance','sentinel','minimalist-light','minimalist-dark','minimalist-warm','minimalist-obsidian']:
     assert f'data-theme=\"{theme}\"' in css or f'data-theme="{theme}"' in css, theme
 assert 'loadCore(theme)' in read('scripts/modules/visualizer.js')
 assert not (root/'scripts/modules/visualizer-themes-1.js').exists()

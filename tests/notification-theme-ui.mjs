@@ -10,8 +10,8 @@ import {
 
 const read = (rel) => fs.readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
 
-// 1. Validate 12 theme notification profiles & aliases
-assert.equal(VALID_THEME_IDS.length, 12);
+// 1. Validate 17 theme notification profiles & aliases
+assert.equal(VALID_THEME_IDS.length, 17);
 for (const id of VALID_THEME_IDS) {
     const profile = getThemeNotificationProfile(id);
     assert.equal(profile.id, id);

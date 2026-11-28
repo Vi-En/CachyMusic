@@ -44,5 +44,28 @@
 #cachyToastContainer[hidden]{display:none!important}
 
 .modalInlineNotice{margin:8px 0 0;padding:8px 10px;max-width:100%;overflow-wrap:anywhere;font-size:var(--font-sm);color:var(--text-primary);background:var(--accent-surface);border-inline-start:3px solid var(--accent-color);border-radius:min(var(--identity-radius, 6px), 8px);flex:0 0 auto;grid-column:1/-1;}
+
+.pwaUpdateBanner {
+    position: fixed;
+    right: max(16px, var(--safe-right));
+    bottom: max(16px, var(--safe-bottom));
+    z-index: 980;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    max-width: min(26rem, calc(100vw - 32px));
+    padding: 10px 14px;
+    background: var(--workspace-panel, var(--bg-surface-2));
+    color: var(--text-primary);
+    border: 1px solid var(--border-control, var(--border-medium));
+    border-inline-start: 3px solid var(--accent-color);
+    border-radius: min(var(--identity-radius, 8px), 12px);
+    box-shadow: 0 10px 28px oklch(0 0 0 / 0.36);
+}
+.pwaUpdateBanner[hidden] { display: none !important; }
+.pwaUpdateText { flex: 1 1 12rem; font-size: var(--font-sm); line-height: 1.4; }
+.pwaUpdateActions { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+.pwaUpdateActions .actionBtn { min-height: 44px; padding: 6px 12px; }
 }
 

@@ -428,6 +428,203 @@
         --ambient-aura-2: oklch(0.77 0.14 232 / 0.04);
     }
 
+    /* 13. Carbon Signal (Precision Studio) */
+    :is(:root, .themeCardPreview)[data-theme="carbon-signal"] {
+        color-scheme: dark;
+        --bg-canvas: #0B0F12;
+        --bg-surface-1: #12181D;
+        --bg-surface-2: #182127;
+        --bg-surface-3: #1F2B33;
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: rgba(11, 15, 18, 0.94);
+
+        --border-divider: #2A3840;
+        --border-surface: #455860;
+        --border-subtle: #2E3D45;
+        --border-control: #71858D;
+        --border-medium: #71858D;
+        --border-bold: #4FD1C5;
+        --border-focus: #4FD1C5;
+
+        --text-primary: #F3F7F9;
+        --text-secondary: #B7C4CA;
+        --text-muted: #B7C4CA;
+        --text-disabled: #8A9CA4;
+        --text-accent: #4FD1C5;
+        --text-on-accent: #06100F;
+
+        --accent-color: #4FD1C5;
+        --accent-primary: #4FD1C5;
+        --accent-hover: #7AE0D6;
+        --accent-glow: rgba(79, 209, 197, 0.30);
+        --accent-surface: rgba(79, 209, 197, 0.14);
+        --ambient-aura-1: rgba(79, 209, 197, 0.10);
+        --ambient-aura-2: rgba(183, 196, 202, 0.04);
+
+        --status-success: #82D8A3;
+        --status-warning: #FFD082;
+        --status-danger: #FFB4AB;
+        --text-on-status: #18120F;
+    }
+
+    /* 14. Paper Sonata (Editorial Light Collection) */
+    :is(:root, .themeCardPreview)[data-theme="paper-sonata"] {
+        color-scheme: light;
+        --bg-canvas: #F6F1E7;
+        --bg-surface-1: #FFFDF8;
+        --bg-surface-2: #EDE5D7;
+        --bg-surface-3: #E2D7C5;
+        --bg-chrome: #FBF7EE;
+        --bg-glass: rgba(255, 253, 248, 0.96);
+
+        --border-divider: #D6CBBB;
+        --border-surface: #B7A796;
+        --border-subtle: #D2C6B5;
+        --border-control: #827366;
+        --border-medium: #827366;
+        --border-bold: #8B2F3C;
+        --border-focus: #8B2F3C;
+
+        --text-primary: #211D19;
+        --text-secondary: #5E554B;
+        --text-muted: #5E554B;
+        --text-disabled: #75695D;
+        --text-accent: #8B2F3C;
+        --text-on-accent: #FFFFFF;
+
+        --accent-color: #8B2F3C;
+        --accent-primary: #8B2F3C;
+        --accent-hover: #732530;
+        --accent-glow: rgba(139, 47, 60, 0.20);
+        --accent-surface: rgba(139, 47, 60, 0.10);
+        --ambient-aura-1: rgba(139, 47, 60, 0.06);
+        --ambient-aura-2: rgba(94, 85, 75, 0.03);
+
+        --status-success: #17633C;
+        --status-warning: #845100;
+        --status-danger: #A12435;
+        --text-on-status: #FFFFFF;
+        --shadow-card: 0 2px 12px rgba(33, 29, 25, 0.07);
+        --shadow-modal: 0 18px 42px rgba(33, 29, 25, 0.16);
+    }
+
+    /* 15. Blue Note Console (Broadcast Workstation) */
+    :is(:root, .themeCardPreview)[data-theme="blue-note-console"] {
+        color-scheme: dark;
+        --bg-canvas: #07111F;
+        --bg-surface-1: #0D1C2D;
+        --bg-surface-2: #13283D;
+        --bg-surface-3: #1B3550;
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: rgba(7, 17, 31, 0.94);
+
+        --border-divider: #253E59;
+        --border-surface: #456280;
+        --border-subtle: #2A4562;
+        --border-control: #758EAA;
+        --border-medium: #758EAA;
+        --border-bold: #7CC4FF;
+        --border-focus: #7CC4FF;
+
+        --text-primary: #F2F7FF;
+        --text-secondary: #B7C9DE;
+        --text-muted: #B7C9DE;
+        --text-disabled: #8AA1BA;
+        --text-accent: #7CC4FF;
+        --text-on-accent: #04111C;
+
+        --accent-color: #7CC4FF;
+        --accent-primary: #7CC4FF;
+        --accent-hover: #9AD3FF;
+        --accent-glow: rgba(124, 196, 255, 0.34);
+        --accent-surface: rgba(124, 196, 255, 0.15);
+        --ambient-aura-1: rgba(124, 196, 255, 0.13);
+        --ambient-aura-2: rgba(183, 201, 222, 0.04);
+
+        --status-success: #82D8A3;
+        --status-warning: #FFD082;
+        --status-danger: #FFB4AB;
+        --text-on-status: #18120F;
+    }
+
+    /* 16. Copper Reel (Warm Tactile Analog) */
+    :is(:root, .themeCardPreview)[data-theme="copper-reel"] {
+        color-scheme: dark;
+        --bg-canvas: #18120F;
+        --bg-surface-1: #241A15;
+        --bg-surface-2: #31231B;
+        --bg-surface-3: #3F2E24;
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: rgba(24, 18, 15, 0.94);
+
+        --border-divider: #4D3B30;
+        --border-surface: #695041;
+        --border-subtle: #513E32;
+        --border-control: #9D7D65;
+        --border-medium: #9D7D65;
+        --border-bold: #E8A06B;
+        --border-focus: #E8A06B;
+
+        --text-primary: #FFF4EA;
+        --text-secondary: #D8C2B0;
+        --text-muted: #D8C2B0;
+        --text-disabled: #A88E7B;
+        --text-accent: #E8A06B;
+        --text-on-accent: #241006;
+
+        --accent-color: #E8A06B;
+        --accent-primary: #E8A06B;
+        --accent-hover: #F2B588;
+        --accent-glow: rgba(232, 160, 107, 0.32);
+        --accent-surface: rgba(232, 160, 107, 0.16);
+        --ambient-aura-1: rgba(232, 160, 107, 0.14);
+        --ambient-aura-2: rgba(216, 194, 176, 0.04);
+
+        --status-success: #82D8A3;
+        --status-warning: #FFD082;
+        --status-danger: #FFB4AB;
+        --text-on-status: #18120F;
+    }
+
+    /* 17. Orchid Matrix (Modular Creative Workspace) */
+    :is(:root, .themeCardPreview)[data-theme="orchid-matrix"] {
+        color-scheme: dark;
+        --bg-canvas: #100D16;
+        --bg-surface-1: #191421;
+        --bg-surface-2: #241B30;
+        --bg-surface-3: #302440;
+        --bg-chrome: var(--bg-surface-1);
+        --bg-glass: rgba(16, 13, 22, 0.94);
+
+        --border-divider: #3E334E;
+        --border-surface: #5B4A70;
+        --border-subtle: #423653;
+        --border-control: #8C78A5;
+        --border-medium: #8C78A5;
+        --border-bold: #D0A2FF;
+        --border-focus: #D0A2FF;
+
+        --text-primary: #F8F3FF;
+        --text-secondary: #C9BBDD;
+        --text-muted: #C9BBDD;
+        --text-disabled: #9C8AB4;
+        --text-accent: #D0A2FF;
+        --text-on-accent: #160520;
+
+        --accent-color: #D0A2FF;
+        --accent-primary: #D0A2FF;
+        --accent-hover: #DFBFFF;
+        --accent-glow: rgba(208, 162, 255, 0.32);
+        --accent-surface: rgba(208, 162, 255, 0.15);
+        --ambient-aura-1: rgba(208, 162, 255, 0.13);
+        --ambient-aura-2: rgba(201, 187, 221, 0.04);
+
+        --status-success: #82D8A3;
+        --status-warning: #FFD082;
+        --status-danger: #FFB4AB;
+        --text-on-status: #18120F;
+    }
+
     /* Theme Selector Card Swatch Backgrounds */
     .themeCardPreview {
         background: var(--bg-canvas);

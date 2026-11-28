@@ -164,6 +164,21 @@ export async function loadSavedDirectoryHandle() {
     }
 }
 
+export async function clearSavedDirectoryHandle() {
+    try {
+        const db = await openPwaDb();
+        await new Promise((resolve, reject) => {
+            const tx = db.transaction('handles', 'readwrite');
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error || new Error('Directory handle clear failed'));
+            tx.objectStore('handles').delete('active_dir');
+        });
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 let librarySaveTail = Promise.resolve();
 export function saveLibraryToLocalDb(tracks, directoryName) {
     const snapshot = [...tracks]; // Capture membership before waiting for older saves.

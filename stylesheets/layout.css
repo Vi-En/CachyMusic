@@ -198,6 +198,7 @@
         flex-direction: column;
         padding: var(--space-md) max(var(--space-md), var(--safe-right)) var(--space-md) max(var(--space-md), var(--safe-left));
         overflow-y: auto;
+        scroll-padding-bottom: max(16px, var(--safe-bottom));
         gap: var(--space-md);
     }
 

@@ -1,37 +1,25 @@
-// CachyMusic Audio Workstation - High-Performance Service Worker v3.0.0-dev.6
+// CachyMusic Audio Workstation - Tiered Service Worker (Critical Shell + Lazy Runtime)
 // Cache Storage is shared by every installation on an origin. Scope the
 // cache name so a subdirectory installation cannot evict another one.
 const CACHE_PREFIX = 'cachymusic-shell:' + encodeURIComponent(self.registration.scope) + ':';
-const CACHE_NAME = CACHE_PREFIX + '3.0.0-dev.7.1';
+const CACHE_VERSION = '3.0.0-dev.7.2';
+const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
+const CACHE_RUNTIME_NAME = CACHE_PREFIX + 'runtime:' + CACHE_VERSION;
+const MAX_RUNTIME_ENTRIES = 128;
 
-const PRECACHE_ASSETS = [
+const CRITICAL_PRECACHE_ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './stylesheets/homepage.css',
   './stylesheets/custom-theme.css',
-  './scripts/modules/frame-scheduler.js',
-  './scripts/modules/color-contrast.js',
-  './scripts/modules/custom-theme-textures.js',
-  './scripts/modules/custom-theme-schema.js',
-  './scripts/modules/theme-asset-worker.js',
-  './scripts/modules/custom-theme-store.js',
-  './scripts/modules/custom-theme-engine.js',
-  './scripts/modules/custom-theme-studio-ui.js',
-  './scripts/modules/keyboard-shortcuts.js',
   './stylesheets/interaction.css',
   './stylesheets/interaction-refinement.css',
-  './scripts/modules/listening-history.js',
-  './scripts/modules/recording-lease.js',
-  './scripts/modules/listening-history-model.js',
   './stylesheets/library-rows.css',
   './stylesheets/playlist-workspace.css',
   './stylesheets/settings-navigation.css',
   './stylesheets/surface-shapes.css',
   './stylesheets/metadata-editor.css',
-  './scripts/modules/library-query-controller.js',
-  './scripts/modules/transport-controls.js',
-  './scripts/modules/settings-navigation.js',
   './stylesheets/volume-controls.css',
   './stylesheets/eq-spectrum.css',
   './stylesheets/tokens.css',
@@ -42,17 +30,23 @@ const PRECACHE_ASSETS = [
   './stylesheets/soulseek-responsive.css',
   './stylesheets/theme-identities.css',
   './stylesheets/audit-overhaul.css',
+  './stylesheets/task-feedback.css',
+  './stylesheets/visualizer-platter.css',
   './scripts/theme-preload.js',
   './scripts/pwa-init.js',
-  './scripts/modules/pwa-install.js',
+  './scripts/dsp-worklet-processor.js',
+  './scripts/modules/frame-scheduler.js',
+  './scripts/modules/keyboard-shortcuts.js',
+  './scripts/modules/listening-history.js',
+  './scripts/modules/recording-lease.js',
+  './scripts/modules/listening-history-model.js',
+  './scripts/modules/library-query-controller.js',
+  './scripts/modules/transport-controls.js',
+  './scripts/modules/settings-navigation.js',
   './scripts/modules/preference-storage.js',
   './scripts/modules/utils.js',
   './scripts/modules/notification-center.js',
-  './stylesheets/task-feedback.css',
   './scripts/modules/icons.js',
-  './scripts/modules/soulseek-ui-budget.js',
-  './scripts/modules/soulseek-transport.js',
-  './scripts/modules/soulseek-result-metadata.js',
   './scripts/modules/state.js',
   './scripts/modules/runtime-capabilities.js',
   './scripts/modules/tag-parser.js',
@@ -79,9 +73,9 @@ const PRECACHE_ASSETS = [
   './scripts/modules/audio-change-policy.js',
   './scripts/modules/dsp-control-transaction.js',
   './scripts/modules/mixer-write-queue.js',
-    './scripts/modules/audio-output-hold.js',
-    './scripts/modules/worklet-ack.js',
-    './scripts/modules/platter-gesture.js',
+  './scripts/modules/audio-output-hold.js',
+  './scripts/modules/worklet-ack.js',
+  './scripts/modules/platter-gesture.js',
   './scripts/modules/player-core.js',
   './scripts/modules/track-session.js',
   './scripts/modules/player-marquee.js',
@@ -95,11 +89,8 @@ const PRECACHE_ASSETS = [
   './scripts/modules/library-transition.js',
   './scripts/modules/playlist-model.js',
   './scripts/modules/playlist-playback.js',
-  './scripts/modules/metadata-editor.js',
   './scripts/modules/peq-workstation.js',
   './scripts/modules/software-audio-decoder.js',
-  './scripts/modules/soulseek-client.js',
-  './scripts/modules/soulseek-controls.js',
   './scripts/modules/player-progress.js',
   './scripts/modules/media-element-events.js',
   './scripts/modules/audio-preferences-ui.js',
@@ -107,14 +98,51 @@ const PRECACHE_ASSETS = [
   './scripts/modules/library-query-worker.js',
   './scripts/modules/metadata-providers.js',
   './scripts/modules/artwork-validation.js',
-  './scripts/modules/flac-tag-writer.js',
-  './scripts/modules/mp3-tag-writer.js',
-  './scripts/modules/container-tag-writer.js',
   './scripts/modules/ogg-tag-writer.js',
   './scripts/modules/mp4-tag-writer.js',
   './scripts/modules/lyrics.js',
   './scripts/modules/theme-catalog.js',
-  './stylesheets/visualizer-platter.css',
+  './scripts/modules/settings.js',
+  './scripts/modules/android-native-playback.js',
+  './scripts/modules/android-pcm-reader.js',
+  './scripts/modules/artwork-loader.js',
+  './scripts/modules/app.js',
+  './scripts/modules/peak-limiter.js',
+  './scripts/modules/pcm-reader.js',
+  './scripts/modules/flac-reader.js',
+  './scripts/modules/pcm-range.js',
+  './scripts/modules/pcm-worker.js',
+  './scripts/modules/pcm-stream.js',
+  './scripts/modules/pcm-transition.js',
+  './scripts/modules/permission-preflight.js',
+  './resources/images/music-hanzi.svg',
+  './resources/images/app-icon.svg',
+  './resources/images/icon-192.png',
+  './resources/images/icon-512.png',
+  './resources/images/icon-maskable-192.png',
+  './resources/images/icon-maskable-512.png',
+  './resources/images/default.svg'
+];
+
+const OPTIONAL_RUNTIME_ASSETS = [
+  './scripts/modules/color-contrast.js',
+  './scripts/modules/custom-theme-textures.js',
+  './scripts/modules/custom-theme-schema.js',
+  './scripts/modules/theme-asset-worker.js',
+  './scripts/modules/custom-theme-store.js',
+  './scripts/modules/custom-theme-engine.js',
+  './scripts/modules/custom-theme-studio-ui.js',
+  './scripts/modules/pwa-install.js',
+  './scripts/modules/app-badge.js',
+  './scripts/modules/soulseek-ui-budget.js',
+  './scripts/modules/soulseek-transport.js',
+  './scripts/modules/soulseek-result-metadata.js',
+  './scripts/modules/metadata-editor.js',
+  './scripts/modules/soulseek-client.js',
+  './scripts/modules/soulseek-controls.js',
+  './scripts/modules/flac-tag-writer.js',
+  './scripts/modules/mp3-tag-writer.js',
+  './scripts/modules/container-tag-writer.js',
   './scripts/modules/visualizers/alloy.js',
   './scripts/modules/visualizers/amethyst.js',
   './scripts/modules/visualizers/bloom.js',
@@ -138,85 +166,128 @@ const PRECACHE_ASSETS = [
   './scripts/modules/visualizers/themed-wave.js',
   './scripts/modules/visualizer-budget.js',
   './scripts/modules/visualizer.js',
-  './scripts/modules/settings.js',
   './scripts/modules/p2p.js',
-  './scripts/modules/android-soulseek-bridge.js',
-    './scripts/modules/android-native-playback.js',
-  './scripts/modules/android-pcm-reader.js',
-  './scripts/modules/artwork-loader.js',
-  './scripts/modules/app.js',
-  './scripts/dsp-worklet-processor.js',
-  './scripts/modules/peak-limiter.js',
-  './scripts/modules/pcm-reader.js',
-  './scripts/modules/flac-reader.js',
-  './scripts/modules/pcm-range.js',
-  './scripts/modules/pcm-worker.js',
-  './scripts/modules/pcm-stream.js',
-  './scripts/modules/pcm-transition.js',
-  './resources/images/music-hanzi.svg',
-  './resources/images/app-icon.svg',
-  './resources/images/icon-192.png',
-  './resources/images/icon-512.png',
-  './resources/images/default.svg'
+  './scripts/modules/android-soulseek-bridge.js'
 ];
 
-// Cache only the immutable application shell. No private metadata, covers, audio or API responses.
-const SHELL = new Set(PRECACHE_ASSETS.map(asset => new URL(asset, self.registration.scope).pathname));
+// Cache only the immutable application shell & allowlisted optional modules.
+// No private metadata, covers, audio or API responses.
+const scopePath = (asset) => new URL(asset, self.registration.scope).pathname;
+const CRITICAL_SHELL = new Set(CRITICAL_PRECACHE_ASSETS.map(scopePath));
+const OPTIONAL_SHELL = new Set(OPTIONAL_RUNTIME_ASSETS.map(scopePath));
+
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    // Installation fails if even one required asset is missing. Keep the old active build.
-    await cache.addAll(PRECACHE_ASSETS.map(asset => new Request(new URL(asset, self.registration.scope), {cache: 'reload'})));
+    // Installation fails if even one required critical asset is missing. Keep old active build.
+    await cache.addAll(
+      CRITICAL_PRECACHE_ASSETS.map(asset => new Request(new URL(asset, self.registration.scope), { cache: 'reload' }))
+    );
   })());
 });
+
+self.addEventListener('message', event => {
+  if (event?.data && event.data.type === 'CACHY_SKIP_WAITING' && typeof self.skipWaiting === 'function') {
+    event.waitUntil(Promise.resolve(self.skipWaiting()));
+  }
+});
+
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(key => key !== CACHE_NAME &&
-      key.startsWith(CACHE_PREFIX)).map(key => caches.delete(key)));
+    await Promise.all(
+      keys
+        .filter(key => key !== CACHE_NAME && key !== CACHE_RUNTIME_NAME && key.startsWith(CACHE_PREFIX))
+        .map(key => caches.delete(key))
+    );
     await self.clients.claim();
   })());
 });
+
 // Artwork misses are deferred only for controlled image requests. API/media
 // responses are never stored in CacheStorage. Unmanaged servers remain compatible.
 let coverInFlight = 0;
 async function fetchCover(request) {
   const fallback = async () => {
     const cache = await caches.open(CACHE_NAME);
-    return await cache.match(new Request(new URL('resources/images/default.svg', self.registration.scope))) || new Response('', {status: 503});
+    return (await cache.match(new Request(new URL('resources/images/default.svg', self.registration.scope))))
+      || new Response('', { status: 503 });
   };
   if (coverInFlight >= 24) return fallback();
   coverInFlight++;
   const deadline = Date.now() + 15000;
-  const url = new URL(request.url); url.searchParams.set('defer','1');
+  const url = new URL(request.url);
+  url.searchParams.set('defer', '1');
   try {
     while (Date.now() < deadline) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), Math.max(1,deadline-Date.now()));
+      const timer = setTimeout(() => controller.abort(), Math.max(1, deadline - Date.now()));
       let response;
-      try { response = await fetch(url.href,{credentials:'same-origin',cache:'no-store',redirect:'error',signal:controller.signal}); }
-      finally {clearTimeout(timer);}
+      try {
+        response = await fetch(url.href, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          redirect: 'error',
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timer);
+      }
       if (response.status !== 202 && response.status !== 503) return response;
       // A 503 without the pending protocol's retry header is a real error.
       if (response.headers.get('Retry-After') !== '1') return response;
-      await new Promise(resolve => setTimeout(resolve,500));
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
     return fallback();
-  } catch (_) {return fallback();}
-  finally {coverInFlight--;}
+  } catch (_) {
+    return fallback();
+  } finally {
+    coverInFlight--;
+  }
 }
+
+async function fetchOptionalAsset(request) {
+  const cache = await caches.open(CACHE_RUNTIME_NAME);
+  const cached = await cache.match(request, { ignoreSearch: true });
+  if (cached) return cached;
+  try {
+    const response = await fetch(request, { credentials: 'same-origin', redirect: 'error' });
+    if (response && response.ok && (response.type === 'basic' || !response.type)) {
+      if (typeof cache.put === 'function') {
+        await cache.put(request, response.clone());
+        if (typeof cache.keys === 'function' && typeof cache.delete === 'function') {
+          const entries = await cache.keys();
+          while (entries.length > MAX_RUNTIME_ENTRIES) {
+            const oldest = entries.shift();
+            if (oldest) await cache.delete(oldest);
+          }
+        }
+      }
+    }
+    return response;
+  } catch (_) {
+    return new Response('Optional module unavailable offline', { status: 503 });
+  }
+}
+
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET' || request.headers.has('range')) return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (request.destination === 'image' && url.pathname === new URL('php/api/cover.php',self.registration.scope).pathname) {
-    event.respondWith(fetchCover(request)); return;
+  if (request.destination === 'image' && url.pathname === scopePath('php/api/cover.php')) {
+    event.respondWith(fetchCover(request));
+    return;
   }
-  if (!SHELL.has(url.pathname)) return;
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(request, {ignoreSearch: true});
-    return cached || new Response('Application asset unavailable', {status: 503});
-  })());
+  if (CRITICAL_SHELL.has(url.pathname)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request, { ignoreSearch: true });
+      return cached || new Response('Application asset unavailable', { status: 503 });
+    })());
+    return;
+  }
+  if (OPTIONAL_SHELL.has(url.pathname)) {
+    event.respondWith(fetchOptionalAsset(request));
+  }
 });

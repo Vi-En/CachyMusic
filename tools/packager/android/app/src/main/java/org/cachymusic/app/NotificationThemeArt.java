@@ -57,6 +57,11 @@ public final class NotificationThemeArt {
     static {
         Map<String, ThemeSpec> m = new HashMap<>();
         m.put("default", new ThemeSpec("default", 0xFF090E14, 0xFF13202E, 0xFF38BDF8, 0xFF94A3B8, false, false));
+        m.put("carbon-signal", new ThemeSpec("carbon-signal", 0xFF0B0F12, 0xFF12181D, 0xFF4FD1C5, 0xFFB7C4CA, false, false));
+        m.put("paper-sonata", new ThemeSpec("paper-sonata", 0xFFF6F1E7, 0xFFEDE5D7, 0xFF8B2F3C, 0xFF5E554B, false, true));
+        m.put("blue-note-console", new ThemeSpec("blue-note-console", 0xFF07111F, 0xFF0D1C2D, 0xFF7CC4FF, 0xFFB7C9DE, false, false));
+        m.put("copper-reel", new ThemeSpec("copper-reel", 0xFF18120F, 0xFF241A15, 0xFFE8A06B, 0xFFD8C2B0, true, false));
+        m.put("orchid-matrix", new ThemeSpec("orchid-matrix", 0xFF100D16, 0xFF191421, 0xFFD0A2FF, 0xFFC9BBDD, true, false));
         m.put("nms", new ThemeSpec("nms", 0xFF15080A, 0xFF281016, 0xFFFF2A55, 0xFF00E5FF, true, false));
         m.put("solar-eclipse", new ThemeSpec("solar-eclipse", 0xFF0A0B1A, 0xFF161938, 0xFF38D9FF, 0xFFA855F7, true, false));
         m.put("euclid-horizon", new ThemeSpec("euclid-horizon", 0xFF120E09, 0xFF251D13, 0xFFF59E0B, 0xFFFBBF24, false, false));

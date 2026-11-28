@@ -22,6 +22,11 @@
 :root[data-theme="minimalist-dark"] { --shape-field:4px; --shape-action:3px; --shape-icon:3px; --shape-nav:0; --shape-primary:5px; --shape-dialog:8px; --shape-thumb:2px; }
 :root[data-theme="minimalist-warm"] { --shape-field:9px; --shape-action:8px; --shape-primary:17px; --shape-dialog:20px; --shape-thumb:5px; }
 :root[data-theme="minimalist-obsidian"] { --shape-field:6px; --shape-action:5px; --shape-nav:3px; --shape-primary:50%; --shape-dialog:12px; --shape-thumb:3px; }
+:root[data-theme="carbon-signal"] { --shape-field:6px; --shape-action:6px; --shape-nav:4px; --shape-primary:50%; --shape-dialog:8px; --shape-thumb:4px; }
+:root[data-theme="paper-sonata"] { --shape-field:4px; --shape-action:4px; --shape-nav:3px; --shape-primary:50%; --shape-dialog:6px; --shape-thumb:2px; }
+:root[data-theme="blue-note-console"] { --shape-field:8px; --shape-action:10px; --shape-nav:8px; --shape-primary:12px; --shape-dialog:12px; --shape-thumb:6px; }
+:root[data-theme="copper-reel"] { --shape-field:10px; --shape-action:10px; --shape-nav:10px; --shape-primary:50%; --shape-dialog:14px; --shape-thumb:6px; }
+:root[data-theme="orchid-matrix"] { --shape-field:10px; --shape-action:10px; --shape-nav:10px; --shape-primary:16px; --shape-dialog:18px; --shape-thumb:8px; }
 
 /* Ordinary text actions and inputs: conventional rectangular boundaries. */
 :root[data-theme] :is(.actionBtn,.topBtn,.folderBrowseBtn,.scanFolderActionBtn,.slskSubmitBtn,.slskFilterToggleBtn,.slskConnectionToggleBtn,.slskMiniTransfersBtn,.slskPanelToggleControl,.slskDirPill,.settingsThemePickerBtn,.metaEditorCoverActionBtn,.sleepOptBtn,.playlistChipBtn,.eqDeckBtn,.miniDeckReturnBtn,.visModeBtn,.themeSelectCard,.slskTransferBtn,.slskShowMoreBtn,.slskActionBtn) { border-radius:var(--shape-action); }

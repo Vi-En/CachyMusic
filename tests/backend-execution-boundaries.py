@@ -17,11 +17,11 @@ with tempfile.TemporaryDirectory() as tmp:
     require='require '+json.dumps(str(root/'php/platform.php'))+'; '
     def php(code):
         return subprocess.run(['php','-n','-r',require+code],env=env,capture_output=True,text=True,timeout=5)
-    p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-r","echo str_repeat(\\"x\\", 16);"],16));');check('exact stdout cap accepted',p.returncode==0 and json.loads(p.stdout)=='x'*16)
-    p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-r","echo str_repeat(\\"x\\", 17);"],16));');check('oversized stdout rejected',p.returncode==0 and p.stdout=='null')
-    p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-r","fwrite(STDERR,str_repeat(\\"x\\",4096));echo \\"ok\\";"],16));');check('oversized stderr rejected',p.returncode==0 and p.stdout=='null')
-    start=time.monotonic();p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-r","usleep(1200000);echo \\"late\\";"],16,0.15));');check('monotonic child deadline',p.returncode==0 and p.stdout=='null' and time.monotonic()-start<0.8)
-    p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-r","echo \\"partial\\";exit(7);"],16));');check('nonzero exit rejected',p.returncode==0 and p.stdout=='null')
+    p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-n","-r","echo str_repeat(\\"x\\", 16);"],16));');check('exact stdout cap accepted',p.returncode==0 and json.loads(p.stdout)=='x'*16)
+    p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-n","-r","echo str_repeat(\\"x\\", 17);"],16));');check('oversized stdout rejected',p.returncode==0 and p.stdout=='null')
+    p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-n","-r","fwrite(STDERR,str_repeat(\\"x\\",4096));echo \\"ok\\";"],16));');check('oversized stderr rejected',p.returncode==0 and p.stdout=='null')
+    start=time.monotonic();p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-n","-r","usleep(1200000);echo \\"late\\";"],16,0.15));');check('monotonic child deadline',p.returncode==0 and p.stdout=='null' and time.monotonic()-start<0.8)
+    p=php('echo json_encode(cachy_run_args([PHP_BINARY,"-n","-r","echo \\"partial\\";exit(7);"],16));');check('nonzero exit rejected',p.returncode==0 and p.stdout=='null')
     with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
     proc=subprocess.Popen(['php','-S',f'127.0.0.1:{port}','-t',str(root),str(root/'index.php')],env=env,cwd=root,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     client=urllib.request.build_opener(urllib.request.ProxyHandler({}));base=f'http://127.0.0.1:{port}/php/api/'

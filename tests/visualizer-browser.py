@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULES = ROOT / 'scripts/modules'
-THEMES = ['default','nms','solar-eclipse','euclid-horizon','alien-paradise','abyssal-void','dissonance','sentinel','minimalist-light','minimalist-dark','minimalist-warm','minimalist-obsidian']
+THEMES = ['default','carbon-signal','paper-sonata','blue-note-console','copper-reel','orchid-matrix','nms','solar-eclipse','euclid-horizon','alien-paradise','abyssal-void','dissonance','sentinel','minimalist-light','minimalist-dark','minimalist-warm','minimalist-obsidian']
 
 @functools.lru_cache(None)
 def module_url(path):

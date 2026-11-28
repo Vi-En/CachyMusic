@@ -6,7 +6,7 @@ with tempfile.TemporaryDirectory() as tmp:
     for v in [3,4]:
         src=Path(tmp)/f'original-{v}.mp3';dst=Path(tmp)/f'new-{v}.mp3'
         run('ffmpeg','-v','error','-f','lavfi','-i','sine=frequency=440:duration=2','-c:a','libmp3lame','-id3v2_version',str(v),'-metadata','title=Original','-metadata','CUSTOM=preserve',str(src))
-        print(run('node','--experimental-default-type=module','tests/mp3-regression.mjs',str(src),str(dst),str(v)).strip())
+        print(run('node','tests/mp3-regression.mjs',str(src),str(dst),str(v)).strip())
         tags=json.loads(run('ffprobe','-v','error','-show_entries','format_tags','-of','json',str(dst)))['format']['tags'];tags={k.lower():v for k,v in tags.items()}
         assert tags['title']=='Revised title' and tags['artist']=='改 Artist' and tags['custom']=='preserve',tags
         assert '[00:01.00] example' in tags.values(),tags

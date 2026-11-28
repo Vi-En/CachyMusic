@@ -96,6 +96,7 @@
 @layer tokens {
     :root {
         /* Viewport & OS Safe Insets */
+        --wco-titlebar-height: 0px;
         --app-height: 100dvh;
         --app-width: 100dvw;
         --safe-top: max(0.35rem, env(safe-area-inset-top));
@@ -103,12 +104,12 @@
         --safe-left: max(0px, env(safe-area-inset-left));
         --safe-right: max(0px, env(safe-area-inset-right));
 
-        /* Continuous Fluid Typography (Major Third Harmonic Scale) */
-        --font-3xs: clamp(0.625rem, 0.58rem + 0.12vw, 0.6875rem);
-        --font-2xs: clamp(0.6875rem, 0.64rem + 0.16vw, 0.75rem);
-        --font-xs:  clamp(0.75rem, 0.70rem + 0.20vw, 0.8125rem);
-        --font-sm:  clamp(0.8125rem, 0.76rem + 0.24vw, 0.90rem);
-        --font-base:clamp(0.875rem, 0.83rem + 0.25vw, 1.00rem);
+        /* Continuous Fluid Typography (Harmonic Scale, accessible legibility floor) */
+        --font-3xs: clamp(0.75rem, 0.72rem + 0.12vw, 0.8125rem);
+        --font-2xs: clamp(0.75rem, 0.73rem + 0.14vw, 0.8125rem);
+        --font-xs:  clamp(0.8125rem, 0.78rem + 0.16vw, 0.875rem);
+        --font-sm:  clamp(0.875rem, 0.84rem + 0.18vw, 0.9375rem);
+        --font-base:clamp(0.9375rem, 0.90rem + 0.18vw, 1.05rem);
         --font-md:  clamp(1.00rem, 0.92rem + 0.35vw, 1.25rem);
         --font-lg:  clamp(1.15rem, 1.02rem + 0.60vw, 1.55rem);
         --font-xl:  clamp(1.35rem, 1.15rem + 0.90vw, 2.00rem);
@@ -157,6 +158,15 @@
         --dur-press: 130ms;
         --dur-release: 320ms;
         --dur-toggle: 380ms;
+        --motion-press: 75ms;
+        --motion-state: 140ms;
+        --motion-panel: 200ms;
+        --motion-workspace: 220ms;
+        --motion-modal-in: 260ms;
+        --motion-modal-out: 180ms;
+        --motion-theme: 150ms;
+        --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+        --motion-ease-out: ease-out;
         --motion-scale: 1;
         --motion-ease: var(--ease-silky);
         --transition-fast: 190ms var(--ease-silky);

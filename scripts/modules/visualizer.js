@@ -343,7 +343,8 @@ store.subscribe('visualizer:ensure-themes', ensureVisualizerThemeModules);
             const analyser = st.analyser;
             const audioContext = st.audioContext;
             const isMobileViewport = mobileViewportQuery ? cachedMobileViewport : window.innerWidth <= 768;
-            const reducedMotion = cachedReducedMotion;
+            const docMotion = typeof document !== 'undefined' ? document.documentElement?.dataset?.reducedMotion : undefined;
+            const reducedMotion = docMotion === 'true' ? true : (docMotion === 'false' ? false : cachedReducedMotion);
 
             if (st.currentWorkspace !== 'player' || activeVisualizerMode==='artwork') {
                 if (statPeakLevel) statPeakLevel.textContent = 'Unavailable';

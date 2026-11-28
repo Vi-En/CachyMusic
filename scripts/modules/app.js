@@ -1,5 +1,6 @@
-import {installRecordingLease} from './recording-lease.js';
-import {requestServerBrowse} from './server-scan.js';
+import { installRecordingLease } from './recording-lease.js';
+import { requestServerBrowse } from './server-scan.js';
+import { setupLibraryStorageControls } from './permission-preflight.js';
 import {initListeningHistory} from './listening-history.js';
 import {playlistNavigationToken} from './library.js';
 import {bindSettingsNavigation} from './settings-navigation.js';
@@ -129,12 +130,15 @@ import {
 } from './ui-elements.js';
 import { installKeyboardShortcuts } from './keyboard-shortcuts.js';
 import { setProgressFraction } from './player-progress.js';
-import { hydrateActiveCustomThemeOnBoot } from './custom-theme-engine.js';
 import {
     applyTheme,
     closeThemeModal,
+    initMotionPreferences,
+    initSystemThemeMode,
+    isSystemThemeModeEnabled,
     openThemeModal,
-    openThemeStudio
+    openThemeStudio,
+    resolveSystemThemeId
 } from './themes.js';
 import * as audioEngineModule from './audio-engine.js';
 import {
@@ -487,13 +491,14 @@ store.subscribe('workspace:change', ({ detail }) => {
 
         initMprisBridge();
         const urlThemeOverride = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('theme') : null;
-        if (!urlThemeOverride) {
-            void hydrateActiveCustomThemeOnBoot().then(applied => {
+        const storedTheme = String(safeStorage.getItem('cachymusic_active_theme') || '');
+        if (!urlThemeOverride && (storedTheme.startsWith('custom:') || document.documentElement?.dataset?.theme === 'custom')) {
+            void import('./custom-theme-engine.js').then(m => m.hydrateActiveCustomThemeOnBoot()).then(applied => {
                 if (applied) {
                     store.emit('visualizer:ensure-themes');
                     store.emit('peq:redraw');
                 }
-            });
+            }).catch(() => {});
         }
     }
 
@@ -797,6 +802,26 @@ store.subscribe('workspace:change', ({ detail }) => {
                 playlistsView.style.display = 'none';
                 if (queueView) queueView.style.display = 'flex';
                 renderQueueView();
+            });
+        }
+
+        // WAI-ARIA ArrowLeft/ArrowRight/Home/End roving keyboard activation on Library tabs
+        const libraryTabsEl = document.getElementById('libraryTabs');
+        if (libraryTabsEl) {
+            libraryTabsEl.addEventListener('keydown', (e) => {
+                const tabs = Array.from(libraryTabsEl.querySelectorAll('[role="tab"]'));
+                const idx = tabs.indexOf(e.target.closest('[role="tab"]'));
+                if (idx < 0) return;
+                let nextIdx = -1;
+                if (e.key === 'ArrowRight') nextIdx = (idx + 1) % tabs.length;
+                else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + tabs.length) % tabs.length;
+                else if (e.key === 'Home') nextIdx = 0;
+                else if (e.key === 'End') nextIdx = tabs.length - 1;
+                if (nextIdx >= 0) {
+                    e.preventDefault();
+                    tabs[nextIdx].focus();
+                    tabs[nextIdx].click();
+                }
             });
         }
 
@@ -1434,12 +1459,12 @@ store.subscribe('workspace:change', ({ detail }) => {
 
         bindMetadataEditor();
 
-        async function handleOpenStandaloneAudioFiles(files) {
+        async function handleOpenStandaloneAudioFiles(files, mode = 'play') {
             const s = store.state;
             const rawFiles = Array.from(files || []);
             const audioFiles = rawFiles.filter(f => {
                 const name = (f.name || '').toLowerCase();
-                return f.type.startsWith('audio/') || /\.(mp3|flac|wav|ogg|m4a|aac|opus|alac|aiff)$/i.test(name);
+                return f.type.startsWith('audio/') || /\.(mp3|flac|wav|ogg|m4a|aac|opus|alac|webm|aif|aiff)$/i.test(name);
             });
             if (audioFiles.length === 0) return;
 
@@ -1496,6 +1521,11 @@ store.subscribe('workspace:change', ({ detail }) => {
             hideTrackLoadingOverlay();
             if (!s.isTrackLoadingCancelled && openedTracks.length > 0) {
                 setScanStatus(`Loaded ${openedTracks.length} standalone file(s).`, false);
+                if (mode === 'queue') {
+                    for (const tr of openedTracks) addToQueue(tr);
+                    showToast(`Added ${openedTracks.length} opened audio file(s) to queue.`);
+                    return;
+                }
                 s.standaloneTrackList = openedTracks;
                 s.standaloneTrackIndex = 0;
                 s.isStandalonePlayback = true;
@@ -1525,24 +1555,13 @@ store.subscribe('workspace:change', ({ detail }) => {
             await handleOpenStandaloneAudioFiles(dt.files);
         });
 
-        // W3C File Handling API (Launch Queue - when user opens audio files with CachyMusic from desktop/OS file manager)
-        if (typeof window !== 'undefined' && 'launchQueue' in window && window.LaunchParams && 'files' in window.LaunchParams.prototype) {
-            try {
-                window.launchQueue.setConsumer(async (launchParams) => {
-                    if (!launchParams.files || launchParams.files.length === 0) return;
-                    const loadedFiles = [];
-                    for (const handle of launchParams.files) {
-                        try {
-                            const file = await handle.getFile();
-                            if (file) loadedFiles.push(file);
-                        } catch (_) {}
-                    }
-                    if (loadedFiles.length > 0) {
-                        await handleOpenStandaloneAudioFiles(loadedFiles);
-                    }
-                });
-            } catch (_) {}
-        }
+        // Desktop File Handling events routed safely through #fileLaunchDialog in pwa-install.js
+        store.subscribe('pwa:launch-files', (e) => {
+            const detail = e?.detail;
+            if (detail?.files?.length > 0) {
+                void handleOpenStandaloneAudioFiles(detail.files, detail.action === 'queue' ? 'queue' : 'play');
+            }
+        });
 
         if (standaloneResumeLibraryBtn) {
             standaloneResumeLibraryBtn.addEventListener('click', () => {
@@ -1689,7 +1708,16 @@ store.subscribe('workspace:change', ({ detail }) => {
             if (urlParams.get('vis')) {
                 getVisualizerModule().then(m => m?.setVisualizerMode?.(urlParams.get('vis')));
             }
-            applyTheme(urlParams.get('theme') || store.state.activeTheme, false);
+            initMotionPreferences();
+            initSystemThemeMode();
+            const requestedTheme = urlParams.get('theme');
+            if (requestedTheme) {
+                applyTheme(requestedTheme, { source: 'boot' });
+            } else if (isSystemThemeModeEnabled()) {
+                applyTheme(resolveSystemThemeId(), { source: 'system' });
+            } else {
+                applyTheme(store.state.activeTheme, { source: 'boot' });
+            }
             if (modal === 'theme' || hash === '#theme') {
                 openThemeModal();
                 if (urlParams.get('scroll_theme') === '1') {
@@ -1761,7 +1789,8 @@ store.subscribe('workspace:change', ({ detail }) => {
             }
         });
 
-        // Setup PWA & Desktop Installation Handler
+        // Setup PWA & Desktop Installation Handler and Library Storage Controls
+        setupLibraryStorageControls();
         setupPwaInstallPrompt();
 
         // Downloads and P2P controls initialize on first workspace visit.

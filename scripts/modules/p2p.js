@@ -12,6 +12,7 @@ import { canReachSoulseekBackend, slskFetch } from './soulseek-client.js';
 import { getRuntime } from './runtime-capabilities.js';
 import { applySearchAndSort } from './library.js';
 import { loadTrack, playbackIntentVersion } from './player-core.js';
+import { clearAppBadge, updateAppBadge } from './app-badge.js';
 import { setMobileSearchPanelCollapsed, slskAccountAlert, slskAccountBtn, slskActiveSearchMeta, slskChangeDirBtn, slskChangeSharedDirBtn, slskClearSubFilterBtn, slskDownloadsPathText, slskExcludeFilterInput, slskIncludeFilterInput, slskMobileTransferCount, slskModalPowerBtn, slskModalUsername, slskPlaceholder, slskPowerBtn, slskPowerBtnText, slskResultCount, slskResultsList, slskScanDownloadsBtn, slskSearchingState, slskSearchingTitle, slskSharedPathText, slskStartDaemonBtn, slskStatusDot, slskStatusText, slskSuggestedChips, slskSuggestedRow, slskToggleTransfersBtn, slskTransferCount, slskTransfersDrawer, slskTransfersList, slskTransfersSummary, slskUsername, soulseekWorkspace, wsSoulseekBadge } from './ui-elements.js';
 
     // =========================================================================
@@ -1011,6 +1012,7 @@ function updateConnectionLabel(text) {
                 clearInterval(this.transfersPollTimer);
                 this.transfersPollTimer = null;
             }
+            void clearAppBadge();
         },
 
         getTransferActionsHtml(item, isFin) {
@@ -1150,6 +1152,7 @@ function updateConnectionLabel(text) {
 
                 const items = data.items;
                 const activeCount = items.filter(it => !isTransferFinished(it)).length;
+                void updateAppBadge(activeCount);
 
                 if (slskTransferCount) slskTransferCount.textContent = activeCount.toString();
                 if (slskMobileTransferCount) slskMobileTransferCount.textContent = activeCount.toString();

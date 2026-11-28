@@ -30,11 +30,33 @@
 
         var t = urlT || savedT || 'default';
         var valid = [
-            'default', 'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
+            'default',
+            'carbon-signal', 'paper-sonata', 'blue-note-console', 'copper-reel', 'orchid-matrix',
+            'nms', 'solar-eclipse', 'euclid-horizon', 'alien-paradise',
             'abyssal-void', 'dissonance', 'sentinel',
             'minimalist-light', 'minimalist-dark', 'minimalist-warm', 'minimalist-obsidian'
         ];
         var metaTheme = document.querySelector('meta[name="theme-color"]');
+
+        // Pre-paint motion preference ('system' | 'reduce' | 'normal') without delaying first paint.
+        try {
+            var motionMode = window.localStorage ? localStorage.getItem('cachymusic_reduced_motion') : null;
+            var sysReduce = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+            var resolvedReduced = motionMode === 'reduce' || (motionMode !== 'normal' && sysReduce);
+            root.setAttribute('data-reduced-motion', resolvedReduced ? 'true' : 'false');
+        } catch (_) {}
+
+        // Optional OS appearance mode: resolve Paper Sonata / Carbon Signal without overwriting explicit theme.
+        var themeMode = null;
+        try { themeMode = window.localStorage ? localStorage.getItem('cachymusic_theme_mode') : null; } catch (_) {}
+        if (!urlT && themeMode === 'system') {
+            var prefersLight = Boolean(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+            t = prefersLight ? 'paper-sonata' : 'carbon-signal';
+            root.setAttribute('data-theme', t);
+            var sysChrome = prefersLight ? '#F6F1E7' : '#0B0F12';
+            if (metaTheme) metaTheme.setAttribute('content', sysChrome);
+            return;
+        }
 
         // Hydrate saved Custom Theme snapshot synchronously before first paint when active
         if (!urlT && typeof t === 'string' && (t === 'custom' || t.indexOf('custom:') === 0)) {
@@ -81,6 +103,11 @@
         root.setAttribute('data-theme', t);
         var themeMetaColors = {
             default: '#090e14', 'studio-dark': '#090e14',
+            'carbon-signal': '#0B0F12',
+            'paper-sonata': '#F6F1E7',
+            'blue-note-console': '#07111F',
+            'copper-reel': '#18120F',
+            'orchid-matrix': '#100D16',
             nms: '#15080a', atlas: '#15080a',
             'solar-eclipse': '#0a0b1a', cyberpunk: '#0a0b1a', 'neon-night': '#0a0b1a',
             'euclid-horizon': '#120e09',

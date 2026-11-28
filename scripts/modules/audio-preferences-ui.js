@@ -7,6 +7,7 @@ import {miniVolumeSlider, volumeSlider} from './ui-elements.js';
 import {setDebugMode, updateAudioDiagnosticsUi, updateDebugHudState} from './settings.js';
 import {syncVolumeSliders} from './control-ui.js';
 import {ultrasonicFilterStatus} from './ultrasonic-status.js';
+import {requestWithPreflight} from './permission-preflight.js';
 
 // Preference UI and transactions request graph/mixer operations through explicit callbacks.
 export function createAudioPreferencesUi({acknowledgeAudioEdit, audioBufferChangePending, checkDacCapabilities, checkHardwareGainStatus, ensureAudioEngineForSampleRate, getConfirmedAudioRoute, setVolume, syncSoftwareVolume, updateAmpGain, updateAudioRouting, updateDspButtonsUi, updateLimiterState, updateWorkletParams, workletAcks, beginMixerTransition, endMixerTransition}) {
@@ -349,20 +350,57 @@ export function createAudioPreferencesUi({acknowledgeAudioEdit, audioBufferChang
                 bgNotifToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
             };
             syncBgNotifUi();
-            bgNotifToggle.addEventListener('click', async () => {
+            bgNotifToggle.addEventListener('click', () => {
                 const wantsEnable = !s.backgroundNotificationsEnabled;
-                let allowed = !wantsEnable || Notification.permission === 'granted';
-                if (wantsEnable && Notification.permission === 'default') {
-                    bgNotifToggle.disabled = true;
-                    try { allowed = await Notification.requestPermission() === 'granted'; }
-                    catch (_) { allowed = false; }
-                    finally { bgNotifToggle.disabled = false; }
+                if (!wantsEnable) {
+                    s.backgroundNotificationsEnabled = false;
+                    safeStorage.setItem('cachymusic_bg_notifications', 'false');
+                    syncBgNotifUi();
+                    showToast('Background alerts disabled.');
+                    return;
                 }
-                s.backgroundNotificationsEnabled = wantsEnable && allowed;
-                safeStorage.setItem('cachymusic_bg_notifications', String(s.backgroundNotificationsEnabled));
+                if (Notification.permission === 'granted') {
+                    s.backgroundNotificationsEnabled = true;
+                    safeStorage.setItem('cachymusic_bg_notifications', 'true');
+                    syncBgNotifUi();
+                    showToast('Background alerts enabled.');
+                    return;
+                }
+                if (Notification.permission === 'denied') {
+                    s.backgroundNotificationsEnabled = false;
+                    safeStorage.setItem('cachymusic_bg_notifications', 'false');
+                    syncBgNotifUi();
+                    showToast('Notifications are blocked in your browser site settings. Re-enable them there to use alerts.');
+                    return;
+                }
                 syncBgNotifUi();
-                showToast(allowed ? `Background alerts ${wantsEnable ? 'enabled' : 'disabled'}`
-                    : 'Browser notification permission is required.');
+                requestWithPreflight({
+                    title: 'Allow background track notifications?',
+                    what: 'Show a desktop notification with track title and artwork when a song changes in the background.',
+                    why: 'Optional setting — playback and Media Session controls work normally without it.',
+                    storageNote: 'No notification content is uploaded; track info may be visible on your OS notification tray or lock screen.',
+                    revocationNote: 'Turn this toggle off or revoke notification permission in browser site settings at any time.',
+                    onContinue: () => {
+                        bgNotifToggle.disabled = true;
+                        Promise.resolve(Notification.requestPermission())
+                            .then((res) => {
+                                const allowed = res === 'granted';
+                                s.backgroundNotificationsEnabled = allowed;
+                                safeStorage.setItem('cachymusic_bg_notifications', String(allowed));
+                                syncBgNotifUi();
+                                showToast(allowed
+                                    ? 'Background alerts enabled.'
+                                    : 'Notification permission was not granted.');
+                            })
+                            .catch(() => {
+                                s.backgroundNotificationsEnabled = false;
+                                syncBgNotifUi();
+                            })
+                            .finally(() => {
+                                bgNotifToggle.disabled = false;
+                            });
+                    }
+                });
             });
         }
 

@@ -7,7 +7,7 @@
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' blob: https://musicbrainz.org https://coverartarchive.org https://archive.org https://*.archive.org https://lrclib.net; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'">
     <meta name="theme-color" content="#090e14">
-    <script src="scripts/theme-preload.js?v=3.0.0-dev.7.1"></script>
+    <script src="scripts/theme-preload.js?v=3.0.0-dev.7.2"></script>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,7 +26,7 @@
     <link rel="modulepreload" href="scripts/modules/player-core.js">
     <link rel="modulepreload" href="scripts/modules/audio-engine.js">
     <link rel="modulepreload" href="scripts/modules/library.js">
-    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.7.1">
+    <link rel="stylesheet" href="stylesheets/homepage.css?v=3.0.0-dev.7.2">
     <script src="scripts/pwa-init.js" defer></script>
 </head>
 <body class="view-player mobile-tab-player">
@@ -43,7 +43,7 @@
 
     <!-- Top Navigation Bar -->
     <header class="topBar">
-        <div class="workspaceSwitcher" id="workspaceSwitcher">
+        <nav class="workspaceSwitcher" id="workspaceSwitcher" aria-label="Primary workspaces">
             <button type="button" class="wsTabBtn active" id="wsPlayerBtn" aria-current="page" data-view="player" title="Music Player (Alt+P)">
                 <span class="wsLabel">Player</span>
             </button>
@@ -51,7 +51,7 @@
                 <span class="wsLabel">Soulseek</span>
                 <span class="wsBadge statusIndicator" id="wsSoulseekBadge" aria-hidden="true"></span>
             </button>
-        </div>
+        </nav>
 
         <div class="searchContainer" id="headerSearchContainer">
             <svg class="searchIcon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.66" y2="16.66"></line></svg>
@@ -197,23 +197,24 @@
 
         <!-- Center Panel: The Turntable Deck & Now Playing -->
         <section class="panel playerDeck mobileActive empty-deck">
-
-            <!-- Turntable Stage: Embedded Artwork Backdrop Behind Vinyl Deck -->
-            <div class="turntableStage" id="turntableStage">
-                <!-- Embedded Artwork Layer (Positioned Behind Turntable) -->
-                <div class="deckArtworkWrapper" id="deckArtworkWrapper">
-                    <img src="resources/images/default.svg" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true" decoding="async">
-                    <div class="deckArtworkCard" id="deckArtworkCard">
-                        <img src="resources/images/default.svg" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop" decoding="async">
-                    </div>
-                    <div class="deckArtworkScrim"></div>
+            <!-- Embedded Artwork Layer (Full-Deck Backdrop in visualizer modes) -->
+            <div class="deckArtworkWrapper" id="deckArtworkWrapper">
+                <img src="resources/images/default.svg" alt="" id="deckArtworkAmbient" class="deckArtworkAmbient" aria-hidden="true" decoding="async">
+                <div class="deckArtworkCard" id="deckArtworkCard">
+                    <img src="resources/images/default.svg" alt="Embedded Album Artwork" id="deckArtworkBackdrop" class="deckArtworkBackdrop" decoding="async">
                 </div>
+                <div class="deckArtworkScrim"></div>
+            </div>
+
+            <!-- Turntable Stage: Centered Artwork / Vinyl Deck & Quick Actions -->
+            <div class="turntableStage" id="turntableStage">
 
                 <!-- Lyrics View (overlays turntable) -->
                 <div class="lyricsCon lyricsActiveHidden is-empty" id="lyricsCon" style="display:none;">
                     <div class="lyricsHeader">
                         <span class="lyricsTrackName" id="lyricsTrackName">—</span>
                         <span class="lyricsArtistName" id="lyricsArtistName">—</span>
+                        <button type="button" id="lyricsResumeFollowBtn" class="actionBtn lyricsResumeFollowBtn" hidden>Resume lyric sync</button>
                     </div>
                     <div class="lyricsScrollArea" id="lyricsScrollArea">
                         <div class="lyricsContent" id="lyricsContent"><div class="lyricsPlaceholder" id="lyricsPlaceholder"><div class="lyricsPlaceholderIcon"><svg class="uiIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13M9 18a3 2 0 1 1-6 0 3 2 0 0 1 6 0Zm12-2a3 2 0 1 1-6 0 3 2 0 0 1 6 0Z"/></svg></div><p>No lyrics available for this track.</p></div></div>
@@ -281,6 +282,10 @@
                 <h1 id="trackName" dir="auto" style="display: none;"></h1>
                 <h2 id="artistName" dir="auto" style="display: none;"></h2>
                 <p id="albumName" dir="auto" class="albumName" style="display: none;"></p>
+                <div class="trackOverflowActions" id="trackOverflowActions" hidden>
+                    <button type="button" id="marqueePauseToggleBtn" class="trackOverflowBtn" aria-pressed="false" title="Pause scrolling text">Pause scroll</button>
+                    <button type="button" id="trackFullTextBtn" class="trackOverflowBtn" title="Show full track title and details">Full title</button>
+                </div>
 
                 <!-- Empty State Prompt (Shown when no music directory is loaded yet) -->
                 <div class="playerEmptyPrompt" id="playerEmptyPrompt">
@@ -320,7 +325,7 @@
                     </svg>
                 </button>
 
-                <button type="button" class="mediaBtn playPauseBtn" id="playPauseBtn" title="Play / Pause (Space)" aria-label="Play or Pause">
+                <button type="button" class="mediaBtn playPauseBtn" id="playPauseBtn" title="Play / Pause (Space)" aria-label="Play">
                     <div class="playPauseGlowRing"></div>
                     <svg id="playPauseImg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
                         <path class="icon-play" d="M8 5v14l11-7z"/>
@@ -373,10 +378,10 @@
         <section class="panel trackListPanel">
             <h2 class="libraryWorkspaceHeading">Library</h2>
             <!-- Library / Playlist / Up Next Navigation Tabs -->
-            <div class="libraryTabs">
-                <button type="button" class="libTab active" id="tabLibrary" aria-current="page">Library</button>
-                <button type="button" class="libTab" id="tabPlaylists">Playlists</button>
-                <button type="button" class="libTab" id="tabQueue">Up next <span class="queueCountBadge" id="queueCountBadge" style="display: none;">0</span></button>
+            <div class="libraryTabs" id="libraryTabs" role="tablist" aria-label="Library sections">
+                <button type="button" class="libTab active" id="tabLibrary" role="tab" aria-selected="true" aria-controls="trackList" tabindex="0">Library</button>
+                <button type="button" class="libTab" id="tabPlaylists" role="tab" aria-selected="false" aria-controls="playlistsView" tabindex="-1">Playlists</button>
+                <button type="button" class="libTab" id="tabQueue" role="tab" aria-selected="false" aria-controls="queueView" tabindex="-1">Up next <span class="queueCountBadge" id="queueCountBadge" style="display: none;">0</span></button>
             </div>
 
             <!-- Instant Quality Format Filter Bar + Mobile Collapsible Sort & Tools Toggle -->
@@ -475,7 +480,7 @@
             </div>
 
             <!-- Playlists Management View (MusicBee / Musicolet Style) -->
-            <div class="playlistsView" id="playlistsView" style="display: none;">
+            <div class="playlistsView" id="playlistsView" role="tabpanel" aria-labelledby="tabPlaylists" style="display: none;">
                 <div class="playlistsViewHeader">
                     <div class="playlistsStatsRow">
                         <span class="playlistsSectionTitle">My playlists</span>
@@ -493,7 +498,7 @@
             </div>
 
             <!-- Up Next / Dynamic Play Queue View -->
-            <div class="queueView" id="queueView" style="display: none;">
+            <div class="queueView" id="queueView" role="tabpanel" aria-labelledby="tabQueue" style="display: none;">
                 <div class="queueControlsBar">
                     <div class="queueSummary">
                         <span class="queueBadge">PLAY QUEUE</span>
@@ -512,7 +517,7 @@
             </div>
 
             <!-- Track List View -->
-            <div class="trackList" id="trackList" tabindex="-1" role="region" aria-label="Music tracks">
+            <div class="trackList" id="trackList" tabindex="-1" role="tabpanel" aria-labelledby="tabLibrary">
                 <!-- Populated dynamically with tracks -->
             </div>
 
@@ -980,6 +985,11 @@
                         <div class="settingsScanStatusBox" id="settingsTabScanStatus">
                             Ready to scan local music library.
                         </div>
+                        <div class="settingsOptionToggles" id="settingsStorageControls" style="margin-top:8px;">
+                            <button type="button" id="settingsRevokeFolderBtn" class="actionBtn">Revoke folder access</button>
+                            <button type="button" id="settingsPersistStorageBtn" class="actionBtn">Request persistent storage</button>
+                        </div>
+                        <p class="settingsRowDesc" id="settingsStorageStatus" role="status"></p>
                     </div>
                 </div>
 
@@ -1154,6 +1164,23 @@
                                 <button type="button" class="visModeBtn" data-mode="wave">Liquid wave</button>
                                 <button type="button" class="visModeBtn" data-mode="dash">Segmented bars</button>
                                 <button type="button" class="visModeBtn" data-mode="thematic">Theme visualizer</button>
+                            </div>
+                        </div>
+                        <div class="settingsRowItem" id="settingsRowMotion">
+                            <div class="settingsRowHeader">
+                                <div class="settingsRowTitleGroup">
+                                    <h4 class="settingsRowTitle">Motion &amp; scrolling</h4>
+                                    <p class="settingsRowDesc">Follow OS reduced motion or pause scrolling track text.</p>
+                                </div>
+                            </div>
+                            <div class="settingsOptionToggles">
+                                <label class="settingsSelectLabel" for="settingsMotionModeSelect">Motion</label>
+                                <select id="settingsMotionModeSelect" class="cachySelect" aria-label="Motion preference">
+                                    <option value="system">System default</option>
+                                    <option value="reduce">Reduced motion</option>
+                                    <option value="normal">Standard transitions</option>
+                                </select>
+                                <button type="button" id="settingsMarqueePauseBtn" class="actionBtn" aria-pressed="false">Pause scrolling text</button>
                             </div>
                         </div>
                     </div>
@@ -1775,7 +1802,85 @@
                             </div>
                         </div>
                         <p class="themeCategoryLead">Build themes with custom colors, gradients, images, textures, borders, typography and motion.</p>
+                        <div class="settingsOptionToggles" style="margin-bottom:10px;">
+                            <label class="cachySwitchLabel" for="themeSystemModeToggle">
+                                <input type="checkbox" id="themeSystemModeToggle">
+                                <span>Follow OS appearance (Paper Sonata / Carbon Signal)</span>
+                            </label>
+                        </div>
                         <div class="themeModalGrid" id="customThemeModalGrid"></div>
+                    </div>
+                    <!-- Signature Collection: Five Compositional Systems -->
+                    <div class="themeCategoryGroup" data-category="signature">
+                    <div class="themeCategoryHeader">
+                        <div class="themeCategoryHeading">
+                            <h4>Signature collection</h4>
+                        </div>
+                        <span class="themeCategoryCount">5 THEMES</span>
+                    </div>
+                    <p class="themeCategoryLead">Five distinct spatial, typographic and hardware-inspired compositions.</p>
+                    <div class="themeModalGrid">
+                        <button type="button" class="themeSelectCard" data-theme="carbon-signal">
+                            <span class="themeCardPreview" data-theme="carbon-signal" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Carbon Signal</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Precision studio with 1px structural framing and restrained teal accents.</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="paper-sonata">
+                            <span class="themeCardPreview" data-theme="paper-sonata" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Paper Sonata</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Editorial light collection with serif headings and warm burgundy ink.</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="blue-note-console">
+                            <span class="themeCardPreview" data-theme="blue-note-console" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Blue Note Console</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Broadcast workstation in deep navy with grouped signal readouts.</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="copper-reel">
+                            <span class="themeCardPreview" data-theme="copper-reel" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Copper Reel</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Warm dark analog aesthetic with matte copper cards and inset metadata.</span>
+                            </span>
+                        </button>
+                        <button type="button" class="themeSelectCard" data-theme="orchid-matrix">
+                            <span class="themeCardPreview" data-theme="orchid-matrix" aria-hidden="true">
+                                <span class="previewDot"></span><span class="previewDot"></span><span class="previewDot"></span>
+                            </span>
+                            <span class="themeCardContent">
+                                <span class="themeCardHeading">
+                                    <span class="themeCardTitle">Orchid Matrix</span>
+                                    <span class="themeActivePill">ACTIVE</span>
+                                </span>
+                                <span class="themeCardDesc">Modular creative workspace with generous panels and violet common regions.</span>
+                            </span>
+                        </button>
+                    </div>
                     </div>
                     <!-- Category 1: Sci-Fi & Universe (No Man's Sky) -->
                     <div class="themeCategoryGroup" data-category="scifi">
@@ -1969,6 +2074,18 @@
         <div class="modalCard ctStudioCard" id="customThemeStudioCard"></div>
     </div>
 
+    <!-- Non-Modal Explicit App Update Banner (Never skipsWaiting during playback) -->
+    <div id="pwaUpdateBanner" class="pwaUpdateBanner" role="status" aria-live="polite" hidden>
+        <span class="pwaUpdateText">An updated version of CachyMusic is ready.</span>
+        <div class="pwaUpdateActions">
+            <button type="button" id="pwaUpdateLaterBtn" class="actionBtn">Later</button>
+            <button type="button" id="pwaUpdateApplyBtn" class="actionBtn primaryBtn">Apply update</button>
+        </div>
+    </div>
+
+    <!-- Screen-Reader Polite Status Announcements -->
+    <div id="cachyLiveStatus" class="srOnly" role="status" aria-live="polite" aria-atomic="true"></div>
+
     <!-- Modern Floating Toast Container -->
     <div id="cachyToastContainer" class="toastContainer"></div>
 
@@ -2015,6 +2132,57 @@
             <div class="audioChangeActions">
                 <button type="submit" value="cancel" class="actionBtn" autofocus>Cancel</button>
                 <button type="submit" value="allow" class="actionBtn primaryBtn">Continue</button>
+            </div>
+        </form>
+    </dialog>
+    <dialog id="trackFullTextDialog" class="audioChangeDialog" aria-modal="true" aria-labelledby="trackFullTextTitle">
+        <form method="dialog">
+            <h2 id="trackFullTextTitle">Track information</h2>
+            <div id="trackFullTextBody" class="trackFullTextBody"></div>
+            <div class="audioChangeActions">
+                <button type="button" id="trackFullTextCopyBtn" class="actionBtn">Copy info</button>
+                <button type="submit" value="close" class="actionBtn primaryBtn" autofocus>Close</button>
+            </div>
+        </form>
+    </dialog>
+    <dialog id="installHelpDialog" class="audioChangeDialog" aria-modal="true" aria-labelledby="installHelpTitle">
+        <form method="dialog">
+            <h2 id="installHelpTitle">Install CachyMusic</h2>
+            <p class="settingsRowDesc">You can continue using CachyMusic in your browser, or install it as a standalone app using your platform’s menu:</p>
+            <ul class="trackFullTextBody" style="margin:8px 0 12px; padding-inline-start:18px;">
+                <li><strong>Chrome, Brave or Edge:</strong> Open the browser menu (or address bar install icon) and select <em>Install CachyMusic</em>.</li>
+                <li><strong>iPhone or iPad Safari:</strong> Tap <em>Share</em> then choose <em>Add to Home Screen</em>.</li>
+                <li><strong>macOS Safari:</strong> Choose <em>File</em> &rarr; <em>Add to Dock</em>.</li>
+                <li><strong>Firefox or Linux Desktop:</strong> Bookmark the workspace or use the packaged desktop builds when available.</li>
+            </ul>
+            <div class="audioChangeActions">
+                <button type="submit" id="installHelpCloseBtn" value="close" class="actionBtn primaryBtn" autofocus>Close</button>
+            </div>
+        </form>
+    </dialog>
+    <dialog id="fileLaunchDialog" class="audioChangeDialog" aria-modal="true" aria-labelledby="fileLaunchTitle" aria-describedby="fileLaunchSummary">
+        <form method="dialog">
+            <h2 id="fileLaunchTitle">Open audio file</h2>
+            <p id="fileLaunchSummary"></p>
+            <div class="audioChangeActions">
+                <button type="submit" value="cancel" class="actionBtn">Cancel</button>
+                <button type="button" id="fileLaunchQueueBtn" class="actionBtn">Add to queue</button>
+                <button type="button" id="fileLaunchPlayBtn" class="actionBtn primaryBtn" autofocus>Play now</button>
+            </div>
+        </form>
+    </dialog>
+    <dialog id="permissionPreflightDialog" class="audioChangeDialog" aria-modal="true" aria-labelledby="permissionPreflightTitle">
+        <form method="dialog">
+            <h2 id="permissionPreflightTitle">Permission request</h2>
+            <div class="trackFullTextBody">
+                <p id="permPreflightWhat"></p>
+                <p id="permPreflightWhy"></p>
+                <p id="permPreflightStorage"></p>
+                <p id="permPreflightRevoke"></p>
+            </div>
+            <div class="audioChangeActions">
+                <button type="button" id="permPreflightNotNowBtn" class="actionBtn">Not now</button>
+                <button type="button" id="permPreflightContinueBtn" class="actionBtn primaryBtn" autofocus>Continue</button>
             </div>
         </form>
     </dialog>

@@ -2,8 +2,8 @@ import {requestServerScan,readServerDirectory} from './server-scan.js';
 import {serverLibraryGate,sameServerTransport} from './library-transition.js';
 import {startPlaylistSession, playbackPool, playlistNeighbor} from './playlist-playback.js';
 import {buildPlaylistLookupIndex, buildPlaylistLookupIndexAsync, buildPlaylistMutationIndex, preparePlaylistEdit, trackKey, canonicalizeMembership, memberLookupKey, isServerPlaylist, resolvePlaylistMembers, playlistSummary, moveMember, replacementMember, rebasePlaylistDraft, createPlaylistPickerIndex, createPlaylistPickerIndexAsync, searchPlaylistTracksAsync, classifyPlaylistSelection} from './playlist-model.js';
-import {createMetadataEditor} from './metadata-editor.js';
 import {findTrackIndex, mergeTracks, dismissalKey} from './track-session.js';
+import {renderTrackMetadata} from './player-presentation.js';
 import { createLibraryQueryController } from './library-query-controller.js';
 import { queryLibrary } from './library-query.js';
 import { uiIcon } from './icons.js';
@@ -25,6 +25,7 @@ import {
     albumName,
     artistName,
     browseFolderBtn,
+    coverArtPreview,
     currentPlaylistTitle,
     folderPathInput,
     hideTrackLoadingOverlay,
@@ -1224,7 +1225,7 @@ async function queuePlaylistTracks(plid, name) {
 let playlistOpenGeneration=0;
 let libraryBrowsePreferences=null;
 const playlistBrowsePreferences=new Map();
-function rememberBrowsePreferences(){const s=store.state;const prefs={query:s.searchQuery,format:s.currentFormatFilter};if(s.currentPlaylistId!==null){const key=String(s.currentPlaylistId);playlistBrowsePreferences.delete(key);playlistBrowsePreferences.set(key,prefs);if(playlistBrowsePreferences.size>32)playlistBrowsePreferences.delete(playlistBrowsePreferences.keys().next().value);}else if(document.getElementById('tabLibrary')?.getAttribute('aria-current')==='page')libraryBrowsePreferences=prefs;}
+function rememberBrowsePreferences(){const s=store.state;const prefs={query:s.searchQuery,format:s.currentFormatFilter};if(s.currentPlaylistId!==null){const key=String(s.currentPlaylistId);playlistBrowsePreferences.delete(key);playlistBrowsePreferences.set(key,prefs);if(playlistBrowsePreferences.size>32)playlistBrowsePreferences.delete(playlistBrowsePreferences.keys().next().value);}else if(document.getElementById('tabLibrary')?.getAttribute('aria-selected')==='true')libraryBrowsePreferences=prefs;}
 function restoreBrowsePreferences(prefs={query:'',format:'all'}){const s=store.state;s.searchQuery=prefs.query||'';s.currentFormatFilter=prefs.format||'all';const input=document.getElementById('trackSearch');if(input)input.value=s.searchQuery;document.getElementById('trackSearchClearBtn')?.style.setProperty('display',s.searchQuery?'':'none');document.querySelectorAll('.formatFilterPill').forEach(b=>{const on=b.dataset.filter===s.currentFormatFilter;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on));});}
 
 function refreshPlaylistMeta(index = null){const s=store.state,p=s.playlists.find(p=>String(p.plid)===String(s.currentPlaylistId));const meta=document.getElementById('currentPlaylistMeta');if(p){const stats=playlistSummary(p,index instanceof Map ? index : s.allTracks);if(meta)meta.textContent=stats.text;for(const id of ['bannerPlayAllBtn','bannerShuffleBtn','bannerQueueBtn']){const el=document.getElementById(id);if(el)el.disabled=stats.tracks.length===0;}}}
@@ -1777,9 +1778,79 @@ function closeTrackActionMenu() {
 }
 
 // =========================================================================
-// Track Metadata & ID3 Tag Editor + Online Artwork Finder
+// Track Metadata & ID3 Tag Editor + Online Artwork Finder (Lazy-Loaded)
 // =========================================================================
-const {bindMetadataEditor, setupMetadataLookup, updateTrackMetadataDisplay, revertCover, handleCoverFileSelect, openMetadataEditor, closeMetadataEditor, requestSaveMetadataConfirmation, cancelMetadataConfirmation, executeSaveMetadata, saveMetadata} = createMetadataEditor({getTrackKey, refreshLibrary: () => renderVirtualTrackWindow(true)});
+let metadataEditorInstance = null;
+let metadataEditorPromise = null;
+let lightweightMetaBound = false;
+
+async function loadMetadataEditor() {
+    if (metadataEditorInstance) return metadataEditorInstance;
+    if (!metadataEditorPromise) {
+        metadataEditorPromise = import('./metadata-editor.js')
+            .then(mod => {
+                metadataEditorInstance = mod.createMetadataEditor({
+                    getTrackKey,
+                    refreshLibrary: () => renderVirtualTrackWindow(true)
+                });
+                metadataEditorInstance.bindMetadataEditor();
+                return metadataEditorInstance;
+            })
+            .catch(err => {
+                metadataEditorPromise = null;
+                throw err;
+            });
+    }
+    return metadataEditorPromise;
+}
+
+function updateTrackMetadataDisplay(track) {
+    if (!track) return;
+    renderTrackMetadata(track, false, () => {});
+    if (coverArtPreview) coverArtPreview.src = track.cover || 'resources/images/default.svg';
+}
+
+function bindMetadataEditor() {
+    if (metadataEditorInstance) {
+        metadataEditorInstance.bindMetadataEditor();
+        return;
+    }
+    if (lightweightMetaBound || typeof document === 'undefined') return;
+    lightweightMetaBound = true;
+    document.getElementById('infoPanelEditMetaBtn')?.addEventListener('click', () => {
+        const s = store.state;
+        void openMetadataEditor(s.currentInspectedTrack || s.currentTrack || s.allTracks?.[s.currentTrackIndex]);
+    });
+}
+
+async function setupMetadataLookup(...args) {
+    return (await loadMetadataEditor()).setupMetadataLookup(...args);
+}
+async function revertCover(...args) {
+    return (await loadMetadataEditor()).revertCover(...args);
+}
+async function handleCoverFileSelect(...args) {
+    return (await loadMetadataEditor()).handleCoverFileSelect(...args);
+}
+async function openMetadataEditor(...args) {
+    return (await loadMetadataEditor()).openMetadataEditor(...args);
+}
+function closeMetadataEditor() {
+    metadataEditorInstance?.closeMetadataEditor();
+}
+async function requestSaveMetadataConfirmation(...args) {
+    return (await loadMetadataEditor()).requestSaveMetadataConfirmation(...args);
+}
+function cancelMetadataConfirmation() {
+    metadataEditorInstance?.cancelMetadataConfirmation();
+}
+async function executeSaveMetadata(...args) {
+    return (await loadMetadataEditor()).executeSaveMetadata(...args);
+}
+async function saveMetadata(...args) {
+    return (await loadMetadataEditor()).saveMetadata(...args);
+}
+
 export {bindMetadataEditor, setupMetadataLookup};
 
 // =========================================================================

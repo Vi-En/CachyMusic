@@ -12,7 +12,7 @@ with tempfile.TemporaryDirectory() as d:
     chunk=lambda t,b:struct.pack('>I',len(b))+t+b+struct.pack('>I',binascii.crc32(t+b)&0xffffffff)
     art.write_bytes(b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',2,2,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(b'\0'+b'\x20\x80\xa0'*2+b'\0'+b'\x20\x80\xa0'*2))+chunk(b'IEND',b''))
     run('ffmpeg','-v','error','-f','lavfi','-i','sine=frequency=1000:duration=2','-metadata','title=Original','-metadata','artist=Fixture','-metadata','CUSTOM=preserve-me','-c:a','flac',str(orig))
-    print(run('node','--experimental-default-type=module','tests/metadata-regression.mjs',str(orig),str(js),str(art)).strip())
+    print(run('node','tests/metadata-regression.mjs',str(orig),str(js),str(art)).strip())
     php.write_bytes(orig.read_bytes()); bad.write_bytes(b'fLaC'+bytes(50)); old=bad.read_bytes()
     print(run('php','-r', 'require "php/flac_metadata.php"; if(!cm_flac_rewrite($argv[1],["title"=>"PHP changed","lyrics"=>"[00:01.00] test"],file_get_contents($argv[3]),getimagesize($argv[3]))) exit(1); if(cm_flac_rewrite($argv[2],["title"=>"No"])) exit(2); echo "PASS: PHP rewrite and malformed-file rejection\\n";',str(php),str(bad),str(art)).strip())
     assert bad.read_bytes()==old
